@@ -14,6 +14,7 @@ import (
 	connect "connectrpc.com/connect"
 	"github.com/coder/websocket"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/devresources/realtime"
@@ -202,6 +203,45 @@ func TestAPublishBeforeAnyRealtimeIsDeclaredIsAFailedPrecondition(t *testing.T) 
 	_, err := newBackend(t).Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "app", Channel: "/app/status", Event: `{"v":1}`})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Errorf("Publish = %v, want a failed precondition: no realtime is declared", err)
+	}
+}
+
+func TestTokensMintedThroughTheBackendOpenASocketAndSubscribeOnTheChannelsTheyName(t *testing.T) {
+	t.Parallel()
+
+	backend := newBackend(t)
+	bound := resolveOne(t, backend, "app")
+	channel := "/app/orders/o-1"
+	minted, err := backend.Mint(context.Background(), &realtimev1.MintRequest{Realtime: "app", Subject: "user-1", Ttl: durationpb.New(time.Minute), Grants: []*realtimev1.Grant{
+		{Operation: realtimev1.Operation_OPERATION_CONNECT, Channel: "/app"},
+		{Operation: realtimev1.Operation_OPERATION_SUBSCRIBE, Channel: channel},
+	}})
+	if err != nil {
+		t.Fatalf("Mint = %v", err)
+	}
+	connectToken, subscribeToken := minted.GetTokens()[0], minted.GetTokens()[1]
+	if subscribeToken.GetChannel() != channel {
+		t.Fatalf("the subscribe token is for %q, want %q as asked", subscribeToken.GetChannel(), channel)
+	}
+	conn, err := dial(t, bound, connectToken.GetToken())
+	if err != nil {
+		t.Fatalf("dial the gateway: %v", err)
+	}
+	exchange(t, conn, map[string]any{"type": "connection_init"})
+	subscribe := map[string]any{"type": "subscribe", "id": "s-1", "channel": subscribeToken.GetChannel(), "authorization": map[string]string{"Authorization": subscribeToken.GetToken()}}
+	if got := exchange(t, conn, subscribe); got["type"] != "subscribe_success" {
+		t.Fatalf("got %v, want subscribe_success", got)
+	}
+}
+
+func TestAMintBeforeAnyRealtimeIsDeclaredIsAFailedPrecondition(t *testing.T) {
+	t.Parallel()
+
+	_, err := newBackend(t).Mint(context.Background(), &realtimev1.MintRequest{Realtime: "app", Subject: "user-1", Ttl: durationpb.New(time.Minute), Grants: []*realtimev1.Grant{
+		{Operation: realtimev1.Operation_OPERATION_SUBSCRIBE, Channel: "/app/status"},
+	}})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("Mint = %v, want a failed precondition: no realtime is declared", err)
 	}
 }
 

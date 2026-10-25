@@ -2,16 +2,18 @@
 // @generated from file app/realtime/v1/realtime.proto (package app.realtime.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb.js";
+import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_duration, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file app/realtime/v1/realtime.proto.
  */
 export const file_app_realtime_v1_realtime: GenFile = /*@__PURE__*/
-  fileDesc("Ch5hcHAvcmVhbHRpbWUvdjEvcmVhbHRpbWUucHJvdG8SD2FwcC5yZWFsdGltZS52MSKjAgoOUHVibGlzaFJlcXVlc3QSSAoIcmVhbHRpbWUYASABKAlCNrpIM3IxMi9eW0EtWmEtejAtOV0oPzpbQS1aYS16MC05LV17MCw0OH1bQS1aYS16MC05XSk/JBIYCgdjaGFubmVsGAIgASgJQge6SARyAhABEhoKBWV2ZW50GAMgASgJQgu6SAhyBhABKICADzqQAbpIjAEaiQEKGHJlYWx0aW1lLnB1Ymxpc2guY2hhbm5lbBI5YSByZXNvdXJjZSBwdWJsaXNoZXMgb25seSBvbiBhIGNoYW5uZWwgdW5kZXIgaXRzIG93biBuYW1lGjJ0aGlzLmNoYW5uZWwuc3RhcnRzV2l0aCgnLycgKyB0aGlzLnJlYWx0aW1lICsgJy8nKSIRCg9QdWJsaXNoUmVzcG9uc2UyXwoPUmVhbHRpbWVTZXJ2aWNlEkwKB1B1Ymxpc2gSHy5hcHAucmVhbHRpbWUudjEuUHVibGlzaFJlcXVlc3QaIC5hcHAucmVhbHRpbWUudjEuUHVibGlzaFJlc3BvbnNlQj1aO2dpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2FwcC9yZWFsdGltZS92MTtyZWFsdGltZXYxYgZwcm90bzM", [file_buf_validate_validate]);
+  fileDesc("Ch5hcHAvcmVhbHRpbWUvdjEvcmVhbHRpbWUucHJvdG8SD2FwcC5yZWFsdGltZS52MSKjAgoOUHVibGlzaFJlcXVlc3QSSAoIcmVhbHRpbWUYASABKAlCNrpIM3IxMi9eW0EtWmEtejAtOV0oPzpbQS1aYS16MC05LV17MCw0OH1bQS1aYS16MC05XSk/JBIYCgdjaGFubmVsGAIgASgJQge6SARyAhABEhoKBWV2ZW50GAMgASgJQgu6SAhyBhABKICADzqQAbpIjAEaiQEKGHJlYWx0aW1lLnB1Ymxpc2guY2hhbm5lbBI5YSByZXNvdXJjZSBwdWJsaXNoZXMgb25seSBvbiBhIGNoYW5uZWwgdW5kZXIgaXRzIG93biBuYW1lGjJ0aGlzLmNoYW5uZWwuc3RhcnRzV2l0aCgnLycgKyB0aGlzLnJlYWx0aW1lICsgJy8nKSIRCg9QdWJsaXNoUmVzcG9uc2UiXwoFR3JhbnQSOQoJb3BlcmF0aW9uGAEgASgOMhouYXBwLnJlYWx0aW1lLnYxLk9wZXJhdGlvbkIKukgHggEEEAEgABIbCgdjaGFubmVsGAIgASgJQgq6SAdyBRABKIAEIvYDCgtNaW50UmVxdWVzdBJICghyZWFsdGltZRgBIAEoCUI2ukgzcjEyL15bQS1aYS16MC05XSg/OltBLVphLXowLTktXXswLDQ4fVtBLVphLXowLTldKT8kEhsKB3N1YmplY3QYAiABKAlCCrpIB3IFEAEogAgSOgoDdHRsGAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uQhK6SA/IAQGqAQkiAwisAjICCAoSMgoGZ3JhbnRzGAQgAygLMhYuYXBwLnJlYWx0aW1lLnYxLkdyYW50Qgq6SAeSAQQIARAzOo8CukiLAhqIAgoVcmVhbHRpbWUubWludC5jaGFubmVsEmNhIHJlc291cmNlIG1pbnRzIGEgY29ubmVjdCB0b2tlbiBmb3IgaXRzIG93biBuYW1lIGFuZCBhIHN1YnNjcmliZSB0b2tlbiBvbmx5IGZvciBhIGNoYW5uZWwgdW5kZXIgaXQaiQF0aGlzLmdyYW50cy5hbGwoZ3JhbnQsIGdyYW50Lm9wZXJhdGlvbiA9PSAxID8gZ3JhbnQuY2hhbm5lbCA9PSAnLycgKyB0aGlzLnJlYWx0aW1lIDogZ3JhbnQuY2hhbm5lbC5zdGFydHNXaXRoKCcvJyArIHRoaXMucmVhbHRpbWUgKyAnLycpKSItCgtNaW50ZWRUb2tlbhINCgV0b2tlbhgBIAEoCRIPCgdjaGFubmVsGAIgASgJImwKDE1pbnRSZXNwb25zZRIsCgZ0b2tlbnMYASADKAsyHC5hcHAucmVhbHRpbWUudjEuTWludGVkVG9rZW4SLgoKZXhwaXJlc19hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqVgoJT3BlcmF0aW9uEhkKFU9QRVJBVElPTl9VTlNQRUNJRklFRBAAEhUKEU9QRVJBVElPTl9DT05ORUNUEAESFwoTT1BFUkFUSU9OX1NVQlNDUklCRRACMqQBCg9SZWFsdGltZVNlcnZpY2USTAoHUHVibGlzaBIfLmFwcC5yZWFsdGltZS52MS5QdWJsaXNoUmVxdWVzdBogLmFwcC5yZWFsdGltZS52MS5QdWJsaXNoUmVzcG9uc2USQwoETWludBIcLmFwcC5yZWFsdGltZS52MS5NaW50UmVxdWVzdBodLmFwcC5yZWFsdGltZS52MS5NaW50UmVzcG9uc2VCPVo7Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vYXBwL3JlYWx0aW1lL3YxO3JlYWx0aW1ldjFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message app.realtime.v1.PublishRequest
@@ -54,6 +56,130 @@ export const PublishResponseSchema: GenMessage<PublishResponse> = /*@__PURE__*/
   messageDesc(file_app_realtime_v1_realtime, 1);
 
 /**
+ * @generated from message app.realtime.v1.Grant
+ */
+export type Grant = Message<"app.realtime.v1.Grant"> & {
+  /**
+   * @generated from field: app.realtime.v1.Operation operation = 1;
+   */
+  operation: Operation;
+
+  /**
+   * @generated from field: string channel = 2;
+   */
+  channel: string;
+};
+
+/**
+ * Describes the message app.realtime.v1.Grant.
+ * Use `create(GrantSchema)` to create a new message.
+ */
+export const GrantSchema: GenMessage<Grant> = /*@__PURE__*/
+  messageDesc(file_app_realtime_v1_realtime, 2);
+
+/**
+ * @generated from message app.realtime.v1.MintRequest
+ */
+export type MintRequest = Message<"app.realtime.v1.MintRequest"> & {
+  /**
+   * @generated from field: string realtime = 1;
+   */
+  realtime: string;
+
+  /**
+   * @generated from field: string subject = 2;
+   */
+  subject: string;
+
+  /**
+   * @generated from field: google.protobuf.Duration ttl = 3;
+   */
+  ttl?: Duration | undefined;
+
+  /**
+   * @generated from field: repeated app.realtime.v1.Grant grants = 4;
+   */
+  grants: Grant[];
+};
+
+/**
+ * Describes the message app.realtime.v1.MintRequest.
+ * Use `create(MintRequestSchema)` to create a new message.
+ */
+export const MintRequestSchema: GenMessage<MintRequest> = /*@__PURE__*/
+  messageDesc(file_app_realtime_v1_realtime, 3);
+
+/**
+ * @generated from message app.realtime.v1.MintedToken
+ */
+export type MintedToken = Message<"app.realtime.v1.MintedToken"> & {
+  /**
+   * @generated from field: string token = 1;
+   */
+  token: string;
+
+  /**
+   * @generated from field: string channel = 2;
+   */
+  channel: string;
+};
+
+/**
+ * Describes the message app.realtime.v1.MintedToken.
+ * Use `create(MintedTokenSchema)` to create a new message.
+ */
+export const MintedTokenSchema: GenMessage<MintedToken> = /*@__PURE__*/
+  messageDesc(file_app_realtime_v1_realtime, 4);
+
+/**
+ * @generated from message app.realtime.v1.MintResponse
+ */
+export type MintResponse = Message<"app.realtime.v1.MintResponse"> & {
+  /**
+   * @generated from field: repeated app.realtime.v1.MintedToken tokens = 1;
+   */
+  tokens: MintedToken[];
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 2;
+   */
+  expiresAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message app.realtime.v1.MintResponse.
+ * Use `create(MintResponseSchema)` to create a new message.
+ */
+export const MintResponseSchema: GenMessage<MintResponse> = /*@__PURE__*/
+  messageDesc(file_app_realtime_v1_realtime, 5);
+
+/**
+ * @generated from enum app.realtime.v1.Operation
+ */
+export enum Operation {
+  /**
+   * @generated from enum value: OPERATION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: OPERATION_CONNECT = 1;
+   */
+  CONNECT = 1,
+
+  /**
+   * @generated from enum value: OPERATION_SUBSCRIBE = 2;
+   */
+  SUBSCRIBE = 2,
+}
+
+/**
+ * Describes the enum app.realtime.v1.Operation.
+ */
+export const OperationSchema: GenEnum<Operation> = /*@__PURE__*/
+  enumDesc(file_app_realtime_v1_realtime, 0);
+
+/**
  * @generated from service app.realtime.v1.RealtimeService
  */
 export const RealtimeService: GenService<{
@@ -64,6 +190,14 @@ export const RealtimeService: GenService<{
     methodKind: "unary";
     input: typeof PublishRequestSchema;
     output: typeof PublishResponseSchema;
+  },
+  /**
+   * @generated from rpc app.realtime.v1.RealtimeService.Mint
+   */
+  mint: {
+    methodKind: "unary";
+    input: typeof MintRequestSchema;
+    output: typeof MintResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_app_realtime_v1_realtime, 0);

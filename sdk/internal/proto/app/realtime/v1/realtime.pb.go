@@ -10,6 +10,8 @@ import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -21,6 +23,55 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+type Operation int32
+
+const (
+	Operation_OPERATION_UNSPECIFIED Operation = 0
+	Operation_OPERATION_CONNECT     Operation = 1
+	Operation_OPERATION_SUBSCRIBE   Operation = 2
+)
+
+// Enum value maps for Operation.
+var (
+	Operation_name = map[int32]string{
+		0: "OPERATION_UNSPECIFIED",
+		1: "OPERATION_CONNECT",
+		2: "OPERATION_SUBSCRIBE",
+	}
+	Operation_value = map[string]int32{
+		"OPERATION_UNSPECIFIED": 0,
+		"OPERATION_CONNECT":     1,
+		"OPERATION_SUBSCRIBE":   2,
+	}
+)
+
+func (x Operation) Enum() *Operation {
+	p := new(Operation)
+	*p = x
+	return p
+}
+
+func (x Operation) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Operation) Descriptor() protoreflect.EnumDescriptor {
+	return file_app_realtime_v1_realtime_proto_enumTypes[0].Descriptor()
+}
+
+func (Operation) Type() protoreflect.EnumType {
+	return &file_app_realtime_v1_realtime_proto_enumTypes[0]
+}
+
+func (x Operation) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Operation.Descriptor instead.
+func (Operation) EnumDescriptor() ([]byte, []int) {
+	return file_app_realtime_v1_realtime_proto_rawDescGZIP(), []int{0}
+}
 
 type PublishRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -118,19 +169,269 @@ func (*PublishResponse) Descriptor() ([]byte, []int) {
 	return file_app_realtime_v1_realtime_proto_rawDescGZIP(), []int{1}
 }
 
+type Grant struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Operation     Operation              `protobuf:"varint,1,opt,name=operation,proto3,enum=app.realtime.v1.Operation" json:"operation,omitempty"`
+	Channel       string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Grant) Reset() {
+	*x = Grant{}
+	mi := &file_app_realtime_v1_realtime_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Grant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Grant) ProtoMessage() {}
+
+func (x *Grant) ProtoReflect() protoreflect.Message {
+	mi := &file_app_realtime_v1_realtime_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Grant.ProtoReflect.Descriptor instead.
+func (*Grant) Descriptor() ([]byte, []int) {
+	return file_app_realtime_v1_realtime_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Grant) GetOperation() Operation {
+	if x != nil {
+		return x.Operation
+	}
+	return Operation_OPERATION_UNSPECIFIED
+}
+
+func (x *Grant) GetChannel() string {
+	if x != nil {
+		return x.Channel
+	}
+	return ""
+}
+
+type MintRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Realtime      string                 `protobuf:"bytes,1,opt,name=realtime,proto3" json:"realtime,omitempty"`
+	Subject       string                 `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	Ttl           *durationpb.Duration   `protobuf:"bytes,3,opt,name=ttl,proto3" json:"ttl,omitempty"`
+	Grants        []*Grant               `protobuf:"bytes,4,rep,name=grants,proto3" json:"grants,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MintRequest) Reset() {
+	*x = MintRequest{}
+	mi := &file_app_realtime_v1_realtime_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MintRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MintRequest) ProtoMessage() {}
+
+func (x *MintRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_app_realtime_v1_realtime_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MintRequest.ProtoReflect.Descriptor instead.
+func (*MintRequest) Descriptor() ([]byte, []int) {
+	return file_app_realtime_v1_realtime_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *MintRequest) GetRealtime() string {
+	if x != nil {
+		return x.Realtime
+	}
+	return ""
+}
+
+func (x *MintRequest) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *MintRequest) GetTtl() *durationpb.Duration {
+	if x != nil {
+		return x.Ttl
+	}
+	return nil
+}
+
+func (x *MintRequest) GetGrants() []*Grant {
+	if x != nil {
+		return x.Grants
+	}
+	return nil
+}
+
+type MintedToken struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	Channel       string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MintedToken) Reset() {
+	*x = MintedToken{}
+	mi := &file_app_realtime_v1_realtime_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MintedToken) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MintedToken) ProtoMessage() {}
+
+func (x *MintedToken) ProtoReflect() protoreflect.Message {
+	mi := &file_app_realtime_v1_realtime_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MintedToken.ProtoReflect.Descriptor instead.
+func (*MintedToken) Descriptor() ([]byte, []int) {
+	return file_app_realtime_v1_realtime_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *MintedToken) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *MintedToken) GetChannel() string {
+	if x != nil {
+		return x.Channel
+	}
+	return ""
+}
+
+type MintResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tokens        []*MintedToken         `protobuf:"bytes,1,rep,name=tokens,proto3" json:"tokens,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MintResponse) Reset() {
+	*x = MintResponse{}
+	mi := &file_app_realtime_v1_realtime_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MintResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MintResponse) ProtoMessage() {}
+
+func (x *MintResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_app_realtime_v1_realtime_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MintResponse.ProtoReflect.Descriptor instead.
+func (*MintResponse) Descriptor() ([]byte, []int) {
+	return file_app_realtime_v1_realtime_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *MintResponse) GetTokens() []*MintedToken {
+	if x != nil {
+		return x.Tokens
+	}
+	return nil
+}
+
+func (x *MintResponse) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
 var File_app_realtime_v1_realtime_proto protoreflect.FileDescriptor
 
 const file_app_realtime_v1_realtime_proto_rawDesc = "" +
 	"\n" +
-	"\x1eapp/realtime/v1/realtime.proto\x12\x0fapp.realtime.v1\x1a\x1bbuf/validate/validate.proto\"\xbd\x02\n" +
+	"\x1eapp/realtime/v1/realtime.proto\x12\x0fapp.realtime.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbd\x02\n" +
 	"\x0ePublishRequest\x12R\n" +
 	"\brealtime\x18\x01 \x01(\tB6\xbaH3r12/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$R\brealtime\x12!\n" +
 	"\achannel\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\achannel\x12!\n" +
 	"\x05event\x18\x03 \x01(\tB\v\xbaH\br\x06\x10\x01(\x80\x80\x0fR\x05event:\x90\x01\xbaH\x8c\x01\x1a\x89\x01\n" +
 	"\x18realtime.publish.channel\x129a resource publishes only on a channel under its own name\x1a2this.channel.startsWith('/' + this.realtime + '/')\"\x11\n" +
-	"\x0fPublishResponse2_\n" +
+	"\x0fPublishResponse\"s\n" +
+	"\x05Grant\x12D\n" +
+	"\toperation\x18\x01 \x01(\x0e2\x1a.app.realtime.v1.OperationB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\toperation\x12$\n" +
+	"\achannel\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x04R\achannel\"\x96\x04\n" +
+	"\vMintRequest\x12R\n" +
+	"\brealtime\x18\x01 \x01(\tB6\xbaH3r12/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$R\brealtime\x12$\n" +
+	"\asubject\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\bR\asubject\x12?\n" +
+	"\x03ttl\x18\x03 \x01(\v2\x19.google.protobuf.DurationB\x12\xbaH\x0f\xc8\x01\x01\xaa\x01\t\"\x03\b\xac\x022\x02\b\n" +
+	"R\x03ttl\x12:\n" +
+	"\x06grants\x18\x04 \x03(\v2\x16.app.realtime.v1.GrantB\n" +
+	"\xbaH\a\x92\x01\x04\b\x01\x103R\x06grants:\x8f\x02\xbaH\x8b\x02\x1a\x88\x02\n" +
+	"\x15realtime.mint.channel\x12ca resource mints a connect token for its own name and a subscribe token only for a channel under it\x1a\x89\x01this.grants.all(grant, grant.operation == 1 ? grant.channel == '/' + this.realtime : grant.channel.startsWith('/' + this.realtime + '/'))\"=\n" +
+	"\vMintedToken\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12\x18\n" +
+	"\achannel\x18\x02 \x01(\tR\achannel\"\x7f\n" +
+	"\fMintResponse\x124\n" +
+	"\x06tokens\x18\x01 \x03(\v2\x1c.app.realtime.v1.MintedTokenR\x06tokens\x129\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt*V\n" +
+	"\tOperation\x12\x19\n" +
+	"\x15OPERATION_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11OPERATION_CONNECT\x10\x01\x12\x17\n" +
+	"\x13OPERATION_SUBSCRIBE\x10\x022\xa4\x01\n" +
 	"\x0fRealtimeService\x12L\n" +
-	"\aPublish\x12\x1f.app.realtime.v1.PublishRequest\x1a .app.realtime.v1.PublishResponseB=Z;github.com/ocelhq/ocel/pkg/proto/app/realtime/v1;realtimev1b\x06proto3"
+	"\aPublish\x12\x1f.app.realtime.v1.PublishRequest\x1a .app.realtime.v1.PublishResponse\x12C\n" +
+	"\x04Mint\x12\x1c.app.realtime.v1.MintRequest\x1a\x1d.app.realtime.v1.MintResponseB=Z;github.com/ocelhq/ocel/pkg/proto/app/realtime/v1;realtimev1b\x06proto3"
 
 var (
 	file_app_realtime_v1_realtime_proto_rawDescOnce sync.Once
@@ -144,19 +445,34 @@ func file_app_realtime_v1_realtime_proto_rawDescGZIP() []byte {
 	return file_app_realtime_v1_realtime_proto_rawDescData
 }
 
-var file_app_realtime_v1_realtime_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_app_realtime_v1_realtime_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_app_realtime_v1_realtime_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_app_realtime_v1_realtime_proto_goTypes = []any{
-	(*PublishRequest)(nil),  // 0: app.realtime.v1.PublishRequest
-	(*PublishResponse)(nil), // 1: app.realtime.v1.PublishResponse
+	(Operation)(0),                // 0: app.realtime.v1.Operation
+	(*PublishRequest)(nil),        // 1: app.realtime.v1.PublishRequest
+	(*PublishResponse)(nil),       // 2: app.realtime.v1.PublishResponse
+	(*Grant)(nil),                 // 3: app.realtime.v1.Grant
+	(*MintRequest)(nil),           // 4: app.realtime.v1.MintRequest
+	(*MintedToken)(nil),           // 5: app.realtime.v1.MintedToken
+	(*MintResponse)(nil),          // 6: app.realtime.v1.MintResponse
+	(*durationpb.Duration)(nil),   // 7: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
 }
 var file_app_realtime_v1_realtime_proto_depIdxs = []int32{
-	0, // 0: app.realtime.v1.RealtimeService.Publish:input_type -> app.realtime.v1.PublishRequest
-	1, // 1: app.realtime.v1.RealtimeService.Publish:output_type -> app.realtime.v1.PublishResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: app.realtime.v1.Grant.operation:type_name -> app.realtime.v1.Operation
+	7, // 1: app.realtime.v1.MintRequest.ttl:type_name -> google.protobuf.Duration
+	3, // 2: app.realtime.v1.MintRequest.grants:type_name -> app.realtime.v1.Grant
+	5, // 3: app.realtime.v1.MintResponse.tokens:type_name -> app.realtime.v1.MintedToken
+	8, // 4: app.realtime.v1.MintResponse.expires_at:type_name -> google.protobuf.Timestamp
+	1, // 5: app.realtime.v1.RealtimeService.Publish:input_type -> app.realtime.v1.PublishRequest
+	4, // 6: app.realtime.v1.RealtimeService.Mint:input_type -> app.realtime.v1.MintRequest
+	2, // 7: app.realtime.v1.RealtimeService.Publish:output_type -> app.realtime.v1.PublishResponse
+	6, // 8: app.realtime.v1.RealtimeService.Mint:output_type -> app.realtime.v1.MintResponse
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_app_realtime_v1_realtime_proto_init() }
@@ -169,13 +485,14 @@ func file_app_realtime_v1_realtime_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_realtime_v1_realtime_proto_rawDesc), len(file_app_realtime_v1_realtime_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   2,
+			NumEnums:      1,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_app_realtime_v1_realtime_proto_goTypes,
 		DependencyIndexes: file_app_realtime_v1_realtime_proto_depIdxs,
+		EnumInfos:         file_app_realtime_v1_realtime_proto_enumTypes,
 		MessageInfos:      file_app_realtime_v1_realtime_proto_msgTypes,
 	}.Build()
 	File_app_realtime_v1_realtime_proto = out.File
