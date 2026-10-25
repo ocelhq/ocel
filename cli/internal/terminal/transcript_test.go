@@ -761,11 +761,12 @@ func TestWithColourABlockGraysItsTimingItsDetailAndWhatEachResourceIsButNotItsSi
 	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
 	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
 	forwardResource(deploy, 3, 2, "web", provider.ActionCreate, "fake:bucket", "assets", progressv1.SpanStatus_SPAN_STATUS_OK, start)
+	forwardResource(deploy, 4, 2, "web", provider.ActionCreate, "fake:queue", "jobs", progressv1.SpanStatus_SPAN_STATUS_OK, start)
 	deploy.Forward(providerEnded(2, "web", "Deployed", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
 	deploy.Forward(providerEnded(1, "web", "Deployed web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(8*time.Second)))
 
 	for _, want := range []string{
-		" \x1b[1mweb\x1b[22m: Deployed web\x1b[90m in 8s\x1b[0m — 1 resource created\n",
+		" \x1b[1mweb\x1b[22m: Deployed web\x1b[90m in 8s\x1b[0m — 2 resources created\n",
 		"      \x1b[32m+\x1b[0m \x1b[90massets (fake:bucket) created\x1b[0m\n",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -790,6 +791,23 @@ func TestWithColourASpansProgressMessageIsGrayUnderItsHeader(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("got\n%q\nwant it to contain\n%q", out.String(), want)
 		}
+	}
+}
+
+func TestABlockThatChangedOneResourceListsItWithoutCountingIt(t *testing.T) {
+	t.Parallel()
+
+	run, out, c := groupedRun(t, Presentation{})
+	destroy := run.Phase(progressv1.Phase_PHASE_DESTROY)
+	start := c.now()
+	destroy.Forward(providerStarted(1, "prod--go--r26c87f73", "Destroying the stack", start))
+	forwardResource(destroy, 2, 1, "prod--go--r26c87f73", provider.ActionDelete, "function", "fn--go--index", progressv1.SpanStatus_SPAN_STATUS_OK, start)
+	destroy.Forward(providerEnded(1, "prod--go--r26c87f73", "Destroyed the stack", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(4*time.Second)))
+
+	want := "INFO  [deploy] ✓ prod--go--r26c87f73: Destroyed the stack in 4s\n" +
+		"      – fn--go--index (function) deleted\n"
+	if got := out.String(); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }
 

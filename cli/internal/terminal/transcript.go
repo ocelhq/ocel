@@ -150,12 +150,16 @@ func (s *Transcript) end(span string, ev *streamv1.RunEvent) {
 	took := formatDuration(endedDuration(ev, ended))
 	failed := ended.GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
 	partial := !failed && ev.GetOperation().GetLevel() >= progressv1.Level_LEVEL_WARN
+	grouped := s.present.GitHubActions && !failed && !partial && len(tracked.body) > 0
 	head := line{
 		level:   ev.GetOperation().GetLevel(),
 		status:  ended.GetStatus(),
 		message: ended.GetTitle(),
 		timing:  " in " + took + tally.finished(),
 		outcome: tracked.resources.summary(),
+	}
+	if tracked.resources.single() && (grouped || !s.failed) {
+		head.outcome = ""
 	}
 	if failed {
 		head.message, head.timing = tracked.opened.GetOperation().GetMessage()+" failed", " after "+took+tally.finished()
@@ -167,7 +171,7 @@ func (s *Transcript) end(span string, ev *streamv1.RunEvent) {
 		head.status = progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED
 	}
 	header := tracked.header(head, s.present)
-	if s.present.GitHubActions && !failed && !partial && len(tracked.body) > 0 {
+	if grouped {
 		s.printGroup(header, tracked.body)
 		return
 	}
