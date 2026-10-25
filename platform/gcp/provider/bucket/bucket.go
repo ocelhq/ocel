@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"cloud.google.com/go/compute/metadata"
-	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iamcredentials/v1"
 	"google.golang.org/api/option"
 	storage "google.golang.org/api/storage/v1"
@@ -22,12 +21,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
 const (
 	GoogleStorage = "https://storage.googleapis.com"
-	platformScope = "https://www.googleapis.com/auth/cloud-platform"
 	tagLength     = 6
 )
 
@@ -38,10 +37,10 @@ type Store struct {
 	SignBlob func(ctx context.Context, account string, payload []byte) ([]byte, error)
 }
 
-func Open(ctx context.Context, endpoint string) (Store, error) {
+func Open(ctx context.Context, endpoint, quotaProject string) (Store, error) {
 	store := Store{Endpoint: endpoint, Client: http.DefaultClient}
 	if endpoint == "" {
-		client, err := google.DefaultClient(ctx, platformScope)
+		client, err := ports.NewHTTPClient(ctx, quotaProject)
 		if err != nil {
 			return Store{}, fmt.Errorf("find the Google credentials Cloud Storage is reached with: %w", err)
 		}

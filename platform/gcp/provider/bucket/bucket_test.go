@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -401,7 +404,7 @@ func TestASignatureAskedForOffGoogleCloudSaysOnlyTheDeployedAppCanSign(t *testin
 	t.Cleanup(metadataServer.Close)
 	t.Setenv("GCE_METADATA_HOST", strings.TrimPrefix(metadataServer.URL, "http://"))
 
-	store, err := Open(context.Background(), "http://storage.invalid")
+	store, err := Open(context.Background(), "http://storage.invalid", "")
 	if err != nil {
 		t.Fatalf("Open() = %v", err)
 	}
@@ -425,7 +428,7 @@ func TestTheAccountAnAppSignsAsIsAskedAgainAfterTheMetadataServerFailedAndKeptOn
 	t.Cleanup(metadataServer.Close)
 	t.Setenv("GCE_METADATA_HOST", strings.TrimPrefix(metadataServer.URL, "http://"))
 
-	store, err := Open(context.Background(), "http://storage.invalid")
+	store, err := Open(context.Background(), "http://storage.invalid", "")
 	if err != nil {
 		t.Fatalf("Open() = %v", err)
 	}
@@ -479,4 +482,66 @@ func assemble(t *testing.T, h *harness, key string) *bucketv1.CompleteMultipartR
 		t.Fatalf("CompleteMultipart() = %v", err)
 	}
 	return done
+}
+
+func billedProjectOfAStoreOpenedWith(t *testing.T, quotaProject string, credential map[string]string) string {
+	t.Helper()
+	var billed string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/token" {
+			_, _ = w.Write([]byte(`{"access_token":"ya29.stub","token_type":"Bearer","expires_in":3600}`))
+			return
+		}
+		billed = r.Header.Get(googletest.QuotaProjectHeader)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(server.Close)
+	credential["token_uri"] = server.URL + "/token"
+	raw, err := json.Marshal(credential)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "adc.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", path)
+	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "")
+
+	store, err := Open(context.Background(), "", quotaProject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := store.Client.Get(server.URL + "/storage/v1/b/" + uploads)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	return billed
+}
+
+func userCredential(ownQuotaProject string) map[string]string {
+	credential := map[string]string{
+		"type":          "authorized_user",
+		"client_id":     "id.apps.googleusercontent.com",
+		"client_secret": "secret",
+		"refresh_token": "refresh",
+	}
+	if ownQuotaProject != "" {
+		credential["quota_project_id"] = ownQuotaProject
+	}
+	return credential
+}
+
+func TestAStoreABuildOpensBillsItsCallsToTheQuotaProjectItNames(t *testing.T) {
+	if billed := billedProjectOfAStoreOpenedWith(t, "acme-prod", userCredential("elsewhere")); billed != "acme-prod" {
+		t.Errorf("a Cloud Storage call was billed to %q, want acme-prod: a build runs on the deploying user's credential, which bills the project it deploys to", billed)
+	}
+}
+
+func TestAStoreOpenedWithNoQuotaProjectNamesNone(t *testing.T) {
+	if billed := billedProjectOfAStoreOpenedWith(t, "", userCredential("")); billed != "" {
+		t.Errorf("a Cloud Storage call was billed to %q, want none: a store an app opens names no quota project, and its credential names none either", billed)
+	}
 }

@@ -23,7 +23,7 @@ type resourceManager struct {
 }
 
 func (r resourceManager) Reaches(ctx context.Context, project string) error {
-	service, err := cloudresourcemanager.NewService(ctx, ports.EmulatorREST(r.endpoint)...)
+	service, err := cloudresourcemanager.NewService(ctx, ports.NewRESTOptions(r.endpoint, "")...)
 	if err != nil {
 		return gcloud.Unauthenticated()
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -156,5 +157,30 @@ func TestARunChecksItsRegionAgainstCloudRunOnlyWhenTheChecksAreNotSkipped(t *tes
 		if checked := err != nil; checked != wantChecked {
 			t.Errorf("openClients() with the checks skipped %t = %v, want the region checked %t: with no credential, only the check reaches for one", skipChecks, err, wantChecked)
 		}
+	}
+}
+
+func TestARunOfAUserCredentialThatMayNotBillTheProjectIsRefusedBeforeItCallsAnythingElse(t *testing.T) {
+	googletest.UseUserCredential(t)
+	googletest.ServeAsGoogle(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/locations") {
+			googletest.WriteBody(w, runLocationsPage{Locations: []runLocation{{LocationID: googletest.Region}}})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"Caller does not have required permission to use project acme-prod.",` +
+			`"details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"USER_PROJECT_DENIED","domain":"googleapis.com"}]}}`))
+	})
+	p := &Provider{
+		options:  Options{Project: googletest.Project, Region: googletest.Region},
+		resolved: &gcloud.Clients{Names: googletest.Names, Region: googletest.Region},
+	}
+
+	_, err := p.openClients(context.Background())
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied || !strings.Contains(refused.Message, credential.BillingPermission) {
+		t.Errorf("openClients() = %v, want a %s refusal naming %s: a user's credential bills every later call to the project", err, refusal.CodeDenied, credential.BillingPermission)
 	}
 }

@@ -89,11 +89,14 @@ func (p *Provider) openClients(ctx context.Context) (*gcloud.Clients, error) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if !p.regionChecked {
+	if !p.clientsChecked {
 		if err := opened.RefuseRegionNotServed(ctx); err != nil {
 			return nil, err
 		}
-		p.regionChecked = true
+		if err := opened.RefuseBillingDenied(ctx); err != nil {
+			return nil, err
+		}
+		p.clientsChecked = true
 	}
 	return opened, nil
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,7 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/auth"
 	"github.com/google/uuid"
+	"golang.org/x/oauth2"
 	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
@@ -107,17 +110,7 @@ type AuthToken struct {
 
 type Memorystore struct {
 	Base   string
-	tokens TokenSource
 	Client *http.Client
-}
-
-func NewMemorystore(endpoint string, tokens TokenSource) Memorystore {
-	base := memorystoreHost
-	if endpoint != "" {
-		base = strings.TrimRight(endpoint, "/")
-		tokens = nil
-	}
-	return Memorystore{Base: base, tokens: tokens, Client: &http.Client{Timeout: memorystoreTimeout}}
 }
 
 func (m Memorystore) ReadInstance(ctx context.Context, name string) (*MemorystoreInstance, error) {
@@ -222,14 +215,10 @@ func (m Memorystore) send(ctx context.Context, method, target string, body []byt
 		return nil, 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if m.tokens != nil {
-		token, err := m.tokens.Token(ctx)
-		if err != nil {
-			return nil, 0, Unauthenticated()
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
 	resp, err := m.Client.Do(req)
+	if isTokenRefused(err) {
+		return nil, 0, Unauthenticated()
+	}
 	if err != nil {
 		return nil, 0, err
 	}
@@ -242,6 +231,12 @@ func (m Memorystore) send(ctx context.Context, method, target string, body []byt
 		return nil, resp.StatusCode, newMemorystoreError(resp.StatusCode, answer)
 	}
 	return answer, resp.StatusCode, nil
+}
+
+func isTokenRefused(err error) bool {
+	var retrieved *oauth2.RetrieveError
+	var fetched *auth.Error
+	return errors.As(err, &retrieved) || errors.As(err, &fetched)
 }
 
 func newMemorystoreError(code int, answer []byte) error {

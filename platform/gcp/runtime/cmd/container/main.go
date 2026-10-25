@@ -208,7 +208,7 @@ func readManifest(raw string) (variables.Manifest, error) {
 func serveProxy(ctx context.Context, values *live.Values, manifest variables.Manifest, app string, engine *runs.Engine) (bindingproxy.Served, error) {
 	var services bindingproxy.Services
 	if values != nil && bindsBuckets(values) {
-		store, err := bucket.Open(ctx, manifest.Endpoint)
+		store, err := bucket.Open(ctx, manifest.Endpoint, "")
 		if err != nil {
 			return bindingproxy.Served{}, err
 		}

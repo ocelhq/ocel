@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 
@@ -78,6 +79,7 @@ type Clients struct {
 	globalTags    Memo[*crm.Service]
 	regionalTags  Memo[*crm.Service]
 	logs          Memo[*logging.Client]
+	memorystore   Memo[Memorystore]
 	numberLock    sync.Mutex
 	projectNumber int64
 	tierBuckets   tierBucketsRead
@@ -107,45 +109,45 @@ func opened[T any](c *Clients, cache *Memo[T], doing string, open func() (T, err
 
 func (c *Clients) Storage() (*storage.Client, error) {
 	return opened(c, &c.storage, "Cloud Storage", func() (*storage.Client, error) {
-		return storage.NewClient(context.Background(), ports.EmulatorStorage(c.Endpoint)...)
+		return storage.NewClient(context.Background(), ports.NewStorageOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) Databases() (*firestoreadmin.Service, error) {
 	return opened(c, &c.databases, "Firestore admin", func() (*firestoreadmin.Service, error) {
-		return firestoreadmin.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return firestoreadmin.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) Secrets() (*secretmanager.Service, error) {
 	return opened(c, &c.secrets, "Secret Manager", func() (*secretmanager.Service, error) {
-		return secretmanager.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return secretmanager.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) Services() (*serviceusage.Service, error) {
 	return opened(c, &c.services, "Service Usage", func() (*serviceusage.Service, error) {
-		return serviceusage.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return serviceusage.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) Repositories() (*artifactregistry.Service, error) {
 	return opened(c, &c.images, "Artifact Registry", func() (*artifactregistry.Service, error) {
-		return artifactregistry.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return artifactregistry.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) Run() (*run.Service, error) {
 	return opened(c, &c.runs, "Cloud Run", func() (*run.Service, error) {
-		return run.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return run.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) RunV1() (*runv1.APIService, error) {
 	return opened(c, &c.runsV1, "Cloud Run v1", func() (*runv1.APIService, error) {
-		options := ports.EmulatorREST(c.Endpoint)
-		if len(options) == 0 {
-			options = []option.ClientOption{option.WithEndpoint("https://" + c.Region + "-run.googleapis.com/")}
+		options := ports.NewRESTOptions(c.Endpoint, c.QuotaProject())
+		if !c.Emulated() {
+			options = append(options, option.WithEndpoint("https://"+c.Region+"-run.googleapis.com/"))
 		}
 		return runv1.NewService(context.Background(), options...)
 	})
@@ -153,49 +155,63 @@ func (c *Clients) RunV1() (*runv1.APIService, error) {
 
 func (c *Clients) RunLocations() (*runv1.APIService, error) {
 	return opened(c, &c.runLocations, "Cloud Run locations", func() (*runv1.APIService, error) {
-		return runv1.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return runv1.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, "")...)
 	})
 }
 
 func (c *Clients) Scheduler() (*cloudscheduler.Service, error) {
 	return opened(c, &c.schedules, "Cloud Scheduler", func() (*cloudscheduler.Service, error) {
-		return cloudscheduler.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return cloudscheduler.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) LoggingREST() (*loggingrest.Service, error) {
 	return opened(c, &c.loggingREST, "Cloud Logging", func() (*loggingrest.Service, error) {
-		return loggingrest.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return loggingrest.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) Compute() (*compute.Service, error) {
 	return opened(c, &c.compute, "Compute Engine", func() (*compute.Service, error) {
-		return compute.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return compute.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) Certificates() (*certmanager.Service, error) {
 	return opened(c, &c.certs, "Certificate Manager", func() (*certmanager.Service, error) {
-		return certmanager.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return certmanager.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) Connectivity() (*networkconnectivity.Service, error) {
 	return opened(c, &c.connectivity, "Network Connectivity", func() (*networkconnectivity.Service, error) {
-		return networkconnectivity.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return networkconnectivity.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) SQL() (*sqladmin.Service, error) {
 	return opened(c, &c.sql, "Cloud SQL Admin", func() (*sqladmin.Service, error) {
-		return sqladmin.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return sqladmin.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) Accounts() (*iam.Service, error) {
 	return opened(c, &c.accounts, "IAM", func() (*iam.Service, error) {
-		return iam.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return iam.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
+	})
+}
+
+func (c *Clients) Memorystore() (Memorystore, error) {
+	return opened(c, &c.memorystore, "Memorystore", func() (Memorystore, error) {
+		if c.Emulated() {
+			return Memorystore{Base: strings.TrimRight(c.Endpoint, "/"), Client: &http.Client{Timeout: memorystoreTimeout}}, nil
+		}
+		client, err := ports.NewHTTPClient(context.Background(), c.QuotaProject())
+		if err != nil {
+			return Memorystore{}, err
+		}
+		client.Timeout = memorystoreTimeout
+		return Memorystore{Base: memorystoreHost, Client: client}, nil
 	})
 }
 
@@ -214,13 +230,13 @@ func (c *Clients) Principal(ctx context.Context) (string, error) {
 
 func (c *Clients) Projects() (*cloudresourcemanager.Service, error) {
 	return opened(c, &c.projects, "Resource Manager", func() (*cloudresourcemanager.Service, error) {
-		return cloudresourcemanager.NewService(context.Background(), ports.EmulatorREST(c.Endpoint)...)
+		return cloudresourcemanager.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
 func (c *Clients) Logging() (*logging.Client, error) {
 	return opened(c, &c.logs, "Cloud Logging", func() (*logging.Client, error) {
-		return logging.NewClient(context.Background(), ports.EmulatorGRPC(c.Endpoint)...)
+		return logging.NewClient(context.Background(), ports.NewGRPCOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
@@ -250,6 +266,8 @@ func (c *Clients) ReadProjectNumber(ctx context.Context) (int64, error) {
 }
 
 func (c *Clients) Emulated() bool { return c.Endpoint != "" }
+
+func (c *Clients) QuotaProject() string { return c.Workload().QuotaProject() }
 
 func (c *Clients) Location() string {
 	return "projects/" + c.Project() + "/locations/" + c.Region

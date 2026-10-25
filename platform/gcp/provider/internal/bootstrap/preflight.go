@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -171,6 +172,7 @@ var bootstrapRoles = []string{
 	"roles/logging.viewAccessor",
 	"roles/logging.configWriter",
 	"roles/resourcemanager.tagAdmin",
+	credential.BillingRole,
 	gcloud.TierTagUserRole,
 }
 
