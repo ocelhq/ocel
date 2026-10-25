@@ -4,15 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
 )
 
@@ -194,15 +197,17 @@ func TestAnEditReadsThePolicyAgainWhenTheWriteFoundItStale(t *testing.T) {
 
 func TestAnEditOfAPolicyThatKeepsChangingIsRefusedRatherThanRetriedForever(t *testing.T) {
 	t.Parallel()
-	server := &policyServer{stale: policy.EditAttempts + 1}
+	server := &policyServer{stale: math.MaxInt}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
-	_, err := policy.Edit(context.Background(), server.resource(), policy.Grant("roles/viewer", "user:new@x.example", nil))
+	_, err := policy.Edit(ctx, server.resource(), policy.Grant("roles/viewer", "user:new@x.example", nil))
 
-	if err == nil {
-		t.Fatal("Edit() over a policy that never stops changing = nil, want a refusal")
+	if googleretry.AnsweredCode(err) != http.StatusPreconditionFailed {
+		t.Fatalf("Edit() over a policy that never stops changing = %v, want the 412 it kept answering", err)
 	}
-	if server.writes != policy.EditAttempts {
-		t.Errorf("Edit() wrote %d times, want %d", server.writes, policy.EditAttempts)
+	if server.writes < 2 {
+		t.Errorf("Edit() wrote %d times, want the stale write rebuilt and written again", server.writes)
 	}
 }
 

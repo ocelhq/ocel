@@ -49,11 +49,7 @@ func (c clock) throttleWait(err error, throttles int) time.Duration {
 		delay = max(delay, throttleBackoff)
 		return delay + c.random(delay/4)
 	}
-	limit := throttleBackoff
-	for doubled := 0; doubled < throttles && limit < throttleCeiling; doubled++ {
-		limit *= 2
-	}
-	return c.random(min(limit, throttleCeiling))
+	return c.random(doubled(throttleBackoff, throttles, throttleCeiling))
 }
 
 func askedDelay(err error, now time.Time) (time.Duration, bool) {
