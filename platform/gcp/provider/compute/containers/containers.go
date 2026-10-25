@@ -9,7 +9,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/compute/functions"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/next"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
@@ -104,15 +103,16 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 
 		OpensOnPromotion: !run.FactsOf(spec.Edge).RunsCode,
 	}
+	if next.Serves(app) {
+		served = next.FillContainerDefaults(served)
+	}
 	if app.IsBuiltFromFunction() {
-		built := functions.Functions{Release: p.Release}
-		if err := built.UploadBuildFiles(ctx, spec, progress); err != nil {
+		if err := p.UploadBuildFiles(ctx, spec, progress); err != nil {
 			return nil, err
 		}
-		served = next.FillContainerDefaults(served)
-		served.Env, err = built.ServiceEnv(ctx, c, spec, app.Functions[0], served, own, facts)
+		served.Env, err = p.NewFunctionEnv(ctx, c, spec, app.Functions[0], served, own, facts)
 	} else {
-		served, err = p.withImageEnv(ctx, c, spec, served, facts)
+		served.Env, err = p.newImageEnv(ctx, c, spec, served, facts)
 	}
 	if err != nil {
 		return nil, err
@@ -142,25 +142,23 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	return append(deployed, release.WorkerContainers(workers, image)...), nil
 }
 
-func (p Containers) withImageEnv(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, served run.Serving, facts release.EdgeFacts) (run.Serving, error) {
+func (p Containers) newImageEnv(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, served run.Serving, facts release.EdgeFacts) (map[string]string, error) {
 	app := spec.App
-	var err error
+	values := served.Env
 	if next.Serves(app) {
-		served = next.FillContainerDefaults(served)
 		buckets, err := c.TierBuckets(ctx, spec.Ref.Tier, naming.StorageEdge, naming.StorageCache)
 		if err != nil {
-			return run.Serving{}, err
+			return nil, err
 		}
 		database, err := c.Workload().ReadProjectDatabase(ctx, spec.Ref.Tier, spec.Ref.Project)
 		if err != nil {
-			return run.Serving{}, err
+			return nil, err
 		}
-		if served.Env, err = run.MergeValues(app.App, release.NextValues, served.Env, next.NewContainerEnv(spec, served.Memory, next.NewCache(c.Names, buckets, database, p.ContainerEndpoint, p.ContainerTagEndpoint, ""))); err != nil {
-			return run.Serving{}, err
+		if values, err = run.MergeValues(app.App, release.NextValues, values, next.NewContainerEnv(spec, served.Memory, next.NewCache(c.Names, buckets, database, p.ContainerEndpoint, p.ContainerTagEndpoint, ""))); err != nil {
+			return nil, err
 		}
 	}
-	served.Env, err = run.MergeValues(app.App, release.OriginGuardValues, served.Env, release.NewOriginGuardEnv(facts.OriginSecret))
-	return served, err
+	return run.MergeValues(app.App, release.OriginGuardValues, values, release.NewOriginGuardEnv(facts.OriginSecret))
 }
 
 func (p Containers) Remove(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, images provider.ImageStore, progress progress.Log) error {

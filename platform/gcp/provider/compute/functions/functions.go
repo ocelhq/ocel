@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
@@ -13,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/next"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
@@ -107,7 +105,7 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 		if next.Serves(app) {
 			served = next.FillServingDefaults(served)
 		}
-		if served.Env, err = p.ServiceEnv(ctx, c, spec, fn, served, own, facts); err != nil {
+		if served.Env, err = p.NewFunctionEnv(ctx, c, spec, fn, served, own, facts); err != nil {
 			return nil, err
 		}
 		gateIgnored := cloudrun.IgnoresGate(spec, fn)
@@ -145,52 +143,6 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 		return nil, err
 	}
 	return append(deployed, release.WorkerFunctions(workers)...), nil
-}
-
-func (p Functions) UploadBuildFiles(ctx context.Context, spec provider.StackSpec, progress progress.Log) error {
-	if next.Serves(spec.App) && spec.App.ISR != nil {
-		if err := next.SeedPrerenders(ctx, p.Objects, spec, progress); err != nil {
-			return err
-		}
-	}
-	return p.Objects.UploadStaticFiles(ctx, spec, progress)
-}
-
-func (p Functions) ServiceEnv(ctx context.Context, c *gcloud.Clients, spec provider.StackSpec, fn provider.FunctionSpec, served run.Serving, own map[string]string, facts release.EdgeFacts) (map[string]string, error) {
-	app := spec.App
-	values, err := run.MergeValues(fn.Name, release.SpecValues, app.Values.ContainerEnv, fn.Env)
-	if err != nil {
-		return nil, err
-	}
-	if values, err = run.MergeValues(fn.Name, release.RuntimeValues, values, own); err != nil {
-		return nil, err
-	}
-	if values, err = run.MergeValues(fn.Name, release.CachingEdgeValues, values, newCachingEdgeEnv(spec)); err != nil {
-		return nil, err
-	}
-	if values, err = run.MergeValues(fn.Name, release.OcelRouteTableValues, values, newOcelRouteTableEnv(spec)); err != nil {
-		return nil, err
-	}
-	if next.Serves(app) {
-		buckets, err := c.TierBuckets(ctx, spec.Ref.Tier, naming.StorageEdge, naming.StorageCache)
-		if err != nil {
-			return nil, err
-		}
-		database, err := c.Workload().ReadProjectDatabase(ctx, spec.Ref.Tier, spec.Ref.Project)
-		if err != nil {
-			return nil, err
-		}
-		if values, err = run.MergeValues(fn.Name, release.NextValues, values, next.NewEnv(spec, fn, served, next.NewCache(c.Names, buckets, database, p.ContainerEndpoint, p.ContainerTagEndpoint, facts.PurgeSecret))); err != nil {
-			return nil, err
-		}
-	}
-	if values, err = run.MergeValues(fn.Name, release.CDNPurgeValues, values, next.NewCDNPurgeEnv(c.Names, spec)); err != nil {
-		return nil, err
-	}
-	if values, err = run.MergeValues(fn.Name, release.NodePurgeValues, values, next.NewNodePurgeEnv(spec, facts.PurgeSecret)); err != nil {
-		return nil, err
-	}
-	return run.MergeValues(fn.Name, release.OriginGuardValues, values, release.NewOriginGuardEnv(facts.OriginSecret))
 }
 
 func workerImageOf(app *provider.AppSpec, images provider.ImagePushes) (string, error) {
