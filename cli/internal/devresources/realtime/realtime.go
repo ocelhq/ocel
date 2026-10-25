@@ -122,7 +122,7 @@ func (b *Backend) Publish(ctx context.Context, req *realtimev1.PublishRequest) (
 	publisher := b.publisher
 	b.mu.Unlock()
 	if publisher == nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this app declares no realtime, so there is nothing to publish on"))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("this app declares no realtime"))
 	}
 	return publisher.Publish(ctx, req)
 }

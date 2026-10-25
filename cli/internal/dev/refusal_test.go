@@ -261,8 +261,7 @@ func TestADevRunRefusesAScopedValueNoChildItStartsCouldRead(t *testing.T) {
 
 		want := "A_KEY, B_KEY, C_KEY, D_KEY are scoped to a folder this run cannot state — the app has not been started.\n" +
 			"\n  web binds /web\n  api binds /api\n\n" +
-			"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, " +
-			"so the binding they state is the project root. A scoped read refuses under it, even with the value in " + project.DotenvFileName + ".\n\n" +
+			"`ocel dev` and `ocel run` run the whole project bound to the project root, where a scoped read refuses even with the value in " + project.DotenvFileName + ".\n\n" +
 			"fix: bind every app to the same folder in ocel.json, or drop `folders:` from those declarations"
 
 		for range 50 {

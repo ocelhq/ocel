@@ -37,9 +37,9 @@ func (v valueLayers) advice(watched bool) string {
 		}
 	}
 	if watched {
-		return fmt.Sprintf("editing %s re-resolves this run; saving it is enough.", strings.Join(files, " or "))
+		return fmt.Sprintf("Editing %s re-resolves this run.", strings.Join(files, " or "))
 	}
-	return fmt.Sprintf("%s is read once, at startup; editing it takes effect on the next `ocel run`.", strings.Join(files, " or "))
+	return fmt.Sprintf("%s is read once; edits apply on the next `ocel run`.", strings.Join(files, " or "))
 }
 
 func reportValues(span *run.Span, dir string, values valueLayers, watched bool) {
@@ -51,16 +51,14 @@ func reportValues(span *run.Span, dir string, values valueLayers, watched bool) 
 		reported = true
 		keys := strings.Join(slices.Sorted(maps.Keys(layer.values)), ", ")
 		if !layer.file {
-			span.Say(fmt.Sprintf("resolved %s from %s, the dev env source, read once as this run started.", keys, layer.from))
+			span.Say(fmt.Sprintf("Resolved %s from %s.", keys, layer.from))
 			continue
 		}
-		span.Say(fmt.Sprintf("resolved %s from %s. That file is yours alone — a teammate's checkout has its own, so nothing set here reaches anyone else and a deploy resolves none of it.",
-			keys, layer.from))
+		span.Say(fmt.Sprintf("Resolved %s from %s, local to this checkout.", keys, layer.from))
 	}
 	if !reported {
 		return
 	}
-	span.Say("dev delivers every value to the app in plaintext under its own name; a deploy keeps a sensitive value out of the function environment and a live one out of the artifact.")
 	span.Say(values.advice(watched))
 	for _, layer := range values {
 		if !layer.file || len(layer.values) == 0 {
@@ -68,9 +66,9 @@ func reportValues(span *run.Span, dir string, values valueLayers, watched bool) 
 		}
 		switch ignored, err := readGitIgnored(dir, layer.from); {
 		case err != nil:
-			span.Warn(fmt.Sprintf("ocel cannot tell whether git ignores %s (%v). Keep it out of version control — it contains values nothing else may see.", layer.from, err))
+			span.Warn(fmt.Sprintf("Could not tell whether git ignores %s (%v): keep it out of version control.", layer.from, err))
 		case !ignored:
-			span.Warn(fmt.Sprintf("%s is not ignored by git. Add it to .gitignore before committing — it contains values nothing else may see.", layer.from))
+			span.Warn(fmt.Sprintf("%s is not ignored by git: add it to .gitignore before committing.", layer.from))
 		}
 	}
 }
@@ -96,5 +94,5 @@ func reportSecretValues(span *run.Span, secretKeys []string) {
 	}
 	keys := slices.Clone(secretKeys)
 	slices.Sort(keys)
-	span.Say(fmt.Sprintf("resolved %s the way dev resolves every other value. Deployed, a rotated value is picked up within a bounded window.", strings.Join(keys, ", ")))
+	span.Say(fmt.Sprintf("Resolved secrets %s.", strings.Join(keys, ", ")))
 }

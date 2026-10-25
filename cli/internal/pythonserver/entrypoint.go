@@ -41,7 +41,7 @@ func (e Entrypoint) arguments() []string {
 
 func ResolveEntrypoint(source, entrypoint string) (Entrypoint, error) {
 	if entrypoint == "" {
-		return Entrypoint{}, fmt.Errorf("%s holds none of %s, the files a python app is served from: set \"entrypoint\" to the file or module that serves it", source, strings.Join(language.PythonEntrypoints, ", "))
+		return Entrypoint{}, fmt.Errorf("%s holds none of %s: set \"entrypoint\" to the file or module that serves it", source, strings.Join(language.PythonEntrypoints, ", "))
 	}
 	parsed, err := ParseEntrypoint(entrypoint)
 	if err != nil {
@@ -72,11 +72,11 @@ func ParseEntrypoint(entrypoint string) (Entrypoint, error) {
 
 func parseEntryFile(declared string) (string, error) {
 	if !strings.HasSuffix(declared, pythonFileSuffix) {
-		return "", fmt.Errorf("entrypoint %q names a path that is not a .py file: a python entrypoint is a .py file in the app's directory, or a module as module or module:name", declared)
+		return "", fmt.Errorf("entrypoint %q is not a .py file: name a .py file in the app's directory, or a module as module[:name]", declared)
 	}
 	clean := path.Clean(declared)
 	if path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
-		return "", fmt.Errorf("entrypoint %q is not a path inside the app's directory, and an artifact holds the app's own directory and nothing beside it", declared)
+		return "", fmt.Errorf("entrypoint %q is outside the app's directory", declared)
 	}
 	return clean, nil
 }
@@ -88,7 +88,7 @@ func refuseModuleEntrypoint(declared string) error {
 		invalid = invalid || !pythonIdentifier.MatchString(part)
 	}
 	if invalid {
-		return fmt.Errorf("entrypoint %q is neither a .py file nor a module path: a module entrypoint is dotted names, as my_pkg.api, optionally followed by :name, the object it serves", declared)
+		return fmt.Errorf("entrypoint %q is neither a .py file nor a module path such as my_pkg.api[:name]", declared)
 	}
 	return nil
 }

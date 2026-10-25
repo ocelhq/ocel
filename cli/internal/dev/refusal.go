@@ -69,7 +69,7 @@ func shellHint(key string, dotfileKeys map[string]struct{}, run localCommand) st
 	if _, inShell := os.LookupEnv(key); !inShell {
 		return ""
 	}
-	return fmt.Sprintf("%s is set in this shell, but `%s` resolves values from %s so every developer's run is the same.", key, run.line(), run.source.where())
+	return fmt.Sprintf("%s is set in this shell, but `%s` reads values from %s only.", key, run.line(), run.source.where())
 }
 
 func whyUnready(problem *resourcesv1.VariableProblem) string {
@@ -136,7 +136,7 @@ func refuseUnstatableBinding(source valueSource, apps []project.App, stated, con
 
   %s
 
-`+"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, so the binding they state is %s. A scoped read refuses under it, even with the value in %s.\n\nfix: bind every app to the same folder in %s, or drop `folders:` from those declarations",
+`+"`ocel dev` and `ocel run` run the whole project bound to %s, where a scoped read refuses even with the value in %s.\n\nfix: bind every app to the same folder in %s, or drop `folders:` from those declarations",
 		scopedPlural(keys), strings.Join(bindings, "\n  "), folderLabel(stated), source.where(), configName)
 }
 

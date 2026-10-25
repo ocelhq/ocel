@@ -65,11 +65,8 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 				t.Fatalf("notice = %q, want it to disclose no value", got)
 			}
 		}
-		if !strings.Contains(got, "teammate") && !strings.Contains(got, "yours alone") {
-			t.Errorf("notice = %q, want it to say the collaboration a shared store provides is gone", got)
-		}
-		if !strings.Contains(got, "plaintext") {
-			t.Errorf("notice = %q, want it to say values reach the child in plaintext, which a deploy does not do", got)
+		if !strings.Contains(got, "local to this checkout") {
+			t.Errorf("notice = %q, want it to say the file stays in this checkout", got)
 		}
 		if strings.Contains(got, ".gitignore") {
 			t.Errorf("notice = %q, want no gitignore warning when the file is already ignored", got)
@@ -111,7 +108,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		}, true)
 		got := out.String()
 
-		for _, want := range []string{"API_TOKEN from infisical:p-1/dev", "LOG_LEVEL from " + project.LocalDotenvFileName, project.LocalDotenvFileName + " is not ignored by git", "editing " + project.LocalDotenvFileName + " re-resolves"} {
+		for _, want := range []string{"API_TOKEN from infisical:p-1/dev", "LOG_LEVEL from " + project.LocalDotenvFileName, project.LocalDotenvFileName + " is not ignored by git", "Editing " + project.LocalDotenvFileName + " re-resolves"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("notice = %q, want it to say %q", got, want)
 			}
@@ -194,7 +191,7 @@ func TestTheDevValueReportAsksGitWhetherItIgnoresEachFile(t *testing.T) {
 
 		var out bytes.Buffer
 		reportValues(spanWriting(t, &out), dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
-		if got := out.String(); !strings.Contains(got, "cannot tell whether git ignores "+project.DotenvFileName) {
+		if got := out.String(); !strings.Contains(got, "Could not tell whether git ignores "+project.DotenvFileName) {
 			t.Errorf("notice = %q, want it to say it cannot tell", got)
 		}
 	})
@@ -244,13 +241,13 @@ func TestReportSecretValues(t *testing.T) {
 		}
 	})
 
-	t.Run("it names every secret key and says dev resolves them like any other value", func(t *testing.T) {
+	t.Run("it names every secret key", func(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
 		reportSecretValues(spanWriting(t, &out), []string{"WEBHOOK_SECRET", "API_TOKEN"})
 		got := out.String()
-		for _, want := range []string{"API_TOKEN", "WEBHOOK_SECRET", "every other value", "bounded window"} {
+		for _, want := range []string{"API_TOKEN", "WEBHOOK_SECRET"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("reportSecretValues wrote %q, want it to mention %q", got, want)
 			}
