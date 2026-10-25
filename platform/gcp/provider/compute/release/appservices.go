@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -38,7 +39,7 @@ func WarnPreviewOpen(spec provider.StackSpec, service string, progress progress.
 	gcloud.EnsureProgress(progress).Warn("Cloud Run service " + service + " " + previewOpenWarning)
 }
 
-func (p *Release) RevokeAfterRemoval(ctx context.Context, c *gcloud.Clients, ref provider.StackRef, goingFunctions, goingContainers []string, progress progress.Log) error {
+func (p *Release) DeleteUnusedAccount(ctx context.Context, c *gcloud.Clients, ref provider.StackRef, goingFunctions, goingContainers []string, progress progress.Log) error {
 	keeps, err := StackKeepsRunning(ctx, p.Records, ref, goingFunctions, goingContainers)
 	if err != nil || keeps {
 		return err
@@ -58,7 +59,20 @@ func (p *Release) RevokeAfterRemoval(ctx context.Context, c *gcloud.Clients, ref
 	if err != nil {
 		return err
 	}
-	if revoked {
+	if recorded, err = stackrecords.List(ctx, p.Records, ref.Tier, ref.Project); err != nil {
+		return err
+	}
+	if runsAppElsewhere(recorded, ref) {
+		return nil
+	}
+	deleted, err := c.DeleteAccount(ctx, ref.Tier, account)
+	if err != nil {
+		return gcloud.ExplainMissingGrant(err, c.DeployCredential(ref.Tier).Tiered(credential.AccountsRole).String())
+	}
+	switch {
+	case deleted:
+		gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Deleted the %s service account: nothing runs as app %s of %s in environment %s any more", account, ref.Name.App, ref.Project, ref.Name.Env))
+	case revoked:
 		gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Revoked what app %s of %s was granted in environment %s: nothing runs as the %s service account any more", ref.Name.App, ref.Project, ref.Name.Env, account))
 	}
 	return nil

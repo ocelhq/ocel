@@ -226,6 +226,29 @@ func TestADeployCredentialHoldsItsTiersPowersOverItsOwnTiersServiceAccounts(t *t
 	}
 }
 
+func TestADeployCredentialMayUntagAndDeleteItsOwnTiersAppAccountsAndNoneOfTheOtherTiers(t *testing.T) {
+	t.Parallel()
+
+	key := names.New("ocel", "acme-prod").TierTagKeyPath()
+	const account = "projects/acme-prod/serviceAccounts/ocel-app-550f4d4c26@acme-prod.iam.gserviceaccount.com"
+	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
+		tagged := grantedOver(t, deployOf(tier), checkedResource{name: account, tags: map[string]string{key: string(tier)}})
+		if _, holds := tagged["iam.serviceAccounts.deleteTagBinding"]; !holds {
+			t.Errorf("the %s deploy credential cannot unbind its tier's value from its own tier's app account, which a removal does before deleting it", tier)
+		}
+		untagged := grantedOver(t, deployOf(tier), checkedResource{name: account})
+		if _, holds := untagged["iam.serviceAccounts.delete"]; !holds {
+			t.Errorf("the %s deploy credential cannot delete an app account once it is untagged, and every removed environment then keeps one", tier)
+		}
+		other := grantedOver(t, deployOf(tier), checkedResource{name: account, tags: map[string]string{key: string(tier.Sibling())}})
+		for _, power := range []string{"iam.serviceAccounts.delete", "iam.serviceAccounts.deleteTagBinding"} {
+			if via, holds := other[power]; holds {
+				t.Errorf("the %s deploy credential holds %s on an account tagged %s, through %s", tier, power, tier.Sibling(), via)
+			}
+		}
+	}
+}
+
 func TestEveryRoleAFenceHoldsIsConditionedOnItsOwnTiersTagOrNoTierTag(t *testing.T) {
 	t.Parallel()
 

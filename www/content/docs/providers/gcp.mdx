@@ -670,9 +670,12 @@ granted on the project, on a condition naming that database.
 A serverless app behind the load balancer that revalidates, a Next app or a Node app whose build declares the `revalidation` need, is also granted the cache purge role, which holds `compute.urlMaps.invalidateCache` and nothing else, so `revalidateTag` clears the tag from Cloud CDN. Google cannot scope the permission to one URL map; see [sharing one project between tiers](#sharing-one-project-between-tiers).
 
 Google limits how many service accounts a project may hold, and every app takes one per environment
-it runs in: a deploy that reaches the limit is refused, naming the quota. A deploy never deletes an
-account: `ocel bootstrap <tier>` deletes the account of each app an environment of that tier no
-longer runs.
+it runs in: a deploy that reaches the limit is refused, naming the quota. Destroying an environment,
+or removing the last release of an app in it, takes back everything the app's account was granted
+there and deletes the account. A deleted account no longer counts against the quota, and a later
+deploy to the same environment creates a new one. `ocel bootstrap <tier>` also deletes the account
+of each app an environment of that tier no longer runs, which catches any account a removal that
+was cut short left behind.
 
 A prune or a destroy untags the images no Cloud Run revision runs any more, and the repository
 deletes an untagged image a week later. A deploy that finds its image already pushed tags it again

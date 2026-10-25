@@ -421,6 +421,14 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 			if s.TierTags != nil && len(s.TierTags.Bound(AccountTagParent(accountIDIn(path)))) > 0 {
 				s.DeletedTagged = append(s.DeletedTagged, path)
 			}
+			if s.Accounts != nil {
+				if !s.Accounts[accountIDIn(path)] {
+					w.WriteHeader(http.StatusNotFound)
+					_, _ = w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"service account not found"}}`))
+					return
+				}
+				delete(s.Accounts, accountIDIn(path))
+			}
 			_, _ = w.Write([]byte(`{}`))
 		case s.Accounts != nil && r.Method == http.MethodGet && strings.Contains(path, "/serviceAccounts/") &&
 			!s.Accounts[strings.TrimSuffix(path[strings.LastIndex(path, "/")+1:], "@acme-prod.iam.gserviceaccount.com")]:

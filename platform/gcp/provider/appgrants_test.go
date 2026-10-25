@@ -74,7 +74,7 @@ func recordApp(t *testing.T, p *Provider, ref provider.StackRef, name naming.Sta
 
 func removeStack(t *testing.T, p *Provider, c *gcloud.Clients, ref provider.StackRef) {
 	t.Helper()
-	if err := p.release().RevokeAfterRemoval(context.Background(), c, ref, nil, nil, nil); err != nil {
+	if err := p.release().DeleteUnusedAccount(context.Background(), c, ref, nil, nil, nil); err != nil {
 		t.Fatalf("revokeAfterRemoval(%s) = %v", ref.Name, err)
 	}
 }
@@ -235,6 +235,74 @@ func TestRemovingTheLastReleaseOfAnEnvironmentRevokesEveryGrantItsAccountHeld(t 
 	}
 }
 
+func accountPathOf(c *gcloud.Clients, ref provider.StackRef, app string) string {
+	return "/v1/projects/acme-prod/serviceAccounts/" + c.AppAccountEmail(ref.Project, ref.Name.Env, app)
+}
+
+func TestRemovingTheLastReleaseOfAnEnvironmentDeletesItsAccount(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	p, c, spec, _ := grantedAppAccount(t, server)
+
+	removeStack(t, p, c, spec.Ref)
+
+	if want := []string{accountPathOf(c, spec.Ref, "web")}; !slices.Equal(server.DeletedAccounts, want) {
+		t.Errorf("deleted the accounts %q, want %q: every removed environment that keeps its account takes one more of the project's service account quota", server.DeletedAccounts, want)
+	}
+}
+
+func TestRemovingAnEnvironmentWhoseAccountIsAlreadyGoneSucceeds(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	p, c, spec, _ := grantedAppAccount(t, server)
+	server.Mu.Lock()
+	delete(server.Accounts, c.AppAccount(spec.Ref.Project, spec.Ref.Name.Env, "web"))
+	server.Mu.Unlock()
+
+	removeStack(t, p, c, spec.Ref)
+}
+
+func TestRemovingAnEnvironmentKeepsItsAccountWhenADeployRecordsTheAppBeforeTheDelete(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	p, c, spec, _ := grantedAppAccount(t, server)
+	removal := p.release()
+	recorded := &countingRecords{Store: removal.Records}
+	recorded.after = func(listed int) {
+		if listed == 1 {
+			recordApp(t, p, spec.Ref, stackOf(spec.Ref.Name.Env, "web", "r2"))
+		}
+	}
+	removal.Records = recorded
+
+	if err := removal.DeleteUnusedAccount(context.Background(), c, spec.Ref, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(server.DeletedAccounts) != 0 {
+		t.Errorf("deleted the accounts %q, want none: a deploy recorded the app after the removal first read the records, and its service would run as a deleted account", server.DeletedAccounts)
+	}
+}
+
+func TestRedeployingAnEnvironmentAfterItsRemovalCreatesAndGrantsItsAccountAgain(t *testing.T) {
+	t.Parallel()
+	server := appAccountsOnly()
+	p, c, spec, member := grantedAppAccount(t, server)
+	before := holdings(server, c, member)
+	removeStack(t, p, c, spec.Ref)
+
+	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}}); err != nil {
+		t.Fatalf("ensureAppAccount() after the removal = %v", err)
+	}
+
+	if len(server.Created) != 2 {
+		t.Errorf("%d accounts were created, want the account made again after its removal deleted it", len(server.Created))
+	}
+	if got := holdings(server, c, member); !slices.Equal(got, before) {
+		t.Errorf("the account holds %q after the redeploy, want the %q it held before the removal", got, before)
+	}
+}
+
 func TestRemovingOneReleaseLeavesTheAccountAnotherReleaseOfTheEnvironmentRuns(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
@@ -248,6 +316,9 @@ func TestRemovingOneReleaseLeavesTheAccountAnotherReleaseOfTheEnvironmentRuns(t 
 
 	if got := holdings(server, c, member); !slices.Equal(got, before) {
 		t.Errorf("the account holds %q, want the %q it held while another release of the app is recorded", got, before)
+	}
+	if len(server.DeletedAccounts) != 0 {
+		t.Errorf("deleted the accounts %q, want none while another release of the app is recorded", server.DeletedAccounts)
 	}
 }
 
