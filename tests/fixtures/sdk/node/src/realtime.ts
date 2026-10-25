@@ -43,10 +43,14 @@ function readBinding(): string {
   return raw;
 }
 
+function readBindingSeed(): string | undefined {
+  return JSON.parse(readBinding()).realtime.signingKey || undefined;
+}
+
 function readSigningKey(signer: Signer): KeyObject | undefined {
   switch (signer) {
     case "binding": {
-      const seed = Buffer.from(JSON.parse(readBinding()).realtime.signingKey, "base64");
+      const seed = Buffer.from(readBindingSeed() ?? "", "base64");
       return createPrivateKey({
         key: Buffer.concat([PKCS8_ED25519_PREFIX, seed]),
         format: "der",
@@ -74,6 +78,10 @@ realtimeRoutes.post("/api/tokens", express.json(), (req, res) => {
     claims: unknown;
     signedBy: Signer;
   };
+  if (signedBy === "binding" && !readBindingSeed()) {
+    res.status(404).json({ error: "the realtime binding holds no signing key" });
+    return;
+  }
   const input = `${encodeSegment(header)}.${encodeSegment(claims)}`;
   const key = readSigningKey(signedBy);
   const signature = key ? sign(null, Buffer.from(input), key).toString("base64url") : "";
