@@ -42,7 +42,7 @@ type leaseLostError struct {
 }
 
 func (e *leaseLostError) Error() string {
-	return "the provider refused to renew this deploy's lease on the environment, so the build stopped: " + e.refusal.Error()
+	return "the provider refused to renew this deploy's lease: " + e.refusal.Error()
 }
 
 func (e *leaseLostError) Unwrap() error { return e.refusal }

@@ -101,7 +101,7 @@ func manifestAppsOf(apps []app, functions []build.Function, functionsByApp map[s
 	for _, a := range apps {
 		configured[a.Name] = true
 		if a.Compute == "" {
-			return nil, fmt.Errorf("app %q reached the manifest with no compute resolved — every app on the wire names the compute it runs on, and the manifest is built after preflight so that a provider's own answer is what fills it", a.Name)
+			return nil, fmt.Errorf("app %q reached the manifest with no compute resolved", a.Name)
 		}
 		framework := buildoutput.Framework{Name: a.Framework, Arch: a.Arch}
 		if framework.Name == "" {

@@ -88,7 +88,7 @@ func refuseABinaryWithoutOcelMain(ctx context.Context, binary rustBinary) error 
 		return fmt.Errorf("discovery: %w", err)
 	}
 	if !marked {
-		return fmt.Errorf("discovery: the binary %q of the crate at %s has no #[ocel::main] and no call to ocel::discover(), or was built with an ocel-sdk older than this CLI, so running it would start the app instead of declaring its resources: put #[ocel::main] on fn main in %s", binary.bin.Name, binary.crate.Dir(), binary.bin.SrcPath)
+		return fmt.Errorf("discovery: the binary %q of the crate at %s has no #[ocel::main] and no call to ocel::discover(), or was built with an older ocel-sdk: put #[ocel::main] on fn main in %s", binary.bin.Name, binary.crate.Dir(), binary.bin.SrcPath)
 	}
 	return nil
 }
@@ -131,7 +131,7 @@ func refuseDivergentDefaultBin(root Root, crate cargo.Package, bin cargo.Target)
 	if err == nil {
 		ran = fmt.Sprintf("%q", runs.Name)
 	}
-	return fmt.Errorf("discovery: apps %q and %q are both built from the crate at %s: %q names the binary %q, and %q names none, so it runs %s: resources are declared by running one binary of a crate, so give both apps the same \"entrypoint\"", root.BinApp, root.DefaultBinApp, root.Dir, root.BinApp, bin.Name, root.DefaultBinApp, ran)
+	return fmt.Errorf("discovery: apps %q and %q are both built from the crate at %s: %q names the binary %q, and %q names none, so it runs %s: give both apps the same \"entrypoint\"", root.BinApp, root.DefaultBinApp, root.Dir, root.BinApp, bin.Name, root.DefaultBinApp, ran)
 }
 
 func declaresThroughOcel(at string) bool {

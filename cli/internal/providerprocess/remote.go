@@ -43,7 +43,7 @@ type remoteTransport struct {
 
 func StartRemote(ctx context.Context, cfg *project.Project, span *run.Span, questions Questions, remote Remote) (*Provider, error) {
 	if len(cfg.Transforms) > 0 {
-		return nil, &clierror.Error{Code: clierror.CodeCloudUnsupported, Cause: fmt.Errorf("%s applies transforms, and Ocel Cloud runs none: drop them from its config, or name a provider to run them against your own account", cfg.Path)}
+		return nil, &clierror.Error{Code: clierror.CodeCloudUnsupported, Cause: fmt.Errorf("%s applies transforms, which Ocel Cloud does not run: drop them, or name a provider", cfg.Path)}
 	}
 	config, err := newProviderConfig(cfg, nil)
 	if err != nil {

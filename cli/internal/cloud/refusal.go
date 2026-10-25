@@ -20,7 +20,7 @@ func RefusalOf(apiURL string, err *connect.Error) *clierror.Error {
 		return &clierror.Error{Code: clierror.CodeCloudVersionUnserved, Cause: wireerror.Error{Message: describeUnserved(apiURL, unserved.GetServed()), Wire: err}}
 	}
 	if err.Code() == connect.CodeUnauthenticated {
-		return &clierror.Error{Code: clierror.CodeCloudTokenRefused, Hint: "ocel login", Cause: wireerror.Error{Message: fmt.Sprintf("Ocel Cloud at %s refuses the token the console issued (%s): run `ocel login` and run this again", apiURL, err.Message()), Wire: err}}
+		return &clierror.Error{Code: clierror.CodeCloudTokenRefused, Hint: "ocel login", Cause: wireerror.Error{Message: fmt.Sprintf("Ocel Cloud at %s refuses the token the console issued (%s): run `ocel login`", apiURL, err.Message()), Wire: err}}
 	}
 	return nil
 }
@@ -51,12 +51,12 @@ func detailOf[T any](err *connect.Error) (T, bool) {
 func describeUnserved(apiURL string, served []string) string {
 	running := version.Version
 	if len(served) == 0 {
-		return fmt.Sprintf("Ocel Cloud at %s serves no release of ocel at the moment, so not ocel %s: run this again later", apiURL, running)
+		return fmt.Sprintf("Ocel Cloud at %s serves no release of ocel, so not ocel %s: try again later", apiURL, running)
 	}
 	bySemver := func(a, b string) int { return semver.Compare(semverOf(a), semverOf(b)) }
 	newest := slices.MaxFunc(served, bySemver)
 	if semver.IsValid(semverOf(running)) && bySemver(running, slices.MinFunc(served, bySemver)) < 0 {
-		return fmt.Sprintf("ocel %s is older than every release Ocel Cloud at %s serves: upgrade ocel to %s and run this again", running, apiURL, newest)
+		return fmt.Sprintf("ocel %s is older than every release Ocel Cloud at %s serves: upgrade ocel to %s", running, apiURL, newest)
 	}
 	return fmt.Sprintf("Ocel Cloud at %s serves ocel %s, not ocel %s: run this with ocel %s, or again once Ocel Cloud serves ocel %s", apiURL, strings.Join(served, ", "), running, newest, running)
 }

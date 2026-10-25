@@ -85,7 +85,7 @@ func (i Invocation) resolveLinkedWithoutNode(ctx context.Context, configPath str
 	if project.ValidateSlug(slug) != nil {
 		return Target{}, nil
 	}
-	derived := fmt.Sprintf("%s needs node to read and node is not on PATH, so this runs as %s, the console project this directory is linked to", filepath.Base(configPath), slug)
+	derived := fmt.Sprintf("node is not on PATH to read %s; running as %s, the linked console project", filepath.Base(configPath), slug)
 	return Target{Project: project.NewUnconfigured(dir, slug), Cloud: cloud, Derived: derived}, nil
 }
 

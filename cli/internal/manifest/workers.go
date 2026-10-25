@@ -104,9 +104,9 @@ func workerApp(apps []app, name string, declaration declaredResource, declared b
 		joined := apps[i]
 		switch {
 		case len(joined.Domains) > 0:
-			return app{}, refuse(declaration, "%sjoins the app %q, and that app has domains: a worker takes no public traffic, so rename the worker or remove the app's domains", runsOn, name)
+			return app{}, refuse(declaration, "%sjoins the app %q, which has domains: rename the worker or remove the app's domains", runsOn, name)
 		case joined.HealthCheckPath != "":
-			return app{}, refuse(declaration, "%sjoins the app %q, and that app has a health path: a worker takes no public traffic, so rename the worker or remove the app's health path", runsOn, name)
+			return app{}, refuse(declaration, "%sjoins the app %q, which has a health path: rename the worker or remove the app's health path", runsOn, name)
 		}
 		return joined, nil
 	}
@@ -118,7 +118,7 @@ func workerApp(apps []app, name string, declaration declaredResource, declared b
 			return declaring, nil
 		}
 	}
-	return app{}, refuse(declaration, "%sneeds an app, and with %d apps in ocel.json and none named %q, ocel cannot tell which app's folder and compute worker %q takes: add an app named %q to ocel.json", runsOn, len(apps), name, name, name)
+	return app{}, refuse(declaration, "%sneeds an app, and none of the %d apps in ocel.json is named %q: add one", runsOn, len(apps), name)
 }
 
 func appDeclaring(apps []app, source string) (app, bool) {

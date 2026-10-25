@@ -257,7 +257,7 @@ func WorkerRoot(configDir string, roots []Root, worker string, sources []string)
 			continue
 		}
 		if root.Language != served.Language {
-			return Root{}, fmt.Errorf("worker %q serves %s in %s and %s in %s, and a worker runs in one language: give one of them a worker of its own", worker, servedAt, served.Language, at, root.Language)
+			return Root{}, fmt.Errorf("worker %q serves %s in %s and %s in %s, : give one of them a worker of its own", worker, servedAt, served.Language, at, root.Language)
 		}
 	}
 	if servedAt != "" {

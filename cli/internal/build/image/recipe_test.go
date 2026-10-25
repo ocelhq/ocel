@@ -92,7 +92,7 @@ func TestADockerfileBesideAGoAppBelowItsModuleIsToldWhereItsCopiesAreReadFrom(t 
 	if strings.Count(notice, "\n") != 0 {
 		t.Errorf("the notice is %q, want one line", notice)
 	}
-	if !strings.Contains(notice, "copies from "+root) || !strings.Contains(notice, "build context") {
+	if !strings.Contains(notice, "with context "+root) {
 		t.Errorf("the notice is %q, and never says the build context is %s — a COPY go.mod . now reads the directory holding the module, and nothing else says so", notice, root)
 	}
 }

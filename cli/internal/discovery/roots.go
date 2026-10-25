@@ -74,7 +74,7 @@ func crateRoots(cfg *project.Project) ([]Root, error) {
 				root.DefaultBinApp = c.app.Name
 			}
 		case root.Bin != "" && root.Bin != c.app.Entrypoint:
-			return nil, fmt.Errorf("discovery: apps %q and %q are both built from the crate at %s, and name the binaries %q and %q: resources are declared by running one binary of a crate, so give both apps the same \"entrypoint\"", root.BinApp, c.app.Name, c.dir, root.Bin, c.app.Entrypoint)
+			return nil, fmt.Errorf("discovery: apps %q and %q are both built from the crate at %s, and name the binaries %q and %q: give both apps the same \"entrypoint\"", root.BinApp, c.app.Name, c.dir, root.Bin, c.app.Entrypoint)
 		default:
 			root.Bin, root.BinApp = c.app.Entrypoint, c.app.Name
 		}
@@ -98,7 +98,7 @@ func Roots(configDir string, paths []string) ([]Root, error) {
 			continue
 		}
 		if found == language.Rust {
-			return nil, fmt.Errorf("discovery: %s contains rust files, and a rust app declares from its own crate: delete the folder and derive ocel::Resources or ocel::Env on a struct in the crate", dir)
+			return nil, fmt.Errorf("discovery: %s contains rust files: delete the folder and derive ocel::Resources or ocel::Env on a struct in the app's crate", dir)
 		}
 		roots = append(roots, Root{Dir: dir, Language: found})
 	}

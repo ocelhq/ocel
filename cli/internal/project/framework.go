@@ -111,7 +111,7 @@ func refuseEntrypointForm(app, framework, entrypoint string) error {
 	switch framework {
 	case buildoutput.FrameworkRust:
 		if !cargoTargetName.MatchString(entrypoint) {
-			return fmt.Errorf("app %q is built with rust and sets entrypoint %q, which names no binary: give it the name of one of the crate's binaries, as cargo run --bin takes it", app, entrypoint)
+			return fmt.Errorf("app %q is built with rust and sets entrypoint %q, which names no binary: give it one of the crate's binaries, as cargo run --bin takes it", app, entrypoint)
 		}
 	case buildoutput.FrameworkPython:
 		if _, err := pythonserver.ParseEntrypoint(entrypoint); err != nil {
@@ -119,7 +119,7 @@ func refuseEntrypointForm(app, framework, entrypoint string) error {
 		}
 	case buildoutput.FrameworkGo:
 		if !filepath.IsLocal(filepath.FromSlash(entrypoint)) {
-			return fmt.Errorf("app %q is built with go and sets entrypoint %q, which names no directory inside the app: give it the directory of the main package, relative to the app's path", app, entrypoint)
+			return fmt.Errorf("app %q is built with go and sets entrypoint %q, which names no directory inside the app: give it the main package's directory, relative to the app", app, entrypoint)
 		}
 	}
 	return nil
