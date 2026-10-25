@@ -40,10 +40,10 @@ const (
 )
 
 type forwardsSeen struct {
-	mutex        sync.Mutex
-	asked        []provider.PortForwardRequest
-	open         int
-	openAtDeploy []int
+	mutex           sync.Mutex
+	asked           []provider.PortForwardRequest
+	open            int
+	openAtPreflight []int
 }
 
 func (s *forwardsSeen) openNow() int {
@@ -87,7 +87,7 @@ func forwardingPorts(t *testing.T, fixture clitest.FakeProject) *forwardsSeen {
 		apply := preflight.Apply
 		preflight.Apply = func(ctx context.Context, pre provider.DeployPreflight) error {
 			seen.mutex.Lock()
-			seen.openAtDeploy = append(seen.openAtDeploy, seen.open)
+			seen.openAtPreflight = append(seen.openAtPreflight, seen.open)
 			seen.mutex.Unlock()
 			if apply == nil {
 				return nil
@@ -151,10 +151,10 @@ func TestADeployBuildsAnAppWithTheBindingsOfWhatItUsesPointedAtPortForwardsAndCl
 		t.Errorf("the CLI asked to forward %v, want the one binding the built app uses granted to that app", sent)
 	}
 	seen.mutex.Lock()
-	deployedWith := slices.Clone(seen.openAtDeploy)
+	preflightsWith := slices.Clone(seen.openAtPreflight)
 	seen.mutex.Unlock()
-	if !slices.Equal(deployedWith, []int{0}) {
-		t.Errorf("the deploy began with %v forwards still open, want it to begin once, after every forward the build used was closed", deployedWith)
+	if !slices.Equal(preflightsWith, []int{0, 0}) {
+		t.Errorf("the preflights ran with %v forwards open, want the infra run's before any opened and the deploy's once, after every forward the build used was closed", preflightsWith)
 	}
 }
 
@@ -529,10 +529,10 @@ func TestADeployBuildsAnAppWithTheBindingProxyAndTheBucketRecordItBindsAndCloses
 		t.Errorf("the deploy said %q, want the session token never shown", said)
 	}
 	seen.mutex.Lock()
-	deployedWith := slices.Clone(seen.openAtDeploy)
+	preflightsWith := slices.Clone(seen.openAtPreflight)
 	seen.mutex.Unlock()
-	if !slices.Equal(deployedWith, []int{0}) {
-		t.Errorf("the deploy began with %v forwards or proxies still open, want it to begin after the build closed them", deployedWith)
+	if !slices.Equal(preflightsWith, []int{0, 0}) {
+		t.Errorf("the preflights ran with %v forwards or proxies open, want the infra run's before any opened and the deploy's after the build closed them", preflightsWith)
 	}
 }
 

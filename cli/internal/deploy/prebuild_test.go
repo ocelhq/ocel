@@ -111,8 +111,8 @@ func TestAPreBuildRunsOnceAfterInfraIsProvisionedAndPortsAreForwardedAndBeforeTh
 	}
 	p.seen.mutex.Lock()
 	defer p.seen.mutex.Unlock()
-	if !slices.Equal(p.seen.openAtDeploy, []int{0}) {
-		t.Errorf("the deploy began with %v forwards open, want them closed first", p.seen.openAtDeploy)
+	if !slices.Equal(p.seen.openAtPreflight, []int{0, 0}) {
+		t.Errorf("the preflights ran with %v forwards open, want the infra run's before any opened and the deploy's after they closed", p.seen.openAtPreflight)
 	}
 }
 
