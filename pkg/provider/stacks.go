@@ -181,8 +181,10 @@ func bindingNames(bindings []Binding) []string {
 }
 
 type SecretRef struct {
-	Key    string
-	Folder string
+	Key      string
+	Folder   string
+	Binding  string
+	Property string
 }
 
 type FunctionSpec struct {

@@ -39,8 +39,18 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 		if resource.Binding == "" {
 			continue
 		}
-		if _, bound := published[resource.Binding]; !bound {
+		if _, bound := published[resource.Binding]; !bound && !slices.Contains(missing, resource.Binding) {
 			missing = append(missing, resource.Binding)
+		}
+	}
+	isPublished := make(map[string]bool, len(names))
+	for _, name := range names {
+		isPublished[name] = true
+	}
+	bound := r.boundVariables()
+	for _, name := range unpublishedVariableRecords(bound, isPublished) {
+		if !slices.Contains(missing, name) {
+			missing = append(missing, name)
 		}
 	}
 	if len(missing) > 0 {
@@ -54,7 +64,7 @@ func (r *deployRun) admitBindings(ctx context.Context, progress progress.Log) er
 			return err
 		}
 	}
-	return nil
+	return r.refuseMismatchedVariables(ctx, bound)
 }
 
 func proxied(kind provider.BindingType) bool {
@@ -66,9 +76,9 @@ func RefuseMismatchedBinding(binding provider.Binding, declaredName string, decl
 	case binding.Type == provider.BindingCustom:
 		return refusal.Refuse(refusal.CodeInvalid,
 			"`bindings` binds %s.%s to %q, and the record published under that name is a custom one: "+
-				"a custom binding is read by transforms; it is external by definition and never provisioned, so it is not bound here. "+
-				"Drop it from `bindings` and read it from a transform as `bindings.custom.%s.<property>`",
-			declared, declaredName, binding.Name, binding.Name)
+				"a custom binding is external by definition and never provisioned, so it is not bound here. "+
+				"Drop it from `bindings` and read it from a transform as `bindings.custom.%s.<property>`, or into a variable as `\"variables\": { \"<KEY>\": \"@%s.<property>\" }`",
+			declared, declaredName, binding.Name, binding.Name, binding.Name)
 	case binding.Type != declared:
 		return refusal.Refuse(refusal.CodeInvalid,
 			"`bindings` declares %s as a %s and binds it to %q, and the record published under that name is a %s. "+

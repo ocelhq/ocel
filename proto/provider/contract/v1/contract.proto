@@ -317,6 +317,12 @@ message ManifestApp {
 }
 
 message ManifestVariable {
+  option (buf.validate.message).cel = {
+    id: "manifest.variable.binding"
+    message: "a variable bound to a published record names the record and one of its properties, and carries no value of its own"
+    expression: "(this.binding == '') == (this.property == '') && (this.binding == '' || this.value == '')"
+  };
+
   string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
   app.resources.v1.VariableClass class = 2 [(buf.validate.field).enum.defined_only = true];
 
@@ -327,6 +333,10 @@ message ManifestVariable {
   int64 version = 5;
 
   string description = 6;
+
+  string binding = 7;
+
+  string property = 8;
 }
 
 message ManifestFunction {

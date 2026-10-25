@@ -42,6 +42,7 @@ type Project struct {
 	Apps              []App
 	RootAppUndetected error
 	Bindings          []Binding
+	BoundVariables    []BoundVariable
 	Domains           Domains
 	Registry          *Registry
 	Lifecycle         Lifecycle
@@ -156,6 +157,10 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	if err != nil {
 		return nil, newInvalidConfigError(fmt.Errorf("%s: %w", configPath, err), "bindings")
 	}
+	boundVariables, err := normalizeBoundVariables(doc.Bindings[configdoc.VariablesKey])
+	if err != nil {
+		return nil, newInvalidConfigError(fmt.Errorf("%s: %w", configPath, err), "bindings")
+	}
 
 	registry, err := normalizeRegistry(doc.Registry)
 	if err != nil {
@@ -185,6 +190,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 		Apps:              apps,
 		RootAppUndetected: rootAppUndetected,
 		Bindings:          bindings,
+		BoundVariables:    boundVariables,
 		Domains:           domains,
 		Registry:          registry,
 		Lifecycle:         lifecycle,

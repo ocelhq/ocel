@@ -5,7 +5,9 @@ two, in Pulumi rather than [SST](../with-sst), and building on the same two rung
 the database and the network it sits in, and ocel still deploys the app — into that network.
 Bindings are how the app reaches what Pulumi provisioned; transforms are how ocel renders what
 it provisions itself. `index.ts`, `ocel.json` and `transforms/network.transform.ts` are the
-three files that make it work.
+three files that make it work. The `release` record Pulumi publishes reaches the app as two
+declared variables, under `bindings.variables`: `RELEASE_CHANNEL` a plain value, and
+`RELEASE_TOKEN` a secret, since Pulumi publishes it from a secret output.
 
 ## Run it
 

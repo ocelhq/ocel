@@ -817,6 +817,17 @@ func TestAVariableReachesTheManifestAtItsResolvedVersion(t *testing.T) {
 	})
 }
 
+func TestABoundVariableReachesTheManifestAsTheRecordAndPropertyItReads(t *testing.T) {
+	t.Parallel()
+
+	got := manifestVariables([]variables.Variable{
+		{Key: "CLOUD_SEAL_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Binding: "keys", Property: "seal"},
+	})
+	if len(got) != 1 || got[0].GetBinding() != "keys" || got[0].GetProperty() != "seal" || got[0].GetValue() != "" {
+		t.Errorf("manifestVariables = %v, want CLOUD_SEAL_KEY bound to keys.seal with no value of its own", got)
+	}
+}
+
 func TestUsagesLandAsOneEdgePerAppAndResource(t *testing.T) {
 	t.Parallel()
 

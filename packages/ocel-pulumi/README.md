@@ -99,7 +99,66 @@ every app bound to that name another database.
 
 ## `bind.custom(name, properties, opts?)`
 
-Publishes values ocel neither types nor delivers, for a transform to read:
+Publishes values ocel does not type, for an app's declared variables or a transform to read.
+
+### Into an app's variables
+
+```ts
+import * as tls from "@pulumi/tls";
+import { bind } from "@ocel/pulumi";
+
+const key = new tls.PrivateKey("origin", { algorithm: "ECDSA" });
+const certificate = new tls.SelfSignedCert("origin", {
+  privateKeyPem: key.privateKeyPem,
+  subject: { commonName: "origin.shop.example" },
+  allowedUses: ["server_auth"],
+  validityPeriodHours: 8760,
+});
+
+bind.custom("origin", {
+  certificate: certificate.certPem,
+  key: key.privateKeyPem,
+});
+```
+
+`ocel.config.ts` binds each variable to one property, written `"@<name>.<property>"`:
+
+```ts
+export default defineConfig({
+  slug: "shop",
+  bindings: {
+    variables: {
+      ORIGIN_CERT: "@origin.certificate",
+      ORIGIN_KEY: "@origin.key",
+    },
+  },
+  apps: [{ name: "api", path: "." }],
+});
+```
+
+The app declares and reads them as it reads any variable:
+
+```ts
+import { defineEnv } from "ocel/env";
+
+export const env = defineEnv({
+  ORIGIN_CERT: { class: "plain" },
+  ORIGIN_KEY: { class: "secret" },
+});
+```
+
+A property given as a secret output — `privateKeyPem` here, `config.requireSecret(…)`, or
+anything wrapped in `pulumi.secret(…)` — is published marked secret, and only a `secret`
+variable may take it; a `secret` variable takes nothing else. The deploy refuses either
+mismatch. The record is sealed in ocel's store like any value, and the dynamic resource's
+digest is a secret output too. A `plain` or `sensitive` variable is read at `ocel deploy`; a
+`secret` is read live, so a rotated key reaches the running app within about a minute.
+Text is passed as it is, and anything else as its JSON. A variable bound this way is never
+set with `ocel env set`.
+
+### Into a transform
+
+A transform reads the same record:
 
 ```ts
 bind.custom("network", {
@@ -129,10 +188,12 @@ The properties are inserted verbatim — string, number, boolean, list or object
 the surface being filled is what rejects a value of the wrong shape. `opts` is the same
 as for `bind.postgres`.
 
-No app reads a custom binding, so it takes no `grants`: nothing would attach them. Naming
-one in `bindings` is refused for the same reason.
+A custom binding takes no `grants`: nothing would attach them. Binding one as a resource under
+`bindings.<type>` is refused for the same reason; bind its properties under
+`bindings.variables` instead.
 
 ## Types
 
 There is one function per ocel binding type an app resolves. A resource ocel cannot type is
-not bindable by name — publish what a transform needs from it with `bind.custom` instead.
+not bindable by name — publish what an app or a transform needs from it with `bind.custom`
+instead.

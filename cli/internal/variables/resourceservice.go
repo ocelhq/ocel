@@ -47,8 +47,9 @@ func (d *Declarations) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareE
 		return nil, err
 	}
 
+	served := d.scope.unbound(req.GetDefinitions())
 	var wanted []Cell
-	for _, definition := range req.GetDefinitions() {
+	for _, definition := range served {
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
 			continue
 		}
@@ -60,7 +61,7 @@ func (d *Declarations) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareE
 	}
 
 	var cells []*resourcesv1.VariableCell
-	for _, definition := range req.GetDefinitions() {
+	for _, definition := range served {
 		live := definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET
 		for _, cell := range cellsOf(present, definition.GetKey()) {
 			var value string

@@ -3,6 +3,7 @@ package variables
 import (
 	"slices"
 
+	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
@@ -21,6 +22,7 @@ type Scope struct {
 	Job         bool
 	Bindings    []BindingVariables
 	OtherTiers  []BindingVariables
+	Bound       []project.BoundVariable
 	EnvSource   EnvSource
 }
 

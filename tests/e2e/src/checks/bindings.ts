@@ -31,3 +31,13 @@ export const bindingQueryCheck: Check = {
 };
 
 export const bindingChecks: Check[] = [bindingCheck, bindingQueryCheck];
+
+export const boundVariablesCheck: Check = {
+  title:
+    "GET /api/variables answers with the plain value and the secret the infrastructure published",
+  run: async (ctx) => {
+    const { res, body } = await json(ctx, "/api/variables");
+    assert.equal(res.status, 200);
+    assert.deepEqual(body, { channel: "pulumi", hasToken: true });
+  },
+};

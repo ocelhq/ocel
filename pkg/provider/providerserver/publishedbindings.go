@@ -9,6 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
@@ -73,6 +74,7 @@ type publishedBindings struct {
 	mu       sync.Mutex
 	inline   []provider.Binding
 	resolved []provider.Binding
+	records  map[string]*variablestorev1.PublishedBinding
 	loaded   bool
 }
 
@@ -80,13 +82,13 @@ func (p *publishedBindings) publishInline(bindings []provider.Binding) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.inline = bindings
-	p.resolved, p.loaded = nil, false
+	p.resolved, p.records, p.loaded = nil, nil, false
 }
 
 func (p *publishedBindings) forget() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.resolved, p.loaded = nil, false
+	p.resolved, p.records, p.loaded = nil, nil, false
 }
 
 func (p *publishedBindings) Published(ctx context.Context) ([]provider.Binding, error) {
@@ -104,19 +106,33 @@ func (p *publishedBindings) Published(ctx context.Context) ([]provider.Binding, 
 		return nil, err
 	}
 	bindings := slices.Clone(p.inline)
+	records := make(map[string]*variablestorev1.PublishedBinding, len(resolved))
 	for i, published := range resolved {
 		if slices.ContainsFunc(p.inline, func(inline provider.Binding) bool { return inline.Name == names[i] }) {
 			continue
 		}
-		binding, err := bindingPublished(names[i], published)
+		message, err := variablestoreserver.DecodePublishedBinding(published.Value)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read binding %s: %w", names[i], err)
 		}
+		binding := provider.PublishedBindingOf(message)
+		binding.Version = published.Version
 		bindings = append(bindings, binding)
+		records[names[i]] = message
 	}
 	slices.SortFunc(bindings, func(a, b provider.Binding) int { return strings.Compare(a.Name, b.Name) })
-	p.resolved, p.loaded = bindings, true
+	p.resolved, p.records, p.loaded = bindings, records, true
 	return bindings, nil
+}
+
+func (p *publishedBindings) Record(ctx context.Context, name string) (*variablestorev1.PublishedBinding, bool, error) {
+	if _, err := p.Published(ctx); err != nil {
+		return nil, false, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	record, ok := p.records[name]
+	return record, ok, nil
 }
 
 func (p *publishedBindings) Names(ctx context.Context) ([]string, error) {

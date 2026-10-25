@@ -420,6 +420,9 @@ Binds a declared resource to one you already have instead of provisioning it. Ke
 | `{ host, database, username, password, port, tls }` | A postgres by its parts. `port` defaults to 5432. `tls.mode` is `require` or `verify-full`, and `tls.ca` a PEM CA. |
 | `{ production: …, preview: … }` | Either of the two above, for that tier alone. The other tier provisions its own. |
 
+`bindings.variables` binds declared variables rather than resources: see
+[A variable from a published record](#a-variable-from-a-published-record).
+
 A bucket binds to one in a store you already run: see
 [Bucket](/docs/sdk/bucket#a-bucket-in-a-store-you-already-run). `ocel dev` always runs its own
 resources.
@@ -494,6 +497,49 @@ database user. The app is handed the binding alone.
       ocel bindings set --preview --environment "$NAME"
 - run: ocel preview up pr-${{ github.event.number }}
 ```
+
+### A variable from a published record
+
+`bindings.variables` gives a variable your app declares the value of one property of a custom
+record, the kind `bind.custom` in [`@ocel/pulumi`](/docs/sdk) publishes. Keyed by the variable,
+each value is `"@<record>.<property>"`, split at the last dot.
+
+```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  bindings: {
+    variables: {
+      ORIGIN_CERT: "@origin.certificate",
+      ORIGIN_KEY: "@origin.key",
+    },
+  },
+});
+```
+
+```json tab="JSON" title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "my-app",
+  "bindings": {
+    "variables": {
+      "ORIGIN_CERT": "@origin.certificate",
+      "ORIGIN_KEY": "@origin.key"
+    }
+  }
+}
+```
+
+- A property published from a secret output reaches only a `secret` variable, and a `secret`
+  variable takes only such a property. The deploy refuses either mismatch.
+- A `plain` or `sensitive` variable is read when you deploy; a `secret` is read live, so a
+  republished secret reaches the running app within about a minute.
+- Text is passed as it is; a number, boolean, list or object as its JSON.
+- The deploy refuses a variable bound here that no app declares, that also has a value set
+  with `ocel env set`, or that a client bundle inlines at build. `ocel env set` refuses it too.
+- A record or property nothing has published stops the deploy, naming it. `ocel dev` reads the
+  variable from its own values, like any other.
 
 ## protection
 

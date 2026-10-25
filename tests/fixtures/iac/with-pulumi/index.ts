@@ -1,6 +1,6 @@
 import { bind } from "@ocel/pulumi";
 import * as aws from "@pulumi/aws";
-import { Config, interpolate } from "@pulumi/pulumi";
+import { Config, interpolate, secret } from "@pulumi/pulumi";
 
 const region = aws.config.requireRegion();
 const password = new Config().requireSecret("dbPassword");
@@ -83,6 +83,11 @@ bind.postgres("orders", {
 bind.custom("network", {
   subnetIds,
   securityGroupIds: [security.id],
+});
+
+bind.custom("release", {
+  channel: "pulumi",
+  token: secret(interpolate`token-${orders.resourceId}`),
 });
 
 export const endpoint = interpolate`${orders.address}:${orders.port}`;

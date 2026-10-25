@@ -88,6 +88,9 @@ func (d *deployRun) collect(ctx context.Context) (collected, error) {
 	if err := declarations.RefuseIncomplete(); err != nil {
 		return collected{}, err
 	}
+	if err := declarations.RefuseBoundVariableConflicts(); err != nil {
+		return collected{}, err
+	}
 	inline, err := inlineBindings(ctx, cfg, declarations)
 	if err != nil {
 		return collected{}, err

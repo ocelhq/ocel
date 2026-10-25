@@ -1,7 +1,10 @@
 {
   "$schema": "https://ocel.dev/schema/ocel.schema.json",
   "slug": "with-pulumi",
-  "bindings": { "postgres": { "orders": "@orders" } },
+  "bindings": {
+    "postgres": { "orders": "@orders" },
+    "variables": { "RELEASE_CHANNEL": "@release.channel", "RELEASE_TOKEN": "@release.token" }
+  },
   "transforms": ["./transforms/network.transform.ts"],
   "provider": "aws",
   "apps": [{ "name": "web", "path": "." }]

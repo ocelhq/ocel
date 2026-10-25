@@ -6,4 +6,6 @@ export const env = defineEnv({
     class: "plain",
     schema: z.string().default("hello"),
   },
+  RELEASE_CHANNEL: { class: "plain" },
+  RELEASE_TOKEN: { class: "secret" },
 });

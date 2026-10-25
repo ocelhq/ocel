@@ -1,5 +1,6 @@
 import {
   bindingChecks,
+  boundVariablesCheck,
   buildVariablesChecks,
   envChecks,
   healthChecks,
@@ -285,7 +286,7 @@ export const iac = {
   withPulumi: fixture("iac/with-pulumi", {
     apps: ["web"],
     redeploys: true,
-    checks: BINDING_CHECKS,
+    checks: [...BINDING_CHECKS, boundVariablesCheck],
     stack: new PulumiStack(awsWorld),
     on: { aws: [container, apiGateway] },
   }),

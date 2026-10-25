@@ -13,6 +13,7 @@ func ScopeOf(cfg *project.Project, tier environmentv1.Tier, environment string) 
 		Environment: environment,
 		Bindings:    inlineBindingVariables(cfg, tier),
 		OtherTiers:  inlineBindingVariables(cfg, OtherTier(tier)),
+		Bound:       cfg.BoundVariables,
 		EnvSource:   ConfiguredEnvSource(cfg, tier),
 	}
 }

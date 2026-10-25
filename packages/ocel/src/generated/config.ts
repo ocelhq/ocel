@@ -41,6 +41,8 @@ export interface OcelConfig {
           production?: PostgresBinding;
         }
     >;
+    /** The variables this project binds to a property of a published custom record, keyed by the name the app declares. Each value is "@" plus the record's name, a dot and the property, such as "@origin.certificate". */
+    variables?: Record<string, `@${string}`>;
   };
   /** Where the resources an app declares are found. */
   discovery?: DiscoveryConfig;
