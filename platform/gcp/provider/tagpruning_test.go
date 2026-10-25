@@ -168,7 +168,7 @@ func TestPruningAReleaseDeletesTheTagRecordsOfItsPagesPrefixAndNoOther(t *testin
 	if len(fake.authorizations) != 0 {
 		t.Errorf("the prune sent authorization %q to floci, want none: admin credentials go only to the tag emulator", fake.authorizations)
 	}
-	if want := []string{"Removed 2 tag records under pages/shop/prod/web/r1a2b3c4d/ from Firestore database " + ports.SharedDatabase("ocel", environment.TierProduction)}; !slices.Equal(log.said, want) {
+	if want := []string{"Removed 2 tag records under pages/shop/prod/web/r1a2b3c4d/"}; !slices.Equal(log.said, want) {
 		t.Errorf("the prune said %q, want %q", log.said, want)
 	}
 }

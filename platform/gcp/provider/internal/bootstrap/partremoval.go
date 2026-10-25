@@ -137,7 +137,7 @@ func (b Engine) removeUnrecordedPart(ctx context.Context, tier environment.Tier,
 	if err := each.Remove(ctx, b, tier, progress); err != nil {
 		return fmt.Errorf("remove the %s part of the %s bootstrap: %w", each.Name, tier, err)
 	}
-	gcloud.EnsureProgress(progress).Say("Removed the " + each.Name + " part of the " + string(tier) + " bootstrap")
+	gcloud.EnsureProgress(progress).Say("Removed the " + each.Name + " part")
 	return nil
 }
 
@@ -148,6 +148,6 @@ func (b Engine) removePart(ctx context.Context, tier environment.Tier, each Part
 	if err := stackrecords.ForgetBootstrapPart(ctx, b.Records, tier, each.Name); err != nil {
 		return err
 	}
-	gcloud.EnsureProgress(progress).Say("Removed the " + each.Name + " part of the " + string(tier) + " bootstrap")
+	gcloud.EnsureProgress(progress).Say("Removed the " + each.Name + " part")
 	return nil
 }

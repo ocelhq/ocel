@@ -67,9 +67,8 @@ func (b ConnectionBudget) WarnOversubscribed(progress progress.Log) {
 		return
 	}
 	gcloud.EnsureProgress(progress).Warn(fmt.Sprintf(
-		"app %s runs %d Cloud Run services bound to postgres %s, and each instance opens up to %d connections, so at one instance each they open %d, "+
-			"more than the %d the %s tier's %s Cloud SQL instance takes from apps: a query waits or fails once they are used up. Serve the app from fewer services",
-		b.app, b.services, b.named(), pooledConnections, opened, b.appConnections(), b.tier, b.size.machineType))
+		"app %s opens up to %d connections to postgres %s, over the %d its %s instance takes: serve the app from fewer services",
+		b.app, opened, b.named(), b.appConnections(), b.size.machineType))
 }
 
 func (b ConnectionBudget) named() string {

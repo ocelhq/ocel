@@ -101,12 +101,10 @@ func (p *Topic) Provision(ctx context.Context, in resources.ProvisionRequest, pr
 	}
 	topic := declaredTopicOf(in.Resource)
 	topology := topologyOf(c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
-	name, err := nameTopic(topology.Names, topic)
-	if err != nil {
+	if _, err := nameTopic(topology.Names, topic); err != nil {
 		return provider.Binding{}, err
 	}
-	path := topics.TopicPath(c.Project(), name)
-	gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Provisioning %s %s as Pub/Sub topic %s with %d consumer(s)", in.Resource.Type, topic.declared, path, len(topic.spec.Consumers)))
+	gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Provisioning %s %s", in.Resource.Type, topic.declared))
 	if previous, recorded, err := p.recordedTopic(ctx, in.Ref, in.Resource); err != nil {
 		return provider.Binding{}, err
 	} else if recorded {
@@ -240,7 +238,7 @@ func (p *Topic) Remove(ctx context.Context, ref provider.StackRef, binding provi
 	if err != nil {
 		return err
 	}
-	gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Removing %s %s and its consumers' subscriptions", binding.Type, topic.declared))
+	gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Removing %s %s and its subscriptions", binding.Type, topic.declared))
 	return topologyOf(c, ref, map[string]*provider.TopicSpec{topic.declared: topic.spec}).Remove(ctx, c.Workload())
 }
 

@@ -142,18 +142,18 @@ func (p *Services) removeUnrunImages(ctx context.Context, app string, ran []stri
 	going := strings.Join(append(slices.Sorted(maps.Values(tagged)), pushed...), ", ")
 	clients, err := p.OpenClients(ctx)
 	if err != nil {
-		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s in place, as what still runs them could not be read: %v", going, err))
+		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s in place: %v", going, err))
 		return
 	}
 	revisions, err := clients.RunV1()
 	if err != nil {
-		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s in place, as what still runs them could not be read: %v", going, err))
+		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s in place: %v", going, err))
 		return
 	}
 	unused := func(image string) bool {
 		kept, err := recorded(ctx)
 		if err != nil {
-			gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s in place, as the images the project's other stacks record could not be read: %v", image, err))
+			gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s in place: %v", image, err))
 			return false
 		}
 		if kept[image] {
@@ -161,7 +161,7 @@ func (p *Services) removeUnrunImages(ctx context.Context, app string, ran []stri
 		}
 		running, err := isRunByARevision(ctx, revisions, clients.Project(), image)
 		if err != nil {
-			gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s in place, as whether a revision still runs it could not be read: %v", image, err))
+			gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s in place: %v", image, err))
 			return false
 		}
 		return !running
@@ -176,7 +176,7 @@ func (p *Services) removeUnrunImages(ctx context.Context, app string, ran []stri
 	}
 	repositories, err := clients.Repositories()
 	if err != nil {
-		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s tagged, as Artifact Registry could not be reached: %v", strings.Join(slices.Sorted(maps.Keys(tagged)), ", "), err))
+		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s tagged: %v", strings.Join(slices.Sorted(maps.Keys(tagged)), ", "), err))
 		return
 	}
 	for _, name := range slices.Sorted(maps.Keys(tagged)) {
@@ -194,10 +194,9 @@ func untag(ctx context.Context, repositories *artifactregistry.Service, name str
 	switch {
 	case err == nil, gcloud.Absent(err):
 	case googleretry.AnsweredCode(err) == http.StatusForbidden:
-		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s tagged, as this credential may not untag it, so the repository keeps the image until it is untagged: "+
-			"grant roles/artifactregistry.repoAdmin on the repository, as `ocel permissions deploy` prints", name))
+		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s tagged: grant roles/artifactregistry.repoAdmin on the repository", name))
 	default:
-		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s tagged after no revision ran it, so the repository keeps the image until it is untagged: %v", name, err))
+		gcloud.EnsureProgress(progress).Warn(fmt.Sprintf("Left %s tagged: %v", name, err))
 	}
 }
 

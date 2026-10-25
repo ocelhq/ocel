@@ -95,9 +95,9 @@ func (s *stack) routePreviewHosts(ctx context.Context, move router.PointerMove, 
 
 func describeHost(host Host) string {
 	if host.Tag == "" {
-		return host.App + "'s Cloud Run service " + host.Service
+		return host.App
 	}
-	return "revision tag " + host.Tag + " of Cloud Run service " + host.Service
+	return host.App + " (tag " + host.Tag + ")"
 }
 
 func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host edge.PreviewHost, deployment bool) (Host, pin.Tags, error) {

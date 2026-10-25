@@ -395,7 +395,7 @@ func TestAPromotionSaysWhichRevisionItPinsEachAppsTrafficTo(t *testing.T) {
 	if err := stack.MovePointer(context.Background(), router.PointerMove{Promotion: promotion}, progress); err != nil {
 		t.Fatalf("Promote(p1) = %v", err)
 	}
-	want := "INFO Pinning all of web's traffic to revision web-00001-abc of Cloud Run service " + webService
+	want := "INFO Pinning web's traffic to revision web-00001-abc"
 	if got := progress.Lines(); !slices.Contains(got, want) {
 		t.Errorf("the promotion said %q, want %q among it", got, want)
 	}

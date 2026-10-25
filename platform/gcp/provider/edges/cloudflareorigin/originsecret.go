@@ -91,11 +91,10 @@ func EnsureOriginSecret(ctx context.Context, c *gcloud.Clients, tier environment
 		return err
 	}
 	if renewal.Retired {
-		say.Warn(fmt.Sprintf("Retired the %s origin secret a rotation replaced: a release not re-deployed since no longer answers its edge", tier))
+		say.Warn(fmt.Sprintf("Retired the %s origin secret's old value: a release not re-deployed since its rotation no longer answers", tier))
 	}
 	if renewal.Rotated {
-		say.Warn(fmt.Sprintf("Rotated the %s origin secret, which was older than %d days: re-deploy each project in the tier so its releases accept the new one; the first bootstrap after %d days retires the old one",
-			tier, int(originsecret.MaxAge.Hours()/24), int(originsecret.Grace.Hours()/24)))
+		say.Warn(fmt.Sprintf("Rotated the %s origin secret: re-deploy each project in the tier within %d days", tier, int(originsecret.Grace.Hours()/24)))
 	}
 	return nil
 }
@@ -114,7 +113,7 @@ func mintOriginSecret(ctx context.Context, c *gcloud.Clients, service *secretman
 	if _, err := writeOriginSecret(ctx, c, service, name, minted); err != nil {
 		return err
 	}
-	say.Say(fmt.Sprintf("Minted a new %s origin secret", tier))
+	say.Say("Minted a new origin secret")
 	return nil
 }
 

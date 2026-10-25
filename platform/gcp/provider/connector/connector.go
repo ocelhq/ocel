@@ -162,7 +162,7 @@ func (p Connector) Install(ctx context.Context, install provider.ConnectorInstal
 	if err := scheduleConnectorHeartbeat(ctx, clients, released.Url); err != nil {
 		return provider.ConnectorAddress{}, err
 	}
-	gcloud.EnsureProgress(progress).Say("Scheduled Cloud Scheduler job " + names.Connector() + " to wake the connector for a heartbeat every minute")
+	gcloud.EnsureProgress(progress).Say("Scheduled Cloud Scheduler job " + names.Connector())
 	return provider.ConnectorAddress{URL: released.Url, PublicKey: publicKey, Compute: compute}, nil
 }
 
@@ -290,7 +290,7 @@ func (p Connector) ensureConnectorAccount(ctx context.Context, grants []string, 
 		}).Context(ctx).Do)
 	switch {
 	case err == nil:
-		gcloud.EnsureProgress(progress).Say("Created service account " + names.ConnectorAccountEmail() + " for the connector to run as")
+		gcloud.EnsureProgress(progress).Say("Created service account " + names.ConnectorAccountEmail())
 	case gcloud.Taken(err):
 		gcloud.EnsureProgress(progress).Debug("The connector runs as service account " + names.ConnectorAccountEmail() + ", which already exists")
 	default:
@@ -350,7 +350,7 @@ func (p Connector) bindConnectorKeys(ctx context.Context, wanted []string, progr
 			return err
 		}
 		if changed && len(wanted) > 0 {
-			gcloud.EnsureProgress(progress).Say("Granted the connector " + strings.Join(wanted, " and ") + " on the " + string(tier) + " KMS key")
+			gcloud.EnsureProgress(progress).Say("Granted the connector " + strings.Join(wanted, " and ") + " on the KMS key")
 		}
 		errs = append(errs, err)
 	}
@@ -373,7 +373,7 @@ func (p Connector) takeConnectorAccount(ctx context.Context, progress progress.L
 		gcloud.AccountPath(clients, name)).Context(ctx).Do); err != nil && !gcloud.Absent(err) {
 		return fmt.Errorf("delete the %s service account: %w", name, err)
 	}
-	gcloud.EnsureProgress(progress).Say("Deleted service account " + clients.ConnectorAccountEmail() + ", which the connector ran as")
+	gcloud.EnsureProgress(progress).Say("Deleted service account " + clients.ConnectorAccountEmail())
 	return nil
 }
 

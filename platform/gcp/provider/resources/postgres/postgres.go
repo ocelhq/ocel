@@ -407,8 +407,7 @@ func (i postgresInstances) create(ctx context.Context, database string, spec pos
 	if err != nil {
 		return nil, err
 	}
-	gcloud.EnsureProgress(progress).Say("Creating postgres " + database + " as Cloud SQL instance " + name + " in " + i.clients.Region +
-		": a new instance takes several minutes")
+	gcloud.EnsureProgress(progress).Say("Creating postgres " + database + " as Cloud SQL instance " + name + ", which takes several minutes")
 	desired, err := i.desiredInstance(name, spec, database)
 	if err != nil {
 		return nil, err
@@ -429,8 +428,7 @@ func (i postgresInstances) resize(ctx context.Context, database string, current 
 	if len(differences) == 0 {
 		return current, nil
 	}
-	gcloud.EnsureProgress(progress).Say("Resizing postgres " + database + "'s Cloud SQL instance " + current.Name + " as the " + string(i.ref.Tier) + " tier runs it (" +
-		strings.Join(differences, "; ") + "): Cloud SQL restarts an instance whose machine type or availability changes")
+	gcloud.EnsureProgress(progress).Say("Resizing postgres " + database + " (" + strings.Join(differences, "; ") + "): Cloud SQL restarts it")
 	started, err := googleretry.Attempted(ctx, i.sql.Instances.Patch(i.clients.Project(), current.Name, &sqladmin.DatabaseInstance{
 		Settings: &sqladmin.Settings{
 			Tier:                      size.machineType,
@@ -673,7 +671,7 @@ func (i postgresInstances) remove(ctx context.Context, binding provider.Binding,
 		if err := i.clients.RemoveTierTag(ctx, i.ref.Tier, i.clients.SQLInstanceTagged(current.Name)); err != nil {
 			return err
 		}
-		gcloud.EnsureProgress(progress).Say("Removing postgres " + binding.Name + ", its Cloud SQL instance " + current.Name + " and its data")
+		gcloud.EnsureProgress(progress).Say("Removing postgres " + binding.Name + " and its data")
 		started, err := googleretry.Attempted(ctx, i.sql.Instances.Delete(i.clients.Project(), current.Name).Context(ctx).Do)
 		switch {
 		case gcloud.Absent(err):

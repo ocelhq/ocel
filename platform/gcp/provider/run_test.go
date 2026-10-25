@@ -536,9 +536,9 @@ func TestARunSaysWhichCloudRunServiceItCreatesReleasesAndDeletesAndInWhichRegion
 	}
 
 	want := []string{
-		"INFO Creating Cloud Run service ocel-shop-prod-app in europe-west1",
-		"INFO Releasing a new revision of Cloud Run service ocel-shop-prod-app in europe-west1",
-		"INFO Deleting Cloud Run service ocel-shop-prod-app in europe-west1",
+		"INFO Creating Cloud Run service ocel-shop-prod-app",
+		"INFO Releasing a new revision of ocel-shop-prod-app",
+		"INFO Deleting Cloud Run service ocel-shop-prod-app",
 	}
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("the run said %q, want %q", got, want)

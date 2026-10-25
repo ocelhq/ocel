@@ -62,10 +62,6 @@ func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, 
 	if err != nil {
 		return err
 	}
-	database, err := resolved.Workload().ReadProjectDatabase(ctx, tier, scope.Project())
-	if err != nil {
-		return err
-	}
 	store, err := resolved.Workload().TagRecordsFirestore(ctx, tier, scope.Project())
 	if err != nil {
 		return err
@@ -112,8 +108,7 @@ func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, 
 		return err
 	}
 	if removed > 0 {
-		gcloud.EnsureProgress(log).Say(fmt.Sprintf("Removed %d tag records under %s from Firestore database %s",
-			removed, prefix, database))
+		gcloud.EnsureProgress(log).Say(fmt.Sprintf("Removed %d tag records under %s", removed, prefix))
 	}
 	return nil
 }

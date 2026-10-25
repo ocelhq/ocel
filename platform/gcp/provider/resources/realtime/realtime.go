@@ -311,7 +311,7 @@ func (r realtimeEnvironment) serve(ctx context.Context, progress progress.Log) (
 func (r realtimeEnvironment) place(ctx context.Context, keys map[string]string, progress progress.Log) (string, error) {
 	gateway := r.gateway
 	if len(keys) == 0 {
-		gcloud.EnsureProgress(progress).Say("Removing the realtime gateway " + gateway + ": " + r.ref.Name.Env + " declares no realtime any more")
+		gcloud.EnsureProgress(progress).Say("Removing the realtime gateway " + gateway)
 		if err := r.removeGateway(ctx, progress); err != nil {
 			return "", err
 		}

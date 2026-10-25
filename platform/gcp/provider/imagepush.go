@@ -29,7 +29,7 @@ func (p *Provider) pushImage(ctx context.Context, tier environment.Tier, app, re
 		return err
 	}
 	progress = gcloud.EnsureProgress(progress)
-	progress.Say("Pushing " + app + "'s image to " + ref)
+	progress.Say("Pushing " + app + "'s image")
 	return store.Push(ctx, push, progress)
 }
 

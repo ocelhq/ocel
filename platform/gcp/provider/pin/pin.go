@@ -157,7 +157,7 @@ func pinRecords(ctx context.Context, pins Pins, move router.PointerMove, progres
 				return restore(ctx, pins, moved, err)
 			}
 			if progress != nil {
-				progress.Say("Pinning all of " + record.App + "'s traffic to revision " + revision + " of Cloud Run service " + service)
+				progress.Say("Pinning " + record.App + "'s traffic to revision " + revision)
 			}
 			opened, err := pins.Pin(ctx, service, revision, move.StillActive)
 			moved = append(moved, pinned{service: service, revision: revision, previous: previous, opened: opened})
@@ -195,7 +195,7 @@ func WarmRevisions(ctx context.Context, warm func(ctx context.Context, service, 
 		return
 	}
 	for _, failure := range slices.Sorted(slices.Values(failed)) {
-		progress.Warn("Could not warm a promoted revision, so its first visitor waits for it to start: " + failure)
+		progress.Warn("Could not warm the promoted revision: " + failure)
 	}
 }
 

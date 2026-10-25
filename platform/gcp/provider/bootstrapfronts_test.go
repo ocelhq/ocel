@@ -393,8 +393,8 @@ func TestInstallingAndDroppingAFrontSaysWhichPartAndEdgeForWhichTier(t *testing.
 	}
 
 	want := []string{
-		"INFO Adding the cloudflare-origin part of the production bootstrap",
-		"INFO Taking down the alb edge's front for preview: the cloudflare-origin part is being removed",
+		"INFO Adding the cloudflare-origin part",
+		"INFO Taking down the alb edge's front",
 	}
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("the bootstrap said %q, want %q", got, want)

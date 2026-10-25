@@ -257,8 +257,7 @@ func (p *KV) Plan(ctx context.Context, in resources.ProvisionRequest, _ *provide
 }
 
 func (i kvInstance) create(ctx context.Context, clients *gcloud.Clients, desired *gcloud.MemorystoreInstance, progress progress.Log) (*gcloud.MemorystoreInstance, error) {
-	gcloud.EnsureProgress(progress).Say("Creating kv " + i.storeName + " as Memorystore instance " + i.id + " in " + clients.Region +
-		": a new instance takes several minutes")
+	gcloud.EnsureProgress(progress).Say("Creating kv " + i.storeName + " as Memorystore instance " + i.id + ", which takes several minutes")
 	started, err := i.service.CreateInstance(ctx, clients.Location(), i.id, desired)
 	if err != nil {
 		return nil, fmt.Errorf("create the Memorystore instance kv %s runs on: %w", i.storeName, err)
@@ -279,7 +278,7 @@ func (i kvInstance) update(ctx context.Context, store kvStore, current *gcloud.M
 	if len(differences) == 0 {
 		return current, nil
 	}
-	gcloud.EnsureProgress(progress).Say("Updating kv " + i.storeName + " on Memorystore instance " + i.id + ": " + strings.Join(differences, "; "))
+	gcloud.EnsureProgress(progress).Say("Updating kv " + i.storeName + ": " + strings.Join(differences, "; "))
 	if len(mask) > 0 {
 		if err := i.patch(ctx, mask, &gcloud.MemorystoreInstance{
 			NodeType:      store.node.nodeType,
@@ -407,7 +406,7 @@ func (p *KV) Remove(ctx context.Context, ref provider.StackRef, binding provider
 	if err != nil {
 		return err
 	}
-	gcloud.EnsureProgress(progress).Say("Removing kv " + binding.Name + ", its Memorystore instance " + instance.id + " and its data")
+	gcloud.EnsureProgress(progress).Say("Removing kv " + binding.Name + " and its data")
 	started, err := instance.service.DeleteInstance(ctx, instance.path)
 	if gcloud.Absent(err) {
 		return nil

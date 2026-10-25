@@ -83,8 +83,7 @@ func (e *Edge) DestroyPreviewWildcard(context.Context, string) error { return ni
 
 func unbindable(what string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
-		"with no edge in front, a project is answered on the url Cloud Run gives each service and claims no hostname of its own, so %s cannot be bound to it: "+
-			"name the %q edge, which provisions one load balancer per bootstrap tier at %s",
+		"%s needs an edge in front of Cloud Run: name the %q edge (%s per tier)",
 		what, alb.Kind, alb.BaselineCost)
 }
 
@@ -93,7 +92,7 @@ func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, er
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(edge.None),
 		Action: edge.PlanKeep,
-		Reason: "this project is answered on each service's own url, so the release surface's rows are the whole of what serves it",
+		Reason: "services answer on their own urls",
 	}}, nil
 }
 
@@ -106,7 +105,7 @@ func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(edge.None),
 		Action: edge.PlanKeep,
-		Reason: "nothing claims a preview hostname here: a preview is reached at the url Cloud Run gave the services it deployed",
+		Reason: "previews answer on their Cloud Run urls",
 	}
 }
 

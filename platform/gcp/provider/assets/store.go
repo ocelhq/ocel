@@ -142,7 +142,7 @@ func (a Store) RemoveObjects(ctx context.Context, tier environment.Tier, scope n
 			errs = append(errs, err)
 			continue
 		}
-		swept = append(swept, "gs://"+name+"/"+prefixes[i])
+		swept = append(swept, prefixes[i])
 	}
 	if slices.Contains(kinds, naming.ObjectPages) {
 		if err := a.RemoveTagRecords(ctx, tier, scope, progress); err != nil {
@@ -155,7 +155,8 @@ func (a Store) RemoveObjects(ctx context.Context, tier environment.Tier, scope n
 	if len(swept) == 0 {
 		return nil
 	}
-	gcloud.EnsureProgress(progress).Say("Removed the " + string(tier) + " objects under " + strings.Join(swept, ", "))
+	_, of, _ := strings.Cut(swept[0], "/")
+	gcloud.EnsureProgress(progress).Say("Removed the stored objects of " + strings.TrimSuffix(of, "/"))
 	return nil
 }
 

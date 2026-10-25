@@ -78,7 +78,7 @@ func (r routerStack) MovePointer(ctx context.Context, move router.PointerMove, p
 		return err
 	}
 	if err := r.s.removeUnheldTags(ctx); err != nil && progress != nil {
-		progress.Warn("Could not remove a Cloud Run revision tag, the next move will try again: " + err.Error())
+		progress.Warn("Left a Cloud Run revision tag for the next move to remove: " + err.Error())
 	}
 	return nil
 }

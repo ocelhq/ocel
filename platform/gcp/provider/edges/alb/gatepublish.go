@@ -29,7 +29,7 @@ const (
 
 func (e *Edge) publishGate(ctx context.Context, publication edge.GatePublication) error {
 	if publication.Say != nil {
-		publication.Say("Rolling the " + string(publication.State.Tier) + " gate of " + publication.State.Slug + " out to the load balancer's gate plugin, which takes a few minutes")
+		publication.Say("Rolling the gate out to the load balancer, which takes a few minutes")
 	}
 	opened, err := e.Open(publication.State)
 	if err != nil {
@@ -210,8 +210,7 @@ func (e *Edge) proveGated(ctx context.Context, proof gateProof, log progress.Log
 	for _, host := range proof.Hosts {
 		pending[host] = 0
 	}
-	log.Say("Waiting for the load balancer to enforce the gate on " + strings.Join(slices.Sorted(maps.Keys(pending)), ", ") +
-		": Google takes a few minutes to carry a new gate to every location that serves requests")
+	log.Say("Waiting for the load balancer to enforce the gate on " + strings.Join(slices.Sorted(maps.Keys(pending)), ", "))
 	var last error
 	for attempt := 1; ; attempt++ {
 		for _, host := range slices.Sorted(maps.Keys(pending)) {

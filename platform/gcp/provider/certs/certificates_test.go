@@ -288,7 +288,7 @@ func TestDiscardingACertificateSaysWhichHostnameItCovered(t *testing.T) {
 	if err := server.open(t).Discard(context.Background(), cert, progress); err != nil {
 		t.Fatalf("DiscardCertificate(%s) = %v", cert.ID, err)
 	}
-	want := []string{"INFO Discarding the certificate covering shop.example.com and its DNS authorization"}
+	want := []string{"INFO Discarding the certificate for shop.example.com"}
 	if got := progress.Lines(); !slices.Equal(got, want) {
 		t.Errorf("the discard said %q, want %q", got, want)
 	}

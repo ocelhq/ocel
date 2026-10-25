@@ -137,9 +137,6 @@ func (b Bastion) provisionService(ctx context.Context, tier environment.Tier, pr
 	if current != nil && !run.Drifted(current, wanted) && run.ServesLatest(current) {
 		return current.Uri, nil
 	}
-	if current == nil {
-		gcloud.EnsureProgress(progress).Say("Making the bastion " + desired.Service + " that forwards ports into the " + string(tier) + " tier's network")
-	}
 	if err := b.ensureAccount(ctx, tier); err != nil {
 		return "", err
 	}

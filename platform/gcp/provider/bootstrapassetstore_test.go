@@ -367,7 +367,7 @@ func TestRaisingAFrontThatRunsCodeSaysItKeepsTheAssetReaderAndNotWhatTheReaderDo
 		t.Fatalf("raiseFronts() = %v", err)
 	}
 
-	want := "INFO Keeping the " + string(registry.front.Kind()) + " edge's asset reader for production"
+	want := "INFO Keeping the " + string(registry.front.Kind()) + " edge's asset reader"
 	if !slices.Contains(progress.Lines(), want) {
 		t.Errorf("the bootstrap said %q, want %q among it", progress.Lines(), want)
 	}
