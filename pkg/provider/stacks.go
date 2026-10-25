@@ -231,6 +231,8 @@ type Grant struct {
 	Actions    []string         `json:"actions,omitempty"`
 	Resources  []string         `json:"resources,omitempty"`
 	Conditions []GrantCondition `json:"conditions,omitempty"`
+	Role       string           `json:"role,omitempty"`
+	Resource   string           `json:"resource,omitempty"`
 }
 
 type GrantCondition struct {

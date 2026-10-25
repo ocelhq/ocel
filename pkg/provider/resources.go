@@ -258,7 +258,7 @@ func GrantMessages(grants []Grant) []*variablestorev1.Grant {
 	}
 	out := make([]*variablestorev1.Grant, 0, len(grants))
 	for _, grant := range grants {
-		message := &variablestorev1.Grant{Label: grant.Label, Actions: grant.Actions, Resources: grant.Resources}
+		message := &variablestorev1.Grant{Label: grant.Label, Actions: grant.Actions, Resources: grant.Resources, Role: grant.Role, Resource: grant.Resource}
 		for _, condition := range grant.Conditions {
 			message.Conditions = append(message.Conditions, &variablestorev1.GrantCondition{
 				Operator: condition.Operator,
@@ -301,7 +301,7 @@ func GrantsOf(grants []*variablestorev1.Grant) []Grant {
 	}
 	out := make([]Grant, 0, len(grants))
 	for _, grant := range grants {
-		decoded := Grant{Label: grant.GetLabel(), Actions: grant.GetActions(), Resources: grant.GetResources()}
+		decoded := Grant{Label: grant.GetLabel(), Actions: grant.GetActions(), Resources: grant.GetResources(), Role: grant.GetRole(), Resource: grant.GetResource()}
 		for _, condition := range grant.GetConditions() {
 			decoded.Conditions = append(decoded.Conditions, GrantCondition{
 				Operator: condition.GetOperator(),

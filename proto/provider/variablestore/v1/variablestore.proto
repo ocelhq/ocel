@@ -212,6 +212,10 @@ message Grant {
   string label = 3;
 
   repeated GrantCondition conditions = 4;
+
+  string role = 5;
+
+  string resource = 6;
 }
 
 message GrantCondition {
