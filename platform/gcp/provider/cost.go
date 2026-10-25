@@ -22,6 +22,9 @@ import (
 )
 
 func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
+	if err := p.options.refuseUnknownApps(req.Deploy.Apps); err != nil {
+		return nil, err
+	}
 	names := names.New(p.namespace, p.options.Project)
 	tree := &pricing.Tree{}
 	region := p.options.Region
@@ -75,12 +78,13 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		if servesNext(app) {
 			memory = run.FormatMemoryLimit(next.MemoryMB)
 		}
+		billsPerRequest := p.options.resolveBilling(app.App, app.Compute(), servesNext(app)) == run.BillingRequest
 		if app.Compute() == provider.ComputeContainer {
 			service, err := names.Service(req.Deploy.Slug, req.Deploy.Env, app.App, app.App)
 			if err != nil {
 				return nil, err
 			}
-			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(false, app.Instances.Min, memory, ingress))
+			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(billsPerRequest, app.Instances.Min, memory, ingress))
 		} else {
 			specs := req.Functions[app.App]
 			if len(specs) == 0 {
@@ -91,7 +95,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 				if err != nil {
 					return nil, err
 				}
-				tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(!servesNext(app), 0, memory, ingress))
+				tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(billsPerRequest, 0, memory, ingress))
 			}
 		}
 		for _, shape := range shapes {

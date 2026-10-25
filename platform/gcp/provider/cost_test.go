@@ -38,10 +38,15 @@ func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1co
 
 func costServedIn(t *testing.T, region string) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
+	return costServedWith(t, gcp.Options{Project: "acme-prod", Region: region})
+}
+
+func costServedWith(t *testing.T, options gcp.Options) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
+	t.Helper()
 	for _, variable := range []string{"OCEL_FLOCI_GCP_ENDPOINT", "OCEL_FLOCI_FIRESTORE_ENDPOINT"} {
 		t.Setenv(variable, "")
 	}
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: region})
+	p := newProvider(t, options)
 	config := providerserver.Config{
 		Version: "test",
 		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
@@ -140,6 +145,49 @@ func TestShapeDescribesAProductionDeployServedDirect(t *testing.T) {
 		if (r.GetScope() == "project:shop/environment:prod/app:api") != (min == 1) {
 			t.Errorf("%s keeps %v instances warm; a container app keeps one and a serverless app none", r.GetName(), min)
 		}
+	}
+}
+
+func TestShapePricesEachAppsServicesByTheBillingItsOptionsChoose(t *testing.T) {
+	client, _ := costServedWith(t, gcp.Options{Project: "acme-prod", Region: "europe-west1", Apps: map[string]gcp.AppOptions{
+		"web": {Billing: "instance"},
+		"api": {Billing: "request"},
+	}})
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    shopManifest(),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+	want := map[string]bool{"project:shop/environment:prod/app:web": false, "project:shop/environment:prod/app:api": true}
+	for _, r := range set.GetResources() {
+		idles, priced := want[r.GetScope()]
+		if r.GetType() != "google_cloud_run_v2_service" || !priced {
+			continue
+		}
+		delete(want, r.GetScope())
+		template := r.GetProperties().AsMap()["template"].(map[string]any)
+		resources := template["containers"].([]any)[0].(map[string]any)["resources"].(map[string]any)
+		if resources["cpu_idle"] != idles {
+			t.Errorf("%s is priced with cpu_idle %v, want %v: the app's billing option decides how its service is billed", r.GetName(), resources["cpu_idle"], idles)
+		}
+	}
+	if len(want) != 0 {
+		t.Errorf("Shape() priced no service for %v", want)
+	}
+}
+
+func TestShapeRefusesBillingSetForNoAppOfTheProject(t *testing.T) {
+	client, _ := costServedWith(t, gcp.Options{Project: "acme-prod", Region: "europe-west1", Apps: map[string]gcp.AppOptions{"wbe": {Billing: "request"}}})
+
+	_, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    shopManifest(),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err == nil || !strings.Contains(err.Error(), `"apps.wbe"`) {
+		t.Errorf("Shape() = %v, want a refusal naming apps.wbe: a cost priced on a misspelt app's default billing is wrong unseen", err)
 	}
 }
 

@@ -977,21 +977,21 @@ func TestAReleaseRetriedAfterAConflictKeepsOnlyTheRollbacksTheServiceRecordsOnTh
 }
 
 func TestAServerlessServiceBilledPerInstanceKeepsItsCPUBetweenRequests(t *testing.T) {
-	idles := func(instanceBilled bool) bool {
+	idles := func(billing run.Billing) bool {
 		desired := desiredOf(t, run.Serving{
-			Service:        "ocel-shop-pr-7-web",
-			Image:          "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
-			Account:        "ocel-1a2b3c4d5e@acme.iam.gserviceaccount.com",
-			Compute:        provider.ComputeServerless,
-			InstanceBilled: instanceBilled,
+			Service: "ocel-shop-pr-7-web",
+			Image:   "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
+			Account: "ocel-1a2b3c4d5e@acme.iam.gserviceaccount.com",
+			Compute: provider.ComputeServerless,
+			Billing: billing,
 		})
 		return desired.Template.Containers[0].Resources.CpuIdle
 	}
 
-	if idles(true) {
+	if idles(run.BillingInstance) {
 		t.Error("a serverless service billed per instance idles its cpu between requests, want it kept")
 	}
-	if !idles(false) {
+	if !idles(run.BillingRequest) {
 		t.Error("a serverless service billed per request keeps its cpu between requests, want it idle")
 	}
 }

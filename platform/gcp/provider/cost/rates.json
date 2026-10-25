@@ -432,6 +432,162 @@
       "verified": "2026-09-13"
     },
     {
+      "id": "gcp/run/cpu-idle-minimum",
+      "region": "europe-west1",
+      "unit": "vCPU-seconds",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
+      "id": "gcp/run/cpu-idle-minimum",
+      "region": "us-central1",
+      "unit": "vCPU-seconds",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
+      "id": "gcp/run/cpu-idle-minimum",
+      "region": "us-east1",
+      "unit": "vCPU-seconds",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
+      "id": "gcp/run/cpu-idle-minimum",
+      "region": "us-east4",
+      "unit": "vCPU-seconds",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
+      "id": "gcp/run/cpu-idle-minimum",
+      "region": "asia-east1",
+      "unit": "vCPU-seconds",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
+      "id": "gcp/run/cpu-idle-minimum",
+      "unit": "vCPU-seconds",
+      "note": "Cloud Run outside the regions the card names is priced at the tier-1 rate; a tier-2 region bills more",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
+      "id": "gcp/run/memory-idle-minimum",
+      "region": "europe-west1",
+      "unit": "GiB-seconds",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
+      "id": "gcp/run/memory-idle-minimum",
+      "region": "us-central1",
+      "unit": "GiB-seconds",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
+      "id": "gcp/run/memory-idle-minimum",
+      "region": "us-east1",
+      "unit": "GiB-seconds",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
+      "id": "gcp/run/memory-idle-minimum",
+      "region": "us-east4",
+      "unit": "GiB-seconds",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
+      "id": "gcp/run/memory-idle-minimum",
+      "region": "asia-east1",
+      "unit": "GiB-seconds",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
+      "id": "gcp/run/memory-idle-minimum",
+      "unit": "GiB-seconds",
+      "note": "Cloud Run outside the regions the card names is priced at the tier-1 rate; a tier-2 region bills more",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-10-25"
+    },
+    {
       "id": "gcp/storage/standard",
       "region": "europe-west1",
       "unit": "GiB-month",

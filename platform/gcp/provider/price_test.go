@@ -147,6 +147,40 @@ func TestPriceOfAServiceOutsideTheNamedRegionsFallsBackToTierOne(t *testing.T) {
 	}
 }
 
+func TestPriceOfAServiceBilledPerRequestChargesItsMinimumInstancesAtTheIdleRate(t *testing.T) {
+	_, costs := costServed(t)
+
+	properties, _ := structpb.NewStruct(map[string]any{
+		"ingress": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
+		"template": map[string]any{
+			"scaling":    map[string]any{"min_instance_count": 2},
+			"containers": []any{map[string]any{"resources": map[string]any{"cpu_idle": true, "limits": map[string]any{"cpu": "1", "memory": "1Gi"}}}},
+		},
+	})
+	set := &costv1.ResourceSet{
+		Source: "ocel",
+		Scopes: []*costv1.Scope{{Id: "p", Kind: "project", Name: "shop"}},
+		Resources: []*costv1.Resource{{
+			Id: "p/svc", Scope: "p", Vendor: "gcp", Type: "google_cloud_run_v2_service", Name: "svc", Region: "europe-west1", Properties: properties,
+		}},
+	}
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	if err != nil {
+		t.Fatalf("Price() = %v", err)
+	}
+	for name, want := range map[string]string{
+		"CPU, idle minimum instances":    "13.14",
+		"Memory, idle minimum instances": "13.14",
+	} {
+		if got := componentNamed(t, est, "p/svc", name).GetMonthlyCost(); got != want {
+			t.Errorf("%s = %s, want %s (two instances of 1 vCPU and 1 GiB kept for 2,628,000 s at 0.0000025)", name, got, want)
+		}
+	}
+	if fixed := est.GetResources()[0].GetMonthlyFixed(); fixed != "26.28" {
+		t.Errorf("fixed = %s, want 26.28: Cloud Run bills a minimum instance whether or not a request arrives", fixed)
+	}
+}
+
 func TestTheEnvSourceSyncBillsOnlyTheRequestsItsScheduleSends(t *testing.T) {
 	client, costs := costServed(t)
 

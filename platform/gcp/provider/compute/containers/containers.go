@@ -84,6 +84,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 		Env:       values,
 		Account:   account,
 		Compute:   provider.ComputeContainer,
+		Billing:   p.ResolveBilling(app.App, provider.ComputeContainer, next.Serves(app)),
 		Health:    app.HealthCheckPath,
 		Instances: instances,
 		Public:    true,

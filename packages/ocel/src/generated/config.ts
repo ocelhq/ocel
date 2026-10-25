@@ -483,6 +483,8 @@ export interface DNSOptions {
 }
 
 export interface GcpProviderOptions {
+  /** Cloud Run settings for each app, keyed by the app's name. */
+  apps?: Record<string, GcpAppOptions>;
   /** Keep this project's values, runs and tag records in a Firestore database of its own, which no other project's apps can reach. Left off, they are kept in the one database every project of the tier shares. Fixed by the project's first deploy or value. */
   ownDatabase?: boolean;
   /** The Google Cloud project to deploy into. Left off, from GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT or gcloud config. */
@@ -537,6 +539,12 @@ export interface GcpProviderOptions {
   edge?: GcpEdgeDescriptor;
   /** Where the project's hostname records are written, named alone or keyed with its options. */
   dns?: GcpDNSDescriptor;
+}
+
+/** The Cloud Run settings of one app. */
+export interface GcpAppOptions {
+  /** How Cloud Run bills the app's services. request bills by the request and takes the CPU away once a response ends, so work after it, such as after(), waitUntil, a background page refresh or a tag purge, may stall until the next request or never run. instance bills the instance for its whole life, up to 15 minutes idle after the last request, and an idle instances.min instance in full. Left off, instance for a Next app or a container, and request for every other app. */
+  billing?: "request" | "instance";
 }
 
 /** The edge in front of the origin, named alone or keyed with its options. Left off, CloudFront on AWS and none elsewhere. */

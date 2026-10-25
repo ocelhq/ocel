@@ -10,6 +10,26 @@
   "options": {
     "additionalProperties": false,
     "properties": {
+      "apps": {
+        "additionalProperties": {
+          "additionalProperties": false,
+          "description": "The Cloud Run settings of one app.",
+          "properties": {
+            "billing": {
+              "description": "How Cloud Run bills the app's services. request bills by the request and takes the CPU away once a response ends, so work after it, such as after(), waitUntil, a background page refresh or a tag purge, may stall until the next request or never run. instance bills the instance for its whole life, up to 15 minutes idle after the last request, and an idle instances.min instance in full. Left off, instance for a Next app or a container, and request for every other app.",
+              "enum": [
+                "request",
+                "instance"
+              ],
+              "type": "string"
+            }
+          },
+          "title": "AppOptions",
+          "type": "object"
+        },
+        "description": "Cloud Run settings for each app, keyed by the app's name.",
+        "type": "object"
+      },
       "ownDatabase": {
         "description": "Keep this project's values, runs and tag records in a Firestore database of its own, which no other project's apps can reach. Left off, they are kept in the one database every project of the tier shares. Fixed by the project's first deploy or value.",
         "type": "boolean"

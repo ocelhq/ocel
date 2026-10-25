@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
-func TestTheOptionsAreAProjectAndARegionAndNothingElse(t *testing.T) {
+func TestTheOptionsNeedOnlyAProjectAndARegion(t *testing.T) {
 	t.Parallel()
 
 	p, err := gcp.New(context.Background(), provider.Settings{Options: provider.Options{"project": "acme-prod", "region": "europe-west1"}})
@@ -38,6 +38,14 @@ func TestAnOptionThisProviderDoesNotTakeIsRefused(t *testing.T) {
 			options: provider.Options{"project": "acme-prod", "region": "europe-west1", "keyFile": "/tmp/sa.json"},
 			names:   "keyFile",
 			code:    refusal.CodeUnknownOption,
+		},
+		{
+			name: "a billing Cloud Run has no name for",
+			options: provider.Options{"project": "acme-prod", "region": "europe-west1", "apps": map[string]any{
+				"web": map[string]any{"billing": "requests"},
+			}},
+			names: `"apps.web.billing"`,
+			code:  refusal.CodeInvalid,
 		},
 		{
 			name:    "no region",

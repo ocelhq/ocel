@@ -36,6 +36,7 @@ const (
 
 	ingressEverywhere = "INGRESS_TRAFFIC_ALL"
 	cpuIdle           = "template.containers.0.resources.cpu_idle"
+	minInstances      = "template.scaling.min_instance_count"
 	scheduledRequests = "requests_per_hour"
 	billedSecondsEach = "billed_seconds_per_request"
 	holdsSockets      = "holds_sockets"
@@ -123,6 +124,7 @@ func Price(req *costv1.PriceRequest, edges ...pricing.EdgeRates) (*costv1.Estima
 		"the forwarding rule is priced as the project's first five, which share one hourly charge",
 		"a realtime gateway is priced at Cloud Run's request-based rate for every hour a socket is open, an upper bound on what an instance holding sockets bills",
 		"a Cloud Run service billed per instance is priced for every hour an instance lives, idle ones included: Cloud Run keeps an instance up to 15 minutes after its last request, so traffic that never pauses that long keeps one alive all month",
+		"a minimum instance of a Cloud Run service billed per request is priced at the idle rate all month, on top of the requests it serves",
 	)
 	return estimate, nil
 }
@@ -138,7 +140,7 @@ func cloudRunService(r *pricing.Subject) {
 	switch {
 	case !r.Bool(cpuIdle):
 		seconds := func() decimal.Decimal {
-			warm, _ := r.Number("template.scaling.min_instance_count").Mul(pricing.MonthlyHours).Float64()
+			warm, _ := r.Number(minInstances).Mul(pricing.MonthlyHours).Float64()
 			alive := pricing.Band{Light: max(warm, aliveBand.Light), Moderate: max(warm, aliveBand.Moderate), Heavy: max(warm, aliveBand.Heavy)}
 			return r.Usage(usageInstanceHours, alive).Mul(decimal.NewFromInt(secondsPerHour))
 		}
@@ -168,6 +170,12 @@ func cloudRunService(r *pricing.Subject) {
 			Quantity: seconds().Mul(cpu()), Needs: billing})
 		r.Add(pricing.Component{Name: "Memory during requests", Unit: "GiB-seconds", Rate: "gcp/run/memory-active", UsageBased: true,
 			Quantity: seconds().Mul(memoryGiB()), Needs: billing})
+	}
+	if minimum := r.Number(minInstances); r.Bool(cpuIdle) && minimum.IsPositive() {
+		seconds := minimum.Mul(pricing.MonthlyHours).Mul(decimal.NewFromInt(secondsPerHour))
+		idle := []string{cpuIdle, minInstances}
+		r.Add(pricing.Component{Name: "CPU, idle minimum instances", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-idle-minimum", Quantity: seconds.Mul(cpu()), Needs: idle})
+		r.Add(pricing.Component{Name: "Memory, idle minimum instances", Unit: "GiB-seconds", Rate: "gcp/run/memory-idle-minimum", Quantity: seconds.Mul(memoryGiB()), Needs: idle})
 	}
 	if r.String("ingress") == ingressEverywhere {
 		r.Add(pricing.Component{Name: "Data transfer out to internet", Unit: "GiB", Rate: "gcp/network/premium-egress", Quantity: r.Usage(usageDataOut, egressBand), UsageBased: true})
