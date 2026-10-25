@@ -8,6 +8,7 @@
   "exports": {
     "./background": "./src/background.mts",
     "./boot": "./src/boot.mts",
+    "./edge-purge": "./src/edge-purge.mts",
     "./router-header": "./src/router-header.mts",
     "./fetch-bridge": "./src/fetch-bridge.mts",
     "./undecoded-fetch": "./src/undecoded-fetch.mts",

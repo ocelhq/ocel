@@ -3,8 +3,7 @@ import { createHmac } from "node:crypto";
 import { purgeSignatureHeader, type TagRecord } from "@platform/edge-contract/purge";
 import { expect, test } from "vitest";
 
-import { newCloudflarePurge } from "../src/cache/cloudflare-purge.mjs";
-import { withCdnPurge } from "../src/next/tag-records.mjs";
+import { newEdgePurge } from "../src/edge-purge.mjs";
 
 const url = "https://shop-prod.acct.workers.dev/.ocel/purge";
 const coordinate = { project: "shop", env: "prod", app: "web", release: "r1a2b3c4d" };
@@ -28,7 +27,7 @@ function expired(...tags: string[]): Map<string, TagRecord> {
 }
 
 function purger(s: ReturnType<typeof stub>) {
-  return newCloudflarePurge({
+  return newEdgePurge({
     url,
     coordinate,
     secret,
@@ -121,31 +120,5 @@ test("a tag gone stale and later expired is purged, raised when it expired", asy
 
   expect(bodiesOf(s)).toEqual([
     { storageCoordinate, mode: "purge", tags: [{ tag: "posts", raisedAt }] },
-  ]);
-});
-
-test("a published tag is purged once it has been published, and not before", async () => {
-  const s = stub();
-  const order: string[] = [];
-  const publish = async () => void order.push("published");
-  const purge = async (tags: ReadonlyMap<string, TagRecord>) => {
-    order.push(`purged ${[...tags.keys()].join(",")}`);
-    await purger(s)(tags);
-  };
-
-  await withCdnPurge(publish, purge)("posts", { expired: 1 });
-
-  expect(order).toEqual(["published", "purged posts"]);
-  expect(s.calls).toHaveLength(1);
-});
-
-test("revalidateTag with the max profile reaches the worker as an invalidate", async () => {
-  const s = stub();
-  const publish = async () => {};
-
-  await withCdnPurge(publish, purger(s))("posts", { stale: raisedAt, expired: raisedAt + 1_000 });
-
-  expect(bodiesOf(s)).toEqual([
-    { storageCoordinate, mode: "invalidate", tags: [{ tag: "posts", raisedAt }] },
   ]);
 });

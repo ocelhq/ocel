@@ -1,3 +1,4 @@
+import { newEdgePurge } from "@framework/node-runtime/edge-purge";
 import type { TagRecord } from "@platform/edge-contract/purge";
 import { expect, test } from "vitest";
 import { newCdnPurge } from "../src/cache/cdn-purge.mjs";
@@ -161,4 +162,31 @@ test("a revalidation whose tag write fails clears nothing and rejects with that 
     "write failed",
   );
   expect(s.purges).toHaveLength(0);
+});
+
+test("a revalidation with the max profile reaches the edge's purge endpoint as an invalidate", async () => {
+  const s = stub([202]);
+  const raisedAt = 1_700_000_000_000;
+  const purge = newEdgePurge({
+    url: "https://shop-prod.acct.workers.dev/.ocel/purge",
+    coordinate: { project: "shop", env: "prod", app: "web", release },
+    secret,
+    now: () => raisedAt + 10,
+    fetch: s.fetch,
+    sleep: noSleep,
+    random: () => 1,
+  });
+
+  await withCdnPurge(async () => {}, purge)("posts", {
+    stale: raisedAt,
+    expired: raisedAt + 1_000,
+  });
+
+  expect(s.purges.map((call) => JSON.parse(call.init.body as string))).toEqual([
+    {
+      storageCoordinate: "shop/prod/web/r1a2b3c4d",
+      mode: "invalidate",
+      tags: [{ tag: "posts", raisedAt }],
+    },
+  ]);
 });

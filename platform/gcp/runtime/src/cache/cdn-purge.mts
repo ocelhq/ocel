@@ -1,5 +1,5 @@
+import type { PurgeTags } from "@framework/node-runtime/tag-records";
 import { storedCacheTags } from "@platform/edge-contract/cache-tags";
-import type { TagRecord } from "@platform/edge-contract/purge";
 import { cloudCdnTagLimits } from "./cloud-cdn-tags.mjs";
 import { newMetadataToken } from "./metadata-token.mjs";
 
@@ -16,8 +16,6 @@ export interface CdnPurgeOptions {
   origin?: string;
   warn?: (message: string) => void;
 }
-
-export type PurgeTags = (tags: ReadonlyMap<string, TagRecord>) => Promise<void>;
 
 const attempts = 4;
 const tagsPerRequest = 10;

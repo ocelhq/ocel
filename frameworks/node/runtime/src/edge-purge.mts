@@ -1,16 +1,15 @@
 import { type PurgeSender, postPurge, readPurgeEntry } from "@platform/edge-contract/purge";
 import type { StorageCoordinate } from "@platform/edge-contract/storage-key";
+import type { PurgeTags } from "./tag-records.mjs";
 
-import type { PurgeTags } from "./cdn-purge.mjs";
-
-export interface CloudflarePurgeOptions extends Partial<PurgeSender> {
+export interface EdgePurgeOptions extends Partial<PurgeSender> {
   url: string;
   coordinate: StorageCoordinate;
   secret: string;
   now?: () => number;
 }
 
-export function newCloudflarePurge(options: CloudflarePurgeOptions): PurgeTags {
+export function newEdgePurge(options: EdgePurgeOptions): PurgeTags {
   const { url, coordinate, secret } = options;
   const sender: PurgeSender = {
     fetch: options.fetch ?? globalThis.fetch,

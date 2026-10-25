@@ -4,7 +4,7 @@ import { expect, test, vi } from "vitest";
 import { newGcpNextHost } from "../src/next/next-host.mjs";
 
 test("the GCP host shapes at most forty-nine tags, leaving room for the release tag", () => {
-  expect(newGcpNextHost({ PORT: "8080" }).cacheTagsPerObject).toBe(49);
+  expect(newGcpNextHost({}).cacheTagsPerObject).toBe(49);
 });
 
 const MB = 1024 * 1024;
@@ -22,27 +22,27 @@ function fits(
 }
 
 test("the GCP host's in-instance cache holds one tenth of the memory its service runs with", () => {
-  const cache = newGcpNextHost({ PORT: "8080", OCEL_FUNCTION_MEMORY_MB: "2048" }).instanceCache!;
+  const cache = newGcpNextHost({ OCEL_FUNCTION_MEMORY_MB: "2048" }).instanceCache!;
 
   expect(fits(cache, Math.floor(2048 * MB * 0.1))).toBe(true);
   expect(fits(cache, Math.floor(2048 * MB * 0.1) + 1)).toBe(false);
 });
 
 test("the GCP host's in-instance cache holds 50 MB where its service names no memory", () => {
-  const cache = newGcpNextHost({ PORT: "8080" }).instanceCache!;
+  const cache = newGcpNextHost({}).instanceCache!;
 
   expect(fits(cache, 50 * MB)).toBe(true);
   expect(fits(cache, 50 * MB + 1)).toBe(false);
 });
 
 test("the GCP host installs every store an app with an incremental cache boots with", () => {
-  const env = { PORT: "8080", OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d" };
+  const env = { OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d" };
 
   expect(refuseIncompleteHost(newGcpNextHost(env), env)).toBeUndefined();
 });
 
 test("the GCP host's cache store keeps an entry for the next request the instance serves", async () => {
-  const host = newGcpNextHost({ PORT: "8080" });
+  const host = newGcpNextHost({});
   const store = await host.newCacheStore!();
   const entry = { lastModified: 1, value: { kind: "FETCH", data: {} } };
 
@@ -63,7 +63,6 @@ test("the GCP host keeps a fetch entry in the cache bucket and under the release
   try {
     const { port } = server.address() as { port: number };
     const env = {
-      PORT: "8080",
       OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d",
       OCEL_EDGE_BUCKET: "e",
       OCEL_CACHE_BUCKET: "c",
@@ -110,7 +109,6 @@ async function listen(
 }
 
 const tagEnv = {
-  PORT: "8080",
   OCEL_STORAGE_COORDINATE: "shop/prod/web/r1a2b3c4d",
   OCEL_EDGE_BUCKET: "e",
   OCEL_CACHE_BUCKET: "c",
@@ -137,7 +135,7 @@ test("the GCP host records tags in the tags database its service is told", async
 });
 
 test("the GCP host's cache store and use-cache store share one tenth of the service's memory", async () => {
-  const host = newGcpNextHost({ PORT: "8080", OCEL_FUNCTION_MEMORY_MB: "1" });
+  const host = newGcpNextHost({ OCEL_FUNCTION_MEMORY_MB: "1" });
   const pages = await host.newCacheStore!();
   const useCache = await host.newUseCacheStore!();
   const html = "x".repeat(30_000);
@@ -168,7 +166,7 @@ test("the GCP host's cache store and use-cache store share one tenth of the serv
 
 test("the GCP host's cache store and the cache the default use-cache handler fills share one tenth of the service's memory", async () => {
   vi.resetModules();
-  const host = newGcpNextHost({ PORT: "8080", OCEL_FUNCTION_MEMORY_MB: "1" });
+  const host = newGcpNextHost({ OCEL_FUNCTION_MEMORY_MB: "1" });
   installNextHost(host);
   const handler = (await import("@framework/next-runtime/use-cache-default")).default;
   const pages = await host.newCacheStore!();
@@ -361,15 +359,13 @@ test("the GCP host keeps pages in Cloud Storage and tags in the tags database, w
 
 test("the GCP host's origin invoke answers the optimizer's image path and leaves every other request to Next", async () => {
   const withAssets = newGcpNextHost({
-    PORT: "8080",
     OCEL_EDGE_BUCKET: "ocel-prod-edge-k3x9q2",
     OCEL_IMAGE_ENDPOINT: "1",
   });
   const withoutEndpoint = newGcpNextHost({
-    PORT: "8080",
     OCEL_EDGE_BUCKET: "ocel-prod-edge-k3x9q2",
   });
-  const without = newGcpNextHost({ PORT: "8080" });
+  const without = newGcpNextHost({});
   const next = async () => {};
 
   expect(await withAssets.newOriginInvoke!(next)).not.toBe(next);
