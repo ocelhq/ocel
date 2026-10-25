@@ -17,9 +17,9 @@ export function middleware(request: NextRequest): NextResponse {
       headers: { "content-type": "text/html; charset=utf-8" },
     });
   }
-  return NextResponse.redirect(new URL("/docs", request.url));
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: [{ source: "/:path*", has: [{ type: "query", key: "go-get", value: "1" }] }, "/"],
+  matcher: [{ source: "/:path*", has: [{ type: "query", key: "go-get", value: "1" }] }],
 };

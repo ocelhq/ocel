@@ -1,16 +1,11 @@
-import Image from "next/image";
-import Link from "next/link";
 import type { ComponentType, ReactNode } from "react";
-import { FaAws } from "react-icons/fa";
 import { codeToHtml } from "shiki";
-import { RdsIcon, S3Icon, SqsIcon } from "@/components/landing/aws-icons";
-import { CommandLine } from "@/components/landing/command-line";
-import { Hero } from "@/components/landing/hero";
-import { Marquee } from "@/components/landing/marquee";
-import { Roadmap } from "@/components/landing/roadmap";
-import { SiteHeader } from "@/components/landing/site-header";
-import { StatusQuo } from "@/components/landing/status-quo";
-import { Terminal } from "@/components/landing/terminal";
+import { GoLogo, RustLogo } from "@/components/docs/logos";
+import { CopyCommand } from "@/components/landing/copy-command";
+import { EarlyAccess } from "@/components/landing/early-access";
+import { Screen, Session } from "@/components/landing/screen";
+import { TargetProvider, TargetSelect } from "@/components/landing/target";
+import { ConfigDiff, Needs, TargetName } from "@/components/landing/target-parts";
 import {
   ExpressLogo,
   FastifyLogo,
@@ -19,676 +14,555 @@ import {
   NextjsLogo,
   SvelteLogo,
 } from "@/components/landing/tool-logos";
-import { Wordmark } from "@/components/landing/wordmark";
-import { Button } from "@/components/ui/button";
+import { agent, deploy, dev, preview } from "@/components/landing/transcripts";
+import { SiteBar } from "@/components/site-bar";
 import { cn } from "@/lib/utils";
 
-export default function Home() {
-  return (
-    <div className="min-h-screen bg-background">
-      <SiteHeader />
-      <Hero />
-      <Marquee />
-      <StatusQuo />
-      <Cli />
-      <Sdk />
-      <DevMode />
-      <Console />
-      <Interop />
-      <Pricing />
-      <Faq />
-      <OneMoreThing />
-      <Roadmap />
-      <CtaBand />
-      <Footer />
-    </div>
-  );
-}
+const install = "curl -fsSL https://ocel.dev/install.sh | sh";
+const repo = "https://github.com/ocelhq/ocel";
 
-function Eyebrow({ children }: { children: ReactNode }) {
-  return <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-electric">{children}</div>;
-}
-
-function SectionHeading({ children }: { children: ReactNode }) {
-  return (
-    <h2 className="text-[34px] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
-      {children}
-    </h2>
-  );
-}
-
-function Container({ children }: { children: ReactNode }) {
-  return <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">{children}</div>;
-}
-
-function DarkCodePane({
-  file,
-  children,
-  className,
-}: {
-  file: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "min-w-0 max-w-full self-start border-[1.5px] border-foreground bg-[#0a0a0a] shadow-float",
-        className,
-      )}
-    >
-      <div className="border-b border-[#2e2e2e] px-4 py-2.5 font-mono text-[11px] text-[#8a8a8a]">
-        {file}
-      </div>
-      <div className="overflow-x-auto px-5.5 py-5 font-mono text-[13.5px] leading-[1.95] text-[#e8e9eb]">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-type CliCommand = {
-  name: string;
-  desc: string;
-  primary?: boolean;
-  note?: string;
-};
-
-const cliCommands: CliCommand[] = [
-  { name: "init", desc: "create a new project" },
-  { name: "dev", desc: "your app and its stack, one command", note: "later ↓" },
-  { name: "deploy", desc: "ship to your account", primary: true },
-  { name: "preview", desc: "a URL for the current branch", primary: true },
-  { name: "rollback", desc: "revert production, instantly", primary: true },
-  { name: "run", desc: "a one-off with your resources" },
-];
-
-const frameworks: {
-  name: string;
-  Logo: ComponentType<{ className?: string }>;
-}[] = [
-  { name: "Next.js", Logo: NextjsLogo },
-  { name: "SvelteKit", Logo: SvelteLogo },
-  { name: "Nest.js", Logo: NestjsLogo },
-  { name: "Fastify", Logo: FastifyLogo },
-  { name: "Express", Logo: ExpressLogo },
-  { name: "Hono", Logo: HonoLogo },
-];
-
-const cliVerbs = [
-  {
-    cmd: "$ ocel preview",
-    body: "A full environment for the current branch. Share the URL, get the review.",
-  },
-  {
-    cmd: "$ ocel deploy",
-    body: "Build, provision, release — phased and observable. Serverless today, containers next.",
-  },
-  {
-    cmd: "$ ocel rollback",
-    body: "Production back to any previous deployment. One command, no ceremony.",
-  },
-];
-
-function Cli() {
-  return (
-    <section className="relative border-t-[1.5px] border-foreground">
-      <span className="absolute right-10 top-11 font-mono text-[15px] text-faint">+</span>
-      <Container>
-        <div className="grid grid-cols-1 items-center gap-[52px] md:grid-cols-2">
-          <div>
-            <Eyebrow>01 — THE CLI</Eyebrow>
-            <SectionHeading>
-              Works with the framework <span className="text-electric">you already use.</span>
-            </SectionHeading>
-            <p className="mt-[18px] max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
-              Zero-config deploys into the account you already own — the one thing everything else
-              is built on. Point it at a project and it detects the framework, no config to write.
-            </p>
-            <div className="mt-[26px] flex flex-wrap items-center gap-2">
-              {frameworks.map(({ name, Logo }) => (
-                <span
-                  key={name}
-                  className="inline-flex items-center gap-2 border border-border px-2.5 py-1.5 transition-colors hover:border-foreground"
-                >
-                  <span className="flex w-4 justify-center text-foreground">
-                    <Logo className="h-4 w-auto" />
-                  </span>
-                  <span className="font-mono text-[12.5px] text-muted-foreground">{name}</span>
-                </span>
-              ))}
-              <span className="font-mono text-[12.5px] text-dim">+ more added all the time</span>
-            </div>
-            <div className="mt-[26px] flex flex-wrap items-center gap-4">
-              <CommandLine command="npm i -g @ocel/cli" />
-              <a
-                href="https://ocel.app/docs/cli/frameworks"
-                target="_blank"
-                rel="noreferrer"
-                className="font-mono text-[13px] text-electric underline-offset-4 hover:underline"
-              >
-                CLI docs — frameworks ↗
-              </a>
-            </div>
-          </div>
-          <Terminal
-            title="acme — ocel --help"
-            className="self-start"
-            bodyClassName="px-5.5 py-5 text-[13px] leading-[1.9] text-foreground"
-          >
-            <div>
-              <span className="text-dim">$</span> ocel --help
-            </div>
-            <div className="text-dim">ocel deploys apps to your own cloud</div>
-            <div className="mt-2 text-dim">Commands:</div>
-            {cliCommands.map((cmd) => (
-              <div key={cmd.name} className="flex">
-                <span className="w-6 shrink-0" />
-                <span
-                  className={`w-[76px] shrink-0 ${cmd.primary ? "text-electric" : "text-foreground"}`}
-                >
-                  {cmd.name}
-                </span>
-                <span className="text-dim">
-                  {cmd.desc}
-                  {cmd.note ? <span className="text-faint"> — {cmd.note}</span> : null}
-                </span>
-              </div>
-            ))}
-          </Terminal>
-        </div>
-        <div className="mt-[52px] grid grid-cols-1 border-[1.5px] border-foreground md:grid-cols-3">
-          {cliVerbs.map((step, i) => (
-            <div
-              key={step.cmd}
-              className={i < 2 ? "border-b border-border p-6 md:border-b-0 md:border-r" : "p-6"}
-            >
-              <div className="mb-3">
-                <span className="inline-block bg-chip px-2 py-[3px] font-mono text-[13px] text-foreground">
-                  {step.cmd}
-                </span>
-              </div>
-              <div className="text-sm leading-[1.6] text-muted-foreground">{step.body}</div>
-            </div>
-          ))}
-        </div>
-      </Container>
-    </section>
-  );
-}
-
-type SdkResource = {
-  handle: string;
-  call: string;
-  service: string;
-  blurb: string;
-  Icon: ComponentType<{ className?: string }>;
-};
-
-const sdkResources: SdkResource[] = [
-  {
-    handle: "db",
-    call: 'postgres("main")',
-    service: "Amazon RDS",
-    blurb: "Managed Postgres",
-    Icon: RdsIcon,
-  },
-  {
-    handle: "uploads",
-    call: 'bucket("uploads")',
-    service: "Amazon S3",
-    blurb: "Object storage",
-    Icon: S3Icon,
-  },
-  {
-    handle: "jobs",
-    call: 'task("emails")',
-    service: "Amazon SQS",
-    blurb: "Background task",
-    Icon: SqsIcon,
-  },
-];
-
-const sdkCode = `import { postgres } from "ocel/postgres";
-import { bucket } from "ocel/bucket";
+const resourcesCode = `import { bucket } from "ocel/bucket";
+import { postgres } from "ocel/postgres";
 import { task } from "ocel/task";
 
 export const db = postgres("main");
 export const uploads = bucket("uploads");
-export const jobs = task("emails", { run: sendEmail });
+export const digest = task("weekly-digest", {
+  run: async () => sendDigest(await db.query("select * from notes")),
+});`;
 
-// then consume them anywhere
-await db.query("select * from orders");
-await uploads.put(file);
-await jobs.trigger({ to: user.email });
-`;
+const pageCode = `import { db } from "@/resources";
 
-async function Sdk() {
-  const codeHtml = (
-    await codeToHtml(sdkCode, { lang: "typescript", theme: "vitesse-dark" })
-  ).replace(/background-color:[^;"]*;?/g, "");
+export default async function Notes() {
+  const { rows } = await db.query("select id, body from notes");
+  return rows.map((note) => <p key={note.id}>{note.body}</p>);
+}`;
 
-  return (
-    <section className="border-t border-border bg-secondary">
-      <Container>
-        <div className="mx-auto max-w-[560px] text-center">
-          <Eyebrow>02 — SDK</Eyebrow>
-          <SectionHeading>Application-defined infrastructure.</SectionHeading>
-          <p className="mx-auto mt-4 max-w-[48ch] text-[15px] leading-[1.65] text-muted-foreground">
-            Your app comes first; cloud resources are a consequence of what it needs. Call a
-            primitive, use it right there — no separate IaC wiring before a line of product code. On
-            deploy, each call lands as real infrastructure in your own AWS account.
-          </p>
-        </div>
+const heroCode = `import { postgres } from "ocel/postgres";
 
-        <div className="mt-14 grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,1fr)_72px_minmax(0,1fr)] md:items-center md:gap-x-0">
-          <DarkCodePane file="app/ocel/index.ts" className="w-full">
-            <div className="shiki-pane" dangerouslySetInnerHTML={{ __html: codeHtml }} />
-          </DarkCodePane>
+export const db = postgres("main");`;
 
-          <div aria-hidden className="hidden items-center md:flex">
-            <span className="animate-flow h-[3px] flex-1" />
-            <span className="size-0 border-y-[6px] border-l-[8px] border-y-transparent border-l-electric" />
-          </div>
+const pageHeroCode = `import { db } from "@/resources";
 
-          <div className="min-w-0 border-[1.5px] border-foreground bg-card shadow-float">
-            <div className="flex items-center gap-2.5 border-b-[1.5px] border-foreground px-4 py-3">
-              <FaAws className="size-6 shrink-0 text-foreground" />
-              <span className="text-[13px] font-semibold text-foreground">Your AWS account</span>
-              <span className="ml-auto font-mono text-[11px] text-dim">provisioned on deploy</span>
-            </div>
-            {sdkResources.map((r) => (
-              <div
-                key={r.handle}
-                className="flex items-center gap-3 border-b border-border px-4 py-3.5"
-              >
-                <r.Icon className="size-6 shrink-0 text-muted-foreground" />
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium text-foreground">{r.service}</div>
-                  <div className="text-[12px] text-muted-foreground">{r.blurb}</div>
-                </div>
-                <span className="ml-auto shrink-0 font-mono text-[11.5px] text-dim">{r.call}</span>
-              </div>
-            ))}
-            <div className="flex items-center gap-3 px-4 py-3.5">
-              <span aria-hidden className="size-6 shrink-0 border border-dashed border-dim" />
-              <div className="min-w-0">
-                <div className="text-[13px] font-medium text-muted-foreground">More primitives</div>
-                <div className="text-[12px] text-dim">cron, workflows &amp; more</div>
-              </div>
-              <span className="ml-auto shrink-0 font-mono text-[11px] text-dim">soon</span>
-            </div>
-          </div>
-        </div>
+const { rows } = await db.query(
+  "select body from notes",
+);`;
 
-        <div className="mt-12 flex justify-center">
-          <Button
-            variant="outline"
-            nativeButton={false}
-            render={<Link href="https://ocel.app/docs/sdk" target="_blank" rel="noreferrer" />}
-            className="h-auto rounded-none border-foreground px-6 py-3 text-[13px] font-semibold normal-case tracking-normal"
-          >
-            Explore the SDK docs ↗
-          </Button>
-        </div>
-      </Container>
-    </section>
-  );
-}
+const frameworks: { name: string; Logo: ComponentType<{ className?: string }> }[] = [
+  { name: "Next.js", Logo: NextjsLogo },
+  { name: "SvelteKit", Logo: SvelteLogo },
+  { name: "Express", Logo: ExpressLogo },
+  { name: "Fastify", Logo: FastifyLogo },
+  { name: "Hono", Logo: HonoLogo },
+  { name: "NestJS", Logo: NestjsLogo },
+  { name: "Go", Logo: GoLogo },
+  { name: "Rust", Logo: RustLogo },
+];
 
-const devModeTiles: { label: string; visual: ReactNode; copy: string }[] = [
+const resources = ["postgres", "bucket", "kv", "task", "topic", "worker", "realtime"];
+
+const places = [
   {
-    label: "YOUR WORKFLOW",
-    visual: (
-      <div className="flex flex-wrap items-center gap-1.5 font-mono text-[12.5px]">
-        <span className="bg-chip px-2 py-[3px] text-foreground">ocel dev</span>
-        <span className="text-dim">--</span>
-        <span className="border border-dashed border-foreground px-2 py-[3px] text-foreground">
-          next dev
-        </span>
-      </div>
-    ),
-    copy: "Wrap the dev command you already run. Ocel does the plumbing around it — nothing to rewrite.",
+    name: "Ocel Cloud",
+    status: "Early access",
+    where: "Ocel's machines. Apps sleep when idle and wake on the next request.",
+    bring: "Nothing",
   },
   {
-    label: "SECRETS",
-    visual: (
-      <div className="flex items-center gap-2 font-mono text-[12.5px]">
-        <span className="text-dim line-through decoration-dim">.env</span>
-        <span className="text-electric">→</span>
-        <span className="bg-chip px-2 py-[3px] text-foreground">process.env</span>
-      </div>
-    ),
-    copy: "Connection strings and keys are injected at boot. No .env stitching between services.",
+    name: "AWS",
+    where: "Your account, under your billing and access.",
+    bring: "Credentials in your shell",
   },
   {
-    label: "ONE COMMAND",
-    visual: (
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 font-mono text-[12.5px]">
-        <span className="text-dim line-through decoration-dim">compose files</span>
-        <span className="text-dim line-through decoration-dim">seed scripts</span>
-        <span className="inline-flex items-center gap-1.5 text-foreground">
-          <span className="size-[7px] rounded-full bg-chart-2" />
-          docker only
-        </span>
-      </div>
-    ),
-    copy: "The postgres and buckets your code declares come up with it. Docker is the only prerequisite.",
+    name: "Google Cloud",
+    where: "Your project, under your billing and access.",
+    bring: "Application-default credentials",
   },
   {
-    label: "ZERO SETUP",
-    visual: (
-      <div className="flex items-center gap-2 font-mono text-[12.5px]">
-        <span className="inline-flex items-center gap-1.5 border border-dashed border-dim px-2 py-[3px] text-dim">
-          <FaAws className="size-3.5" />
-          AWS
-        </span>
-        <span className="text-dim">at deploy →</span>
-      </div>
-    ),
-    copy: "No cloud account to wire up first. Bring your AWS only when you're ready to ship.",
+    name: "VPS",
+    where: "Any Linux box you own.",
+    bring: "SSH access",
+  },
+  {
+    name: "Cloudflare",
+    where: "An edge in front of any of the above.",
+    bring: "An API token",
   },
 ];
 
-function DevMode() {
+async function highlight(code: string, lang: "tsx" | "typescript") {
+  const html = await codeToHtml(code, { lang, theme: "vitesse-dark" });
+  return html.replace(/background-color:[^;"]*;?/g, "");
+}
+
+function Container({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className="relative border-t border-border">
-      <span className="absolute left-[44%] top-10 font-mono text-[15px] text-electric">+</span>
-      <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">
-        <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
-          <div>
-            <Eyebrow>03 — DEV MODE</Eyebrow>
-            <SectionHeading>Dev that mirrors production.</SectionHeading>
-            <p className="mt-4 max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
-              No compose file to keep in sync, no shared staging database.{" "}
-              <span className="bg-chip px-[5px] py-px font-mono text-[13.5px]">ocel dev</span>{" "}
-              starts the stack your code declares on your own machine — a private copy for every
-              developer on the team, with Docker as the only prerequisite.
-            </p>
-            <p className="mt-3.5 max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
-              When your code reaches production it runs against your own account. No code changes.
-              It just works.
-            </p>
-          </div>
-          <Terminal
-            title="acme — ocel dev"
-            className="self-start"
-            bodyClassName="px-5.5 py-5 text-[13.5px] leading-[1.9] text-foreground"
-          >
-            <div>
-              <span className="text-dim">$</span> ocel dev
-            </div>
-            <div>
-              <span className="text-chart-2">●</span> stack ready{" "}
-              <span className="text-dim">— on this machine</span>
-            </div>
-            <div className="text-dim">
-              &nbsp;&nbsp;postgres "main" → postgres:17 @ 127.0.0.1:54312
-            </div>
-            <div className="text-dim">&nbsp;&nbsp;bucket "uploads" → floci @ 127.0.0.1:54313</div>
-            <div className="mt-2">
-              <span className="text-electric">→</span> watching src/{" "}
-              <span className="text-dim">— every teammate's run gets its own</span>
-            </div>
-          </Terminal>
-        </div>
-        <div className="mt-[52px] grid grid-cols-1 border-[1.5px] border-foreground md:grid-cols-4">
-          {devModeTiles.map((tile, i) => (
-            <div
-              key={tile.label}
-              className={
-                i < devModeTiles.length - 1
-                  ? "border-b border-border p-6 md:border-b-0 md:border-r"
-                  : "p-6"
-              }
-            >
-              <div className="mb-3.5 font-mono text-[11px] tracking-[0.1em] text-dim">
-                {tile.label}
-              </div>
-              <div className="mb-3.5">{tile.visual}</div>
-              <p className="text-[13.5px] leading-[1.55] text-muted-foreground">{tile.copy}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
+    <div className={cn("mx-auto w-full max-w-[1180px] px-5 md:px-10", className)}>{children}</div>
   );
 }
 
-function Console() {
+function Crosses() {
   return (
-    <section className="relative overflow-hidden border-t border-border bg-secondary">
-      <span className="absolute left-3.5 top-[54%] hidden origin-top-left rotate-90 font-mono text-[10.5px] tracking-[0.14em] text-dim md:block">
-        FIG. 02 — CONSOLE
-      </span>
-      <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">
-        <div className="mx-auto max-w-[620px] text-center">
-          <Eyebrow>04 — CONSOLE</Eyebrow>
-          <SectionHeading>A dashboard for infra you still own.</SectionHeading>
-          <p className="mx-auto mt-4 max-w-[52ch] text-[15px] leading-[1.65] text-muted-foreground">
-            Git integration, environments and variables, team access, logs and metrics — everything
-            you'd expect from a platform, connected to your production account with scoped access.
-            Nothing hosted in ours.
-          </p>
-        </div>
-        <div className="mt-14 border-[1.5px] border-foreground bg-card shadow-float">
-          <Image
-            src="/dashboard.png"
-            alt="The Ocel console showing a project overview pointed at your own AWS account"
-            width={2562}
-            height={1730}
-            className="h-auto w-full"
-            priority={false}
-          />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Interop() {
-  return (
-    <section className="relative border-t border-border">
-      <span className="absolute bottom-9 right-12 font-mono text-[15px] text-faint">+</span>
-      <div className="mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-12 px-5 py-16 md:grid-cols-2 md:px-10 md:py-[84px]">
-        <div>
-          <Eyebrow>05 — INTEROP</Eyebrow>
-          <SectionHeading>Bring your own IaC.</SectionHeading>
-          <p className="mt-4 max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
-            Already on Pulumi or SST? Interop mode hands resource provisioning to your tool —
-            configure your database however you want. Ocel deploys the app and consumes the outputs.
-            Plugins shape what Ocel manages: tag functions, pin them in a VPC, and more.
-          </p>
-        </div>
-        <DarkCodePane file="ocel.json">
-          <div>{"{"}</div>
-          <div>
-            &nbsp;&nbsp;<span className="text-[#7da6ff]">"infra"</span>:{" "}
-            <span className="text-[#7da6ff]">"pulumi"</span>,{" "}
-            <span className="text-[#5f646b]">{"// your tool provisions"}</span>
-          </div>
-          <div>
-            &nbsp;&nbsp;<span className="text-[#7da6ff]">"plugins"</span>: [
-            <span className="text-[#7da6ff]">"vpc"</span>,{" "}
-            <span className="text-[#7da6ff]">"tags"</span>]
-          </div>
-          <div>{"}"}</div>
-        </DarkCodePane>
-      </div>
-    </section>
-  );
-}
-
-function Pricing() {
-  return (
-    <section className="border-t border-border bg-secondary">
-      <div className="mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-12 px-5 py-16 md:grid-cols-2 md:px-10 md:py-[84px]">
-        <div>
-          <Eyebrow>06 — THE MATH</Eyebrow>
-          <SectionHeading>Read the bill, not the brochure.</SectionHeading>
-          <p className="mt-4 max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
-            Seat-priced platforms charge for the privilege of marking up compute you already pay a
-            cloud for. Ocel runs in your account — the only bill is the one you already have.
-          </p>
-        </div>
-        <div className="min-w-0 border-[1.5px] border-foreground bg-card font-mono text-sm text-foreground shadow-float">
-          <div className="flex justify-between gap-4 border-b border-border px-5 py-4">
-            <span className="text-dim">20 seats × $20/mo, elsewhere</span>
-            <span>$400/mo</span>
-          </div>
-          <div className="flex justify-between border-b border-border px-5 py-4">
-            <span className="text-dim">markup on your compute</span>
-            <span>10–1000%</span>
-          </div>
-          <div className="flex justify-between bg-electric px-5 py-4 text-electric-foreground">
-            <span>ocel markup, forever</span>
-            <span className="font-semibold">$0</span>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-const faqs = [
-  {
-    q: "Is this a PaaS?",
-    a: "It's the PaaS experience — deploys, previews, logs, rollbacks — but nothing runs in our account. You connect your own cloud with scoped, revocable access.",
-  },
-  {
-    q: "Do I have to use the SDK?",
-    a: "No. The CLI alone gives you zero-config deploys. The SDK is there when your app needs a database, storage, or background tasks.",
-  },
-  {
-    q: "We already use Pulumi / SST.",
-    a: "Keep it. Interop mode hands provisioning to your tool; Ocel deploys the app and consumes the outputs.",
-  },
-  {
-    q: "Where does dev mode run?",
-    a: "On your machine. ocel dev starts the postgres and buckets your code declares in Docker containers, so nothing leaves your laptop. Production always runs in your account.",
-  },
-];
-
-function Faq() {
-  return (
-    <section className="border-t border-border">
-      <Container>
-        <Eyebrow>07 — FAQ</Eyebrow>
-        <h2 className="mb-[34px] text-[34px] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
-          The questions engineers ask.
-        </h2>
-        <div className="grid grid-cols-1 border-[1.5px] border-foreground md:grid-cols-2">
-          {faqs.map((f, i) => (
-            <div
-              key={f.q}
-              className={
-                "border-border p-6" +
-                (i % 2 === 0 ? " md:border-r" : "") +
-                (i < 2 ? " border-b max-md:border-b" : " max-md:border-t")
-              }
-            >
-              <div className="mb-2 text-[15px] font-semibold text-foreground">{f.q}</div>
-              <div className="text-sm leading-[1.6] text-muted-foreground">{f.a}</div>
-            </div>
-          ))}
-        </div>
-      </Container>
-    </section>
-  );
-}
-
-function CtaBand() {
-  return (
-    <section className="relative overflow-hidden bg-foreground px-5 py-16 text-center md:px-10 md:py-20">
-      <span className="absolute left-[60px] top-10 font-mono text-[15px] text-dim">+</span>
-      <span className="absolute bottom-11 right-20 font-mono text-[15px] text-electric">+</span>
-      <h2 className="text-pretty text-[34px] font-semibold leading-[1.1] tracking-[-0.03em] text-background md:text-[40px]">
-        Deploy to your own cloud in minutes.
-      </h2>
-      <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Button className="h-auto rounded-none px-6 py-[13px] text-[15px] font-semibold normal-case tracking-normal">
-          Get started
-        </Button>
-        <span className="border-[1.5px] border-dim px-[18px] py-3 font-mono text-sm text-background">
-          npm i -g @ocel/cli
+    <>
+      {["top-3 left-3", "top-3 right-3", "bottom-3 left-3", "bottom-3 right-3"].map((at) => (
+        <span
+          key={at}
+          aria-hidden
+          className={cn(
+            "absolute hidden font-mono text-[13px] leading-none text-faint md:block",
+            at,
+          )}
+        >
+          +
         </span>
-      </div>
-    </section>
+      ))}
+    </>
   );
 }
 
-const footerCols = [
-  { title: "PRODUCT", links: ["CLI", "SDK", "Dev mode", "Console"] },
-  { title: "RESOURCES", links: ["Docs", "Changelog", "Blog", "Philosophy"] },
-  {
-    title: "OPEN SOURCE",
-    links: ["GitHub", "Discord", "Contributing", "License (Apache-2.0)"],
-  },
-];
+function Caption({ children }: { children: ReactNode }) {
+  return (
+    <p className="m-0 mt-4 flex items-start gap-3 font-mono text-[11px] leading-[1.6] tracking-[0.14em] text-muted-foreground uppercase">
+      <span className="mt-[0.75em] h-[1.5px] w-6 shrink-0 bg-foreground" />
+      {children}
+    </p>
+  );
+}
 
-function OneMoreThing() {
+function Sheet({
+  children,
+  className,
+  tone = "paper",
+}: {
+  children: ReactNode;
+  className?: string;
+  tone?: "paper" | "fog";
+}) {
   return (
     <section
-      className="relative overflow-hidden px-5 pb-20 pt-4 text-center md:px-10 md:py-20"
-      style={{
-        backgroundImage:
-          "linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)",
-        backgroundSize: "48px 48px",
-      }}
+      className={cn(
+        "relative border-t-[1.5px] border-foreground py-16 md:py-24",
+        tone === "fog" && "bg-muted",
+        className,
+      )}
     >
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 70% 85% at 50% 45%,transparent 22%,var(--background) 78%)",
-        }}
-      />
-      <div className="relative">
-        <h2 className="text-pretty text-[38px] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground md:text-[54px]">
-          Oh — and it's <span className="text-electric">open source.</span>
-        </h2>
-        <p className="mx-auto mt-[18px] max-w-[52ch] text-[15px] leading-[1.65] text-muted-foreground">
-          Apache-2.0 licensed. Nothing runs in our account. If you stopped using Ocel tomorrow, the
-          infrastructure and the code describing it are still yours to read and run.
-        </p>
-        <div className="mt-6 flex justify-center gap-3">
-          <Button className="h-auto rounded-none bg-foreground px-[22px] py-3 text-sm font-semibold normal-case tracking-normal text-background hover:bg-foreground/85">
-            ★ Star on GitHub
-          </Button>
-          <span className="border-[1.5px] border-foreground px-4 py-[11px] font-mono text-[13px] text-foreground">
-            read the source →
-          </span>
-        </div>
-      </div>
+      <Crosses />
+      <Container className="relative">{children}</Container>
     </section>
   );
 }
 
-function Footer() {
+function Heading({ children, lede }: { children: ReactNode; lede: ReactNode }) {
   return (
-    <section className="border-t border-border px-5 pb-[26px] pt-[54px] text-center md:px-10">
-      <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-8 text-left md:grid-cols-[1.4fr_1fr_1fr_1fr]">
-        <div>
-          <Wordmark markSize={18} textSize={15} />
-          <div className="mt-2.5 max-w-[26ch] text-[12.5px] leading-[1.6] text-dim">
-            Deploy apps to your own cloud.
-          </div>
-        </div>
-        {footerCols.map((col) => (
-          <div key={col.title} className="text-[13px] leading-[2.1] text-muted-foreground">
-            <div className="mb-1.5 font-mono text-[11px] tracking-[0.1em] text-dim">
-              {col.title}
+    <div className="mb-10 grid gap-5 md:mb-14 md:grid-cols-12 md:items-end">
+      <h2 className="m-0 text-[clamp(1.875rem,3.6vw,2.75rem)] leading-[1.06] font-semibold tracking-[-0.03em] text-balance text-foreground md:col-span-7">
+        {children}
+      </h2>
+      <p className="m-0 max-w-[46ch] text-[16px] leading-[1.6] text-pretty text-muted-foreground md:col-span-5">
+        {lede}
+      </p>
+    </div>
+  );
+}
+
+function C({ children }: { children: ReactNode }) {
+  return <code className="font-mono text-[0.9em] text-foreground">{children}</code>;
+}
+
+function Code({ html, file }: { html: string; file: string }) {
+  return (
+    <div className="flex min-w-0 flex-col">
+      <div className="border-b border-terminal-rule px-4 py-2 font-mono text-[11px] text-terminal-foreground">
+        {file}
+      </div>
+      <div className="shiki-pane px-4 py-3.5" dangerouslySetInnerHTML={{ __html: html }} />
+    </div>
+  );
+}
+
+function Cell({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-3 p-5 md:p-6", className)}>
+      <span className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+        {label}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+function TitleBlock({ source, inputId }: { source: string; inputId?: string }) {
+  return (
+    <div className="grid border-[1.5px] border-foreground bg-background md:grid-cols-12">
+      <Cell label="Ocel Cloud · early access" className="md:col-span-5">
+        <p className="m-0 text-[14px] leading-relaxed text-muted-foreground">
+          The quickest target: no account of yours, no keys. Invites go out in batches.
+        </p>
+        <EarlyAccess source={source} inputId={inputId} />
+      </Cell>
+      <Cell
+        label="Install the CLI"
+        className="border-t border-border md:col-span-4 md:border-t-0 md:border-l"
+      >
+        <p className="m-0 text-[14px] leading-relaxed text-muted-foreground">
+          One binary. Your own cloud works today, without an invite.
+        </p>
+        <CopyCommand command={install} />
+      </Cell>
+      <Cell
+        label="Source"
+        className="border-t border-border md:col-span-3 md:border-t-0 md:border-l"
+      >
+        <p className="m-0 text-[14px] leading-relaxed text-muted-foreground">
+          The engine, the SDKs and the console, in the open.
+        </p>
+        <a
+          href={repo}
+          className="w-fit border-b-[1.5px] border-electric font-mono text-[13px] text-foreground"
+        >
+          github.com/ocelhq/ocel
+        </a>
+        <span className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+          Apache-2.0
+        </span>
+      </Cell>
+    </div>
+  );
+}
+
+export default async function Home() {
+  const [hero, pageHero, resourcesHtml, pageHtml] = await Promise.all([
+    highlight(heroCode, "typescript"),
+    highlight(pageHeroCode, "tsx"),
+    highlight(resourcesCode, "typescript"),
+    highlight(pageCode, "tsx"),
+  ]);
+
+  return (
+    <TargetProvider>
+      <div className="min-h-screen bg-background">
+        <SiteBar current="engine" />
+        <main>
+          <section className="relative overflow-hidden pt-10 pb-16 md:pt-14 md:pb-24">
+            <div aria-hidden className="paper-grid absolute inset-0" />
+            <Crosses />
+            <Container className="relative">
+              <div className="grid gap-6 md:grid-cols-12 md:items-end">
+                <h1 className="m-0 text-[clamp(2.5rem,5.4vw,4.25rem)] leading-[1.02] font-semibold tracking-[-0.04em] text-balance text-foreground md:col-span-8">
+                  Ocel deploys apps, and{" "}
+                  <span className="underline decoration-electric decoration-[5px] underline-offset-[10px]">
+                    everything they declare.
+                  </span>
+                </h1>
+                <p className="m-0 max-w-[40ch] text-[17px] leading-[1.55] text-pretty text-muted-foreground md:col-span-4 md:pb-2">
+                  Your code declares the database it needs.{" "}
+                  <code className="bg-muted px-1.5 font-mono text-[0.85em] text-foreground">
+                    ocel deploy
+                  </code>{" "}
+                  builds the app and the database, on Ocel Cloud or in your own account.
+                </p>
+              </div>
+
+              <Screen
+                className="mt-8 md:mt-10"
+                title="~/notes"
+                bar={<TargetSelect id="hero-target" />}
+              >
+                <div className="grid md:grid-cols-12">
+                  <div className="order-2 flex flex-col border-t border-terminal-rule md:order-none md:col-span-5 md:border-t-0 md:border-r">
+                    <Code html={hero} file="resources/index.ts" />
+                    <div className="hidden border-t border-terminal-rule md:block">
+                      <Code html={pageHero} file="app/page.tsx" />
+                    </div>
+                  </div>
+                  <Session
+                    byTarget={deploy}
+                    className="order-1 min-h-[22rem] px-4 py-3 sm:px-5 md:order-none md:col-span-7"
+                  />
+                </div>
+                <Needs />
+              </Screen>
+              <Caption>
+                Fig. 1 · ocel deploy · abridged output; the account, job and URLs are illustrative
+              </Caption>
+
+              <div className="mt-6">
+                <TitleBlock source="ocel.dev-hero" inputId="early-access" />
+              </div>
+
+              <ul className="m-0 mt-8 flex list-none flex-wrap items-center gap-x-6 gap-y-3 p-0 font-mono text-[12.5px] text-muted-foreground">
+                <li className="tracking-[0.14em] uppercase">Deploys</li>
+                {frameworks.map(({ name, Logo }) => (
+                  <li key={name} className="flex items-center gap-2">
+                    <Logo className="size-4" />
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            </Container>
+          </section>
+
+          <Sheet>
+            <Heading
+              lede={
+                <>
+                  Declare it where you use it.{" "}
+                  <code className="font-mono text-[0.9em] text-foreground">ocel dev</code> starts it
+                  on your machine, and{" "}
+                  <code className="font-mono text-[0.9em] text-foreground">ocel deploy</code>{" "}
+                  provisions the same one wherever the app goes. There is no second file to keep in
+                  sync.
+                </>
+              }
+            >
+              A database is a line of your app.
+            </Heading>
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-12">
+              <Screen title="resources/index.ts" className="lg:col-span-7">
+                <div
+                  className="shiki-pane px-4 py-4"
+                  dangerouslySetInnerHTML={{ __html: resourcesHtml }}
+                />
+              </Screen>
+              <Screen title="~/notes" className="lg:col-span-5">
+                <Session lines={dev} className="px-4 py-4 sm:px-5" />
+              </Screen>
             </div>
-            {col.links.map((link) => (
-              <div key={link}>{link}</div>
-            ))}
-          </div>
-        ))}
+            <Caption>Fig. 2 · ocel dev · abridged output</Caption>
+            <div className="mt-8 flex flex-wrap items-baseline gap-x-5 gap-y-3 border-t border-border pt-6">
+              <span className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                Resources
+              </span>
+              {resources.map((name) => (
+                <a
+                  key={name}
+                  href={`/docs/sdk/${name === "worker" ? "task" : name}`}
+                  className="font-mono text-[13px] text-foreground underline decoration-border decoration-[1.5px] underline-offset-4 hover:decoration-electric"
+                >
+                  {name}
+                </a>
+              ))}
+              <span className="text-[14px] text-muted-foreground">
+                Docker is all <code className="font-mono text-[0.9em]">ocel dev</code> needs, and
+                only when the app declares one.
+              </span>
+            </div>
+          </Sheet>
+
+          <Sheet tone="fog">
+            <Heading lede="A preview provisions resources of its own, so a branch never writes to production's database. It's torn down when you're done with it.">
+              A URL for the branch you're on.
+            </Heading>
+            <Screen title="~/notes" bar={<TargetSelect id="preview-target" />}>
+              <Session byTarget={preview} className="min-h-[15rem] px-4 py-4 sm:px-5" />
+            </Screen>
+            <Caption>Fig. 3 · ocel preview up · abridged output; URLs are illustrative</Caption>
+          </Sheet>
+
+          <Sheet>
+            <Heading lede="Claude Code, Codex or Cursor can declare resources, run ocel dev and ship previews. The CLI is built for them as much as for you.">
+              Your agent runs it as well as you do.
+            </Heading>
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-12">
+              <dl className="m-0 grid content-start gap-0 lg:col-span-5">
+                {(
+                  [
+                    [
+                      "The skill",
+                      <>
+                        <C>ocel skill install</C> gives the agent the playbook for this CLI's
+                        version, and <C>ocel doctor</C> says when it's stale.
+                      </>,
+                    ],
+                    [
+                      "JSON everywhere",
+                      <>
+                        <C>--json</C> on every command: nothing prompts, and every error has a
+                        stable code, a hint and a docs URL.
+                      </>,
+                    ],
+                    [
+                      "A binary that describes itself",
+                      <>
+                        <C>ocel help --json</C> lists every command and whether it changes anything;{" "}
+                        <C>ocel schema</C> prints its output's shape.
+                      </>,
+                    ],
+                    [
+                      "Docs for agents",
+                      <>
+                        <C>ocel.dev/llms.txt</C> indexes every page, and each page is also served as
+                        markdown.
+                      </>,
+                    ],
+                    [
+                      "What stays with you",
+                      "The skill brings you the plan and waits for your yes on production deploys, rollbacks and anything that costs money.",
+                    ],
+                  ] as const
+                ).map(([term, detail]) => (
+                  <div
+                    key={term}
+                    className="grid gap-1.5 border-t border-border py-4 first:border-t-[1.5px] first:border-electric"
+                  >
+                    <dt className="text-[15px] font-semibold text-foreground">{term}</dt>
+                    <dd className="m-0 text-[14.5px] leading-[1.6] text-muted-foreground">
+                      {detail}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="self-start lg:col-span-7">
+                <Screen title="~/notes">
+                  <Session lines={agent} className="px-4 py-4 sm:px-5" />
+                </Screen>
+                <Caption>Fig. 4 · what an agent reads · abridged output</Caption>
+              </div>
+            </div>
+          </Sheet>
+
+          <Sheet tone="fog">
+            <Heading
+              lede={
+                <>
+                  The app never names where it runs. Moving it from{" "}
+                  <TargetName className="text-foreground" /> to anywhere else is the provider line;
+                  the code is the same file it was.
+                </>
+              }
+            >
+              Change the target. Not the app.
+            </Heading>
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-12">
+              <div className="lg:col-span-5">
+                <ConfigDiff />
+              </div>
+              <Screen
+                title={
+                  <span>
+                    app/page.tsx{" "}
+                    <span className="ml-2 text-[#3ecf7a]">0 changes on every target</span>
+                  </span>
+                }
+                className="self-start lg:col-span-7"
+              >
+                <div
+                  className="shiki-pane px-4 py-4"
+                  dangerouslySetInnerHTML={{ __html: pageHtml }}
+                />
+              </Screen>
+            </div>
+            <Caption>Fig. 5 · the same app, four targets</Caption>
+
+            <div className="mt-12 border-[1.5px] border-foreground bg-background">
+              <dl className="m-0 md:hidden">
+                {places.map((place) => (
+                  <div key={place.name} className="grid gap-1 border-b border-border px-5 py-4">
+                    <dt className="font-semibold text-foreground">
+                      {place.name}
+                      {place.status ? (
+                        <span className="ml-2 border border-electric px-1.5 py-0.5 font-mono text-[10.5px] font-medium tracking-[0.14em] text-electric uppercase">
+                          {place.status}
+                        </span>
+                      ) : null}
+                    </dt>
+                    <dd className="m-0 text-[14.5px] text-muted-foreground">{place.where}</dd>
+                    <dd className="m-0 font-mono text-[13px] text-foreground">
+                      You bring: {place.bring}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <table className="hidden w-full border-collapse text-left text-[14.5px] md:table">
+                <thead>
+                  <tr className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                    <th className="border-b border-border px-5 py-3 font-medium">Target</th>
+                    <th className="border-b border-border px-5 py-3 font-medium">
+                      Where the app runs
+                    </th>
+                    <th className="border-b border-border px-5 py-3 font-medium">What you bring</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {places.map((place) => (
+                    <tr key={place.name} className="align-top">
+                      <td className="border-b border-border px-5 py-3.5 font-semibold text-foreground">
+                        {place.name}
+                        {place.status ? (
+                          <span className="ml-2 border border-electric px-1.5 py-0.5 font-mono text-[10.5px] font-medium tracking-[0.14em] text-electric uppercase">
+                            {place.status}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="border-b border-border px-5 py-3.5 text-muted-foreground">
+                        {place.where}
+                      </td>
+                      <td className="border-b border-border px-5 py-3.5 font-mono text-[13px] text-foreground">
+                        {place.bring}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="m-0 px-5 py-4 text-[14.5px] text-muted-foreground">
+                Already running Terraform, Pulumi or SST? Ocel sits beside them rather than
+                replacing them.{" "}
+                <a
+                  href="/docs/compare"
+                  className="border-b-[1.5px] border-electric text-foreground"
+                >
+                  How it compares
+                </a>
+              </p>
+            </div>
+          </Sheet>
+
+          <Sheet>
+            <h2 className="m-0 max-w-[18ch] text-[clamp(2.375rem,4.4vw,3.5rem)] leading-[1.05] font-semibold tracking-[-0.035em] text-balance text-foreground">
+              Open source, Apache-2.0. Read every line it runs.
+            </h2>
+            <p className="mt-5 mb-10 max-w-[56ch] text-[16px] leading-[1.6] text-muted-foreground">
+              Ocel is pre-release alpha. Nothing is stable yet, and the code makes clean breaks
+              while it gets there.
+            </p>
+            <TitleBlock source="ocel.dev-close" />
+          </Sheet>
+        </main>
+
+        <footer className="border-t-[1.5px] border-foreground">
+          <Container className="flex flex-wrap items-center gap-x-6 gap-y-3 py-8 text-[13px] text-muted-foreground">
+            <span className="font-display text-[15px] font-extrabold tracking-[-0.04em] text-foreground lowercase">
+              ocel
+            </span>
+            <a href="/docs" className="hover:text-foreground">
+              Docs
+            </a>
+            <a href="/docs/cli" className="hover:text-foreground">
+              CLI
+            </a>
+            <a href="/docs/sdk" className="hover:text-foreground">
+              SDK
+            </a>
+            <a href="/docs/agents" className="hover:text-foreground">
+              Agents
+            </a>
+            <a href={repo} className="hover:text-foreground">
+              GitHub
+            </a>
+            <a href="https://ocelhq.com" className="ml-auto hover:text-foreground">
+              Ocel Cloud
+            </a>
+          </Container>
+        </footer>
       </div>
-      <div className="mx-auto mt-[34px] flex max-w-[1180px] flex-col gap-1.5 border-t border-border pt-4 font-mono text-[11.5px] text-dim sm:flex-row sm:justify-between">
-        <span>© 2026 ocel</span>
-        <span>FIG. 04 — YOUR CLOUD. YOUR CODE. YOUR CALL.</span>
-      </div>
-    </section>
+    </TargetProvider>
   );
 }
