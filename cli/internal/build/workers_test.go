@@ -178,7 +178,7 @@ func TestAScriptBuiltAppGainsTheWorkerEntryInTheFunctionAWorkerRunsFrom(t *testi
 		}
 	}
 
-	if err := addWorkerEntryToFunction(context.Background(), cfg, app, outputDir); err != nil {
+	if err := addWorkerEntryToFunction(context.Background(), cfg, app, outputDir, app.Architecture()); err != nil {
 		t.Fatalf("addWorkerEntryToFunction() = %v", err)
 	}
 

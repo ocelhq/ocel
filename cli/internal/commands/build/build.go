@@ -33,6 +33,7 @@ import (
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type Dependencies struct {
@@ -236,7 +237,11 @@ func resolveBuild(ctx context.Context, dependencies Dependencies, building *run.
 	unresolved := len(declared.UnresolvedApps()) > 0
 	if !unresolved {
 		resolved, err = declared.ResolveDeclaredComputes()
-		if err != nil || env == nil && len(build.FindNextFunctionApps(resolved.Apps)) == 0 {
+		if err != nil {
+			return nil, build.Host{}, nil, err
+		}
+		var hostless bool
+		if hostless, err = build.CanBuildWithoutHost(resolved); err != nil || env == nil && hostless {
 			return resolved, build.Host{}, nil, err
 		}
 	}
@@ -246,14 +251,17 @@ func resolveBuild(ctx context.Context, dependencies Dependencies, building *run.
 	if err != nil {
 		return nil, build.Host{}, nil, err
 	}
+	host = build.ReadHost(provider.Facts())
 	if unresolved {
 		resolved, err = readiness.ResolveComputes(provider, declared)
-		if err != nil {
-			provider.Close()
-			return nil, build.Host{}, nil, err
-		}
+	} else {
+		resolved, err = build.ResolveNextContainerBuilds(resolved, host)
 	}
-	return resolved, build.ReadHost(provider.Facts()), provider, nil
+	if err != nil {
+		provider.Close()
+		return nil, build.Host{}, nil, err
+	}
+	return resolved, host, provider, nil
 }
 
 func openOptions(env *environmentv1.Environment) commands.OpenOptions {
@@ -275,7 +283,10 @@ func appBuildLog(phase *run.Span) build.Log {
 
 func declaredArchs(cfg *project.Project) map[string]string {
 	archs := map[string]string{}
-	for _, a := range build.ImageApps(cfg.Apps) {
+	for _, a := range cfg.Apps {
+		if !a.RunsOn(provider.ComputeContainer) {
+			continue
+		}
 		archs[a.Name] = ""
 		if a.Arch != "" {
 			archs[a.Name], _ = arch.GoArch(a.Arch)

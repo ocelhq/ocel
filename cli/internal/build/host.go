@@ -1,15 +1,19 @@
 package build
 
 import (
+	"slices"
+
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type Host struct {
-	MaxFunctionBytes   int64
-	EdgeRunsCode       bool
-	EdgeCacheTagLimits CacheTagLimits
+	RunsServerless           bool
+	MaxFunctionBytes         int64
+	EdgeRunsCode             bool
+	EdgeDispatchesContainers bool
+	EdgeCacheTagLimits       CacheTagLimits
 }
 
 type CacheTagLimits struct {
@@ -21,8 +25,10 @@ type CacheTagLimits struct {
 func ReadHost(facts *contractv1.ProviderFacts) Host {
 	limits := facts.GetEdge().GetCacheTagLimits()
 	return Host{
-		MaxFunctionBytes: facts.GetMaxFunctionBytes(),
-		EdgeRunsCode:     facts.GetEdge().GetRunsCode(),
+		RunsServerless:           slices.Contains(facts.GetComputes(), string(provider.ComputeServerless)),
+		MaxFunctionBytes:         facts.GetMaxFunctionBytes(),
+		EdgeRunsCode:             facts.GetEdge().GetRunsCode(),
+		EdgeDispatchesContainers: slices.Contains(facts.GetEdge().GetDispatchedComputes(), string(provider.ComputeContainer)),
 		EdgeCacheTagLimits: CacheTagLimits{
 			TagBytes:    limits.GetTagBytes(),
 			Tags:        limits.GetTags(),
@@ -31,12 +37,16 @@ func ReadHost(facts *contractv1.ProviderFacts) Host {
 	}
 }
 
-func FindNextFunctionApps(apps []project.App) []string {
-	var names []string
-	for _, a := range FunctionApps(apps) {
-		if a.Framework == buildoutput.FrameworkNext {
-			names = append(names, a.Name)
-		}
+func (h Host) BuildsNextContainersFromFunctions() bool {
+	return h.RunsServerless || h.EdgeDispatchesContainers
+}
+
+func newAppHost(host Host, a project.App) Host {
+	if !a.IsBuiltFromFunction() {
+		return host
 	}
-	return names
+	if !host.EdgeDispatchesContainers {
+		return Host{}
+	}
+	return Host{EdgeRunsCode: host.EdgeRunsCode, EdgeDispatchesContainers: true, EdgeCacheTagLimits: host.EdgeCacheTagLimits}
 }

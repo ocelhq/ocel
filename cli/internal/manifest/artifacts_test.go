@@ -208,6 +208,55 @@ func TestAContainerAppIsServedByItsImageAloneWhateverFunctionsTheBuildLeftForIt(
 	}
 }
 
+func TestANextContainerBuiltFromItsFunctionCarriesThatFunctionAndNoImage(t *testing.T) {
+	t.Parallel()
+
+	cfg := &project.Project{Slug: "proj-1", Dir: t.TempDir(), Apps: []project.App{
+		{Name: "web", Path: "web", Framework: buildoutput.FrameworkNext, Compute: "container", Arch: "arm64", Container: &project.Container{FromFunction: true, MinInstances: new(2)}},
+	}}
+	manifest, err := Assemble(Input{
+		Project: cfg,
+		Built: build.Output{
+			Functions: []build.Function{{App: "web", Route: "index", RouteID: "index", Framework: buildoutput.Framework{Name: "next", Arch: "arm64"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	container := containerOf(t, manifest, "web")
+	if container.GetImage() != "" {
+		t.Errorf("image = %q, want none: the provider builds the image from the function", container.GetImage())
+	}
+	functions := container.GetFunctions()
+	if len(functions) != 1 || functions[0].GetArtifactPath() != "apps/web/functions/index.func" || functions[0].GetFramework().GetArch() != "arm64" {
+		t.Errorf("functions = %v, want the one arm64 function its build made", functions)
+	}
+	if container.GetMinInstances() != 2 || container.GetArch() != "arm64" {
+		t.Errorf("min instances = %d, arch = %q, want the 2 and the arm64 its app asks for", container.GetMinInstances(), container.GetArch())
+	}
+}
+
+func TestANextContainerBuiltFromItsFunctionRefusesABuildThatLeftItNoneOrMany(t *testing.T) {
+	t.Parallel()
+
+	index := build.Function{App: "web", Route: "index", RouteID: "index", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/index.func"}
+	api := build.Function{App: "web", Route: "api", RouteID: "api", Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", ArtifactPath: "apps/web/functions/api.func"}
+	for name, functions := range map[string][]build.Function{"none": nil, "many": {index, api}} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &project.Project{Slug: "proj-1", Dir: t.TempDir(), Apps: []project.App{
+				{Name: "web", Path: "web", Framework: buildoutput.FrameworkNext, Compute: "container", Container: &project.Container{FromFunction: true}},
+			}}
+			_, err := Assemble(Input{Project: cfg, Built: build.Output{Functions: functions}})
+			want := "app \"web\" has no single function built for its container: run `ocel build` again"
+			if err == nil || err.Error() != want {
+				t.Fatalf("Assemble() = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
 func TestContainersAreOrderedByTheAppTheyServe(t *testing.T) {
 	t.Parallel()
 

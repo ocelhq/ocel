@@ -711,6 +711,32 @@ func TestAnAppThatFallsBackToContainerIsBuiltForTheArchitectureTheProviderNames(
 	}
 }
 
+func TestANextContainerBuiltFromItsFunctionIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *testing.T) {
+	dependencies, fixture, _ := registryProject(t, "")
+	fixture.Provider.WrappingContainers("arm64", []byte(fake.RuntimeBinary))
+	writeAppsConfig(t, fixture.Root, `{ name: "web", path: "apps/web", framework: "next", compute: "container" }`)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "apps", "web", "package.json"), "{}\n")
+	var built map[string]string
+	var web project.App
+	stopped := errors.New("stopped after the build was handed its architectures")
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, archs map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		built, web = archs, cfg.Apps[0]
+		return build.Output{}, stopped
+	}
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); !errors.Is(err, stopped) {
+		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if !web.IsBuiltFromFunction() {
+		t.Fatalf("web = %+v, want it built from its function: no Dockerfile builds it", web)
+	}
+	if want := map[string]string{"web": "arm64"}; !maps.Equal(built, want) {
+		t.Errorf("web's function was built for %v, want %v, what the provider names for its container, as its image would be", built, want)
+	}
+}
+
 func TestAPrebuiltDeployDoesNotAskWhetherThisMachineCanBuildImages(t *testing.T) {
 	dependencies, fixture, built := registryProject(t, "")
 	asked := false

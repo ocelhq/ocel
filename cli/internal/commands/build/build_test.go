@@ -372,27 +372,105 @@ func TestBuildOfANextAppWithDeclaredComputesSucceedsWithoutCredentials(t *testin
 func TestBuildRefusesANextFunctionAppWhenNoProviderIsConfiguredToReadItsFactsFrom(t *testing.T) {
 	t.Parallel()
 
-	root := t.TempDir()
-	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+	for _, compute := range []string{`"serverless"`, `{ container: {} }`} {
+		root := t.TempDir()
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: ".", framework: "next", compute: "serverless" }],
+  apps: [{ name: "web", path: ".", framework: "next", compute: `+compute+` }],
 };
 `)
+		clitest.WriteFile(t, filepath.Join(root, "package.json"), "{}\n")
+
+		dependencies := newTestDependencies()
+		built := false
+		dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+			built = true
+			return build.Output{}, nil
+		}
+
+		err := runBuild(context.Background(), dependencies, root, options{}, nil)
+		if err == nil || !strings.Contains(err.Error(), "no provider configured") {
+			t.Fatalf("runBuild on compute %s = %v, want web refused: a Next app built by ocel's adapter is built against its provider's facts, and none is configured", compute, err)
+		}
+		if built {
+			t.Errorf("the build on compute %s ran before the refusal", compute)
+		}
+	}
+}
+
+func TestBuildOfANextContainerNoDockerfileBuildsIsBuiltByTheAdapterAgainstItsProvidersFacts(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.MaxFunctionBytes = 200 << 20 })
+	root := fixture.Root
+	writeBuildConfig(t, root, `[{ name: "web", path: "web", framework: "next", compute: { container: {} } }]`)
+	clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
 
 	dependencies := newTestDependencies()
-	built := false
-	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
-		built = true
+	var built *project.Project
+	var archs map[string]string
+	var host build.Host
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, handed map[string]string, _ build.HostedWorkers, facts build.Host, _ build.Log) (build.Output, error) {
+		built, archs, host = cfg, handed, facts
 		return build.Output{}, nil
 	}
 
-	err := runBuild(context.Background(), dependencies, root, options{}, nil)
-	if err == nil || !strings.Contains(err.Error(), "no provider configured") {
-		t.Fatalf("runBuild = %v, want web refused: a Next function app is built against its provider's facts, and none is configured", err)
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
+		t.Fatalf("runBuild: %v", err)
 	}
-	if built {
-		t.Error("the build ran before the refusal")
+	if built == nil || !built.Apps[0].IsBuiltFromFunction() {
+		t.Fatalf("built = %+v, want web built from its function", built)
+	}
+	if !host.EdgeRunsCode || !host.EdgeDispatchesContainers || host.MaxFunctionBytes != 200<<20 {
+		t.Errorf("host = %+v, want the provider's facts, read as a serverless Next app's are, so ocel build and deploy --prebuilt build web alike", host)
+	}
+	if arch, named := archs["web"]; !named || arch != "" {
+		t.Errorf("archs = %v, want web built for the architecture an image of it would be: none named, so the building machine's", archs)
+	}
+}
+
+func TestBuildOfANextAppTheProviderPutsOnContainersIsBuiltByTheAdapter(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{provider.ComputeContainer} })
+	root := fixture.Root
+	writeBuildConfig(t, root, `[{ name: "web", path: "web", framework: "next" }]`)
+	clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
+
+	dependencies := newTestDependencies()
+	var built *project.Project
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		built = cfg
+		return build.Output{}, nil
+	}
+
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	if built == nil || !built.Apps[0].IsBuiltFromFunction() {
+		t.Fatalf("built = %+v, want web built from its function on the container compute its provider runs", built)
+	}
+}
+
+func TestBuildOfANextContainerOnAProviderThatRunsNoFunctionsAndWhoseEdgeDispatchesNoContainerIsBuiltAsAnImage(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	fixture.Provider.WithFacts(func(facts *provider.Facts) { facts.Computes = []provider.Compute{provider.ComputeContainer} })
+	fixture.Provider.Edges().(*fake.Edges).Edge(fake.KindRelay).RouterDispatches(false)
+	root := fixture.Root
+	writeBuildConfig(t, root, `[{ name: "web", path: "web", framework: "next", compute: { container: {} } }]`)
+	clitest.WriteFile(t, filepath.Join(root, "web", "package.json"), "{}\n")
+
+	dependencies := newTestDependencies()
+	var built *project.Project
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {
+		built = cfg
+		return build.Output{}, nil
+	}
+
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	if built == nil || built.Apps[0].IsBuiltFromFunction() || !built.Apps[0].IsBuiltAsImage() {
+		t.Fatalf("built = %+v, want web built as an image that runs next start: nothing in front of it dispatches it, and no cache it would share exists", built)
 	}
 }
 

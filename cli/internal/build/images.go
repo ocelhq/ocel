@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,9 +15,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
-	"github.com/ocelhq/ocel/pkg/images"
 )
 
 func (t tools) images(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, log Log) (refs map[string]string, err error) {
@@ -79,12 +78,15 @@ func (t tools) readPrebuilt(ctx context.Context, cfg *project.Project, archs map
 		return Output{}, err
 	}
 	prebuilt := Output{Functions: functions}
+	if err := refusePrebuiltFunctionsForAnotherArchitecture(cfg, functions, archs); err != nil {
+		return Output{}, err
+	}
 	for _, app := range ImageApps(cfg.Apps) {
 		ref, err := readImageRef(cfg.Dir, app.Name)
 		if err != nil {
 			return Output{}, err
 		}
-		if err := t.refuseAbsentImage(ctx, app.Name, ref, archs[app.Name]); err != nil {
+		if err := t.refuseAbsentImage(ctx, app.Name, ref, targetArch(archs[app.Name])); err != nil {
 			return Output{}, err
 		}
 		if prebuilt.Images == nil {
@@ -95,16 +97,35 @@ func (t tools) readPrebuilt(ctx context.Context, cfg *project.Project, archs map
 	return prebuilt, nil
 }
 
-func (t tools) refuseAbsentImage(ctx context.Context, app, ref, arch string) error {
+func (t tools) refuseAbsentImage(ctx context.Context, app, ref string, target targetArch) error {
 	repository, digest, _ := strings.Cut(ref, "@")
 	built, err := t.inspection(ctx, repository, digest)
 	if err != nil {
 		return fmt.Errorf("app %q was prebuilt into the image %s, and the docker daemon cannot hand it over: %w; run `ocel build` again, or deploy without --prebuilt", app, ref, err)
 	}
-	if arch != "" && built.Architecture != arch {
-		return fmt.Errorf("app %q was prebuilt into an image for %s, and the target runs %s: declare `arch: %q` on %q and run `ocel build` again, or deploy without --prebuilt", app, images.ContainerPlatform(built.Architecture), images.ContainerPlatform(arch), arch, app)
+	if image := targetArch(built.Architecture); target != "" && image != target {
+		return refusePrebuiltArchitecture(app, image.Architecture(), target.Architecture())
 	}
 	return nil
+}
+
+func refusePrebuiltFunctionsForAnotherArchitecture(cfg *project.Project, functions []Function, archs map[string]string) error {
+	for _, app := range cfg.Apps {
+		target := targetArch(archs[app.Name])
+		if !app.IsBuiltFromFunction() || target == "" {
+			continue
+		}
+		for _, f := range functions {
+			if function := arch.Architecture(f.Framework.Arch); f.App == app.Name && function != target.Architecture() {
+				return refusePrebuiltArchitecture(app.Name, function, target.Architecture())
+			}
+		}
+	}
+	return nil
+}
+
+func refusePrebuiltArchitecture(app, prebuilt, target string) error {
+	return fmt.Errorf("app %q was prebuilt for %s, and its target runs %s: run `ocel build` again with `arch: %q` on %q", app, prebuilt, target, target, app)
 }
 
 const imageRefFileName = "image-ref"
@@ -152,7 +173,9 @@ func readImageRef(projectDir, app string) (string, error) {
 
 func RefuseUnbuildableImages(ctx context.Context, span *run.Span, cfg *project.Project, archs map[string]string) error {
 	var recipes []image.Recipe
+	var imageArchs []string
 	for _, app := range ImageApps(cfg.Apps) {
+		imageArchs = append(imageArchs, archs[app.Name])
 		described, err := image.Describe(cfg, app)
 		if err != nil {
 			return err
@@ -173,7 +196,7 @@ func RefuseUnbuildableImages(ctx context.Context, span *run.Span, cfg *project.P
 			span.Say(notice)
 		}
 	}
-	if err := image.RefuseUnusableDaemon(ctx, slices.Sorted(maps.Values(archs))...); err != nil {
+	if err := image.RefuseUnusableDaemon(ctx, slices.Compact(slices.Sorted(slices.Values(imageArchs)))...); err != nil {
 		return fmt.Errorf("building the container image for %s happens on this machine, before anything is provisioned:\n    %w", english.And(english.Quoted(containers)), err)
 	}
 	return nil

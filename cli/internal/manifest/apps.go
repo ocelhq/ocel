@@ -26,6 +26,7 @@ type app struct {
 	Folder          string
 	Usages          []usage
 	Image           string
+	FromFunction    bool
 	HealthCheckPath string
 	Instances       provider.Instances
 
@@ -50,6 +51,7 @@ func appsOf(configured []project.App, usages []attribution.Usage, images map[str
 			Folder:          a.Folder,
 			Usages:          byApp[a.Name],
 			Image:           images[a.Name],
+			FromFunction:    a.IsBuiltFromFunction(),
 			HealthCheckPath: healthPathOf(a),
 			Instances:       instancesOf(a),
 

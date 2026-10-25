@@ -59,6 +59,19 @@ func TestAProjectOfServerlessAppsNeverAsksForADaemon(t *testing.T) {
 	}
 }
 
+func TestANextContainerBuiltFromItsFunctionNeverAsksForADaemon(t *testing.T) {
+	awayFromAnyDaemon(t)
+	cfg := &project.Project{Apps: []project.App{
+		{Name: "web", Framework: "next", Compute: "container", Container: &project.Container{FromFunction: true}},
+	}}
+
+	rep, _ := said(t)
+
+	if err := RefuseUnbuildableImages(context.Background(), rep, cfg, map[string]string{"web": "arm64"}); err != nil {
+		t.Errorf("RefuseUnbuildableImages() = %v, want nothing asked of docker: web's image is built from its function by its provider", err)
+	}
+}
+
 func containerProject(t *testing.T, dockerfile string) *project.Project {
 	t.Helper()
 	root := t.TempDir()
@@ -273,10 +286,20 @@ func TestAPrebuiltImageBuiltForAnotherArchitectureThanTheTargetRunsIsRefused(t *
 	if err == nil {
 		t.Fatal("readPrebuilt() accepted an amd64 image for a target that runs arm64")
 	}
-	for _, want := range []string{"web", "amd64", "arm64"} {
+	for _, want := range []string{"web", "x86_64", "arm64"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("readPrebuilt() = %v, want it to name %q", err, want)
 		}
+	}
+}
+
+func TestAPrebuiltImageForAnotherArchitectureIsRefusedNamingTheArchTheConfigTakes(t *testing.T) {
+	cfg := containerProject(t, "")
+	builtImage(t, cfg)
+
+	_, err := tools{inspection: daemonHolding("arm64")}.readPrebuilt(context.Background(), cfg, map[string]string{"web": "amd64"})
+	if want := "app \"web\" was prebuilt for arm64, and its target runs x86_64: run `ocel build` again with `arch: \"x86_64\"` on \"web\""; err == nil || err.Error() != want {
+		t.Fatalf("readPrebuilt() = %v, want the fix to name x86_64, the value `arch` takes for amd64", err)
 	}
 }
 

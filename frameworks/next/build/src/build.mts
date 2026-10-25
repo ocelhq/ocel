@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import path from "node:path";
+import { FUNCTION_ARCH_ENV } from "@framework/node-build/output";
 import { Refusal } from "@framework/node-build/refusal";
 import {
   type BuildLog,
@@ -16,6 +17,7 @@ export interface NextBuild extends OutputBuild {
   allowDegraded?: string[];
   publicKeys?: string[];
   maxFunctionBytes?: number;
+  arch?: string;
 }
 
 const ADAPTER_PATH_ENV = "NEXT_ADAPTER_PATH";
@@ -37,6 +39,7 @@ export async function buildNext(app: NextBuild, adapterPath: string, log: BuildL
       OCEL_ALLOW_DEGRADED: (app.allowDegraded ?? []).join(","),
       OCEL_PUBLIC_KEYS: (app.publicKeys ?? []).join(","),
       OCEL_MAX_FUNCTION_BYTES: app.maxFunctionBytes ? String(app.maxFunctionBytes) : "",
+      [FUNCTION_ARCH_ENV]: app.arch ?? "",
       [ADAPTER_PATH_ENV]: adapterPath,
       [DEPLOYMENT_ID_ENV]: app.buildId,
     },

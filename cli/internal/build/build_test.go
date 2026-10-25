@@ -569,7 +569,7 @@ func TestBuild(t *testing.T) {
 		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Framework: "node", Entrypoint: "src/server.ts"}}}
 
 		var stderr bytes.Buffer
-		if err := (tools{node: runNode, buildScript: installedBuildScript}).functions(context.Background(), cfg, nil, Host{}, Log{Shared: &stderr}); err != nil {
+		if err := (tools{node: runNode, buildScript: installedBuildScript}).functions(context.Background(), cfg, nil, nil, Host{}, Log{Shared: &stderr}); err != nil {
 			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 		}
 
@@ -723,7 +723,7 @@ func TestBuildTracesANodeAppWhenTracingIsPreferred(t *testing.T) {
 		cfg := &project.Project{Dir: fixtureRoot, Apps: []project.App{{Name: "api", Path: ".", Compute: provider.ComputeServerless, Framework: "node", Entrypoint: "src/server.ts"}}}
 
 		var stderr bytes.Buffer
-		if err := (tools{node: runNode, buildScript: installedBuildScript}).functions(context.Background(), cfg, nil, Host{}, Log{Shared: &stderr}); err != nil {
+		if err := (tools{node: runNode, buildScript: installedBuildScript}).functions(context.Background(), cfg, nil, nil, Host{}, Log{Shared: &stderr}); err != nil {
 			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 		}
 
@@ -802,12 +802,13 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 }
 
 type nodeOnly struct {
-	node nodeRun
-	host Host
+	node  nodeRun
+	archs map[string]string
+	host  Host
 }
 
 func (n nodeOnly) Build(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, log Log) error {
-	return tools{node: n.node, buildScript: func() (string, error) { return testBuildScript(cfg.Dir), nil }}.functions(ctx, cfg, variables, n.host, log)
+	return tools{node: n.node, buildScript: func() (string, error) { return testBuildScript(cfg.Dir), nil }}.functions(ctx, cfg, variables, n.archs, n.host, log)
 }
 
 func outputRoot(t *testing.T, projectDir string) string {

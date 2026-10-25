@@ -4,11 +4,11 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func newPreflightRequest(cfg *project.Project, req Request) *contractv1.PreflightRequest {
@@ -48,7 +48,10 @@ func domainApps(cfg *project.Project, req Request) map[string]string {
 
 func containers(cfg *project.Project) []*contractv1.ContainerApp {
 	var named []*contractv1.ContainerApp
-	for _, app := range build.ImageApps(cfg.Apps) {
+	for _, app := range cfg.Apps {
+		if !app.RunsOn(provider.ComputeContainer) {
+			continue
+		}
 		named = append(named, &contractv1.ContainerApp{App: app.Name, Arch: app.Arch})
 	}
 	return named
