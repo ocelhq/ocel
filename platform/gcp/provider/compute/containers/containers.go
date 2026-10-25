@@ -28,7 +28,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	if app == nil {
 		return nil, nil
 	}
-	image := imageToRun(spec)
+	image := functioncode.ContainerImageRef(spec)
 	if strings.TrimSpace(image) == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image, and a Cloud Run service runs what a registry coordinate names and nothing else", app.App)
@@ -164,14 +164,7 @@ func (p Containers) withImageEnv(ctx context.Context, c *gcloud.Clients, spec pr
 }
 
 func isBuiltFromFunction(app *provider.AppSpec) bool {
-	return next.Serves(app) && len(app.Functions) == 1
-}
-
-func imageToRun(spec provider.StackSpec) string {
-	if !isBuiltFromFunction(spec.App) {
-		return spec.App.Image
-	}
-	return functioncode.FunctionImageRef(spec.Images, spec.App.Functions[0].Name)
+	return len(app.Functions) > 0
 }
 
 func (p Containers) Remove(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, images provider.ImageStore, progress progress.Log) error {
@@ -209,7 +202,7 @@ func (p Containers) Name(ctx context.Context, spec provider.StackSpec) ([]provid
 	if err != nil {
 		return nil, err
 	}
-	image := imageToRun(spec)
+	image := functioncode.ContainerImageRef(spec)
 	workers := release.WorkerContainers(named, image)
 	return append([]provider.AppContainer{{Name: spec.App.App, Physical: service, Image: image}}, workers...), nil
 }
