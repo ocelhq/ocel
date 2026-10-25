@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -315,7 +316,6 @@ func TestAPreviewDeployCredentialMayNeitherOpenNorReadWhatProductionKeeps(t *tes
 		resource checkedResource
 		powers   []string
 	}{
-		{checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/prod-p-6f25da114a"}, []string{"cloudkms.cryptoKeyVersions.useToDecrypt", "cloudkms.cryptoKeys.setIamPolicy"}},
 		{checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"}, []string{"cloudkms.cryptoKeyVersions.useToDecrypt", "cloudkms.cryptoKeyVersions.useToEncrypt"}},
 		{checkedResource{name: "projects/_/buckets/ocel-prod-cache-k3x9q2/objects/fetch-cache/shop/prod/web/x", tags: production}, []string{"storage.objects.get", "storage.buckets.setIamPolicy"}},
 		{checkedResource{name: "projects/acme-prod/secrets/ocel-prod-pulumi-passphrase", tags: production}, []string{"secretmanager.versions.access", "secretmanager.secrets.setIamPolicy"}},
@@ -367,7 +367,7 @@ func TestTheProjectPermissionsRoleHoldsOnlyWhatNoTieredRoleHoldsOnTheUntaggedPro
 	}
 }
 
-func TestADeployCredentialReadsOcelsKeyRingAndMakesAndListsItsKeysAndNoOtherRings(t *testing.T) {
+func TestADeployCredentialReadsOcelsKeyRingAndMakesItsKeyAndNoOtherRings(t *testing.T) {
 	t.Parallel()
 
 	ours := checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/ocel", kind: keyRingType}
@@ -375,12 +375,29 @@ func TestADeployCredentialReadsOcelsKeyRingAndMakesAndListsItsKeysAndNoOtherRing
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
 		onOurs := grantedOver(t, deployOf(tier), ours)
 		onForeign := grantedOver(t, deployOf(tier), foreign)
-		for _, permission := range []string{"cloudkms.keyRings.get", "cloudkms.cryptoKeys.create", "cloudkms.cryptoKeys.list"} {
+		if via, holds := onOurs["cloudkms.cryptoKeys.list"]; holds {
+			t.Errorf("the %s deploy credential holds cloudkms.cryptoKeys.list on %s through %s, and a deploy reaches its tier key by name", tier, ours.name, via)
+		}
+		for _, permission := range []string{"cloudkms.keyRings.get", "cloudkms.cryptoKeys.create"} {
 			if _, holds := onOurs[permission]; !holds {
 				t.Errorf("the %s deploy credential holds no %s on %s: Cloud KMS checks it against the ring itself", tier, permission, ours.name)
 			}
 			if via, holds := onForeign[permission]; holds {
 				t.Errorf("the %s deploy credential holds %s on %s, a key ring Ocel never made, through %s", tier, permission, foreign.name, via)
+			}
+		}
+	}
+}
+
+func TestADeployCredentialMayUseAndAdministerNoKeyOnTheRingButItsTiers(t *testing.T) {
+	t.Parallel()
+
+	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {
+		other := checkedResource{name: "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/" + naming.TierWord(tier) + "-p-6f25da114a"}
+		held := powersOver(t, deployOf(tier), other)
+		for _, power := range []string{"cloudkms.cryptoKeyVersions.useToDecrypt", "cloudkms.cryptoKeyVersions.destroy", "cloudkms.cryptoKeys.setIamPolicy"} {
+			if via, holds := held[power]; holds {
+				t.Errorf("the %s deploy credential holds %s on %s, through %s: every value of the tier is sealed under its tier key alone", tier, power, other.name, via)
 			}
 		}
 	}

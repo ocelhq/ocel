@@ -538,8 +538,11 @@ func (s *IAM) KeyMembers(key, role string) []string {
 
 func GrantedIAM() *IAM {
 	return &IAM{
-		rings:     map[string]bool{"projects/acme-prod/locations/europe-west1/keyRings/ocel": true},
-		keys:      map[string]bool{"projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production": true},
+		rings: map[string]bool{"projects/acme-prod/locations/europe-west1/keyRings/ocel": true},
+		keys: map[string]bool{
+			"projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production": true,
+			"projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/preview":    true,
+		},
 		KeyPolicy: map[string]*iampb.Policy{},
 		Project:   &cloudresourcemanager.Policy{Etag: "BwXhoLA="},
 	}

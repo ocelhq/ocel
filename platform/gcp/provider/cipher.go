@@ -5,44 +5,45 @@ import (
 	"errors"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 type cipher struct{ p *Provider }
 
-func (s cipher) openKMS(ctx context.Context, tier environment.Tier) (*gcloud.Clients, ports.Cipher, error) {
+func (s cipher) openKMS(ctx context.Context, tier environment.Tier) (ports.Cipher, error) {
 	if tier == "" {
-		return nil, ports.Cipher{}, ports.Tierless("a value")
+		return ports.Cipher{}, ports.Tierless("a value")
 	}
 	opened, err := s.p.openClients(ctx)
 	if err != nil {
-		return nil, ports.Cipher{}, err
+		return ports.Cipher{}, err
 	}
-	return opened, ports.Cipher{Clients: opened.Workload()}, nil
+	return ports.Cipher{Clients: opened.Workload()}, nil
+}
+
+func sealingProject(bound seal.AssociatedData) string {
+	project, owned := bound.Project()
+	if !owned || naming.Validate("project", project) != nil {
+		return ""
+	}
+	return project
 }
 
 func (s cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
-	c, opened, err := s.openKMS(ctx, tier)
+	opened, err := s.openKMS(ctx, tier)
 	if err != nil {
 		return nil, err
 	}
 	sealed, err := opened.Seal(ctx, tier, bound, plaintext)
-	if !errors.Is(err, ports.ErrNoProjectKey) && !errors.Is(err, ports.ErrNoTierKey) {
+	if !errors.Is(err, ports.ErrNoTierKey) {
 		return sealed, err
 	}
-	project, owned := ports.ProjectSealedFor(bound)
-	if err := s.p.ensureKeys(ctx, tier, project); err != nil {
+	if err := s.p.ensureKeys(ctx, tier, sealingProject(bound)); err != nil {
 		return nil, err
-	}
-	if owned {
-		if err := variables.EnsureProjectKey(ctx, c, tier, project); err != nil {
-			return nil, err
-		}
 	}
 	err = googleretry.UntilServed(ctx, func() error {
 		sealed, err = opened.Seal(ctx, tier, bound, plaintext)
@@ -52,7 +53,7 @@ func (s cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 }
 
 func (s cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	_, opened, err := s.openKMS(ctx, tier)
+	opened, err := s.openKMS(ctx, tier)
 	if err != nil {
 		return nil, err
 	}

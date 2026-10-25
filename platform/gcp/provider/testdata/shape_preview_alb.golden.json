@@ -127,15 +127,6 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_kms_crypto_key:preview-p-8650dee75b",
-      "scope": "project:shop/shared:preview",
-      "vendor": "gcp",
-      "type": "google_kms_crypto_key",
-      "name": "preview-p-8650dee75b",
-      "region": "europe-west1",
-      "properties": {}
-    },
-    {
       "id": "project:shop/shared:preview/google_cloud_run_v2_service:ocel-preview-env-sync",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",

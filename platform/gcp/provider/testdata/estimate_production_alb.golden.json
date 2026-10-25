@@ -180,32 +180,6 @@
       "monthlyUsage": "0.54"
     },
     {
-      "resource": "project:shop/shared:production/google_kms_crypto_key:prod-p-6f25da114a",
-      "status": "STATUS_PRICED",
-      "components": [
-        {
-          "name": "Active key version",
-          "unit": "version-months",
-          "monthlyQuantity": "1",
-          "unitPrice": "0.06",
-          "monthlyCost": "0.06",
-          "rateRef": "gcp/kms/key-version"
-        },
-        {
-          "name": "Cryptographic operations",
-          "unit": "operations",
-          "monthlyQuantity": "10000",
-          "unitPrice": "0.000003",
-          "monthlyCost": "0.03",
-          "usageBased": true,
-          "assumption": "moderate profile: 10000 operations",
-          "rateRef": "gcp/kms/operations"
-        }
-      ],
-      "monthlyFixed": "0.06",
-      "monthlyUsage": "0.03"
-    },
-    {
       "resource": "project:shop/shared:production/google_cloud_run_v2_service:ocel-prod-env-sync",
       "status": "STATUS_PRICED",
       "components": [
@@ -515,13 +489,13 @@
   "scopes": [
     {
       "scope": "project:shop",
-      "monthlyFixed": "68.52",
-      "monthlyUsage": "8.79"
+      "monthlyFixed": "68.46",
+      "monthlyUsage": "8.76"
     },
     {
       "scope": "project:shop/shared:production",
-      "monthlyFixed": "18.59",
-      "monthlyUsage": "2.25"
+      "monthlyFixed": "18.53",
+      "monthlyUsage": "2.22"
     },
     {
       "scope": "project:shop/environment:prod",
@@ -540,7 +514,7 @@
     }
   ],
   "coverage": {
-    "supported": 15,
+    "supported": 14,
     "free": 16,
     "supportedTypes": [
       "google_artifact_registry_repository",
@@ -576,6 +550,6 @@
     "a realtime gateway is priced at Cloud Run's request-based rate for every hour a socket is open, an upper bound on what an instance holding sockets bills",
     "a Cloud Run service billed per instance is priced for every hour an instance lives, idle ones included: Cloud Run keeps an instance up to 15 minutes after its last request, so traffic that never pauses that long keeps one alive all month"
   ],
-  "monthlyFixed": "68.52",
-  "monthlyUsage": "8.79"
+  "monthlyFixed": "68.46",
+  "monthlyUsage": "8.76"
 }

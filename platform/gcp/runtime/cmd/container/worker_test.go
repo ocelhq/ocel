@@ -58,12 +58,12 @@ func pinned(t *testing.T, endpoint string) (variables.Manifest, topics.Store) {
 	}
 	manifest.Databases = map[string]string{manifest.Slug: ports.SharedDatabase("ocel", environment.TierPreview)}
 	clients := &ports.Clients{Namespace: "ocel", Project: manifest.Project, Region: manifest.Region, Endpoint: endpoint, ProjectDatabases: manifest.Databases}
-	projectKeyMade(t, clients, environment.TierPreview, manifest.Slug)
+	tierKeyMade(t, clients, environment.TierPreview)
 	scope := topics.Scope{Slug: manifest.Slug, Tier: environment.TierPreview, Environment: manifest.Tasks.Environment}
 	return manifest, topics.Store{Clients: clients, Cipher: ports.Envelope{Clients: clients}, Scope: scope}
 }
 
-func projectKeyMade(t *testing.T, clients *ports.Clients, tier environment.Tier, project string) {
+func tierKeyMade(t *testing.T, clients *ports.Clients, tier environment.Tier) {
 	t.Helper()
 	client, err := clients.KMS()
 	if err != nil {
@@ -79,11 +79,11 @@ func projectKeyMade(t *testing.T, clients *ports.Clients, tier environment.Tier,
 	}
 	_, err = client.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
 		Parent:      clients.KeyRingPath(),
-		CryptoKeyId: ports.ProjectKey(tier, project),
+		CryptoKeyId: string(tier),
 		CryptoKey:   &kmspb.CryptoKey{Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT},
 	})
 	if err != nil && status.Code(err) != codes.AlreadyExists {
-		t.Fatalf("make the key %s seals its runs under: %v", project, err)
+		t.Fatalf("make the %s key runs are sealed under: %v", tier, err)
 	}
 }
 

@@ -58,10 +58,7 @@ func syncResources(b bootstrap.Engine, tier environment.Tier) []provider.Physica
 }
 
 func Ensure(ctx context.Context, b bootstrap.Engine, tier environment.Tier, project string) error {
-	if err := stackrecords.EnsureBootstrapPart(ctx, b.Records, tier, envSourceSyncWork(b, tier, project)); err != nil {
-		return err
-	}
-	return letSyncSealFor(ctx, b, tier, project)
+	return stackrecords.EnsureBootstrapPart(ctx, b.Records, tier, envSourceSyncWork(b, tier, project))
 }
 
 func envSourceSyncWork(b bootstrap.Engine, tier environment.Tier, project string) stackrecords.PartWork {

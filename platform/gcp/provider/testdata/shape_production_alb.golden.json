@@ -127,15 +127,6 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:production/google_kms_crypto_key:prod-p-6f25da114a",
-      "scope": "project:shop/shared:production",
-      "vendor": "gcp",
-      "type": "google_kms_crypto_key",
-      "name": "prod-p-6f25da114a",
-      "region": "europe-west1",
-      "properties": {}
-    },
-    {
       "id": "project:shop/shared:production/google_cloud_run_v2_service:ocel-prod-env-sync",
       "scope": "project:shop/shared:production",
       "vendor": "gcp",

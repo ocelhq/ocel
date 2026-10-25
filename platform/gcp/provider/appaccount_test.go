@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/iam/apiv1/iampb"
+	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iam/v1"
 	pubsub "google.golang.org/api/pubsub/v1"
 
@@ -204,7 +206,7 @@ var openingASecret = provider.AppValues{Secrets: []provider.SecretRef{{Key: "STR
 
 func TestAnAppThatOpensNoValueIsGrantedNoKeyAndMakesNone(t *testing.T) {
 	t.Parallel()
-	server := appAccountsOnly()
+	server := &googletest.IAM{Accounts: map[string]bool{}, KeyPolicy: map[string]*iampb.Policy{}, Project: &cloudresourcemanager.Policy{Etag: "BwXhoLA="}}
 	p, c := ensuringAccounts(t, server)
 
 	if _, _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil); err != nil {
@@ -214,12 +216,12 @@ func TestAnAppThatOpensNoValueIsGrantedNoKeyAndMakesNone(t *testing.T) {
 	if got := keyBindingsOf(server); len(got) != 0 {
 		t.Errorf("the keys bind %q, want nothing: an app with no secret and no binding opens no value", got)
 	}
-	if server.HasKey(c.Workload().ProjectKeyPath(environment.TierProduction, "shop")) {
-		t.Error("deploying an app that opens no value made its project's key, which needs the tier's key ring")
+	if server.HasKeyRing(gcloud.KeyRingPath(c)) || server.HasKey(gcloud.KeyPath(c, string(environment.TierProduction))) {
+		t.Error("deploying an app that opens no value made the key ring or the tier key, and it seals nothing")
 	}
 }
 
-func TestANewAccountMayReadItsProjectsRecordsAndOpenUnderItsProjectsKeyAndNothingMore(t *testing.T) {
+func TestANewAccountMayReadItsProjectsRecordsAndOpenUnderTheTierKeyAndNothingMore(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	p, c := ensuringAccounts(t, server)
@@ -233,9 +235,9 @@ func TestANewAccountMayReadItsProjectsRecordsAndOpenUnderItsProjectsKeyAndNothin
 	if got := projectBindingsOf(server); !slices.Equal(got, want) {
 		t.Errorf("the project binds %q, want exactly %q", got, want)
 	}
-	opening := []string{"roles/cloudkms.cryptoKeyDecrypter " + member + " on projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/" + ports.ProjectKey(environment.TierProduction, "shop")}
+	opening := []string{"roles/cloudkms.cryptoKeyDecrypter " + member + " on projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"}
 	if got := keyBindingsOf(server); !slices.Equal(got, opening) {
-		t.Errorf("the keys bind %q, want exactly %q: the project's key holds who may open under it, which only a deploy of its tier may change", got, opening)
+		t.Errorf("the keys bind %q, want exactly %q: the tier key holds who may open under it, which only a deploy of its tier may change", got, opening)
 	}
 	if server.QueueWrites != 0 || server.TopicWrites != 0 || server.BucketWrites != 0 {
 		t.Errorf("the queue, topics and buckets were written (%d, %d, %d), and an app that reaches no topics and serves no files needs none of them", server.QueueWrites, server.TopicWrites, server.BucketWrites)
@@ -262,7 +264,7 @@ func TestAGrantRefusedBecauseTheNewAccountIsNotYetVisibleIsRetried(t *testing.T)
 	}
 }
 
-func TestAProjectKeyGoogleDoesNotServeYetAfterMakingItIsWaitedForAndGranted(t *testing.T) {
+func TestATierKeyGoogleDoesNotServeYetIsWaitedForAndGranted(t *testing.T) {
 	t.Parallel()
 	server := appAccountsOnly()
 	server.KeyUnserved = 2
@@ -270,9 +272,9 @@ func TestAProjectKeyGoogleDoesNotServeYetAfterMakingItIsWaitedForAndGranted(t *t
 
 	email, _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", openingASecret), nil)
 	if err != nil {
-		t.Fatalf("ensureAppAccount() = %v, want the grant on the new key made once Google serves it", err)
+		t.Fatalf("ensureAppAccount() = %v, want the grant on the tier key made once Google serves it", err)
 	}
-	opening := "roles/cloudkms.cryptoKeyDecrypter serviceAccount:" + email + " on projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/" + ports.ProjectKey(environment.TierProduction, "shop")
+	opening := "roles/cloudkms.cryptoKeyDecrypter serviceAccount:" + email + " on projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"
 	if got := keyBindingsOf(server); !slices.Contains(got, opening) {
 		t.Errorf("the keys bind %q, want %q", got, opening)
 	}
@@ -355,9 +357,9 @@ func TestAnAppReachingTopicsMayRecordRunsDelayMessagesAsItselfAndPublishToItsTop
 	if !published {
 		t.Errorf("topic %s has policy %+v, want the app to publish to it", topic, server.TopicPolicies[topic])
 	}
-	sealing := "roles/cloudkms.cryptoKeyEncrypterDecrypter " + member + " on projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/" + ports.ProjectKey(environment.TierProduction, "shop")
+	sealing := "roles/cloudkms.cryptoKeyEncrypterDecrypter " + member + " on projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"
 	if !slices.Contains(keyBindingsOf(server), sealing) {
-		t.Errorf("the keys bind %q, want %q: the app seals the payload and output of each run it records under its project's key", keyBindingsOf(server), sealing)
+		t.Errorf("the keys bind %q, want %q: the app seals the payload and output of each run it records under the tier key", keyBindingsOf(server), sealing)
 	}
 }
 

@@ -17,18 +17,15 @@ type Cipher struct {
 	Clients *Clients
 }
 
-func (s Cipher) resolveKeyPath(tier environment.Tier, bound seal.AssociatedData) (string, error) {
+func (s Cipher) tierKeyPath(tier environment.Tier) (string, error) {
 	if tier == "" {
 		return "", Tierless("a value")
-	}
-	if project, owned := ProjectSealedFor(bound); owned {
-		return s.Clients.ProjectKeyPath(tier, project), nil
 	}
 	return s.Clients.KeyPath(string(tier)), nil
 }
 
 func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, plaintext []byte) ([]byte, error) {
-	key, err := s.resolveKeyPath(tier, bound)
+	key, err := s.tierKeyPath(tier)
 	if err != nil {
 		return nil, err
 	}
@@ -42,13 +39,13 @@ func (s Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Asso
 		AdditionalAuthenticatedData: bound.Bytes(),
 	})
 	if err != nil {
-		return nil, s.keyless(tier, bound, "encrypt value", err)
+		return nil, s.keyless(tier, "encrypt value", err)
 	}
 	return sealed.GetCiphertext(), nil
 }
 
 func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	key, err := s.resolveKeyPath(tier, bound)
+	key, err := s.tierKeyPath(tier)
 	if err != nil {
 		return nil, err
 	}
@@ -62,18 +59,15 @@ func (s Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.Asso
 		AdditionalAuthenticatedData: bound.Bytes(),
 	})
 	if err != nil {
-		return nil, s.keyless(tier, bound, "decrypt value", err)
+		return nil, s.keyless(tier, "decrypt value", err)
 	}
 	return opened.GetPlaintext(), nil
 }
 
-func (s Cipher) keyless(tier environment.Tier, bound seal.AssociatedData, doing string, err error) error {
-	if project, owned := ProjectSealedFor(bound); owned && status.Code(err) == codes.NotFound {
-		return refuseNoProjectKey(tier, project, err)
-	}
+func (s Cipher) keyless(tier environment.Tier, doing string, err error) error {
 	if status.Code(err) == codes.NotFound {
 		return missingProjectPart{condition: ErrNoTierKey, answer: err, refused: refusal.Refuse(refusal.CodeNotReady,
-			"this project has no %s key on the %s ring yet, and every %s value that belongs to no project is sealed under it.\n"+
+			"this project has no %s key on the %s ring yet, and every %s value is sealed under it.\n"+
 				"Deploy to the %s tier, or set a value with the ocel CLI, which adds it, then try again",
 			tier, s.Clients.KeyRing(), tier, tier)}
 	}
