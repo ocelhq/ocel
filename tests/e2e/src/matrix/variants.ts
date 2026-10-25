@@ -68,6 +68,24 @@ export const alb = variant("alb", { offeredOn: ["gcp"], config: { edge: "alb" } 
 
 export const albInFrontOfNext = { ...alb, checks: backendBucketChecks };
 
+const NEXT_START = { dockerfile: "next-start.Dockerfile" };
+
+export const containerDockerfile = variant("container-dockerfile", {
+  offeredOn: ["aws", "gcp"],
+  config: { compute: "container", image: NEXT_START },
+});
+
+export const albInFrontOfNextContainer = variant("alb-container", {
+  offeredOn: ["gcp"],
+  config: { edge: "alb", compute: "container" },
+  checks: backendBucketChecks,
+});
+
+export const albContainerDockerfile = variant("alb-container-dockerfile", {
+  offeredOn: ["gcp"],
+  config: { edge: "alb", compute: "container", image: NEXT_START },
+});
+
 export const registry = variant("registry", {
   offeredOn: ["vps"],
   config: { registry: { server: JOURNEY_REGISTRY, password: `\${${REGISTRY_TOKEN_ENV}}` } },

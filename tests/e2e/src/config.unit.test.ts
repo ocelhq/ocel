@@ -823,7 +823,7 @@ describe("renderJsonConfig", () => {
       "edge-runtime",
       "edge-cache",
     ]);
-    expect(overlayFor(cell(deploy.next), "aws", {}).allowDegraded).toBeUndefined();
+    expect(overlayFor(cell(deploy.node), "gcp", {}).allowDegraded).toBeUndefined();
   });
 
   it("builds the sdk go app's container on vps from the package its entrypoint names, under the path it declares", async () => {

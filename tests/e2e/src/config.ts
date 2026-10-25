@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { Need } from "ocel/config";
 import stripJsonComments from "strip-json-comments";
 import { migrates } from "./checks";
 import { appHostname } from "./identity";
@@ -13,6 +14,7 @@ import type {
   TargetConfigDelta,
   TargetName,
 } from "./matrix/types";
+import { listWaivedNeeds } from "./matrix/waivers";
 import { REGISTRY_USER_ENV } from "./registry/settings";
 import type { CellUnderTest } from "./run/cellRun";
 import { migrateLine } from "./workspace";
@@ -41,6 +43,7 @@ export function vpsZoneOf(cell: Pick<Cell, "variant">, env: NodeJS.ProcessEnv): 
 export type Overlay = TargetConfigDelta & {
   target: TargetName;
   slug: string;
+  allowDegraded?: Need[];
   compute?: Compute;
   computes?: Record<string, Compute>;
   edge?: Edge;
@@ -89,6 +92,11 @@ function registryOf(cell: PlannedCell, env: NodeJS.ProcessEnv): { registry?: Reg
   return { registry: { ...named, username } };
 }
 
+function waiversOf(cell: PlannedCell, target: TargetName): { allowDegraded?: Need[] } {
+  const waived = listWaivedNeeds(cell.fixture, target, cell.variant);
+  return waived.length > 0 ? { allowDegraded: waived } : {};
+}
+
 function dnsOf(env: NodeJS.ProcessEnv): { dns?: "cloudflare" } {
   return env.OCEL_E2E_DNS === "cloudflare" ? { dns: "cloudflare" } : {};
 }
@@ -114,6 +122,7 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
         target,
         slug: cell.slug,
         ...cell.fixture.configOn?.aws,
+        ...waiversOf(cell, target),
         ...cell.variant.config,
         ...(migrates(cell.fixture.checks) && !emulatorEndpoint(env)
           ? { preBuild: migrateLine() }
@@ -135,6 +144,7 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
         target,
         slug: cell.slug,
         ...cell.fixture.configOn?.gcp,
+        ...waiversOf(cell, target),
         ...cell.variant.config,
         ...(hostnamed ? { dns: "cloudflare" as const, hostnames: hostnamesOf(cell, zone) } : {}),
         ...(previewing ? { previewDomain: `*.${appHostname("pv", cell.slug, zone)}` } : {}),
@@ -147,6 +157,7 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
         target,
         slug: cell.slug,
         ...cell.fixture.configOn?.vps,
+        ...waiversOf(cell, target),
         ...(image ? { image } : {}),
         ...(migrates(cell.fixture.checks) ? { preBuild: migrateLine() } : {}),
         hostnames: hostnamesOf(cell, vpsZoneOf(cell, env)),

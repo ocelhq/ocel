@@ -55,7 +55,7 @@ export const UNNAMED_CONCERNS: Concern[] = CONCERNS.filter(
 
 export type Edge = "cloudfront" | "api-gateway" | "cloudflare" | "alb";
 
-export type CacheLayer = "edge" | "origin";
+export type CacheLayer = "edge" | "origin" | "app-headers";
 
 const COMPUTE_WHEN_NONE_IS_NAMED: Record<TargetName, Compute> = {
   dev: "serverless",
@@ -87,7 +87,6 @@ export type ConfigDelta = {
 };
 
 export type TargetConfigDelta = {
-  allowDegraded?: Need[];
   apps?: Record<string, Partial<AppConfig>>;
 };
 
@@ -123,6 +122,7 @@ export type Fixture = {
   on: Partial<Record<TargetName, Variant[]>>;
   previews?: Partial<Record<TargetName, Variant[]>>;
   configOn?: Partial<Record<TargetName, TargetConfigDelta>>;
+  needs?: Record<string, Need[]>;
   sample?: Sample;
 };
 
@@ -150,8 +150,15 @@ export type Cell = {
   target: TargetName;
 };
 
+function isKeptByItsOwnHeaders(target: TargetName, { edge, image }: ConfigDelta) {
+  return image !== undefined && (target === "aws" || edge === "alb");
+}
+
 export function cacheLayerOf(target: TargetName, variant: Variant): CacheLayer {
-  if (variant.config.edge !== undefined) {
+  if (isKeptByItsOwnHeaders(target, variant.config)) {
+    return "app-headers";
+  }
+  if (variant.config.edge !== undefined || target === "aws") {
     return "edge";
   }
   if (target === "gcp") {

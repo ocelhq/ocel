@@ -333,6 +333,8 @@ describe("sweepStaleFromZone on gcp", () => {
       )
       .sort();
     expect(listed).toEqual([
+      "-deploy-next-alb-container-dockerfile.j.example false",
+      "-deploy-next-alb-container.j.example false",
       "-deploy-next-alb.j.example false",
       "-deploy-next-cloudflare.j.example true",
       "-deploy-node-alb.j.example false",

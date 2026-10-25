@@ -19,3 +19,5 @@ ocel deploy
 
 `src/probes.ts` is the test surface — mounted at `/api/probes`, driven by the suites under
 [`tests/e2e`](../../../e2e), and of no use to the product.
+
+As a container with no Dockerfile, ocel's Next adapter builds it.
