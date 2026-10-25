@@ -16,6 +16,10 @@ on:
         default: aws-cloudflare
         type: choice
         options: [aws-cloudflare, gcp-direct, gcp-alb, gcp-cloudflare]
+      testsPerShard:
+        description: "Test apps each of the 20 shards deploys at once. Empty takes the target's own: 2 for gcp-cloudflare, 3 for the rest"
+        default: ""
+        type: string
 
 concurrency:
   group: ${{ startsWith(inputs.target, 'gcp') && 'real-gcp' || 'real-aws' }}
@@ -30,6 +34,7 @@ env:
   OCEL_AWS_VARIABLES_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
   BASELINE_MANIFEST: test/ocel-deploy-tests-manifest.json
   ADAPTER_BASELINE: ${{ startsWith(inputs.target, 'gcp') && format('tests/next-compat/baseline-manifest.{0}.json', inputs.target) || 'tests/next-compat/baseline-manifest.json' }}
+  TESTS_PER_SHARD: ${{ inputs.testsPerShard || (inputs.target == 'gcp-cloudflare' && '2' || '3') }}
   # FIXME: must match PinnedVersion in pkg/provider/pulumi/runtime.go —
   # nothing checks that it does, and a mismatch silently warms the wrong directory.
   PULUMI_VERSION: "3.146.0"
@@ -85,6 +90,12 @@ jobs:
             echo "::error::E2E_GCP_CLOUDFLARE_PREVIEW_DOMAIN is not set: set the repository variable to the wildcard gcp-cloudflare previews serve on"
             exit 1
           fi
+          case "$TESTS_PER_SHARD" in
+            '' | 0* | *[!0-9]*)
+              echo "::error::testsPerShard is $TESTS_PER_SHARD: dispatch with a whole number of test apps, 1 or more"
+              exit 1
+              ;;
+          esac
           if [ "$RECORD" != true ] && [ ! -f "$ADAPTER_BASELINE" ]; then
             echo "::error::no baseline for $OCEL_COMPAT_TARGET: dispatch with recordBaseline first and commit $ADAPTER_BASELINE"
             exit 1
@@ -527,7 +538,7 @@ jobs:
           OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
         shell: bash
         run: |
-          node run-tests.js --timings -g ${{ matrix.group }} -c 3 --type e2e \
+          node run-tests.js --timings -g ${{ matrix.group }} -c "$TESTS_PER_SHARD" --type e2e \
             2>&1 | tee "$RUNNER_TEMP/deploy-tests.log"
 
       - name: Collect this group's results into a baseline fragment
