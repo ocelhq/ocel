@@ -191,8 +191,8 @@ func TestABootstrapWhoseCredentialMayNotSwitchServicesOnIsRefusedOnceBeforeItRea
 				t.Errorf("%s refused with %q, want it to name %s", name, refused.Message, api)
 			}
 		}
-		if !strings.Contains(refused.Message, "admin@acme.example") || !strings.Contains(refused.Message, "gcloud services enable") || !strings.Contains(refused.Message, bootstrap.ServicesRole) {
-			t.Errorf("%s refused with %q, want the principal, the gcloud command and the role", name, refused.Message)
+		if !strings.Contains(refused.Message, "admin@acme.example") || !strings.Contains(refused.Message, "gcloud services enable") {
+			t.Errorf("%s refused with %q, want the principal and the gcloud command", name, refused.Message)
 		}
 		if reads := f.readsBeyondServiceUsage(); len(reads) > 0 || len(f.usage.Enabled) > 0 {
 			t.Errorf("%s read %v and switched on %v before refusing, want neither", name, reads, f.usage.Enabled)

@@ -171,10 +171,15 @@ var bootstrapRoles = []string{
 	"roles/resourcemanager.tagAdmin",
 	credential.BillingRole,
 	gcloud.TierTagUserRole,
-	ServicesRole,
 }
 
-func BootstrapRoles() []string { return slices.Clone(bootstrapRoles) }
+const servicesRoleWhy = "it lets ocel switch on a service a bootstrap needs while it is off, and a credential without it bootstraps only where every one is on"
+
+func BootstrapRoles() []string { return append(slices.Clone(bootstrapRoles), ServicesRole) }
+
+func BootstrapRoleLines() []string {
+	return append(slices.Clone(bootstrapRoles), ServicesRole+": "+servicesRoleWhy)
+}
 
 func GrantsFor(parts []string) gcloud.Grants {
 	if slices.Contains(parts, CloudflareOriginPart) {

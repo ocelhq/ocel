@@ -243,8 +243,9 @@ func TestBothCredentialsNameWhatLetsOcelSwitchOnAServiceThatIsOff(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Permissions(bootstrap) = %v", err)
 	}
-	if !slices.Contains(strings.Split(bootstrapped.Document, "\n"), bootstrap.ServicesRole) {
-		t.Errorf("Permissions(bootstrap) =\n%s\nwant %s, which lets a bootstrap switch on what it needs", bootstrapped.Document, bootstrap.ServicesRole)
+	bootstrapWant := "roles/serviceusage.serviceUsageAdmin: it lets ocel switch on a service a bootstrap needs while it is off, and a credential without it bootstraps only where every one is on"
+	if !slices.Contains(strings.Split(bootstrapped.Document, "\n"), bootstrapWant) {
+		t.Errorf("Permissions(bootstrap) =\n%s\nwant the line %s", bootstrapped.Document, bootstrapWant)
 	}
 	want := "a custom role holding serviceusage.services.enable, unconditioned: it lets ocel switch on a service a deploy needs while it is off, and a credential without it deploys only where every one is on"
 	if lines := renderedDeploy(t, environment.TierProduction); !slices.Contains(lines, want) {

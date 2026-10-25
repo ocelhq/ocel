@@ -214,9 +214,9 @@ func (b Engine) RefuseSwitchOnDenied(ctx context.Context, off []string) error {
 	}
 	project := b.Clients.Project()
 	return refusal.Refuse(refusal.CodeDenied,
-		"project %s has %s switched off, and %s may not switch services on there.\n"+
-			"Run `gcloud services enable %s --project %s` once as someone who may, or grant %s %s on the project, then try again",
-		project, strings.Join(off, ", "), principal, strings.Join(off, " "), project, principal, ServicesRole)
+		"%s may not switch on %s in project %s.\n"+
+			"Have someone who may run `gcloud services enable %s --project %s`, then try again",
+		principal, strings.Join(off, ", "), project, strings.Join(off, " "), project)
 }
 
 func (b Engine) SwitchOnServices(ctx context.Context, apis []string, progress progress.Log) error {
@@ -243,7 +243,7 @@ func (b Engine) switchOn(ctx context.Context, off []string, progress progress.Lo
 		doing := "switching on " + strings.Join(batch, ", ") + " in project " + b.Clients.Project()
 		started, err := googleretry.Attempted(ctx, service.Services.BatchEnable(parent, &serviceusage.BatchEnableServicesRequest{ServiceIds: batch}).Context(ctx).Do)
 		if err != nil {
-			if refused := b.refuseUnbilled(batch, err.Error(), googleretry.AnsweredCode(err) == http.StatusBadRequest); refused != nil {
+			if refused := b.refuseUnbilled(err.Error(), googleretry.AnsweredCode(err) == http.StatusBadRequest); refused != nil {
 				return refused
 			}
 			return fmt.Errorf("%s: %w", doing, err)
@@ -258,7 +258,7 @@ func (b Engine) switchOn(ctx context.Context, off []string, progress progress.Lo
 			return err
 		}
 		if finished.Error != nil {
-			if refused := b.refuseUnbilled(batch, finished.Error.Message, finished.Error.Code == int64(codes.FailedPrecondition)); refused != nil {
+			if refused := b.refuseUnbilled(finished.Error.Message, finished.Error.Code == int64(codes.FailedPrecondition)); refused != nil {
 				return refused
 			}
 			return fmt.Errorf("%s: %s", doing, finished.Error.Message)
@@ -271,14 +271,13 @@ func (b Engine) switchOn(ctx context.Context, off []string, progress progress.Lo
 	return nil
 }
 
-func (b Engine) refuseUnbilled(batch []string, message string, precondition bool) error {
+func (b Engine) refuseUnbilled(message string, precondition bool) error {
 	if !precondition || !strings.Contains(strings.ToLower(message), "billing") {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
-		"project %s has no billing account linked, and Google switches on %s only in a project that bills.\n"+
-			"Link one at %s%s, then try again",
-		b.Clients.Project(), strings.Join(batch, ", "), billingConsole, url.QueryEscape(b.Clients.Project()))
+		"project %s has no billing account linked.\nLink one at %s%s, then try again",
+		b.Clients.Project(), billingConsole, url.QueryEscape(b.Clients.Project()))
 }
 
 func (b Engine) awaitServicesOn(ctx context.Context, apis []string) error {

@@ -107,7 +107,7 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environmen
 	if purpose == edge.PurposeBootstrap {
 		return edge.CredentialDocument{
 			Heading:  fmt.Sprintf("the roles a bootstrap credential is granted on project %s", project),
-			Document: strings.Join(bootstrap.BootstrapRoles(), "\n"),
+			Document: strings.Join(bootstrap.BootstrapRoleLines(), "\n"),
 		}, nil
 	}
 	if tier != environment.TierProduction && tier != environment.TierPreview {

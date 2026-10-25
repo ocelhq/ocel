@@ -123,7 +123,7 @@ func TestSwitchingOnServicesThatAreAllOnAsksNothingOfTheCredential(t *testing.T)
 	}
 }
 
-func TestACredentialThatMayNotSwitchServicesOnIsRefusedOnceNamingEveryServiceOffWhoItIsAndBothRemedies(t *testing.T) {
+func TestACredentialThatMayNotSwitchServicesOnIsRefusedOnceNamingEveryServiceOffWhoItIsAndTheCommandThatSwitchesThemOn(t *testing.T) {
 	t.Parallel()
 
 	usage := &googletest.ServiceUsage{ServicesOff: []string{"firestore.googleapis.com", "cloudkms.googleapis.com"}}
@@ -135,9 +135,8 @@ func TestACredentialThatMayNotSwitchServicesOnIsRefusedOnceNamingEveryServiceOff
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
 		t.Fatalf("SwitchOnServices() = %v, want a %s refusal", err, refusal.CodeDenied)
 	}
-	want := "project acme-prod has firestore.googleapis.com, cloudkms.googleapis.com switched off, and deployer@acme-prod.iam.gserviceaccount.com may not switch services on there.\n" +
-		"Run `gcloud services enable firestore.googleapis.com cloudkms.googleapis.com --project acme-prod` once as someone who may, " +
-		"or grant deployer@acme-prod.iam.gserviceaccount.com roles/serviceusage.serviceUsageAdmin on the project, then try again"
+	want := "deployer@acme-prod.iam.gserviceaccount.com may not switch on firestore.googleapis.com, cloudkms.googleapis.com in project acme-prod.\n" +
+		"Have someone who may run `gcloud services enable firestore.googleapis.com cloudkms.googleapis.com --project acme-prod`, then try again"
 	if refused.Message != want {
 		t.Errorf("refused with\n%s\nwant\n%s", refused.Message, want)
 	}
@@ -161,7 +160,7 @@ func TestAProjectWithNoBillingAccountIsRefusedWithWhereToLinkOne(t *testing.T) {
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 			t.Fatalf("%s: SwitchOnServices() = %v, want a %s refusal", name, err, refusal.CodeNotReady)
 		}
-		want := "project acme-prod has no billing account linked, and Google switches on run.googleapis.com only in a project that bills.\n" +
+		want := "project acme-prod has no billing account linked.\n" +
 			"Link one at https://console.cloud.google.com/billing/linkedaccount?project=acme-prod, then try again"
 		if refused.Message != want {
 			t.Errorf("%s: refused with\n%s\nwant\n%s", name, refused.Message, want)
