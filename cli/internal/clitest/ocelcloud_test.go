@@ -3,6 +3,7 @@ package clitest
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -13,15 +14,20 @@ import (
 )
 
 func TestTheFakeOcelCloudAnswersAsOcelCloudDoes(t *testing.T) {
-	fake := ServeOcelCloud(t)
-	fake.JobReads = nil
-	cloudconformance.Run(t, cloudconformance.Suite{
-		URL:                    fake.APIURL,
-		Token:                  FakeCloudToken,
-		OtherOrganizationToken: otherOrganizationCloudToken,
-		Version:                version.Version,
-		Builder:                fakeBuilder{fake},
-	})
+	for _, method := range []string{http.MethodPut, http.MethodPost} {
+		t.Run("handing out "+method+" upload targets", func(t *testing.T) {
+			fake := ServeOcelCloud(t)
+			fake.JobReads = nil
+			fake.UploadMethod = method
+			cloudconformance.Run(t, cloudconformance.Suite{
+				URL:                    fake.APIURL,
+				Token:                  FakeCloudToken,
+				OtherOrganizationToken: otherOrganizationCloudToken,
+				Version:                version.Version,
+				Builder:                fakeBuilder{fake},
+			})
+		})
+	}
 }
 
 type fakeBuilder struct{ cloud *FakeOcelCloud }

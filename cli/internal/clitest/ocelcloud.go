@@ -2,6 +2,8 @@ package clitest
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -48,9 +50,11 @@ var versionedProcedures = []string{
 }
 
 type FakeOcelCloud struct {
-	ConsoleURL  string
-	APIURL      string
-	ProviderURL string
+	ConsoleURL   string
+	APIURL       string
+	StorageURL   string
+	ProviderURL  string
+	UploadMethod string
 
 	consolev1connect.UnimplementedProjectServiceHandler
 	consolev1connect.UnimplementedConsoleServiceHandler
@@ -75,9 +79,10 @@ type FakeOcelCloud struct {
 	Events        []*consolev1.RecordEnvironmentEventRequest
 	Reports       []*consolev1.ReportRequest
 
-	blobs   map[string][]byte
-	sources map[string]bool
-	jobs    map[string]*fakeJob
+	blobs      map[string][]byte
+	sources    map[string]bool
+	jobs       map[string]*fakeJob
+	signingKey []byte
 }
 
 type fakeJob struct {
@@ -93,9 +98,11 @@ func ServeOcelCloud(t *testing.T) *FakeOcelCloud {
 	fake := &FakeOcelCloud{
 		Organizations: []console.Organization{{ID: "org_1", Name: "Acme Inc", Slug: "acme"}},
 		JobReads:      []*cloudv1.Job{{State: cloudv1.JobState_JOB_STATE_SUCCEEDED}},
+		UploadMethod:  http.MethodPut,
 		blobs:         map[string][]byte{},
 		sources:       map[string]bool{},
 		jobs:          map[string]*fakeJob{},
+		signingKey:    []byte(rand.Text()),
 	}
 	validate := connect.WithInterceptors(connectvalidate.NewInterceptor())
 
@@ -136,7 +143,6 @@ func ServeOcelCloud(t *testing.T) *FakeOcelCloud {
 	cloudMux := http.NewServeMux()
 	cloudMux.Handle(cloudv1connect.NewUploadServiceHandler(fake, cloudOptions))
 	cloudMux.Handle(cloudv1connect.NewJobServiceHandler(fake, cloudOptions))
-	cloudMux.HandleFunc("PUT /v1/blobs/{digest}", fake.putBlob)
 	cloudServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fake.mu.Lock()
 		fake.CloudBearers = append(fake.CloudBearers, r.Header.Get("Authorization"))
@@ -145,6 +151,13 @@ func ServeOcelCloud(t *testing.T) *FakeOcelCloud {
 	}))
 	t.Cleanup(cloudServer.Close)
 	fake.APIURL = cloudServer.URL
+
+	storageMux := http.NewServeMux()
+	storageMux.HandleFunc("PUT /blobs/{tenant}/{digest}", fake.putBlob)
+	storageMux.HandleFunc("POST /blobs", fake.postBlob)
+	storageServer := httptest.NewServer(storageMux)
+	t.Cleanup(storageServer.Close)
+	fake.StorageURL = storageServer.URL
 	return fake
 }
 
@@ -257,13 +270,37 @@ func (f *FakeOcelCloud) Missing(ctx context.Context, req *cloudv1.MissingRequest
 	tenant := tenantIn(ctx)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var missing []string
+	missing := &cloudv1.MissingResponse{}
 	for _, digest := range req.GetDigests() {
 		if _, held := f.blobs[tenant+"/"+digest]; !held {
-			missing = append(missing, digest)
+			missing.Uploads = append(missing.Uploads, f.uploadTarget(tenant, digest))
 		}
 	}
-	return &cloudv1.MissingResponse{Digests: missing}, nil
+	return missing, nil
+}
+
+func (f *FakeOcelCloud) uploadTarget(tenant, digest string) *cloudv1.Upload {
+	key := tenant + "/" + digest
+	if f.UploadMethod == http.MethodPost {
+		return &cloudv1.Upload{
+			Digest: digest,
+			Url:    f.StorageURL + "/blobs",
+			Method: http.MethodPost,
+			Fields: map[string]string{"key": key, "signature": f.signatureOf(http.MethodPost, key)},
+		}
+	}
+	return &cloudv1.Upload{
+		Digest:  digest,
+		Url:     f.StorageURL + "/blobs/" + key + "?signature=" + f.signatureOf(http.MethodPut, key),
+		Method:  http.MethodPut,
+		Headers: map[string]string{"Content-Type": "application/octet-stream"},
+	}
+}
+
+func (f *FakeOcelCloud) signatureOf(method, key string) string {
+	mac := hmac.New(sha256.New, f.signingKey)
+	_, _ = io.WriteString(mac, method+" "+key)
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func (f *FakeOcelCloud) CommitSource(ctx context.Context, req *cloudv1.CommitSourceRequest) (*cloudv1.CommitSourceResponse, error) {
@@ -380,9 +417,13 @@ func (f *FakeOcelCloud) RespondJob(ctx context.Context, req *cloudv1.RespondJobR
 }
 
 func (f *FakeOcelCloud) putBlob(w http.ResponseWriter, r *http.Request) {
-	tenant, known := tenantOf(r.Header.Get("Authorization"))
-	if !known {
-		http.Error(w, "the bearer token is no organization's", http.StatusUnauthorized)
+	key := r.PathValue("tenant") + "/" + r.PathValue("digest")
+	if !hmac.Equal([]byte(r.URL.Query().Get("signature")), []byte(f.signatureOf(http.MethodPut, key))) {
+		http.Error(w, "the signature does not match", http.StatusForbidden)
+		return
+	}
+	if r.Header.Get("Content-Type") != "application/octet-stream" {
+		http.Error(w, "the content type is not the one signed", http.StatusForbidden)
 		return
 	}
 	body, err := io.ReadAll(r.Body)
@@ -390,14 +431,49 @@ func (f *FakeOcelCloud) putBlob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	f.keepBlob(w, key, body)
+}
+
+func (f *FakeOcelCloud) postBlob(w http.ResponseWriter, r *http.Request) {
+	form, err := r.MultipartReader()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	fields := map[string]string{}
+	for {
+		part, err := form.NextPart()
+		if err != nil {
+			http.Error(w, "the form ends before its file", http.StatusBadRequest)
+			return
+		}
+		value, err := io.ReadAll(part)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if part.FormName() != "file" {
+			fields[part.FormName()] = string(value)
+			continue
+		}
+		if !hmac.Equal([]byte(fields["signature"]), []byte(f.signatureOf(http.MethodPost, fields["key"]))) {
+			http.Error(w, "the policy signature does not match", http.StatusForbidden)
+			return
+		}
+		f.keepBlob(w, fields["key"], value)
+		return
+	}
+}
+
+func (f *FakeOcelCloud) keepBlob(w http.ResponseWriter, key string, body []byte) {
 	sum := sha256.Sum256(body)
-	if hex.EncodeToString(sum[:]) != r.PathValue("digest") {
+	if _, digest, _ := strings.Cut(key, "/"); hex.EncodeToString(sum[:]) != digest {
 		http.Error(w, "the body does not hash to the digest", http.StatusBadRequest)
 		return
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.blobs[tenant+"/"+r.PathValue("digest")] = body
+	f.blobs[key] = body
 	w.WriteHeader(http.StatusNoContent)
 }
 

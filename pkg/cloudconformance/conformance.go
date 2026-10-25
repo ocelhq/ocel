@@ -1,6 +1,7 @@
 package cloudconformance
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -8,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"buf.build/go/protovalidate"
 	"connectrpc.com/connect"
 
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
@@ -117,22 +120,63 @@ func setHeaders(header http.Header, token, version string) {
 	}
 }
 
-func (c caller) put(t *testing.T, digest, body string) int {
+func send(t *testing.T, target *cloudv1.Upload, body string) int {
 	t.Helper()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, c.url+"/v1/blobs/"+digest, strings.NewReader(body))
+	payload, contentType := io.Reader(strings.NewReader(body)), ""
+	if target.GetMethod() == http.MethodPost {
+		payload, contentType = postPolicyForm(t, target, body)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), target.GetMethod(), target.GetUrl(), payload)
 	if err != nil {
 		t.Fatal(err)
 	}
-	setHeaders(req.Header, c.token, c.version)
-	req.Header.Set("Content-Type", "application/octet-stream")
+	for name, value := range target.GetHeaders() {
+		req.Header.Set(name, value)
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("PUT /v1/blobs/%s: %v", digest, err)
+		t.Fatalf("%s the upload target for %s: %v", target.GetMethod(), target.GetDigest(), err)
 	}
 	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
 	return resp.StatusCode
+}
+
+func postPolicyForm(t *testing.T, target *cloudv1.Upload, body string) (io.Reader, string) {
+	t.Helper()
+
+	var form bytes.Buffer
+	writer := multipart.NewWriter(&form)
+	for name, value := range target.GetFields() {
+		if err := writer.WriteField(name, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	file, err := writer.CreateFormFile("file", target.GetDigest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(file, body); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return &form, writer.FormDataContentType()
+}
+
+func (c caller) target(t *testing.T, digest string) *cloudv1.Upload {
+	t.Helper()
+
+	targets := c.targets(t, digest)
+	if len(targets) != 1 || targets[0].GetDigest() != digest {
+		t.Fatalf("Missing(%s) handed out %v, want one upload target for it", digest, targets)
+	}
+	return targets[0]
 }
 
 func (c caller) upload(t *testing.T, path string) *cloudv1.SourceFile {
@@ -140,8 +184,8 @@ func (c caller) upload(t *testing.T, path string) *cloudv1.SourceFile {
 
 	body := freshContent()
 	digest := digestOf(body)
-	if status := c.put(t, digest, body); status/100 != 2 {
-		t.Fatalf("PUT /v1/blobs/%s answered %d, want the blob kept", digest, status)
+	if status := send(t, c.target(t, digest), body); status/100 != 2 {
+		t.Fatalf("the upload target for %s answered %d, want the blob kept", digest, status)
 	}
 	return &cloudv1.SourceFile{Path: path, Digest: digest, Size: uint64(len(body))}
 }
@@ -156,14 +200,27 @@ func (c caller) commit(t *testing.T, files ...*cloudv1.SourceFile) string {
 	return committed.GetSourceId()
 }
 
-func (c caller) missing(t *testing.T, digests ...string) []string {
+func (c caller) targets(t *testing.T, digests ...string) []*cloudv1.Upload {
 	t.Helper()
 
 	missing, err := c.uploads.Missing(t.Context(), &cloudv1.MissingRequest{Digests: digests})
 	if err != nil {
 		t.Fatalf("Missing() error = %v", err)
 	}
-	return missing.GetDigests()
+	if err := protovalidate.Validate(missing); err != nil {
+		t.Fatalf("Missing() answered %v, which breaks the upload target rules: %v", missing, err)
+	}
+	return missing.GetUploads()
+}
+
+func (c caller) missing(t *testing.T, digests ...string) []string {
+	t.Helper()
+
+	var missing []string
+	for _, target := range c.targets(t, digests...) {
+		missing = append(missing, target.GetDigest())
+	}
+	return missing
 }
 
 func freshContent() string {

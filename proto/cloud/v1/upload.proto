@@ -13,8 +13,39 @@ message MissingRequest {
   }];
 }
 
+message Upload {
+  option (buf.validate.message).cel = {
+    id: "upload.fields_only_for_post"
+    message: "only a POST policy has form fields"
+    expression: "this.method == 'POST' || this.fields.size() == 0"
+  };
+
+  string digest = 1 [(buf.validate.field).string = {pattern: "^[0-9a-f]{64}$"}];
+
+  string url = 2 [
+    (buf.validate.field).string = {min_len: 1, max_len: 8192, uri: true},
+    (buf.validate.field).cel = {
+      id: "upload.url_scheme"
+      message: "an upload target is an https or http URL"
+      expression: "this.startsWith('https://') || this.startsWith('http://')"
+    }
+  ];
+
+  string method = 3 [(buf.validate.field).string = {in: ["PUT", "POST"]}];
+
+  map<string, string> headers = 4;
+
+  map<string, string> fields = 5;
+}
+
 message MissingResponse {
-  repeated string digests = 1;
+  option (buf.validate.message).cel = {
+    id: "missing_response.unique_digests"
+    message: "each digest is named once"
+    expression: "this.uploads.map(u, u.digest).unique()"
+  };
+
+  repeated Upload uploads = 1 [(buf.validate.field).repeated.max_items = 20000];
 }
 
 message SourceFile {
