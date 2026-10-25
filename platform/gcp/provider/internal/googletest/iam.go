@@ -17,6 +17,7 @@ import (
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"google.golang.org/api/artifactregistry/v1"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iam/v1"
 	pubsub "google.golang.org/api/pubsub/v1"
@@ -53,6 +54,11 @@ type IAM struct {
 	ProjectAttempts int
 	MissingRole     string
 	MissingRoleAsks int
+
+	ProjectPolicies map[string]*cloudresourcemanager.Policy
+
+	RepositoryPolicies map[string]*artifactregistry.Policy
+	RepositoryWrites   int
 
 	AccountPolicies     map[string]*iam.Policy
 	accountDescriptions map[string]string
@@ -315,6 +321,39 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 			_ = json.NewEncoder(w).Encode(map[string]string{"name": path, "state": state})
 		case r.Method == http.MethodGet && path == "/v1/projects/acme-prod":
 			_, _ = w.Write([]byte(`{"projectId":"acme-prod","projectNumber":"123456789"}`))
+		case strings.Contains(path, "/repositories/") && strings.HasSuffix(path, ":getIamPolicy"):
+			policy := s.RepositoryPolicies[strings.TrimPrefix(strings.TrimSuffix(path, ":getIamPolicy"), "/v1/")]
+			if policy == nil {
+				policy = &artifactregistry.Policy{Etag: "BwXhoLA="}
+			}
+			_ = json.NewEncoder(w).Encode(policy)
+		case strings.Contains(path, "/repositories/") && strings.HasSuffix(path, ":setIamPolicy"):
+			var asked artifactregistry.SetIamPolicyRequest
+			if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if s.RepositoryPolicies == nil {
+				s.RepositoryPolicies = map[string]*artifactregistry.Policy{}
+			}
+			s.RepositoryPolicies[strings.TrimPrefix(strings.TrimSuffix(path, ":setIamPolicy"), "/v1/")] = asked.Policy
+			s.RepositoryWrites++
+			_ = json.NewEncoder(w).Encode(asked.Policy)
+		case s.ProjectPolicies != nil && isOtherProjectPolicy(path, ":getIamPolicy"):
+			policy := s.ProjectPolicies[projectInPolicyPath(path, ":getIamPolicy")]
+			if policy == nil {
+				policy = &cloudresourcemanager.Policy{Etag: "BwXhoLA="}
+			}
+			_ = json.NewEncoder(w).Encode(policy)
+		case s.ProjectPolicies != nil && isOtherProjectPolicy(path, ":setIamPolicy"):
+			var asked cloudresourcemanager.SetIamPolicyRequest
+			if err := json.NewDecoder(r.Body).Decode(&asked); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			s.ProjectPolicies[projectInPolicyPath(path, ":setIamPolicy")] = asked.Policy
+			s.Writes++
+			_ = json.NewEncoder(w).Encode(asked.Policy)
 		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":getIamPolicy") && !strings.Contains(path, "/serviceAccounts/") && !strings.Contains(path, "/topics/"):
 			_ = json.NewEncoder(w).Encode(s.Project)
 		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":setIamPolicy") && !strings.Contains(path, "/serviceAccounts/") && !strings.Contains(path, "/topics/"):
@@ -444,6 +483,15 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}
+}
+
+func projectInPolicyPath(path, method string) string {
+	return strings.TrimSuffix(strings.TrimPrefix(path, "/v1/projects/"), method)
+}
+
+func isOtherProjectPolicy(path, method string) bool {
+	project := projectInPolicyPath(path, method)
+	return strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, method) && !strings.Contains(project, "/") && project != Project
 }
 
 func (s *IAM) Open(t *testing.T) *gcloud.Clients {

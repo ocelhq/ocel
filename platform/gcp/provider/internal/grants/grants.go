@@ -33,9 +33,12 @@ const (
 	Queue   targetKind = "queue"
 	Topic   targetKind = "topic"
 	Secret  targetKind = "secret"
+
+	ServiceAccount targetKind = "service account"
+	Repository     targetKind = "repository"
 )
 
-var targetOrder = []targetKind{Project, Key, Account, Queue, Topic, Bucket, Secret}
+var targetOrder = []targetKind{Project, Key, Account, ServiceAccount, Repository, Queue, Topic, Bucket, Secret}
 
 const appGrantsRecord = "appgrants"
 
@@ -57,6 +60,7 @@ type Grant struct {
 	Role      string            `json:"role"`
 	Member    string            `json:"member"`
 	Condition *policy.Condition `json:"condition,omitempty"`
+	Binding   string            `json:"binding,omitempty"`
 }
 
 func (g Grant) same(other Grant) bool {
@@ -171,11 +175,18 @@ func recordAppGrants(ctx context.Context, store records.Store, tier environment.
 func policyOf(c *gcloud.Clients, target grantTarget) policy.Resource {
 	switch target.Kind {
 	case Project:
+		if target.Name != "" {
+			return gcloud.ProjectPolicyOf(c, target.Name)
+		}
 		return gcloud.ProjectPolicy(c)
 	case Key:
 		return gcloud.KeyPolicy(c, target.Name, target.Name)
 	case Account:
 		return gcloud.AccountPolicy(c, target.Name)
+	case ServiceAccount:
+		return gcloud.AccountPolicyAt(c, target.Name)
+	case Repository:
+		return gcloud.RepositoryPolicy(c, target.Name)
 	case Bucket:
 		return gcloud.BucketPolicy(c, target.Name)
 	case Queue:
@@ -192,7 +203,10 @@ func policyOf(c *gcloud.Clients, target grantTarget) policy.Resource {
 	}}
 }
 
-func explainRefusedGrant(c *gcloud.Clients, tier environment.Tier, target grantTarget, err error) error {
+func explainRefusedGrant(c *gcloud.Clients, tier environment.Tier, target grantTarget, granted []Grant, err error) error {
+	if at := slices.IndexFunc(granted, func(grant Grant) bool { return grant.Target == target && grant.Binding != "" }); at >= 0 {
+		return explainRefusedBindingGrant(c, tier, granted[at], err)
+	}
 	deploy := c.DeployCredential(tier)
 	switch target.Kind {
 	case Project:
@@ -230,7 +244,7 @@ func Apply(ctx context.Context, c *gcloud.Clients, tier environment.Tier, grante
 			return googleretry.UntilServed(ctx, func() error {
 				_, err := policy.Edit(ctx, policyOf(c, target), changesOn(target, granted, revoked))
 				if err != nil && (granting || !policy.IsAbsent(err)) {
-					return explainRefusedGrant(c, tier, target, err)
+					return explainRefusedGrant(c, tier, target, granted, err)
 				}
 				return nil
 			})
