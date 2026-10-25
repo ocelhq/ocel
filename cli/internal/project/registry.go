@@ -25,7 +25,7 @@ func normalizeRegistry(raw *configdoc.RegistryConfig) (*Registry, error) {
 	}
 	variable, ok := configdoc.SecretVariable(raw.Password)
 	if !ok {
-		return nil, errors.New("`password` is the environment variable containing the registry password or token, written as \"${REGISTRY_TOKEN}\", and a push authenticates, so there is no anonymous form to fall back to")
+		return nil, errors.New("`password` must name the environment variable holding the registry token, as \"${REGISTRY_TOKEN}\"")
 	}
 	return &Registry{
 		Server:    server,
@@ -37,22 +37,22 @@ func normalizeRegistry(raw *configdoc.RegistryConfig) (*Registry, error) {
 
 func normalizeRegistryServer(server string) (string, string, error) {
 	if server == "" {
-		return "", "", errors.New("`server` is the only field naming where images land, so a registry without one would push wherever docker defaults to")
+		return "", "", errors.New("`server` is required, such as \"ghcr.io/acme\"")
 	}
 	if strings.Contains(server, "://") {
 		return "", "", errors.New("`server` is a registry host and the namespace under it, such as \"ghcr.io/acme\", not a URL: drop the scheme")
 	}
 	if strings.Contains(server, "@") {
-		return "", "", errors.New("`server` contains credentials, and a registry password belongs in the environment `password` names, never in the config: write the host and namespace alone, such as \"ghcr.io/acme\"")
+		return "", "", errors.New("`server` contains credentials: write the host and namespace alone, such as \"ghcr.io/acme\", and name the token in `password`")
 	}
 	segments := strings.Split(server, "/")
 	host := segments[0]
 	if host == "" {
-		return "", "", errors.New("`server` starts at a registry host, such as \"ghcr.io/acme\", and this one starts at a path separator")
+		return "", "", errors.New("`server` must start with a registry host, such as \"ghcr.io/acme\"")
 	}
 	for _, segment := range segments[1:] {
 		if !naming.IsRepositorySegment(segment) {
-			return "", "", errors.New("`server` names a host and the namespace an image sits under, such as \"ghcr.io/acme\", and a namespace segment is lowercase letters, digits and single separators")
+			return "", "", errors.New("`server` namespace segments are lowercase letters, digits and single separators, such as \"ghcr.io/acme\"")
 		}
 	}
 	return host, strings.Join(segments[1:], "/"), nil

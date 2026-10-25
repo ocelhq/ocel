@@ -139,10 +139,10 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 			return nil, newInvalidConfigError(fmt.Errorf("app is missing required \"name\""), field("name"))
 		}
 		if !validAppName(a.Name) {
-			return nil, newInvalidConfigError(fmt.Errorf("invalid app name %q — an app name must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen. It is served as a label of a preview hostname (\"<preview>--%s.<your-preview-domain>\") and is a segment of every resource name this app deploys", a.Name, a.Name), field("name"))
+			return nil, newInvalidConfigError(fmt.Errorf("invalid app name %q — an app name must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen", a.Name), field("name"))
 		}
 		if a.Name == naming.InfraApp {
-			return nil, newInvalidConfigError(fmt.Errorf("app name %q is reserved — it names the stack holding each environment's shared infrastructure, so no app may take it: rename the app", a.Name), field("name"))
+			return nil, newInvalidConfigError(fmt.Errorf("app name %q is reserved: rename the app", a.Name), field("name"))
 		}
 		if seen[a.Name] {
 			return nil, newInvalidConfigError(fmt.Errorf("duplicate app name %q — app names must be unique", a.Name), field("name"))
@@ -158,7 +158,7 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 				return nil, newInvalidConfigError(fmt.Errorf("app %q: %w", a.Name, err), field("folder"))
 			}
 			if other, taken := boundFolders[a.Folder]; taken {
-				return nil, newInvalidConfigError(fmt.Errorf("apps %q and %q both bind folder %q — a folder stores one app's values, so two apps sharing one would defeat the divergence folders exist for", other, a.Name, a.Folder), field("folder"))
+				return nil, newInvalidConfigError(fmt.Errorf("apps %q and %q both bind folder %q: give each its own", other, a.Name, a.Folder), field("folder"))
 			}
 			boundFolders[a.Folder] = a.Name
 		}
@@ -251,15 +251,15 @@ func normalizeImage(app string, image *configdoc.ImageConfig) (*Build, error) {
 	}
 	dockerfile := strings.TrimSpace(image.Dockerfile)
 	if dockerfile == "" && image.Dockerfile != "" {
-		return nil, fmt.Errorf("app %q sets image.dockerfile to %q, which names no file: give it the path to a Dockerfile, or drop image.dockerfile to build %q from the Dockerfile beside it or from no configuration at all", app, image.Dockerfile, app)
+		return nil, fmt.Errorf("app %q sets image.dockerfile to %q, which names no file: give it a Dockerfile's path, or drop it", app, image.Dockerfile)
 	}
 	context := strings.TrimSpace(image.Context)
 	if context == "" && image.Context != "" {
-		return nil, fmt.Errorf("app %q sets image.context to %q, which names no directory: give it the directory the image is built from, or drop image.context to build %q from the workspace root its own directory sits in", app, image.Context, app)
+		return nil, fmt.Errorf("app %q sets image.context to %q, which names no directory: give it a directory, or drop it", app, image.Context)
 	}
 	command := strings.TrimSpace(image.Command)
 	if command == "" && image.Command != "" {
-		return nil, fmt.Errorf("app %q sets image.command to %q, which names no command: give it the command that builds %q inside the image, or drop image.command to run the app's own build script", app, image.Command, app)
+		return nil, fmt.Errorf("app %q sets image.command to %q, which names no command: give it a command, or drop it", app, image.Command)
 	}
 	return &Build{Dockerfile: dockerfile, Context: context, Command: command}, nil
 }
@@ -270,10 +270,10 @@ func normalizeHealth(app string, health *configdoc.HealthConfig) (*Health, error
 	}
 	path := strings.TrimSpace(health.Path)
 	if path != "" && !strings.HasPrefix(path, "/") {
-		return nil, fmt.Errorf("app %q sets health.path to %q, which is not a path off the app's root: give it one starting with %q, or drop health.path to have the provider choose %q's health check", app, health.Path, "/", app)
+		return nil, fmt.Errorf("app %q sets health.path to %q: start it with %q, or drop it", app, health.Path, "/")
 	}
 	if path != "" && !containerimage.IsHealthCheckPath(path) {
-		return nil, fmt.Errorf("app %q sets health.path to %q, and a probe asks one path of the process: give %q a path containing no %q, %q, whitespace or control character, since a query or fragment names nothing the process is asked for", app, health.Path, app, "?", "#")
+		return nil, fmt.Errorf("app %q sets health.path to %q: give it a path with no %q, %q, whitespace or control character", app, health.Path, "?", "#")
 	}
 	return &Health{Path: path}, nil
 }

@@ -56,7 +56,7 @@ func (p *Project) resolveOn(computes []provider.Compute) (*Project, error) {
 
 func (p *Project) ResolveDeclaredComputes() (*Project, error) {
 	if names := p.UnresolvedApps(); len(names) > 0 {
-		return nil, fmt.Errorf("%s %s no compute, and only the provider this project deploys through can say which one an app that names none runs on", english.And(english.Quoted(names)), english.Number(len(names), "names", "name"))
+		return nil, fmt.Errorf("%s %s no compute, and no provider is named to choose one", english.And(english.Quoted(names)), english.Number(len(names), "names", "name"))
 	}
 	return p.resolveOn(provider.Computes())
 }

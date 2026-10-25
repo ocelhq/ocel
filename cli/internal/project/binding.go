@@ -132,7 +132,7 @@ func normalizeBindings(raw configdoc.Bindings) ([]Binding, error) {
 		named := raw[key]
 		for _, declared := range slices.Sorted(maps.Keys(named)) {
 			if strings.TrimSpace(declared) == "" {
-				return nil, fmt.Errorf("`bindings.%s` is keyed by an empty name — the key is the name an app declares the resource under, and the value is the record it binds, written as \"@<name>\"", key)
+				return nil, fmt.Errorf("`bindings.%s` has an empty key: key it by the name the app declares the resource under", key)
 			}
 			bound, err := normalizeBinding(key, typ, declared, named[declared])
 			if err != nil {
@@ -194,19 +194,19 @@ func publishedName(path, spelled string) (string, error) {
 	value := strings.TrimSpace(spelled)
 	external, marked := strings.CutPrefix(value, "@")
 	if strings.TrimSpace(external) == "" {
-		return "", fmt.Errorf("`%s` names no published record — a binding always spells out the name the record is published under, even when it matches, as \"@<name>\"", path)
+		return "", fmt.Errorf("`%s` names no published record: write it as \"@<name>\"", path)
 	}
 	if !marked {
-		return "", fmt.Errorf("`%s` is %q; a published record is written %q — the @ marks the name the record is published under, apart from the name the app declares", path, value, "@"+value)
+		return "", fmt.Errorf("`%s` is %q: write %q", path, value, "@"+value)
 	}
 	if trimmed := strings.TrimLeftFunc(external, unicode.IsSpace); trimmed != external {
 		return "", fmt.Errorf("`%s` is %q; the published name starts right after the @, written %q", path, value, "@"+trimmed)
 	}
 	if strings.Contains(external, naming.KeySeparator) {
-		return "", fmt.Errorf("published name %q may not contain %q: it separates the fields of the key the record is stored under", external, naming.KeySeparator)
+		return "", fmt.Errorf("published name %q may not contain %q", external, naming.KeySeparator)
 	}
 	if bindings.IsInlineRecord(external) {
-		return "", fmt.Errorf("`%s` binds %q, and a name starting %q is the record ocel keeps for a binding written inline — write that binding's record itself, or publish yours under another name", path, value, bindings.InlineRecordPrefix)
+		return "", fmt.Errorf("`%s` binds %q, and names starting %q are reserved: publish under another name", path, value, bindings.InlineRecordPrefix)
 	}
 	return external, nil
 }
@@ -239,7 +239,7 @@ func variableOf(path string, ref *configdoc.Ref) (string, error) {
 		return "", fmt.Errorf("`%s` reads the variable %q, and a variable is named in upper-case letters, digits and underscores, not starting with a digit", path, key)
 	}
 	if strings.HasPrefix(key, ocelPrefix) {
-		return "", fmt.Errorf("`%s` reads the variable %q, and names starting %s are the ones ocel writes itself — name it something else", path, key, ocelPrefix)
+		return "", fmt.Errorf("`%s` reads the variable %q, and names starting %s are reserved: rename it", path, key, ocelPrefix)
 	}
 	return key, nil
 }

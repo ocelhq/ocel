@@ -14,7 +14,7 @@ func ValidateFolder(folder string) error {
 	case !strings.HasPrefix(folder, "/"):
 		return fmt.Errorf("folder %q must start with %q", folder, "/")
 	case folder == "/":
-		return fmt.Errorf("folder %q is the project root, which is what an unbound app already reads; leave the folder off instead", folder)
+		return fmt.Errorf("folder %q is the project root: drop it", folder)
 	case strings.HasSuffix(folder, "/"):
 		return fmt.Errorf("folder %q must not end with %q", folder, "/")
 	case strings.Contains(folder, "//"):

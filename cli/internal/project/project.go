@@ -101,7 +101,7 @@ func (p *Project) HasProvider() bool {
 
 func (p *Project) RequireProvider() (*Provider, error) {
 	if p.Provider == nil {
-		return nil, newInvalidConfigError(fmt.Errorf("no provider configured in %s — add `\"provider\": { \"<id>\": { … } }` keyed by the provider this project deploys through, one of %s, or run `%s` to deploy through a console that offers Ocel Cloud", filepath.Base(p.Path), strings.Join(configdoc.ProviderIDs(), ", "), loginCommand), "provider")
+		return nil, newInvalidConfigError(fmt.Errorf("no provider configured in %s — add `\"provider\": { \"<id>\": { … } }` with <id> one of %s, or run `%s` to deploy to Ocel Cloud", filepath.Base(p.Path), strings.Join(configdoc.ProviderIDs(), ", "), loginCommand), "provider")
 	}
 	return p.Provider, nil
 }
@@ -143,7 +143,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Project, error) {
 	if len(doc.Apps) == 0 {
 		apps, rootAppUndetected = rootApp(doc.Slug, filepath.Dir(configPath))
 		if len(apps) > 0 && doc.Slug == naming.InfraApp {
-			return nil, newInvalidConfigError(fmt.Errorf("%s names no apps, so the app at the project root is named after the slug, and %q is reserved for the stack holding each environment's shared infrastructure: list the app under \"apps\" with another name, or change the slug", configPath, naming.InfraApp), "slug")
+			return nil, newInvalidConfigError(fmt.Errorf("%s names no apps, so the root app takes the slug, and %q is reserved: change the slug, or list the app under \"apps\" with another name", configPath, naming.InfraApp), "slug")
 		}
 	}
 

@@ -91,7 +91,7 @@ func (a *App) refuseUnserved(lacking, dir string, field func(string) string) err
 		}
 	case buildoutput.FrameworkGo:
 		if a.GoModule == nil {
-			return a.refuseServerless(newInvalidConfigError(fmt.Errorf("app %q is built with go, and neither %s nor a directory above it, up to the project root, has a %s: an app is compiled from the module it belongs to", a.Name, dir, gomodule.File), field("framework")))
+			return a.refuseServerless(newInvalidConfigError(fmt.Errorf("app %q is built with go, and neither %s nor a directory above it, up to the project root, has a %s", a.Name, dir, gomodule.File), field("framework")))
 		}
 	}
 	return nil
