@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -123,8 +124,40 @@ const provider19 = "nineteen-characters"
 type freshFirestore struct {
 	firestorepb.UnimplementedFirestoreServer
 
-	unserved atomic.Int32
-	asked    atomic.Int32
+	unserved   atomic.Int32
+	asked      atomic.Int32
+	unwritable atomic.Int32
+	begun      atomic.Int32
+}
+
+func (f *freshFirestore) BeginTransaction(context.Context, *firestorepb.BeginTransactionRequest) (*firestorepb.BeginTransactionResponse, error) {
+	f.begun.Add(1)
+	if f.unwritable.Add(-1) >= 0 {
+		return nil, status.Error(codes.NotFound, "The database does not exist for project acme")
+	}
+	return &firestorepb.BeginTransactionResponse{Transaction: []byte("t1")}, nil
+}
+
+func (f *freshFirestore) Commit(context.Context, *firestorepb.CommitRequest) (*firestorepb.CommitResponse, error) {
+	return &firestorepb.CommitResponse{CommitTime: timestamppb.Now()}, nil
+}
+
+func (f *freshFirestore) Rollback(context.Context, *firestorepb.RollbackRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
+
+func servedFresh(t *testing.T, fake *freshFirestore) *Clients {
+	t.Helper()
+	isolated(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := grpc.NewServer()
+	firestorepb.RegisterFirestoreServer(server, fake)
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
+	return &Clients{Namespace: "ocel", Project: "acme", Region: "us-central1", Endpoint: "http://" + listener.Addr().String()}
 }
 
 func (f *freshFirestore) RunQuery(_ *firestorepb.RunQueryRequest, stream firestorepb.Firestore_RunQueryServer) error {
@@ -136,23 +169,27 @@ func (f *freshFirestore) RunQuery(_ *firestorepb.RunQueryRequest, stream firesto
 }
 
 func TestADatabaseFirestoreDoesNotServeYetIsWaitedForUntilItAnswersAQuery(t *testing.T) {
-	isolated(t)
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
 	fake := &freshFirestore{}
 	fake.unserved.Store(2)
-	server := grpc.NewServer()
-	firestorepb.RegisterFirestoreServer(server, fake)
-	go func() { _ = server.Serve(listener) }()
-	t.Cleanup(server.Stop)
-	clients := &Clients{Namespace: "ocel", Project: "acme", Region: "us-central1", Endpoint: "http://" + listener.Addr().String()}
+	clients := servedFresh(t, fake)
 
 	if err := UntilDatabaseServes(context.Background(), clients, SharedDatabase("ocel", environment.TierProduction)); err != nil {
 		t.Fatalf("UntilDatabaseServes() = %v, want it to return once the database answers", err)
 	}
 	if got := fake.asked.Load(); got != 3 {
 		t.Errorf("the database was queried %d times, want 3: twice before it served and once after", got)
+	}
+}
+
+func TestADatabaseThatAnswersQueriesButTakesNoWriteYetIsWaitedFor(t *testing.T) {
+	fake := &freshFirestore{}
+	fake.unwritable.Store(2)
+	clients := servedFresh(t, fake)
+
+	if err := UntilDatabaseServes(context.Background(), clients, SharedDatabase("ocel", environment.TierProduction)); err != nil {
+		t.Fatalf("UntilDatabaseServes() = %v, want it to return once the database takes a write", err)
+	}
+	if got := fake.begun.Load(); got != 3 {
+		t.Errorf("a write was begun %d times, want 3: the bootstrap's first record is a write, and Firestore refused the first two as for a database that does not exist", got)
 	}
 }
