@@ -41,19 +41,20 @@ const named = (go: string, listed: string | undefined) =>
     );
 
 describe("the apis the floci lane switches on", () => {
-  it("are the ones the provider's bootstrap refuses without", async () => {
+  it("are the ones the provider's bootstrap switches on", async () => {
     const go = await providerSource("internal", "bootstrap", "resources.go");
     const listed = go.match(/var BootstrapAPIs = \[\]string\{([^}]*)\}/);
     expect(listed).not.toBeNull();
-    expect(quoted(listed?.[1])).toEqual(BOOTSTRAP_APIS);
+    expect(named(go, listed?.[1])).toEqual(BOOTSTRAP_APIS);
   });
 
-  it("are the ones each part the lane adds and each deploy refuses without", async () => {
+  it("are the ones each part the lane adds and each deploy switches on", async () => {
+    const resources = await providerSource("internal", "bootstrap", "resources.go");
     const parts = await providerSource("internal", "bootstrap", "resourcepart.go");
     const sync = await providerSource("envsource", "part.go");
     const deploy = await providerSource("preflight.go");
     const partAPIs = [...parts.matchAll(/APIs:\s*\[\]string\{([^}]*)\}/g)].flatMap((one) =>
-      quoted(one[1]),
+      named(resources, one[1]),
     );
     const syncAPIs = named(sync, sync.match(/var SyncAPIs = \[\]string\{([^}]*)\}/)?.[1]);
     const deployAPIs = quoted(deploy.match(/const \(([^)]*)\)/)?.[1]);
