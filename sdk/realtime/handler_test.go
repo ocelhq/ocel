@@ -2,8 +2,6 @@ package realtime_test
 
 import (
 	"context"
-	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -18,6 +16,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	realtimev1 "ocel.dev/internal/proto/app/realtime/v1"
 	"ocel.dev/internal/proto/app/realtime/v1/realtimev1connect"
@@ -28,10 +27,8 @@ import (
 type realtimeFixture struct {
 	Name     string `json:"name"`
 	Realtime struct {
-		URL        string `json:"url"`
-		Host       string `json:"host"`
-		SigningKey []byte `json:"signingKey"`
-		VerifyKey  []byte `json:"verifyKey"`
+		URL  string `json:"url"`
+		Host string `json:"host"`
 	} `json:"realtime"`
 }
 
@@ -57,37 +54,6 @@ func deliver(t *testing.T, name string, fixture realtimeFixture) {
 	t.Setenv("OCEL_RESOURCE_REALTIME_"+name, string(raw))
 }
 
-type tokenClaims struct {
-	Issuer    string `json:"iss"`
-	Audience  string `json:"aud"`
-	Subject   string `json:"sub"`
-	IssuedAt  int64  `json:"iat"`
-	ExpiresAt int64  `json:"exp"`
-	Ocel      struct {
-		Operation string `json:"op"`
-		Channel   string `json:"ch"`
-		Namespace string `json:"ns"`
-	} `json:"ocel"`
-}
-
-func readClaims(t *testing.T, verifyKey []byte, token string) tokenClaims {
-	t.Helper()
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		t.Fatalf("token %q is no JWT", token)
-	}
-	signature, _ := base64.RawURLEncoding.DecodeString(parts[2])
-	if !ed25519.Verify(verifyKey, []byte(parts[0]+"."+parts[1]), signature) {
-		t.Fatalf("token %q does not verify against the fixture's verify key", token)
-	}
-	payload, _ := base64.RawURLEncoding.DecodeString(parts[1])
-	var claims tokenClaims
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		t.Fatal(err)
-	}
-	return claims
-}
-
 type publishedEvent struct {
 	Realtime string
 	Channel  string
@@ -101,11 +67,20 @@ type publishedEvent struct {
 	}
 }
 
+const mintedExpiresAt = 1790000030
+
+func fakeToken(operation realtimev1.Operation, channel string) string {
+	return "token " + operation.String() + " " + channel
+}
+
 type fakeRuntime struct {
 	t           *testing.T
 	mutex       sync.Mutex
 	published   []publishedEvent
+	minted      []*realtimev1.MintRequest
 	refusal     error
+	mintRefusal error
+	mapChannel  func(string) string
 	delay       time.Duration
 	inFlight    int
 	maxInFlight int
@@ -133,6 +108,70 @@ func (r *fakeRuntime) Publish(ctx context.Context, req *realtimev1.PublishReques
 	}
 	r.published = append(r.published, event)
 	return &realtimev1.PublishResponse{}, nil
+}
+
+func (r *fakeRuntime) Mint(_ context.Context, req *realtimev1.MintRequest) (*realtimev1.MintResponse, error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.minted = append(r.minted, req)
+	if r.mintRefusal != nil {
+		return nil, r.mintRefusal
+	}
+	answer := &realtimev1.MintResponse{ExpiresAt: &timestamppb.Timestamp{Seconds: mintedExpiresAt}}
+	for _, grant := range req.GetGrants() {
+		channel := grant.GetChannel()
+		if r.mapChannel != nil {
+			channel = r.mapChannel(channel)
+		}
+		answer.Tokens = append(answer.Tokens, &realtimev1.MintedToken{Token: fakeToken(grant.GetOperation(), grant.GetChannel()), Channel: channel})
+	}
+	return answer, nil
+}
+
+func (r *fakeRuntime) listMints() []*realtimev1.MintRequest {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	return append([]*realtimev1.MintRequest(nil), r.minted...)
+}
+
+func (r *fakeRuntime) refuseMint(err error) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.mintRefusal = err
+}
+
+func (r *fakeRuntime) mapChannels(mapChannel func(string) string) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.mapChannel = mapChannel
+}
+
+func assertMinted(t *testing.T, runtime *fakeRuntime, subject string, want ...*realtimev1.Grant) {
+	t.Helper()
+	mints := runtime.listMints()
+	if len(mints) != 1 {
+		t.Fatalf("the runtime was asked to mint %d times, want once for the whole batch", len(mints))
+	}
+	mint := mints[0]
+	if mint.GetRealtime() != "app" || mint.GetSubject() != subject || mint.GetTtl().AsDuration() != 30*time.Second {
+		t.Errorf("mint asked for realtime %q subject %q ttl %v, want app, %q and the declared 30s", mint.GetRealtime(), mint.GetSubject(), mint.GetTtl().AsDuration(), subject)
+	}
+	if len(mint.GetGrants()) != len(want) {
+		t.Fatalf("mint asked for %v, want %v", mint.GetGrants(), want)
+	}
+	for i, grant := range mint.GetGrants() {
+		if grant.GetOperation() != want[i].GetOperation() || grant.GetChannel() != want[i].GetChannel() {
+			t.Errorf("mint grant %d = %v, want %v", i, grant, want[i])
+		}
+	}
+}
+
+func connectGrant() *realtimev1.Grant {
+	return &realtimev1.Grant{Operation: realtimev1.Operation_OPERATION_CONNECT, Channel: "/app"}
+}
+
+func subscribeGrant(channel string) *realtimev1.Grant {
+	return &realtimev1.Grant{Operation: realtimev1.Operation_OPERATION_SUBSCRIBE, Channel: channel}
 }
 
 func (r *fakeRuntime) listEvents() []publishedEvent {
@@ -262,9 +301,8 @@ func newHandlerRules() *handlerRules {
 	return &handlerRules{ownedOrdersByOwner: map[string]string{"o-1": "u1"}}
 }
 
-func TestTheHandlerNamesTheSocketAndMintsAConnectTokenWhenAsked(t *testing.T) {
-	fixture := readFixture(t)
-	deliver(t, "app", fixture)
+func TestTheHandlerNamesTheSocketAndHandsOnAConnectTokenTheRuntimeMintsWhenAsked(t *testing.T) {
+	runtime, fixture := serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	answer := readAnswer(t, post(handler, `{"connect":true,"ops":[]}`, nil))
@@ -275,18 +313,14 @@ func TestTheHandlerNamesTheSocketAndMintsAConnectTokenWhenAsked(t *testing.T) {
 	if answer.Connect == nil {
 		t.Fatal("connect = nil, want a connect token")
 	}
-	claims := readClaims(t, fixture.Realtime.VerifyKey, answer.Connect.Token)
-	if claims.Issuer != "ocel:rt:app" || claims.Audience != fixture.Realtime.Host || claims.Subject != "anonymous" ||
-		claims.Ocel.Operation != "connect" || claims.Ocel.Channel != "/app" || claims.Ocel.Namespace != "app" {
-		t.Errorf("claims = %+v, want a connect token for /app", claims)
+	if answer.Connect.Token != fakeToken(realtimev1.Operation_OPERATION_CONNECT, "/app") || answer.Connect.ExpiresAt != mintedExpiresAt {
+		t.Errorf("connect = %+v, want the runtime's connect token for /app and its expiry", answer.Connect)
 	}
-	if claims.ExpiresAt != answer.Connect.ExpiresAt || claims.ExpiresAt-claims.IssuedAt != 30 {
-		t.Errorf("exp %d iat %d expiresAt %d, want 30s apart and expiresAt the exp", claims.ExpiresAt, claims.IssuedAt, answer.Connect.ExpiresAt)
-	}
+	assertMinted(t, runtime, "anonymous", connectGrant())
 }
 
 func TestTheHandlerAnswersASocketPathOnTheOriginTheRequestReachedItAt(t *testing.T) {
-	fixture := readFixture(t)
+	_, fixture := serveFakeRuntime(t, "app")
 	fixture.Realtime.URL = "/.well-known/ocel-realtime"
 	fixture.Realtime.Host = "gateway:8080"
 	deliver(t, "app", fixture)
@@ -302,8 +336,7 @@ func TestTheHandlerAnswersASocketPathOnTheOriginTheRequestReachedItAt(t *testing
 }
 
 func TestTheHandlerGrantsAPublicSubscribeToAnyone(t *testing.T) {
-	fixture := readFixture(t)
-	deliver(t, "app", fixture)
+	runtime, _ := serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	answer := readAnswer(t, post(handler, `{"ops":[{"op":"subscribe","pattern":"status","params":{}}]}`, nil))
@@ -311,15 +344,44 @@ func TestTheHandlerGrantsAPublicSubscribeToAnyone(t *testing.T) {
 	if answer.Connect != nil || len(answer.Denied) != 0 || len(answer.Grants) != 1 || answer.Grants[0].Wire != "/app/status" {
 		t.Fatalf("answer = %+v, want one grant for /app/status", answer)
 	}
-	claims := readClaims(t, fixture.Realtime.VerifyKey, answer.Grants[0].Token)
-	if claims.Subject != "anonymous" || claims.Ocel.Operation != "subscribe" || claims.Ocel.Channel != "/app/status" {
-		t.Errorf("claims = %+v, want an anonymous subscribe to /app/status", claims)
+	if answer.Grants[0].Token != fakeToken(realtimev1.Operation_OPERATION_SUBSCRIBE, "/app/status") {
+		t.Errorf("token = %q, want the runtime's subscribe token for /app/status", answer.Grants[0].Token)
+	}
+	assertMinted(t, runtime, "anonymous", subscribeGrant("/app/status"))
+}
+
+func TestTheHandlerHandsTheBrowserTheChannelTheRuntimeMintedEachSubscribeFor(t *testing.T) {
+	runtime, _ := serveFakeRuntime(t, "app")
+	runtime.mapChannels(func(channel string) string { return "/apps/h-1" + strings.TrimPrefix(channel, "/app") })
+	handler := declareHandlerResource(newHandlerRules()).Handler()
+
+	answer := readAnswer(t, post(handler, `{"connect":true,"ops":[
+		{"op":"subscribe","pattern":"status","params":{}},
+		{"op":"subscribe","pattern":"projects/:projectId/deploys/:deployId","params":{"projectId":"p-1"}}]}`, map[string]string{"X-User": "u1"}))
+
+	if len(answer.Grants) != 2 || answer.Grants[0].Wire != "/apps/h-1/status" || answer.Grants[1].Wire != "/apps/h-1/projects/p-1/deploys/*" {
+		t.Errorf("grants = %+v, want each on the channel the runtime minted it for", answer.Grants)
+	}
+	if answer.Grants[0].Token != fakeToken(realtimev1.Operation_OPERATION_SUBSCRIBE, "/app/status") {
+		t.Errorf("token = %q, want the runtime's token for the grant", answer.Grants[0].Token)
+	}
+}
+
+func TestTheHandlerAsksTheRuntimeForNoTokenWhenTheBatchNeedsNone(t *testing.T) {
+	runtime, _ := serveFakeRuntime(t, "app")
+	handler := declareHandlerResource(newHandlerRules()).Handler()
+
+	readAnswer(t, post(handler, `{"ops":[
+		{"op":"subscribe","pattern":"orders/:orderId","params":{"orderId":"o-2"}},
+		{"op":"publish","pattern":"rooms/:roomId","params":{"roomId":"r1"},"body":{"text":"hi"}}]}`, map[string]string{"X-User": "u1"}))
+
+	if mints := runtime.listMints(); len(mints) != 0 {
+		t.Errorf("the runtime was asked to mint %v, want nothing: the batch grants no subscribe and asks no connect", mints)
 	}
 }
 
 func TestTheHandlerRunsTheSubscribeRuleWithTheAuthParamsAndRequest(t *testing.T) {
-	fixture := readFixture(t)
-	deliver(t, "app", fixture)
+	runtime, _ := serveFakeRuntime(t, "app")
 	rules := newHandlerRules()
 	handler := declareHandlerResource(rules).Handler()
 
@@ -333,12 +395,7 @@ func TestTheHandlerRunsTheSubscribeRuleWithTheAuthParamsAndRequest(t *testing.T)
 	if len(answer.Denied) != 1 || answer.Denied[0].Index != 1 || answer.Denied[0].Code != "forbidden" {
 		t.Errorf("denied = %+v, want o-2 forbidden", answer.Denied)
 	}
-	if sub := readClaims(t, fixture.Realtime.VerifyKey, answer.Connect.Token).Subject; sub != "u1" {
-		t.Errorf("connect sub = %q, want the auth's id", sub)
-	}
-	if sub := readClaims(t, fixture.Realtime.VerifyKey, answer.Grants[0].Token).Subject; sub != "u1" {
-		t.Errorf("subscribe sub = %q, want the auth's id", sub)
-	}
+	assertMinted(t, runtime, "u1", connectGrant(), subscribeGrant("/app/orders/o-1"))
 	for _, call := range rules.subscribeCalls {
 		if call.Auth.ID != "u1" || call.Request.Header.Get("X-User") != "u1" {
 			t.Errorf("rule saw auth %+v and request header %q, want u1's", call.Auth, call.Request.Header.Get("X-User"))
@@ -347,7 +404,7 @@ func TestTheHandlerRunsTheSubscribeRuleWithTheAuthParamsAndRequest(t *testing.T)
 }
 
 func TestTheHandlerDeniesARuledOpToNobodyWithoutRunningTheRule(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	rules := newHandlerRules()
 	handler := declareHandlerResource(rules).Handler()
 
@@ -362,7 +419,7 @@ func TestTheHandlerDeniesARuledOpToNobodyWithoutRunningTheRule(t *testing.T) {
 }
 
 func TestTheHandlerGrantsAWildcardSubscribeAsThePrefixAndStar(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	answer := readAnswer(t, post(handler, `{"ops":[{"op":"subscribe","pattern":"projects/:projectId/deploys/:deployId","params":{"projectId":"p_1"}}]}`, map[string]string{"X-User": "u1"}))
@@ -373,7 +430,7 @@ func TestTheHandlerGrantsAWildcardSubscribeAsThePrefixAndStar(t *testing.T) {
 }
 
 func TestTheHandlerDeniesEachOpItCannotServeWithItsCode(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	answer := readAnswer(t, post(handler, `{"ops":[
@@ -396,7 +453,7 @@ func TestTheHandlerDeniesEachOpItCannotServeWithItsCode(t *testing.T) {
 }
 
 func TestTheHandlerDeniesAnOpWhoseRuleFailsAndServesTheRest(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	rules := newHandlerRules()
 	rules.failNextSubscribe = true
 	handler := declareHandlerResource(rules).Handler()
@@ -411,7 +468,7 @@ func TestTheHandlerDeniesAnOpWhoseRuleFailsAndServesTheRest(t *testing.T) {
 }
 
 func TestTheHandlerAnswersUncacheableAndSetsNoCookie(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	res := post(handler, `{"connect":true,"ops":[]}`, nil)
@@ -422,7 +479,7 @@ func TestTheHandlerAnswersUncacheableAndSetsNoCookie(t *testing.T) {
 }
 
 func TestTheHandlerRefusesWhatIsNoBatchOfJSON(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	get := httptest.NewRecorder()
@@ -445,7 +502,7 @@ func TestTheHandlerRefusesWhatIsNoBatchOfJSON(t *testing.T) {
 }
 
 func TestTheHandlerServesItsOwnOriginAndRefusesAnotherWithoutCORS(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	same := post(handler, `{"ops":[]}`, map[string]string{"Origin": "https://shop.example"})
@@ -470,7 +527,7 @@ func TestTheHandlerServesItsOwnOriginAndRefusesAnotherWithoutCORS(t *testing.T) 
 }
 
 func TestTheHandlerRefusesItsOwnHostUnderAnotherScheme(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	plain := post(handler, `{"ops":[]}`, map[string]string{"Origin": "http://shop.example"})
@@ -491,7 +548,7 @@ func TestTheHandlerRefusesItsOwnHostUnderAnotherScheme(t *testing.T) {
 }
 
 func TestTheHandlerSendsCORSWithEveryAnswerToAnAllowedOrigin(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler(realtime.AllowedOrigins("https://app.example"))
 
 	res := post(handler, `{`, map[string]string{"Origin": "https://app.example"})
@@ -502,7 +559,7 @@ func TestTheHandlerSendsCORSWithEveryAnswerToAnAllowedOrigin(t *testing.T) {
 }
 
 func TestTheHandlerAnswers500WhenAuthorizePanics(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	resource := realtime.New("app", realtime.Authorize(func(*http.Request) (*caller, error) { panic("secret detail") }))
 
 	res := post(resource.Handler(), `{"ops":[]}`, nil)
@@ -514,7 +571,7 @@ func TestTheHandlerAnswers500WhenAuthorizePanics(t *testing.T) {
 }
 
 func TestAuthorizeAndEveryRuleReadTheWholeRequestBody(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	var mutex sync.Mutex
 	var bodies []string
 	readBody := func(r *http.Request) {
@@ -547,7 +604,7 @@ func TestAuthorizeAndEveryRuleReadTheWholeRequestBody(t *testing.T) {
 }
 
 func TestTheHandlerRefusesABatchWhoseShapeIsNotExactly400(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	for _, body := range []string{
@@ -561,7 +618,7 @@ func TestTheHandlerRefusesABatchWhoseShapeIsNotExactly400(t *testing.T) {
 }
 
 func TestTheHandlerDeniesEachMalformedOpOnItsOwnInSpecOrder(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 	cases := []struct{ op, code string }{
 		{`7`, "invalid-op"},
@@ -648,7 +705,7 @@ func TestARelayedPublishOfAnEventOutsideTheChannelSchemaIsDenied(t *testing.T) {
 }
 
 func TestTheHandlerServesAnAllowedOriginWithCORSAndAnswersItsPreflight(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	resource := declareHandlerResource(newHandlerRules())
 	cors := resource.Handler(realtime.AllowedOrigins("https://app.example"))
 
@@ -677,7 +734,7 @@ func TestTheHandlerServesAnAllowedOriginWithCORSAndAnswersItsPreflight(t *testin
 }
 
 func TestTheHandlerAnswers500WithoutTheCauseWhenAuthorizeFails(t *testing.T) {
-	deliver(t, "app", readFixture(t))
+	serveFakeRuntime(t, "app")
 	resource := realtime.New("app", realtime.Authorize(func(*http.Request) (*caller, error) { return nil, errors.New("secret detail") }))
 
 	res := post(resource.Handler(), `{"ops":[]}`, nil)
@@ -750,10 +807,9 @@ func assertServerFailure(t *testing.T, res *httptest.ResponseRecorder) {
 	}
 }
 
-func TestTheHandlerAnswers500WhenAGrantTokenCannotBeMinted(t *testing.T) {
-	fixture := readFixture(t)
-	fixture.Realtime.SigningKey = []byte("short")
-	deliver(t, "app", fixture)
+func TestTheHandlerAnswers500WhenTheRuntimeMintsNoToken(t *testing.T) {
+	runtime, _ := serveFakeRuntime(t, "app")
+	runtime.refuseMint(connect.NewError(connect.CodeFailedPrecondition, errors.New("no key")))
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	assertServerFailure(t, post(handler, `{"ops":[{"op":"subscribe","pattern":"status","params":{}}]}`, nil))
