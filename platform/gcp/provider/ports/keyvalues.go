@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"cloud.google.com/go/firestore"
-	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
 const (
@@ -192,27 +192,25 @@ func (s KeyValues) List(ctx context.Context, in records.Partition, under ...stri
 		ceiling = at + segmentCeiling
 	}
 
-	var found []records.Entry
-	documents := collection.
-		OrderBy(firestore.DocumentID, firestore.Asc).
-		StartAt(at).
-		EndBefore(ceiling).
-		Documents(ctx)
-	defer documents.Stop()
-	for {
-		snapshot, err := documents.Next()
-		if errors.Is(err, iterator.Done) {
-			return found, nil
+	found, err := googleretry.Called(ctx, func() ([]*firestore.DocumentSnapshot, error) {
+		return collection.
+			OrderBy(firestore.DocumentID, firestore.Asc).
+			StartAt(at).
+			EndBefore(ceiling).
+			Documents(ctx).
+			GetAll()
+	})
+	if err != nil {
+		if _, owned := ProjectOfRecords(in); owned && status.Code(err) == codes.NotFound {
+			return nil, nil
 		}
-		if err != nil {
-			if _, owned := ProjectOfRecords(in); owned && status.Code(err) == codes.NotFound {
-				return nil, nil
-			}
-			if status.Code(err) == codes.NotFound {
-				return nil, s.refuseUnbootstrapped(in.Tier)
-			}
-			return nil, fmt.Errorf("read everything in %s: %w", in, err)
+		if status.Code(err) == codes.NotFound {
+			return nil, s.refuseUnbootstrapped(in.Tier)
 		}
+		return nil, fmt.Errorf("read everything in %s: %w", in, err)
+	}
+	var entries []records.Entry
+	for _, snapshot := range found {
 		id := snapshot.Ref.ID
 		if id != at && !strings.HasPrefix(id, beneath) {
 			continue
@@ -229,8 +227,9 @@ func (s KeyValues) List(ctx context.Context, in records.Partition, under ...stri
 		if err != nil {
 			return nil, err
 		}
-		found = append(found, entry)
+		entries = append(entries, entry)
 	}
+	return entries, nil
 }
 
 func compareAndSet(tx *firestore.Transaction, collection *firestore.CollectionRef, entry records.Entry, next records.Revision) error {
