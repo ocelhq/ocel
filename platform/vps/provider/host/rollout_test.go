@@ -687,7 +687,7 @@ func TestADrainThatReadZeroIsToldBeforeTheContainerItFreedIsStopped(t *testing.T
 		t.Fatalf("RollOut() over a drain that read zero = %v", err)
 	}
 	lines := progress.Lines()
-	drained := slices.Index(lines, "INFO Drained retired container shop-web-older00000: nothing was in flight")
+	drained := slices.Index(lines, "INFO Drained retired container shop-web-older00000")
 	if drained < 0 {
 		t.Fatalf("the release said %v and never that the drain read the retired upstream empty: the count reaches zero for about one drain poll before the config that names the upstream is rewritten, so the drain's own word is the only thing that can witness it", lines)
 	}
@@ -719,7 +719,7 @@ func TestARetiringReleaseSaysWhatItWaitsForAndHowLongTheRetireeDrains(t *testing
 		t.Fatalf("RollOut() = %v", err)
 	}
 	for _, want := range []string{
-		"INFO Waiting up to 30s for web to answer 2xx on shop-web-abc123def456:8080/healthz, then switching the proxy to it",
+		"INFO Waiting up to 30s for web to answer 2xx on shop-web-abc123def456:8080/healthz",
 		"INFO Draining retired container shop-web-older00000 for up to 30s: past that, " +
 			"open requests get 502 or a truncated response; websockets and server-sent-events reconnect",
 	} {

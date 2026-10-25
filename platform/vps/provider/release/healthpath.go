@@ -42,8 +42,8 @@ func (c *Containers) FindHealthPath(ctx context.Context, search HealthPathSearch
 	if err != nil {
 		return "", err
 	}
-	progress.Say(fmt.Sprintf("Waiting up to %s for %s to answer HTTP, then probing %s in turn: %s sets no %s, so the first that answers anything but 404 or 405 is its health check",
-		search.Window, search.App, inWords(healthPathCandidates), search.App, HealthKey))
+	progress.Say(fmt.Sprintf("Waiting up to %s for %s to answer HTTP, then probing %s for its health check",
+		search.Window, search.App, inWords(healthPathCandidates)))
 	found, err := c.box.Stream(ctx, elevation, RenderStartWatch([]string{ContainerOf(search.Target)}, findHealthPathCommand(search)), nil)
 	if err != nil {
 		return "", c.refuseMissingHealthPath(ctx, search, err.Error(), false, elevation)
@@ -54,11 +54,7 @@ func (c *Containers) FindHealthPath(ctx context.Context, search HealthPathSearch
 	answers := readPathAnswers(found.Stdout)
 	if found.Code == 0 && len(answers) > 0 && !answers[len(answers)-1].absent() {
 		path := answers[len(answers)-1].path
-		probed := make([]string, 0, len(answers))
-		for _, answer := range answers {
-			probed = append(probed, answer.path)
-		}
-		progress.Say(fmt.Sprintf("%s answers its health check on %s (found by probing %s)", search.App, path, strings.Join(probed, ", ")))
+		progress.Say(fmt.Sprintf("%s answers its health check on %s", search.App, path))
 		return path, nil
 	}
 	if len(answers) == len(healthPathCandidates) && answers[len(answers)-1].absent() {

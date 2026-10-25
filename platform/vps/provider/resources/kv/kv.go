@@ -161,7 +161,7 @@ func (r Resource) Provision(ctx context.Context, in resources.ProvisionRequest, 
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	progress.Say("Provisioning kv " + in.Resource.Name + " in container " + spec.Name)
+	progress.Say("Provisioning kv " + in.Resource.Name)
 	if err := r.box.Containers.Run(ctx, spec, store.valkey.Password); err != nil {
 		return provider.Binding{}, err
 	}
@@ -173,7 +173,7 @@ func (r Resource) Remove(ctx context.Context, ref provider.StackRef, binding pro
 	if err != nil {
 		return err
 	}
-	progress.Say("Removing kv " + binding.Name + ", its container " + name + " and its data")
+	progress.Say("Removing kv " + binding.Name + " and its data")
 	return r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: binding.Name, Name: name})
 }
 

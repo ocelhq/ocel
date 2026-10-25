@@ -135,7 +135,7 @@ func (r Resource) Provision(ctx context.Context, in resources.ProvisionRequest, 
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	progress.Say("Provisioning postgres " + in.Resource.Name + " in container " + spec.Name)
+	progress.Say("Provisioning postgres " + in.Resource.Name)
 	secret, err := r.secret(ctx, in, spec.Name)
 	if err != nil {
 		return provider.Binding{}, err
@@ -151,7 +151,7 @@ func (r Resource) Remove(ctx context.Context, ref provider.StackRef, binding pro
 	if err != nil {
 		return err
 	}
-	progress.Say("Removing postgres " + binding.Name + ", its container " + name + " and its data")
+	progress.Say("Removing postgres " + binding.Name + " and its data")
 	return r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: binding.Name, Name: name})
 }
 

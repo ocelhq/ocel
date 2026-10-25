@@ -162,7 +162,7 @@ echo 'E: Some index files failed to download.' >&2`)
 	for try := 1; try < engineInstallTries; try++ {
 		before := details[(*toldBefore)[try-1]:(*toldBefore)[try]]
 		for _, want := range []string{
-			fmt.Sprintf("WARN Docker's install on ada@ocelbox failed on try %d of %d and runs again", try, engineInstallTries),
+			fmt.Sprintf("WARN Docker's install on ada@ocelbox failed on try %d of %d: retrying", try, engineInstallTries),
 			"OUTPUT E: Some index files failed to download.",
 		} {
 			if !slices.Contains(before, want) {

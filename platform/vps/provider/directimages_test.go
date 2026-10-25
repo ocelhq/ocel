@@ -89,8 +89,8 @@ func TestASlowTransferWarnsWithItsDurationAndPointsAtTheRegistryDocs(t *testing.
 	if len(log.lines) != 1 {
 		t.Fatalf("warnings = %q, want one for a 48s transfer", log.lines)
 	}
-	want := "Sending web's image to box.invalid took 48s for 120 MB. With no registry every deploy sends the whole image over SSH: " +
-		"name a `registry` and the box pulls only the layers that changed. https://ocel.dev/docs/providers/vps#images"
+	want := "Sending web's image to box.invalid took 48s for 120 MB: name a `registry` so the box pulls only changed layers. " +
+		"https://ocel.dev/docs/providers/vps#images"
 	if log.lines[0] != want {
 		t.Errorf("warning = %q, want %q", log.lines[0], want)
 	}
