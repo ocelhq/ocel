@@ -1,0 +1,27 @@
+{
+  "name": "@platform/s3-runtime",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "description": "the Next cache stores any provider's runtime keeps in an S3 bucket",
+  "exports": {
+    "./cache-store": "./src/cache-store.mts",
+    "./object-store": "./src/object-store.mts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1083.0",
+    "@framework/next-cache": "workspace:*",
+    "@framework/next-runtime": "workspace:*",
+    "@platform/edge-contract": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

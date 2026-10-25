@@ -11,9 +11,10 @@ import {
 import type { TagSnapshotRead, UseCacheStore } from "@framework/next-runtime/use-cache-store";
 import { bucketVars } from "@platform/edge-contract/runtime-env";
 import { objectKey as storageKey } from "@platform/edge-contract/storage-key";
+import { isNotFound, readBodyText } from "@platform/s3-runtime/object-store";
 import { newDynamoDBClient, newS3Client } from "../cache/sdk-clients.mjs";
 import { isGuardRejection, tagRecordUpdate } from "../cache/tag-index.mjs";
-import { isNotFound, readBodyText, requireEnv, requireStorageCoordinate } from "./object-store.mjs";
+import { requireEnv, requireStorageCoordinate } from "./required-env.mjs";
 
 function objectName(key: string): string {
   return createHash("sha256").update(key).digest("hex");

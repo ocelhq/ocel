@@ -20,6 +20,7 @@
     "@framework/next-runtime": "workspace:*",
     "@framework/node-runtime": "workspace:*",
     "@platform/edge-contract": "workspace:*",
+    "@platform/s3-runtime": "workspace:*",
     "aws4fetch": "^1.0.20"
   },
   "devDependencies": {

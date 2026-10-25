@@ -54,6 +54,7 @@ smoke_aws:
   - *smoke
   - "platform/aws/**"
   - "platform/edge/**"
+  - "platform/s3/runtime/**"
   - "scripts/floci.sh"
 smoke_gcp:
   - *smoke
@@ -77,6 +78,7 @@ smoke_next:
   - *smoke
   - "platform/aws/**"
   - "platform/edge/**"
+  - "platform/s3/runtime/**"
 preview:
   - "www/**"
   - "console/github/**"
