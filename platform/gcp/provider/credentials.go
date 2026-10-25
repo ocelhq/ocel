@@ -38,6 +38,17 @@ type Credentials struct {
 	Namespace provider.Namespace
 }
 
+func (p *Provider) credentials() Credentials {
+	return Credentials{
+		Project:   p,
+		Region:    p.options.Region,
+		Tokens:    p.tokens,
+		Endpoint:  p.endpoint,
+		Projects:  resourceManager{endpoint: p.endpoint},
+		Namespace: p.namespace,
+	}
+}
+
 func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	project, err := c.Project.Project(ctx)
 	if err != nil {

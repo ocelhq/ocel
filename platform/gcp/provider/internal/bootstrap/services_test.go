@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
@@ -112,7 +113,7 @@ func TestSwitchingOnServicesThatAreAllOnAsksNothingOfTheCredential(t *testing.T)
 	t.Parallel()
 
 	usage := &googletest.ServiceUsage{}
-	b, tested := switchingOn(t, usage, servicesEnablePermission)
+	b, tested := switchingOn(t, usage, credential.ServicesEnablePermission)
 
 	if err := b.SwitchOnServices(t.Context(), BootstrapAPIs, nil); err != nil {
 		t.Fatalf("SwitchOnServices() with every service on = %v, want nothing asked of a credential that may not switch services on", err)
@@ -126,7 +127,7 @@ func TestACredentialThatMayNotSwitchServicesOnIsRefusedOnceNamingEveryServiceOff
 	t.Parallel()
 
 	usage := &googletest.ServiceUsage{ServicesOff: []string{"firestore.googleapis.com", "cloudkms.googleapis.com"}}
-	b, _ := switchingOn(t, usage, servicesEnablePermission)
+	b, _ := switchingOn(t, usage, credential.ServicesEnablePermission)
 
 	err := b.SwitchOnServices(t.Context(), []string{"firestore.googleapis.com", "storage.googleapis.com", "cloudkms.googleapis.com"}, nil)
 

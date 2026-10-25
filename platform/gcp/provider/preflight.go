@@ -48,7 +48,7 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 	}
 	var plan provider.Plan
 	if len(switching) > 0 {
-		plan.Groups = append(plan.Groups, b.SwitchedOnGroup(switching))
+		plan.Groups = append(plan.Groups, b.SwitchOnGroup(switching))
 	}
 	if keeps {
 		groups, err := variables.PlanProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.options.OwnDatabase)
@@ -159,7 +159,7 @@ func (p *Provider) listServicesToSwitchOn(ctx context.Context, b bootstrap.Engin
 	if err != nil {
 		return nil, err
 	}
-	return switching, b.RefuseServicesUnswitchable(ctx, switching)
+	return switching, b.RefuseSwitchOnDenied(ctx, switching)
 }
 
 func (p *Provider) switchOnServices(ctx context.Context, pre provider.DeployPreflight, parts []string) error {

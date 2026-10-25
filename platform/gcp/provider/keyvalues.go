@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
@@ -27,13 +28,21 @@ func (s keyValues) Read(ctx context.Context, key records.Key) (records.Entry, er
 	if err != nil {
 		return records.Entry{}, err
 	}
-	if firestore, ok := store.(ports.KeyValues); ok && s.p.serviceStates.IsOff(bootstrap.FirestoreAPI) {
-		if _, owned := ports.ProjectOfRecords(key.Partition); owned {
-			return records.Entry{}, records.ErrNotFound
-		}
-		return records.Entry{}, firestore.RefuseUnbootstrapped(key.Partition.Tier)
+	if err := s.answerWhileFirestoreOff(store, key.Partition); err != nil {
+		return records.Entry{}, err
 	}
 	return store.Read(ctx, key)
+}
+
+func (s keyValues) answerWhileFirestoreOff(store records.Store, in records.Partition) error {
+	firestore, ok := store.(ports.KeyValues)
+	if !ok || !s.p.serviceStates.IsOff(bootstrap.FirestoreAPI) {
+		return nil
+	}
+	if _, owned := ports.ProjectOfRecords(in); owned {
+		return records.ErrNotFound
+	}
+	return firestore.RefuseUnbootstrapped(in.Tier)
 }
 
 func (s keyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
@@ -93,11 +102,10 @@ func (s keyValues) List(ctx context.Context, in records.Partition, under ...stri
 	if err != nil {
 		return nil, err
 	}
-	if firestore, ok := store.(ports.KeyValues); ok && s.p.serviceStates.IsOff(bootstrap.FirestoreAPI) {
-		if _, owned := ports.ProjectOfRecords(in); owned {
-			return nil, nil
-		}
-		return nil, firestore.RefuseUnbootstrapped(in.Tier)
+	if err := s.answerWhileFirestoreOff(store, in); errors.Is(err, records.ErrNotFound) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
 	}
 	return store.List(ctx, in, under...)
 }

@@ -20,16 +20,18 @@ const (
 	IAMAPI             = "iam.googleapis.com"
 	SecretManagerAPI   = "secretmanager.googleapis.com"
 	resourceManagerAPI = "cloudresourcemanager.googleapis.com"
+	repositoryAPI      = "artifactregistry.googleapis.com"
+	loggingAPI         = "logging.googleapis.com"
 )
 
 var BootstrapAPIs = []string{
 	FirestoreAPI,
 	storageAPI,
 	SecretManagerAPI,
-	"artifactregistry.googleapis.com",
+	repositoryAPI,
 	IAMAPI,
 	resourceManagerAPI,
-	"logging.googleapis.com",
+	loggingAPI,
 }
 
 type Resource struct {

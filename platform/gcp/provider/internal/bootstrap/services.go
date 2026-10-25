@@ -10,24 +10,24 @@ import (
 	"sync"
 
 	"google.golang.org/api/serviceusage/v1"
+	"google.golang.org/grpc/codes"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
 const (
-	EnabledService           = "ENABLED"
-	ServicesRole             = "roles/serviceusage.serviceUsageAdmin"
-	servicesEnablePermission = "serviceusage.services.enable"
-	servicesPerRead          = 30
-	servicesPerSwitch        = 20
-	failedPrecondition       = 9
-	billingConsole           = "https://console.cloud.google.com/billing/linkedaccount?project="
-	reasonSwitchedOff        = "switched off"
+	EnabledService    = "ENABLED"
+	ServicesRole      = "roles/serviceusage.serviceUsageAdmin"
+	servicesPerRead   = 30
+	servicesPerSwitch = 20
+	billingConsole    = "https://console.cloud.google.com/billing/linkedaccount?project="
+	reasonSwitchedOff = "switched off"
 
 	KindServiceUsage Kind = "serviceusage:service"
 )
@@ -70,12 +70,9 @@ func (b Engine) services() *ServiceStates {
 
 func (b Engine) ListServicesOff(ctx context.Context, apis []string) ([]string, error) {
 	states := b.services()
-	var wanted, unread []string
-	for _, api := range apis {
-		if slices.Contains(wanted, api) {
-			continue
-		}
-		wanted = append(wanted, api)
+	wanted := uniqueAPIs(apis)
+	var unread []string
+	for _, api := range wanted {
 		if _, known := states.recall(api); !known {
 			unread = append(unread, api)
 		}
@@ -178,7 +175,7 @@ func (b Engine) preflight(ctx context.Context, req provider.BootstrapRequest) ([
 	if err != nil {
 		return nil, err
 	}
-	if err := b.RefuseServicesUnswitchable(ctx, switching); err != nil {
+	if err := b.RefuseSwitchOnDenied(ctx, switching); err != nil {
 		return nil, err
 	}
 	return switching, b.Permitted(ctx, req.Parts)
@@ -186,16 +183,16 @@ func (b Engine) preflight(ctx context.Context, req provider.BootstrapRequest) ([
 
 func (b Engine) IsOff(api string) bool { return b.ServiceStates.IsOff(api) }
 
-func (b Engine) SwitchedOnGroup(apis []string) provider.ChangeGroup {
+func (b Engine) SwitchOnGroup(apis []string) provider.ChangeGroup {
 	return provider.ChangeGroup{
 		Kind:    provider.StackGroupKind,
 		Name:    string(gcloud.Vendor) + "/" + b.Clients.Project() + "/services",
 		Action:  provider.ActionUpdate,
-		Changes: switchedOn(apis),
+		Changes: switchOnChanges(apis),
 	}
 }
 
-func switchedOn(apis []string) []provider.Change {
+func switchOnChanges(apis []string) []provider.Change {
 	changes := make([]provider.Change, 0, len(apis))
 	for _, api := range apis {
 		changes = append(changes, provider.Change{Kind: string(KindServiceUsage), Name: api, Action: provider.ActionUpdate, Reason: reasonSwitchedOff})
@@ -203,19 +200,17 @@ func switchedOn(apis []string) []provider.Change {
 	return changes
 }
 
-func (b Engine) RefuseServicesUnswitchable(ctx context.Context, off []string) error {
+func (b Engine) RefuseSwitchOnDenied(ctx context.Context, off []string) error {
 	if len(off) == 0 {
 		return nil
 	}
-	granted, err := b.heldPermissions(ctx, []string{servicesEnablePermission})
-	if err != nil || slices.Contains(granted, servicesEnablePermission) {
+	granted, err := b.heldPermissions(ctx, []string{credential.ServicesEnablePermission})
+	if err != nil || slices.Contains(granted, credential.ServicesEnablePermission) {
 		return err
 	}
-	principal := "this credential"
-	if b.Principal != nil {
-		if principal, err = b.Principal(ctx); err != nil {
-			return err
-		}
+	principal, err := b.Principal(ctx)
+	if err != nil {
+		return err
 	}
 	project := b.Clients.Project()
 	return refusal.Refuse(refusal.CodeDenied,
@@ -229,7 +224,7 @@ func (b Engine) SwitchOnServices(ctx context.Context, apis []string, progress pr
 	if err != nil || len(off) == 0 {
 		return err
 	}
-	if err := b.RefuseServicesUnswitchable(ctx, off); err != nil {
+	if err := b.RefuseSwitchOnDenied(ctx, off); err != nil {
 		return err
 	}
 	return b.switchOn(ctx, off, progress)
@@ -263,7 +258,7 @@ func (b Engine) switchOn(ctx context.Context, off []string, progress progress.Lo
 			return err
 		}
 		if finished.Error != nil {
-			if refused := b.refuseUnbilled(batch, finished.Error.Message, finished.Error.Code == failedPrecondition); refused != nil {
+			if refused := b.refuseUnbilled(batch, finished.Error.Message, finished.Error.Code == int64(codes.FailedPrecondition)); refused != nil {
 				return refused
 			}
 			return fmt.Errorf("%s: %s", doing, finished.Error.Message)

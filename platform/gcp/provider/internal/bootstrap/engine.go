@@ -170,7 +170,7 @@ func (b Engine) Plan(ctx context.Context, req provider.BootstrapRequest) (provid
 		return provider.Plan{}, err
 	}
 	groups := bootstrapplan.ChangeGroups(current, CredentialParts(), req)
-	groups[0].Changes = slices.Concat(switchedOn(switching), Planned(read, StackResources(read.Names, read.Tier, read.Emulated)))
+	groups[0].Changes = slices.Concat(switchOnChanges(switching), Planned(read, StackResources(read.Names, read.Tier, read.Emulated)))
 	if len(switching) > 0 && !groups[0].Action.Writes() {
 		groups[0].Action, groups[0].Reason = provider.ActionUpdate, ""
 	}
