@@ -203,7 +203,7 @@ const write = await uploads.signedUpload("reports/q4.pdf", {
 ```
 
 - `signedUpload` returns `url`, `method`, signed `headers` and POST `fields`; send them unchanged.
-- Both need a domain bound to the project.
+- On a VPS both need a domain bound to the project, since the box serves the store on it. AWS and Google Cloud sign for the storage service's own address (S3, `storage.googleapis.com`) and need no domain.
 - A store bound with an `endpoint` (such as R2) signs no POST policy and refuses `maxSize`; check the size after upload instead.
 
 ## Browser uploads
