@@ -181,6 +181,9 @@ func listAppImages(ctx context.Context, store records.Store, tier environment.Ti
 }
 
 func ListRecordedAppImages(ctx context.Context, store records.Store, slug, app string, except ...provider.StackRef) (map[string]bool, error) {
+	if store == nil {
+		return nil, fmt.Errorf("read the images %s's %s stacks record: no records store was opened to read them from", slug, app)
+	}
 	recorded := map[string]bool{}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		stacks, err := listAppImages(ctx, store, tier, slug, app)

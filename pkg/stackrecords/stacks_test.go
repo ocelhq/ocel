@@ -75,6 +75,14 @@ func TestTheImagesOfAnAppAreReadFromItsOwnStacksInEveryTier(t *testing.T) {
 	}
 }
 
+func TestTheImagesOfAnAppReadFromNoStoreAreAnErrorRatherThanAPanic(t *testing.T) {
+	t.Parallel()
+
+	if _, err := stackrecords.ListRecordedAppImages(context.Background(), nil, "shop", "web"); err == nil {
+		t.Error("ListRecordedAppImages() with no store = nil error, want one: the images other stacks record cannot be read from nothing")
+	}
+}
+
 func TestTheImagesOfAnAppLeaveOutTheStackTheyAreReadFor(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
