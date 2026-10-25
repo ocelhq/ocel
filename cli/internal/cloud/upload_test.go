@@ -599,24 +599,57 @@ func TestUploadRetriesWhenItsTargetIsUnreachable(t *testing.T) {
 	}
 }
 
-func TestPlanRefusesATargetForABlobItNeverAskedAbout(t *testing.T) {
+func clientWhoseMissingAnswers(t *testing.T, tamper func(fake *fakeCloud, missing *cloudv1.MissingResponse)) *Client {
+	t.Helper()
 	fake := &fakeCloud{}
 	api := serve(t, fake)
-	stranger := sum("never asked")
 	c, _ := newTestClient(api, &staticTokens{})
 	c.upload = cloudv1connect.NewUploadServiceClient(http.DefaultClient, api.URL, connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			res, err := next(ctx, req)
 			if missing, ok := res.Any().(*cloudv1.MissingResponse); ok {
-				missing.Uploads = append(missing.Uploads, fake.target(stranger))
+				tamper(fake, missing)
 			}
 			return res, err
 		}
 	})))
+	return c
+}
+
+func TestPlanRefusesATargetForABlobItNeverAskedAbout(t *testing.T) {
+	stranger := sum("never asked")
+	c := clientWhoseMissingAnswers(t, func(fake *fakeCloud, missing *cloudv1.MissingResponse) {
+		missing.Uploads = append(missing.Uploads, fake.target(stranger))
+	})
 
 	_, err := c.Plan(t.Context(), memorySource{"a.ts": "alpha"})
 	if err == nil || !strings.Contains(err.Error(), stranger) {
 		t.Fatalf("Plan() = %v, want the target for %s refused", err, stranger)
+	}
+}
+
+func TestPlanRefusesAnAnswerThatBreaksTheUploadTargetRules(t *testing.T) {
+	for name, tamper := range map[string]func(fake *fakeCloud, missing *cloudv1.MissingResponse){
+		"a digest named twice": func(fake *fakeCloud, missing *cloudv1.MissingResponse) {
+			missing.Uploads = append(missing.Uploads, fake.target(sum("alpha")))
+		},
+		"a method other than PUT or POST": func(_ *fakeCloud, missing *cloudv1.MissingResponse) {
+			missing.Uploads[0].Method = http.MethodPatch
+		},
+		"a url that is not http": func(_ *fakeCloud, missing *cloudv1.MissingResponse) {
+			missing.Uploads[0].Url = "file:///etc/passwd"
+		},
+		"form fields on a PUT": func(_ *fakeCloud, missing *cloudv1.MissingResponse) {
+			missing.Uploads[0].Fields = map[string]string{"key": "x"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := clientWhoseMissingAnswers(t, tamper)
+
+			if planned, err := c.Plan(t.Context(), memorySource{"a.ts": "alpha"}); err == nil {
+				t.Fatalf("Plan() planned %d uploads, want the answer refused", len(planned.Missing))
+			}
+		})
 	}
 }
 
