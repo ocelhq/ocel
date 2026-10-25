@@ -20,8 +20,7 @@ func AppEnv(spec provider.StackSpec, bundle variables.Bundle, sessions bucket.Se
 	if spec.Edge != nil {
 		facts := spec.Edge.Facts()
 		if !facts.RunsCode {
-			env[edge.OriginDispatchVar] = "1"
-			env[edge.OriginSignedVar] = "1"
+			maps.Copy(env, provider.NewOriginDispatchEnv())
 		}
 		if !isForwardedPastEdge(spec) {
 			maps.Copy(env, edge.NewCachingOriginEnv(facts, spec.Ref.Name.Release.String()))

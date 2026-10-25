@@ -15,6 +15,7 @@ packages:
   - platform/gcp/provider/suite
   - platform/s3/runtime
   - platform/vps/provider/host
+  - platform/vps/runtime
   - platform/edge/contract
   - platform/edge/cloudflare/deploy/bundles
   - platform/edge/cloudflare/workers/*

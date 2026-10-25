@@ -58,8 +58,14 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-test("the entrypoint installs its cache handlers as Next's global handlers", async () => {
+test("the entrypoint installs its cache handlers as Next's global handlers for a host that keeps a cache store", async () => {
   installNextHost({
+    newCacheStore: async () => ({
+      readEntry: async () => null,
+      writeEntry: async () => {},
+      readFetch: async () => null,
+      writeFetch: async () => {},
+    }),
     newDispatchInvoke: async () => (_req, res) => {
       res.end("dispatched");
     },

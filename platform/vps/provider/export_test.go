@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
@@ -175,4 +176,9 @@ func NewReadingSSHConfig(config string) func(context.Context, provider.Settings)
 		served.(*Provider).options.SSH.Config = config
 		return served, nil
 	}
+}
+
+func (p *Provider) PullingImagesWith(pull images.ImagePull) *Provider {
+	p.pullImage = pull
+	return p
 }

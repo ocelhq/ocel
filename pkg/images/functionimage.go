@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -20,8 +22,10 @@ import (
 const FunctionImageRoot = "/ocel/app"
 
 type FunctionImageOptions struct {
-	Overlay map[string][]byte
-	Runtime map[string][]byte
+	Overlay    map[string][]byte
+	Runtime    map[string][]byte
+	BuildRoot  string
+	BuildPaths []string
 }
 
 func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, opts FunctionImageOptions) (v1.Image, error) {
@@ -49,6 +53,17 @@ func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, o
 		}
 		addenda = append([]mutate.Addendum{{Layer: runtime}}, addenda...)
 	}
+	if len(opts.BuildPaths) > 0 {
+		packed, err := buildLayer(opts.BuildRoot, opts.BuildPaths)
+		if err != nil {
+			return nil, err
+		}
+		build, err := newBytesLayer(packed)
+		if err != nil {
+			return nil, err
+		}
+		addenda = append(addenda, mutate.Addendum{Layer: build})
+	}
 	appended, err := mutate.Append(base, addenda...)
 	if err != nil {
 		return nil, err
@@ -71,6 +86,9 @@ func FunctionImage(base v1.Image, framework buildoutput.Framework, dir string, o
 	config.Env = boundPort(config.Env)
 	if BootsThroughRuntime(framework) {
 		config.Env = ensureNodeEnv(append(config.Env, servedHandler(staged)))
+	}
+	if len(opts.BuildPaths) > 0 {
+		config.Env = append(config.Env, containerimage.BuildDirEnvVar+"="+containerimage.BuildDir)
 	}
 	return mutate.Config(appended, config)
 }
@@ -169,6 +187,40 @@ func functionLayer(dir string, rels []string, opts FunctionImageOptions) ([]byte
 		}
 		if err := tarBody(archive, rel, overlay[rel], 0o644); err != nil {
 			return nil, err
+		}
+	}
+	if err := archive.Close(); err != nil {
+		return nil, err
+	}
+	return packed.Bytes(), nil
+}
+
+func buildLayer(root string, paths []string) ([]byte, error) {
+	var packed bytes.Buffer
+	archive := tar.NewWriter(&packed)
+	for _, named := range paths {
+		from := filepath.Join(root, filepath.FromSlash(named))
+		info, err := os.Lstat(from)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !info.IsDir() {
+			if err := tarFile(archive, from, path.Join(containerimage.BuildDir, named)); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		rels, err := ArtifactFiles(from)
+		if err != nil {
+			return nil, err
+		}
+		for _, rel := range rels {
+			if err := tarFile(archive, filepath.Join(from, filepath.FromSlash(rel)), path.Join(containerimage.BuildDir, named, rel)); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if err := archive.Close(); err != nil {

@@ -3,6 +3,7 @@ import { readdir, rm } from "node:fs/promises";
 import { isBuiltin } from "node:module";
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { cjsInterop } from "@framework/node-runtime/cjs-interop";
 
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = process.argv[2] ? join(process.cwd(), process.argv[2]) : join(pkgDir, "dist");
@@ -21,20 +22,10 @@ const containerModules = ["container-entrypoint", "container-next-host", "functi
 
 const bundledCacheModules = ["sdk-clients", "tag-index"];
 
-const cjsInterop = [
-  'import { createRequire as ocelCreateRequire } from "node:module";',
-  'import { fileURLToPath as ocelFileURLToPath } from "node:url";',
-  'import { dirname as ocelDirname } from "node:path";',
-  "const require = ocelCreateRequire(import.meta.url);",
-  "const ocelFilename = ocelFileURLToPath(import.meta.url);",
-  "const ocelDirnameOf = ocelDirname(ocelFilename);",
-].join("\n");
-
 const selfContained = {
   format: "esm",
   minify: true,
-  banner: cjsInterop,
-  define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
+  ...cjsInterop,
 };
 
 async function bundle(entry, outfile, options) {
@@ -64,12 +55,7 @@ await bundle(join(pkgDir, "src/node/entrypoint.mts"), nodeEntrypoint, {
   format: "esm",
 });
 
-await bundle(join(pkgDir, "src/next/container-entrypoint.mts"), containerEntrypoint, {
-  format: "esm",
-  minify: true,
-  banner: cjsInterop,
-  define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
-});
+await bundle(join(pkgDir, "src/next/container-entrypoint.mts"), containerEntrypoint, selfContained);
 
 await Promise.all([
   ...[...bundledInternals, ...containerModules].map((name) =>

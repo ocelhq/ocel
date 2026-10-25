@@ -34,6 +34,7 @@ type Provider struct {
 	wrappedFor       []string
 	runtimeArch      string
 	runtimeBinary    []byte
+	buildPaths       []string
 
 	runsFunctionsAsImages bool
 	hooks                 provider.Hooks

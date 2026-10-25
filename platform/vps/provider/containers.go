@@ -65,10 +65,14 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if healthPath == "" {
 		healthPath, discovered = app.DiscoveredHealthCheckPath, app.DiscoveredHealthCheckPath
 	}
-	if _, err := p.containers.Run(ctx, release.Container{
+	run := release.Container{
 		Name: physical, Project: spec.Ref.Project, App: app.App, Image: app.Image,
 		Tier: spec.Ref.Tier, Env: app.Values.ContainerEnv, HealthPath: healthPath, Manifest: manifest, Resolved: true,
-	}); err != nil {
+	}
+	if app.IsBuiltFromFunction() {
+		run.Env = newFunctionEnv(app)
+	}
+	if _, err := p.containers.Run(ctx, run); err != nil {
 		return nil, err
 	}
 	target := physical + ":" + containerimage.PortText

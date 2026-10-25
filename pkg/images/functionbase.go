@@ -17,12 +17,18 @@ const NodeBinDir = "/nodejs/bin"
 
 const pathVariable = "PATH"
 
-func PullNodeBase(ctx context.Context, goarch string) (v1.Image, error) {
-	pinned, err := name.NewDigest(NodeBase)
+type ImagePull func(ctx context.Context, ref, goarch string) (v1.Image, error)
+
+func PullRemoteImage(ctx context.Context, ref, goarch string) (v1.Image, error) {
+	pinned, err := name.NewDigest(ref)
 	if err != nil {
 		return nil, err
 	}
-	image, err := remote.Image(pinned, remote.WithContext(ctx), remote.WithPlatform(v1.Platform{OS: "linux", Architecture: goarch}))
+	return remote.Image(pinned, remote.WithContext(ctx), remote.WithPlatform(v1.Platform{OS: "linux", Architecture: goarch}))
+}
+
+func PullNodeBase(ctx context.Context, pull ImagePull, goarch string) (v1.Image, error) {
+	image, err := pull(ctx, NodeBase, goarch)
 	if err != nil {
 		return nil, err
 	}

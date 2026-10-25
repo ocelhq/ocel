@@ -83,17 +83,12 @@ func NewEnv(spec provider.StackSpec, fn provider.FunctionSpec, s run.Serving, ca
 		if run.FactsOf(spec.Edge).RunsCode {
 			env[imageEndpointEnvVar] = "1"
 		} else {
-			env[edge.OriginDispatchVar] = "1"
-			env[edge.OriginSignedVar] = "1"
+			maps.Copy(env, provider.NewOriginDispatchEnv())
 		}
-		env[processenv.RouteTableEnvVar] = routeTableInImage
+		maps.Copy(env, provider.NewRouteTableEnv(app, routeTableInImage))
 		if cache.storageEndpoint != "" {
 			env[storageEndpointEnvVar] = cache.storageEndpoint
 		}
-		if rules := app.Static.Variable(); rules != "" {
-			env[edge.StaticRulesVar] = rules
-		}
-		env[processenv.BuildIDEnvVar] = app.BuildID
 	}
 	maps.Copy(env, newNextCacheEnv(app.ISR, cache))
 	return env

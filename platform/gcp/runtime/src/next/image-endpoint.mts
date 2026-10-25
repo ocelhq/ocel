@@ -1,10 +1,10 @@
+import { newInProcessImageOrigin } from "@framework/next-image-optimizer/in-process-origin";
 import type { ImageOriginRequest } from "@framework/next-protocol/image";
 import { originImagePath } from "@framework/next-router/image";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import type { Invoke } from "@framework/node-runtime/host";
 import { readAssetStorage } from "./asset-storage.mjs";
 import { newCloudStorageObjectStore } from "./cloud-storage-assets.mjs";
-import { newInProcessImageOrigin } from "./image-origin.mjs";
 
 const maxBodyBytes = 32 * 1024 * 1024;
 

@@ -293,6 +293,15 @@ func TestFunctionImageIncludesTheRuntimeInTheDirectoryItBootsFrom(t *testing.T) 
 	}
 }
 
+func mustLayers(t *testing.T, image v1.Image) []v1.Layer {
+	t.Helper()
+	layers, err := image.Layers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return layers
+}
+
 func layerHolding(t *testing.T, layers []v1.Layer, name string) v1.Layer {
 	t.Helper()
 	for _, layer := range layers {
@@ -496,5 +505,60 @@ func TestAFunctionsRouteIsWhatIsLeftOfItsLogicalName(t *testing.T) {
 	if got, want := images.FunctionRoute("web", "fn--web--API/Users_[id]"), "api-users-id"; got != want {
 		t.Errorf("FunctionRoute() = %q, want %q: every caller names a resource with it, and no registry, "+
 			"bucket or service takes what a route may contain", got, want)
+	}
+}
+
+func TestFunctionImageBuiltForAContainerCarriesTheBuildPathsItIsHandedAndSaysWhere(t *testing.T) {
+	dir := stagedFunc(t, map[string]string{
+		"index.mjs":            "export const handler = () => {}",
+		"function-config.json": frameworkConfig(t, buildoutput.FrameworkNext, nil),
+	})
+	build := stagedFunc(t, map[string]string{
+		"static/_next/static/app.js": "chunk",
+		"cache/index.cache.json":     "{}",
+		"fetch-cache/abc.cache.json": "{}",
+		"image-config.json":          "{}",
+		"hosting.json":               "{}",
+		"next-route-table.json":      "{}",
+	})
+
+	image, err := images.FunctionImage(empty.Image, buildoutput.Framework{Name: buildoutput.FrameworkNext}, dir, images.FunctionImageOptions{
+		BuildRoot:  build,
+		BuildPaths: []string{"static", "cache", "image-config.json", "missing"},
+	})
+	if err != nil {
+		t.Fatalf("FunctionImage() error = %v", err)
+	}
+
+	layer := layerHolding(t, mustLayers(t, image), "ocel/build/static/_next/static/app.js")
+	want := []string{"ocel/build/cache/index.cache.json", "ocel/build/image-config.json", "ocel/build/static/_next/static/app.js"}
+	if got := tarNames(t, layer); !slices.Equal(got, want) {
+		t.Errorf("the build layer contains %v, want %v: the paths the provider's runtime reads from its own disk, and nothing else of the build", got, want)
+	}
+	if env := configOf(t, image).Env; !slices.Contains(env, containerimage.BuildDirEnvVar+"="+containerimage.BuildDir) {
+		t.Errorf("env = %v, want %s=%s: the runtime reads the build from where the image put it", env, containerimage.BuildDirEnvVar, containerimage.BuildDir)
+	}
+}
+
+func TestFunctionImageHandedNoBuildPathsCarriesNoBuild(t *testing.T) {
+	dir := stagedFunc(t, map[string]string{
+		"index.mjs":            "export const handler = () => {}",
+		"function-config.json": frameworkConfig(t, buildoutput.FrameworkNext, nil),
+	})
+	build := stagedFunc(t, map[string]string{"static/_next/static/app.js": "chunk"})
+
+	image, err := images.FunctionImage(empty.Image, buildoutput.Framework{Name: buildoutput.FrameworkNext}, dir, images.FunctionImageOptions{BuildRoot: build})
+	if err != nil {
+		t.Fatalf("FunctionImage() error = %v", err)
+	}
+	for _, entry := range configOf(t, image).Env {
+		if strings.HasPrefix(entry, containerimage.BuildDirEnvVar+"=") {
+			t.Errorf("env holds %s, want none: the function's build files live in object storage", entry)
+		}
+	}
+	for _, layer := range mustLayers(t, image) {
+		if slices.Contains(tarNames(t, layer), "ocel/build/static/_next/static/app.js") {
+			t.Errorf("the image carries the build's static files, want none: a provider that uploads them pulls them twice")
+		}
 	}
 }

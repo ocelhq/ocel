@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
@@ -31,7 +32,7 @@ func TestAWSProvider(t *testing.T) {
 func TestAContainerBuiltFromAFunctionPassesTheConformanceSuite(t *testing.T) {
 	t.Parallel()
 
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace).PullingImagesWith(fake.PullStandInImage)
 	conformance.RunFunctionContainers(t, p.Facts(), p.Runtime())
 }
 

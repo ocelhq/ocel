@@ -16,9 +16,10 @@ import (
 )
 
 type ImageSource struct {
-	Base    func(ctx context.Context, framework buildoutput.Framework) (v1.Image, error)
-	Runtime func(ctx context.Context, framework buildoutput.Framework) (map[string][]byte, error)
-	Binary  func(ctx context.Context, arch string) ([]byte, error)
+	Base       func(ctx context.Context, framework buildoutput.Framework) (v1.Image, error)
+	Runtime    func(ctx context.Context, framework buildoutput.Framework) (map[string][]byte, error)
+	Binary     func(ctx context.Context, arch string) ([]byte, error)
+	BuildPaths func(framework buildoutput.Framework) []string
 }
 
 func FunctionImages(ctx context.Context, spec provider.StackSpec, source ImageSource) ([]provider.ImagePush, error) {
@@ -37,7 +38,7 @@ func FunctionImages(ctx context.Context, spec provider.StackSpec, source ImageSo
 		if FunctionImageRef(spec.Images, fn.Name) != "" {
 			continue
 		}
-		image, err := functionImage(ctx, fn, source)
+		image, err := functionImage(ctx, fn, "", source)
 		if err != nil {
 			return nil, err
 		}
@@ -60,8 +61,8 @@ func FunctionImageRef(images provider.ImagePushes, function string) string {
 	return ""
 }
 
-func ContainerImage(ctx context.Context, project, app string, registry provider.RegistryTarget, fn provider.FunctionSpec, source ImageSource) (provider.ImagePush, error) {
-	image, err := functionImage(ctx, fn, source)
+func ContainerImage(ctx context.Context, project, app, build string, registry provider.RegistryTarget, fn provider.FunctionSpec, source ImageSource) (provider.ImagePush, error) {
+	image, err := functionImage(ctx, fn, build, source)
 	if err != nil {
 		return provider.ImagePush{}, err
 	}
@@ -85,7 +86,7 @@ func newImagePush(project, repository string, registry provider.RegistryTarget, 
 	}, nil
 }
 
-func functionImage(ctx context.Context, fn provider.FunctionSpec, source ImageSource) (v1.Image, error) {
+func functionImage(ctx context.Context, fn provider.FunctionSpec, build string, source ImageSource) (v1.Image, error) {
 	dir, err := functionDir(fn)
 	if err != nil {
 		return nil, err
@@ -98,10 +99,11 @@ func functionImage(ctx context.Context, fn provider.FunctionSpec, source ImageSo
 	if err != nil {
 		return nil, err
 	}
-	image, err := images.FunctionImage(base, fn.Framework, dir, images.FunctionImageOptions{
-		Overlay: fn.Overlay,
-		Runtime: runtime,
-	})
+	opts := images.FunctionImageOptions{Overlay: fn.Overlay, Runtime: runtime}
+	if build != "" && source.BuildPaths != nil {
+		opts.BuildRoot, opts.BuildPaths = build, source.BuildPaths(fn.Framework)
+	}
+	image, err := images.FunctionImage(base, fn.Framework, dir, opts)
 	if err != nil {
 		return nil, fmt.Errorf("build %s's image: %w", fn.Name, err)
 	}

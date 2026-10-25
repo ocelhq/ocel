@@ -2,19 +2,11 @@ import { rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stageSharp } from "@framework/next-image-optimizer/stage-sharp";
+import { cjsInterop } from "@framework/node-runtime/cjs-interop";
 
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = process.argv[2] ? join(process.cwd(), process.argv[2]) : join(pkgDir, "dist");
 const directory = join(dist, "next");
-
-const cjsInterop = [
-  'import { createRequire as ocelCreateRequire } from "node:module";',
-  'import { fileURLToPath as ocelFileURLToPath } from "node:url";',
-  'import { dirname as ocelDirname } from "node:path";',
-  "const require = ocelCreateRequire(import.meta.url);",
-  "const ocelFilename = ocelFileURLToPath(import.meta.url);",
-  "const ocelDirnameOf = ocelDirname(ocelFilename);",
-].join("\n");
 
 async function bundle(entry, outfile, options) {
   const result = await Bun.build({
@@ -40,8 +32,7 @@ await bundle(join(pkgDir, "src/next/entrypoint.mts"), join(directory, "entrypoin
   format: "esm",
   minify: true,
   external: ["sharp"],
-  banner: cjsInterop,
-  define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
+  ...cjsInterop,
 });
 
 stageSharp(directory, "x64");

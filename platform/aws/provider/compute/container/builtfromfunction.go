@@ -22,22 +22,14 @@ func newFunctionEnv(app *provider.AppSpec, at Target) map[string]string {
 	if app.Router != "" {
 		env[processenv.RouterKindEnvVar] = string(app.Router)
 	}
-	routing := app.Routing
-	if routing == nil {
+	if app.Routing == nil {
 		return env
 	}
-	env[edge.OriginDispatchVar] = "1"
-	env[edge.OriginSignedVar] = "1"
-	if routing.RouteTable.Format == edge.RouteTableNext {
-		env[processenv.RouteTableEnvVar] = path.Join(images.FunctionImageRoot, edge.NextRouteTableFile)
-	}
-	env[processenv.BuildIDEnvVar] = app.BuildID
+	maps.Copy(env, provider.NewOriginDispatchEnv())
+	maps.Copy(env, provider.NewRouteTableEnv(app, path.Join(images.FunctionImageRoot, edge.NextRouteTableFile)))
 	maps.Copy(env, processenv.StorageEnv(app.StorageCoordinate, naming.Buckets{naming.StorageEdge: at.Buckets[naming.StorageEdge]}))
 	if at.ImageOptimizerURL != "" {
 		env[edge.ImageOptimizerURLVar] = at.ImageOptimizerURL
-	}
-	if rules := app.Static.Variable(); rules != "" {
-		env[edge.StaticRulesVar] = rules
 	}
 	return env
 }

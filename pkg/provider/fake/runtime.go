@@ -5,7 +5,6 @@ import (
 	"slices"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/empty"
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
@@ -15,6 +14,13 @@ import (
 const RuntimeBinary = "the fake container runtime"
 
 const FunctionEntrypoint = "export const fakeRuntime = true"
+
+func (p *Provider) CarryingBuildPaths(paths ...string) *Provider {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.buildPaths = paths
+	return p
+}
 
 func (p *Provider) WrappingContainers(architecture string, binary []byte) *Provider {
 	p.mu.Lock()
@@ -52,7 +58,17 @@ func (r containerRuntime) FunctionBase(ctx context.Context, framework buildoutpu
 	if source := r.stacks.imageSource(); source != nil {
 		return source.Base(ctx, framework)
 	}
-	return empty.Image, nil
+	goarch, known := arch.GoArch(framework.Arch)
+	if !known {
+		goarch, _ = arch.GoArch(arch.X8664)
+	}
+	return images.PullNodeBase(ctx, PullStandInImage, goarch)
+}
+
+func (r containerRuntime) FunctionBuildPaths(buildoutput.Framework) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.buildPaths)
 }
 
 func (r containerRuntime) FunctionFiles(ctx context.Context, framework buildoutput.Framework) (map[string][]byte, error) {

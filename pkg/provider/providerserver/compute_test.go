@@ -2,6 +2,8 @@ package providerserver_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -268,7 +270,14 @@ func builtServerFunction() *contractv1.ManifestFunction {
 
 func TestTheAppSpecOfAContainerBuiltFromAFunctionRunsTheImageBuiltFromThatFunction(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	p := fake.NewProvider(fake.Options{})
+	static := filepath.Join(buildoutput.AppRoot(workingOutputRoot(t), "web"), "static", "_next", "static", "app.js")
+	if err := os.MkdirAll(filepath.Dir(static), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(static, []byte("chunk"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := fake.NewProvider(fake.Options{}).CarryingBuildPaths("static")
 	client := servedBy(t, p)
 
 	result, _ := deploy(t, client, functionContainerDeployRequest(builtServerFunction()))
@@ -285,14 +294,42 @@ func TestTheAppSpecOfAContainerBuiltFromAFunctionRunsTheImageBuiltFromThatFuncti
 	if len(pushes) != 1 || pushes[0].Function || pushes[0].App != "web" || pushes[0].Built == nil || app.Image != pushes[0].ImageRef {
 		t.Fatalf("Image = %q with pushes %+v, want the container to run the one image built from its function", app.Image, pushes)
 	}
-	if got := regularFiles(t, pushes[0].Built); !slices.Contains(got, "ocel/runtime/next/entrypoint.mjs") || !slices.Contains(got, "ocel/app/"+builtEntrypoint) {
-		t.Errorf("the container's image holds %v, want the function's build and the runtime the provider declares for it", got)
+	if got := regularFiles(t, pushes[0].Built); !slices.Contains(got, "ocel/runtime/next/entrypoint.mjs") || !slices.Contains(got, "ocel/app/"+builtEntrypoint) || !slices.Contains(got, "ocel/build/static/_next/static/app.js") {
+		t.Errorf("the container's image holds %v, want the function, the runtime the provider declares for it and the build's static files", got)
 	}
 	if len(app.Functions) != 1 || app.Functions[0].Name != "server" || app.Functions[0].ArtifactDir == "" {
 		t.Errorf("Functions = %+v, want the one built function the container runs, with the directory it was built into", app.Functions)
 	}
 	if app.Instances != (provider.Instances{Min: 1, Max: 1}) || app.HealthCheckPath != "/" {
 		t.Errorf("Instances = %+v and HealthCheckPath = %q, want the counts and probe the manifest names", app.Instances, app.HealthCheckPath)
+	}
+}
+
+func TestAContainerBuiltFromAFunctionCarriesNoBuildPathItsProviderDoesNotRead(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	static := filepath.Join(buildoutput.AppRoot(workingOutputRoot(t), "web"), "static", "_next", "static", "app.js")
+	if err := os.MkdirAll(filepath.Dir(static), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(static, []byte("chunk"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := fake.NewProvider(fake.Options{})
+
+	result, _ := deploy(t, servedBy(t, p), functionContainerDeployRequest(builtServerFunction()))
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	specs := p.FakeStacks().Provisioned()
+	pushes := specs[len(specs)-1].Images.Pushes
+	if len(pushes) != 1 || pushes[0].Built == nil {
+		t.Fatalf("pushes = %+v, want the one image built from the function", pushes)
+	}
+	for _, file := range regularFiles(t, pushes[0].Built) {
+		if strings.HasPrefix(file, "ocel/build/") {
+			t.Errorf("the container's image holds %s, want no build file: a provider that uploads its static files would ship them twice", file)
+		}
 	}
 }
 
