@@ -1,20 +1,17 @@
 package realtime
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/base64"
+	"context"
 	"fmt"
-	"time"
 
-	"ocel.dev/internal/codec"
-	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+
+	realtimev1 "ocel.dev/internal/proto/app/realtime/v1"
 )
 
 type realtimeOperation string
 
 const (
-	realtimeConnect   realtimeOperation = "connect"
 	realtimeSubscribe realtimeOperation = "subscribe"
 	realtimePublish   realtimeOperation = "publish"
 )
@@ -24,45 +21,17 @@ type mintedToken struct {
 	ExpiresAt int64  `json:"expiresAt"`
 }
 
-func signToken(signingKey []byte, header, claims any) (string, error) {
-	if len(signingKey) != ed25519.SeedSize {
-		return "", fmt.Errorf("the realtime signing key is %d bytes, and an Ed25519 seed is %d", len(signingKey), ed25519.SeedSize)
-	}
-	encodedHeader, err := codec.EncodeJSON(header)
+func (d *Realtime) mintTokens(ctx context.Context, subject string, grants []*realtimev1.Grant) (*realtimev1.MintResponse, error) {
+	runtime, err := d.connect("Handler")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	encodedClaims, err := codec.EncodeJSON(claims)
+	minted, err := runtime.Mint(ctx, &realtimev1.MintRequest{Realtime: d.name, Subject: subject, Ttl: durationpb.New(d.settings.ttl), Grants: grants})
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("ocel: realtime %q: mint tokens: %w", d.name, err)
 	}
-	input := base64.RawURLEncoding.EncodeToString(encodedHeader) + "." + base64.RawURLEncoding.EncodeToString(encodedClaims)
-	signature := ed25519.Sign(ed25519.NewKeyFromSeed(signingKey), []byte(input))
-	return input + "." + base64.RawURLEncoding.EncodeToString(signature), nil
-}
-
-func (d *Realtime) mintToken(properties *bindingsv1.RealtimeProperties, subject string, operation realtimeOperation, channel string) (mintedToken, error) {
-	id := make([]byte, 16)
-	if _, err := rand.Read(id); err != nil {
-		return mintedToken{}, err
+	if len(minted.GetTokens()) != len(grants) {
+		return nil, fmt.Errorf("ocel: realtime %q: the runtime minted %d tokens for %d grants", d.name, len(minted.GetTokens()), len(grants))
 	}
-	issuedAt := time.Now().Unix()
-	expiresAt := issuedAt + int64(d.settings.ttl/time.Second)
-	token, err := signToken(properties.GetSigningKey(), map[string]any{"alg": "EdDSA", "typ": "JWT"}, map[string]any{
-		"iss": "ocel:rt:" + d.name,
-		"aud": properties.GetHost(),
-		"sub": subject,
-		"iat": issuedAt,
-		"exp": expiresAt,
-		"jti": base64.RawURLEncoding.EncodeToString(id),
-		"ocel": map[string]any{
-			"op": operation,
-			"ch": channel,
-			"ns": d.name,
-		},
-	})
-	if err != nil {
-		return mintedToken{}, err
-	}
-	return mintedToken{Token: token, ExpiresAt: expiresAt}, nil
+	return minted, nil
 }

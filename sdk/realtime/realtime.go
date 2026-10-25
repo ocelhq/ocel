@@ -56,7 +56,7 @@ func Authorize[A any](authorize func(*http.Request) (*A, error)) Option {
 	})
 }
 
-// TokenTTL is how long each token the handler mints lives, 10s to 5m in whole
+// TokenTTL is how long each token the handler hands out lives, 10s to 5m in whole
 // seconds; without it, 60s.
 func TokenTTL(ttl time.Duration) Option {
 	return option(func(s *settings) { s.ttl = ttl })

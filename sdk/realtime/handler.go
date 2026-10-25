@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"ocel.dev/internal/codec"
+	realtimev1 "ocel.dev/internal/proto/app/realtime/v1"
 	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
 
@@ -69,12 +70,14 @@ type handler struct {
 
 // Handler serves the resource to browsers, mounted at any path: one batched POST of
 // { connect?, ops: [{ op, pattern, params, body? }] }, at most 50 ops, answered with
-// the socket url and the host its authorization names, a connect token when asked, a grant with a token for each op
-// its rule allows and a denial with a code for each it does not. A browser publish runs
-// the channel's publish rule and is published from the server, one publish at a time
-// in the order the batch lists them. It takes POST with application/json alone, serves
-// its own origin and those in [AllowedOrigins], answers Cache-Control:
-// no-store, and never sets a cookie.
+// the socket url and the host its authorization names, a connect token when asked, a
+// grant with a token for each op its rule allows and a denial with a code for each it
+// does not. The runtime the app runs on mints every token, in one call per request, and
+// names the channel each subscribe grant is for, which the browser subscribes to as
+// given. A browser publish runs the channel's publish rule and is published from the
+// server, one publish at a time in the order the batch lists them. It takes POST with
+// application/json alone, serves its own origin and those in [AllowedOrigins], answers
+// Cache-Control: no-store, and never sets a cookie.
 func (d *Realtime) Handler(opts ...HandlerOption) http.Handler {
 	h := &handler{realtime: d}
 	for _, opt := range opts {
@@ -115,9 +118,10 @@ type realtimeAnswer struct {
 }
 
 type realtimeOutcome struct {
-	grant  *grant
-	denial denialCode
-	err    error
+	grant       *grant
+	isSubscribe bool
+	denial      denialCode
+	err         error
 }
 
 type call struct {
@@ -389,14 +393,6 @@ func (d *Realtime) readOp(raw json.RawMessage) (realtimeOp, denialCode) {
 
 func (c *call) answerBatch(batch realtimeBatch) (realtimeAnswer, error) {
 	answer := realtimeAnswer{URL: resolveSocketURL(c.binding.GetUrl(), c.request), Host: c.binding.GetHost(), Grants: []grant{}, Denied: []denial{}}
-	if batch.connect {
-		token, err := c.realtime.mintToken(c.binding, c.subject, realtimeConnect, "/"+c.realtime.name)
-		if err != nil {
-			return realtimeAnswer{}, err
-		}
-		answer.Connect = &token
-	}
-
 	outcomes := make([]realtimeOutcome, len(batch.ops))
 	var publishes []int
 	ops := make([]realtimeOp, len(batch.ops))
@@ -419,11 +415,17 @@ func (c *call) answerBatch(batch realtimeBatch) (realtimeAnswer, error) {
 		}
 	})
 	evaluations.Wait()
+	for _, outcome := range outcomes {
+		if outcome.err != nil {
+			return realtimeAnswer{}, outcome.err
+		}
+	}
+	if err := c.mintTokens(batch.connect, &answer, outcomes); err != nil {
+		return realtimeAnswer{}, err
+	}
 
 	for i, outcome := range outcomes {
 		switch {
-		case outcome.err != nil:
-			return realtimeAnswer{}, outcome.err
 		case outcome.grant != nil:
 			outcome.grant.Index = i
 			answer.Grants = append(answer.Grants, *outcome.grant)
@@ -432,6 +434,36 @@ func (c *call) answerBatch(batch realtimeBatch) (realtimeAnswer, error) {
 		}
 	}
 	return answer, nil
+}
+
+func (c *call) mintTokens(isConnect bool, answer *realtimeAnswer, outcomes []realtimeOutcome) error {
+	var grants []*realtimev1.Grant
+	if isConnect {
+		grants = append(grants, &realtimev1.Grant{Operation: realtimev1.Operation_OPERATION_CONNECT, Channel: "/" + c.realtime.name})
+	}
+	var subscribes []*grant
+	for _, outcome := range outcomes {
+		if outcome.isSubscribe {
+			grants = append(grants, &realtimev1.Grant{Operation: realtimev1.Operation_OPERATION_SUBSCRIBE, Channel: outcome.grant.Wire})
+			subscribes = append(subscribes, outcome.grant)
+		}
+	}
+	if len(grants) == 0 {
+		return nil
+	}
+	minted, err := c.realtime.mintTokens(c.request.Context(), c.subject, grants)
+	if err != nil {
+		return err
+	}
+	tokens := minted.GetTokens()
+	if isConnect {
+		answer.Connect = &mintedToken{Token: tokens[0].GetToken(), ExpiresAt: minted.GetExpiresAt().GetSeconds()}
+		tokens = tokens[1:]
+	}
+	for i, subscribe := range subscribes {
+		subscribe.Wire, subscribe.Token = tokens[i].GetChannel(), tokens[i].GetToken()
+	}
+	return nil
 }
 
 func runOpCatchingPanic(evaluate func() realtimeOutcome) (outcome realtimeOutcome) {
@@ -463,11 +495,7 @@ func (c *call) subscribe(op realtimeOp) realtimeOutcome {
 			return realtimeOutcome{denial: denied}
 		}
 	}
-	token, err := c.realtime.mintToken(c.binding, c.subject, realtimeSubscribe, wire)
-	if err != nil {
-		return realtimeOutcome{err: err}
-	}
-	return realtimeOutcome{grant: &grant{Wire: wire, Token: token.Token}}
+	return realtimeOutcome{grant: &grant{Wire: wire}, isSubscribe: true}
 }
 
 func (c *call) publish(op realtimeOp) realtimeOutcome {

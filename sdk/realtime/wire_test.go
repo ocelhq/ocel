@@ -18,16 +18,6 @@ type realtimeVectors struct {
 		Channel   string            `json:"channel"`
 		Error     string            `json:"error"`
 	} `json:"wire"`
-	Tokens struct {
-		SigningKey []byte `json:"signingKey"`
-		VerifyKey  []byte `json:"verifyKey"`
-		Mint       []struct {
-			Name   string         `json:"name"`
-			Header map[string]any `json:"header"`
-			Claims map[string]any `json:"claims"`
-			Token  string         `json:"token"`
-		} `json:"mint"`
-	} `json:"tokens"`
 }
 
 func readVectors(t *testing.T) realtimeVectors {
