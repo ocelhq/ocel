@@ -6,7 +6,13 @@ infrastructure hundreds of times per run.
 
 `.github/workflows/next-compat.yml` drives it and is the source of truth for
 what runs. **Manual dispatch only.** Inputs: `nextjsRef` (must match the `next`
-version the adapter pins), `recordBaseline` and `target`.
+version the adapter pins), `recordBaseline`, `target` and `testsPerShard`.
+
+Every Cloudflare request the run makes counts against one account limit of
+1,200 per 5 minutes, and 20 shards of 3 concurrent test apps on aws-cloudflare
+have passed it. gcp-cloudflare therefore runs 2 per shard unless the dispatch
+says otherwise; lower `testsPerShard` if a run's deploys report Cloudflare rate
+limits.
 
 Read the scripts for what they do. This file covers only what you cannot get by
 running them.
