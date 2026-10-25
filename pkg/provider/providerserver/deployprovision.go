@@ -242,6 +242,10 @@ func (r *deployRun) appStackOf(ctx context.Context, entry provider.AppEntry) (ap
 	if err != nil {
 		return appStack{}, err
 	}
+	functions, err := r.functionSpecs(entry, facts.OriginTable())
+	if err != nil {
+		return appStack{}, err
+	}
 	images, err := r.imagePushes(ctx, entry)
 	if err != nil {
 		return appStack{}, err
@@ -266,7 +270,7 @@ func (r *deployRun) appStackOf(ctx context.Context, entry provider.AppEntry) (ap
 			BuildID:                   entry.Release.BuildID(),
 			Compute:                   entry.Compute(),
 			Router:                    r.appRouters[entry.App],
-			Functions:                 r.functionSpecs(entry, facts.OriginTable()),
+			Functions:                 functions,
 			Image:                     imageToRun(images, entry),
 			HealthCheckPath:           entry.HealthCheckPath,
 			DiscoveredHealthCheckPath: discovered,
@@ -470,15 +474,19 @@ func (r *deployRun) manifestValues(entry provider.AppEntry, grants []provider.Bi
 	return values, nil
 }
 
-func (r *deployRun) functionSpecs(entry provider.AppEntry, routing *provider.RoutingSpec) []provider.FunctionSpec {
+func (r *deployRun) functionSpecs(entry provider.AppEntry, routing *provider.RoutingSpec) ([]provider.FunctionSpec, error) {
 	var specs []provider.FunctionSpec
 	for _, fn := range entry.Manifest.GetServerless().GetFunctions() {
+		dir, err := artifactDir(r.artifactRoot, fn)
+		if err != nil {
+			return nil, err
+		}
 		spec := functionSpecOf(fn)
-		spec.ArtifactDir = artifactDir(r.artifactRoot, fn)
+		spec.ArtifactDir = dir
 		spec.Overlay = overlayFor(fn, routing)
 		specs = append(specs, spec)
 	}
-	return specs
+	return specs, nil
 }
 
 func (r *deployRun) deploymentHost(app, address string) edge.PreviewHost {

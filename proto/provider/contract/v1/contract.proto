@@ -333,7 +333,11 @@ message ManifestFunction {
   string logical_name = 1;
   Framework framework = 2;
   string entry_file = 3;
-  string artifact_path = 4;
+  string artifact_path = 4 [(buf.validate.field).cel = {
+    id: "function.artifact_path"
+    message: "artifact_path is a path on the machine that built the function, relative to the build root and inside it"
+    expression: "this == '' || !(this.startsWith('/') || this.contains('\\\\') || this.matches('^[A-Za-z]:') || this.matches('(^|/)[.][.](/|$)'))"
+  }];
   string route_id = 6;
   bool has_worker_entry = 7;
 }
