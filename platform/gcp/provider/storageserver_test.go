@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"encoding/json"
+	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +25,7 @@ type storageServer struct {
 	objects  map[string][]string
 	created  []*raw.Bucket
 	patched  []*raw.Bucket
+	cleared  []string
 	setters  []*raw.Policy
 	deleted  []string
 	removed  []string
@@ -89,8 +91,16 @@ func (s *storageServer) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.created = append(s.created, bucket)
-	s.buckets[bucket.Name] = bucket
-	googletest.WriteBody(w, bucket)
+	stored := *bucket
+	if stored.StorageClass == "" {
+		stored.StorageClass = "STANDARD"
+	}
+	if stored.SoftDeletePolicy == nil {
+		stored.SoftDeletePolicy = &raw.BucketSoftDeletePolicy{RetentionDurationSeconds: 7 * 24 * 60 * 60}
+	}
+	effective(stored.RetentionPolicy)
+	s.buckets[bucket.Name] = &stored
+	googletest.WriteBody(w, &stored)
 }
 
 func (s *storageServer) bucket(w http.ResponseWriter, r *http.Request, name string) {
@@ -111,20 +121,21 @@ func (s *storageServer) bucket(w http.ResponseWriter, r *http.Request, name stri
 		}
 		googletest.WriteBody(w, current)
 	case http.MethodPatch:
-		patch := googletest.ReadBody[raw.Bucket](w, r)
-		if patch == nil {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		s.patched = append(s.patched, patch)
-		if patch.IamConfiguration != nil {
-			current.IamConfiguration = patch.IamConfiguration
+		var patch raw.Bucket
+		var fields map[string]any
+		if json.Unmarshal(body, &patch) != nil || json.Unmarshal(body, &fields) != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
-		if patch.Cors != nil {
-			current.Cors = patch.Cors
-		}
-		if patch.Lifecycle != nil {
-			current.Lifecycle = patch.Lifecycle
-		}
+		s.patched = append(s.patched, &patch)
+		cleared := nullFields("", fields)
+		s.cleared = append(s.cleared, cleared...)
+		s.applyPatch(current, &patch, cleared)
 		googletest.WriteBody(w, current)
 	case http.MethodDelete:
 		if len(s.objects[name]) > 0 {
@@ -258,4 +269,76 @@ func (s *storageServer) drift(bucket string, change func(*raw.Bucket)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	change(s.buckets[bucket])
+}
+
+func nullFields(prefix string, fields map[string]any) []string {
+	var null []string
+	for key, value := range fields {
+		path := key
+		if prefix != "" {
+			path = prefix + "." + key
+		}
+		switch nested := value.(type) {
+		case nil:
+			null = append(null, path)
+		case map[string]any:
+			null = append(null, nullFields(path, nested)...)
+		}
+	}
+	return null
+}
+
+func (s *storageServer) applyPatch(current, patch *raw.Bucket, cleared []string) {
+	if patch.IamConfiguration != nil {
+		current.IamConfiguration = patch.IamConfiguration
+	}
+	if patch.Cors != nil {
+		current.Cors = patch.Cors
+	}
+	if patch.Lifecycle != nil {
+		current.Lifecycle = patch.Lifecycle
+	}
+	if patch.StorageClass != "" {
+		current.StorageClass = patch.StorageClass
+	}
+	if patch.Versioning != nil {
+		current.Versioning = patch.Versioning
+	}
+	if patch.SoftDeletePolicy != nil {
+		current.SoftDeletePolicy = patch.SoftDeletePolicy
+	}
+	if patch.RetentionPolicy != nil {
+		current.RetentionPolicy = patch.RetentionPolicy
+		effective(current.RetentionPolicy)
+	}
+	if patch.Encryption != nil && patch.Encryption.DefaultKmsKeyName != "" {
+		current.Encryption = patch.Encryption
+	}
+	if patch.Logging != nil {
+		current.Logging = patch.Logging
+	}
+	for key, value := range patch.Labels {
+		if current.Labels == nil {
+			current.Labels = map[string]string{}
+		}
+		current.Labels[key] = value
+	}
+	for _, path := range cleared {
+		switch {
+		case path == "retentionPolicy":
+			current.RetentionPolicy = nil
+		case path == "logging":
+			current.Logging = nil
+		case path == "encryption.defaultKmsKeyName":
+			current.Encryption = nil
+		case strings.HasPrefix(path, "labels."):
+			delete(current.Labels, strings.TrimPrefix(path, "labels."))
+		}
+	}
+}
+
+func effective(policy *raw.BucketRetentionPolicy) {
+	if policy != nil && policy.EffectiveTime == "" {
+		policy.EffectiveTime = "2026-01-01T00:00:00Z"
+	}
 }

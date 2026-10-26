@@ -27,7 +27,11 @@ func (p *Provider) realtimeHooks() *realtime.Realtime {
 }
 
 func (p *Provider) resourceHooks() resources.Hooks {
-	hooks := p.components().Hooks()
+	registry := p.components()
+	if p.transforms != nil {
+		registry = registry.WithEvaluationRequired()
+	}
+	hooks := registry.Hooks()
 	hooks.ListResources = p.ListStackResources
 
 	return p.computeHooks(hooks)

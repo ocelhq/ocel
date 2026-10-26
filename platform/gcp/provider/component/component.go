@@ -6,25 +6,34 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 )
 
 type Component struct {
-	Types     []provider.BindingType
-	Hooks     resources.ResourceHooks
-	Parts     []Part
-	Preflight func(resource provider.Resource) error
-	Shape     func(shape Shape, declared []provider.Resource) error
-	Grants    func(ctx context.Context, app App) ([]grants.Grant, error)
-	Egress    bool
-	Accounts  []bootstrap.Account
+	Types      []provider.BindingType
+	Hooks      resources.ResourceHooks
+	Parts      []Part
+	Preflight  func(resource provider.Resource) error
+	Shape      func(shape Shape, declared []provider.Resource) error
+	Grants     func(ctx context.Context, app App) ([]grants.Grant, error)
+	Egress     bool
+	Accounts   []bootstrap.Account
+	Transforms map[provider.BindingType]*Transform
 
 	ListResources func(ctx context.Context, clients *gcloud.Clients, ref provider.StackRef, binding provider.Binding) ([]provider.PhysicalResource, error)
+}
+
+type Transform struct {
+	Kind    string
+	Allowed surface.Allowed
 }
 
 type Part struct {
@@ -44,6 +53,7 @@ type Shape struct {
 	Region      string
 	Shared      string
 	Environment string
+	Transforms  surface.Evaluated
 }
 
 type App struct {
@@ -83,6 +93,33 @@ func (r Registry) Hooks() resources.Hooks {
 				hooks.Realtime = served
 			}
 		}
+	}
+	return hooks
+}
+
+func (r Registry) WithEvaluationRequired() Registry {
+	required := slices.Clone(r)
+	for i := range required {
+		if len(required[i].Transforms) > 0 {
+			required[i].Hooks = requireEvaluated(required[i].Hooks)
+		}
+	}
+	return required
+}
+
+func requireEvaluated(hooks resources.ResourceHooks) resources.ResourceHooks {
+	plan, provision := hooks.Plan, hooks.Provision
+	hooks.Plan = func(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
+		if err := surface.RefuseUnevaluated(ctx, in.Ref, in.Resource); err != nil {
+			return "", "", err
+		}
+		return plan(ctx, in, recorded)
+	}
+	hooks.Provision = func(ctx context.Context, in resources.ProvisionRequest, log progress.Log) (provider.Binding, error) {
+		if err := surface.RefuseUnevaluated(ctx, in.Ref, in.Resource); err != nil {
+			return provider.Binding{}, err
+		}
+		return provision(ctx, in, log)
 	}
 	return hooks
 }
@@ -183,4 +220,32 @@ func (r Registry) Accounts() []bootstrap.Account {
 		accounts = append(accounts, each.Accounts...)
 	}
 	return accounts
+}
+
+func (c Component) TransformOf(kind provider.BindingType) *Transform {
+	return c.Transforms[kind]
+}
+
+func (r Registry) Transformed() map[string]surface.Allowed {
+	allowed := map[string]surface.Allowed{}
+	for _, each := range r {
+		for _, typed := range each.Transforms {
+			allowed[typed.Kind] = typed.Allowed
+		}
+	}
+	return allowed
+}
+
+func (r Registry) TransformCandidates(declared []provider.Resource) []transform.Resource {
+	var candidates []transform.Resource
+	for _, resource := range declared {
+		each, served := r.For(resource.Type)
+		if !served || resource.Binding != "" {
+			continue
+		}
+		if target := each.TransformOf(resource.Type); target != nil {
+			candidates = append(candidates, transform.Resource{Type: target.Kind, Name: resource.Name})
+		}
+	}
+	return candidates
 }
