@@ -1,4 +1,4 @@
-import type { storage } from "@pulumi/gcp";
+import type { memorystore, sql, storage } from "@pulumi/gcp";
 import type { Unwrap } from "@pulumi/pulumi";
 import type { Patch } from "../patch.js";
 
@@ -13,6 +13,26 @@ export interface GcpResourceArgs {
    */
   bucket: {
     bucket: storage.BucketArgs;
+  };
+  /**
+   * A postgres database's Cloud SQL instance. ocel names it and keeps its
+   * region, Postgres version, private endpoint, encrypted connections, user
+   * and database. A placement names the one network its endpoint is made in,
+   * which needs a Cloud SQL service connection policy in the deploy's region;
+   * an endpoint never moves to another network once made.
+   */
+  postgres: {
+    instance: sql.DatabaseInstanceArgs;
+  };
+  /**
+   * A kv store's Memorystore instance. ocel sizes its node from the store's
+   * memory and keeps its version, eviction, token auth, TLS and append-only
+   * persistence. A placement names the one network its endpoint is made in,
+   * which needs a Memorystore service connection policy in the deploy's
+   * region; an endpoint never moves to another network once made.
+   */
+  kv: {
+    instance: memorystore.InstanceArgs;
   };
 }
 
@@ -68,6 +88,52 @@ export const gcpAllowedPaths = {
       "softDeletePolicy.retentionDurationSeconds",
       "storageClass",
       "versioning.enabled",
+    ],
+  },
+  postgres: {
+    instance: [
+      "settings.availabilityType",
+      "settings.backupConfiguration.backupRetentionSettings.retainedBackups",
+      "settings.backupConfiguration.backupRetentionSettings.retentionUnit",
+      "settings.backupConfiguration.enabled",
+      "settings.backupConfiguration.pointInTimeRecoveryEnabled",
+      "settings.backupConfiguration.startTime",
+      "settings.backupConfiguration.transactionLogRetentionDays",
+      "settings.dataCacheConfig.dataCacheEnabled",
+      "settings.databaseFlags.name",
+      "settings.databaseFlags.value",
+      "settings.deletionProtectionEnabled",
+      "settings.diskAutoresize",
+      "settings.diskAutoresizeLimit",
+      "settings.diskSize",
+      "settings.diskType",
+      "settings.edition",
+      "settings.insightsConfig.queryInsightsEnabled",
+      "settings.insightsConfig.queryPlansPerMinute",
+      "settings.insightsConfig.queryStringLength",
+      "settings.insightsConfig.recordApplicationTags",
+      "settings.insightsConfig.recordClientAddress",
+      "settings.ipConfiguration.pscConfigs.pscAutoConnections.consumerNetwork",
+      "settings.maintenanceWindow.day",
+      "settings.maintenanceWindow.hour",
+      "settings.maintenanceWindow.updateTrack",
+      "settings.tier",
+    ],
+  },
+  kv: {
+    instance: [
+      "automatedBackupConfig.fixedFrequencySchedule.startTime.hours",
+      "automatedBackupConfig.retention",
+      "deletionProtectionEnabled",
+      "desiredAutoCreatedEndpoints.network",
+      "maintenancePolicy.weeklyMaintenanceWindows.day",
+      "maintenancePolicy.weeklyMaintenanceWindows.startTime.hours",
+      "maintenancePolicy.weeklyMaintenanceWindows.startTime.minutes",
+      "maintenancePolicy.weeklyMaintenanceWindows.startTime.nanos",
+      "maintenancePolicy.weeklyMaintenanceWindows.startTime.seconds",
+      "replicaCount",
+      "zoneDistributionConfig.mode",
+      "zoneDistributionConfig.zone",
     ],
   },
 } as const satisfies AllowedPathNames;

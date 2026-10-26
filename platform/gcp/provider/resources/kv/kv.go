@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,12 +13,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/valkey"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 )
 
@@ -125,43 +128,102 @@ func (s kvStore) instance(project, network string, labels map[string]string) *gc
 	}
 }
 
-func (s kvStore) shapeProperties(region string) map[string]any {
+func (s kvStore) shapeProperties(region string, instance *gcloud.MemorystoreInstance) map[string]any {
 	return map[string]any{
 		"location":           region,
 		"mode":               clusterModeOff,
 		"node_type":          s.node.terraformNodeType(),
 		"node_capacity_gb":   s.node.capacityGB,
 		"shard_count":        1,
-		"replica_count":      s.replicas,
+		"replica_count":      replicasOf(instance),
 		"persistence_config": map[string]any{"mode": appendOnly, "aof_config": map[string]any{"append_fsync": fsyncEverySecond}},
 	}
 }
 
-func (s kvStore) changes(current *gcloud.MemorystoreInstance) ([]string, []string) {
-	var mask, differences []string
-	if current.NodeType != s.node.nodeType {
-		mask = append(mask, "node_type")
-		differences = append(differences, fmt.Sprintf("node type changes from %s to %s", current.NodeType, s.node.nodeType))
+type declaredStore struct {
+	name    string
+	patched surface.RecordedPatch[gcloud.MemorystoreInstance, instanceUpdate]
+}
+
+func (p *KV) declare(ctx context.Context, clients *gcloud.Clients, in resources.ProvisionRequest, store kvStore) (declaredStore, error) {
+	labels, err := names.LabelsFor(clients.Names, in.Ref, names.KVLabel, in.Resource.Name)
+	if err != nil {
+		return declaredStore{}, err
 	}
-	if current.EngineVersion != s.version {
-		mask = append(mask, "engine_version")
-		differences = append(differences, fmt.Sprintf("engine version changes from %s to %s", current.EngineVersion, s.version))
+	evaluated, _ := surface.ReadEvaluated(ctx, in.Ref)
+	result := evaluated.For(transformKind, in.Resource.Name)
+	record := surface.Record{Store: p.records, Key: surface.KeyFor(in.Ref, transformKind, in.Resource.Name)}
+	own := store.instance(clients.Project(), clients.NetworkPath(in.Ref.Tier), labels)
+	patched, err := storeSurface.PatchRecorded(ctx, record, "kv "+in.Resource.Name, *own, result)
+	return declaredStore{name: in.Resource.Name, patched: patched}, err
+}
+
+func (d declaredStore) desired() *gcloud.MemorystoreInstance { return &d.patched.Desired }
+
+func (d declaredStore) network() string { return connectionOf(d.desired()).Network }
+
+type storeChanges struct {
+	engine      []string
+	replicas    bool
+	patched     instanceUpdate
+	differences []string
+}
+
+func (d declaredStore) drift(current *gcloud.MemorystoreInstance) (storeChanges, error) {
+	if err := d.refuseZonesChange(current); err != nil {
+		return storeChanges{}, err
 	}
-	want := s.engineConfigs()
+	desired := d.desired()
+	changes := storeChanges{patched: instanceUpdate{currentLabels: current.Labels}}
+	if current.NodeType != desired.NodeType {
+		changes.engine = append(changes.engine, "node_type")
+		changes.differences = append(changes.differences, fmt.Sprintf("node type changes from %s to %s", current.NodeType, desired.NodeType))
+	}
+	if current.EngineVersion != desired.EngineVersion {
+		changes.engine = append(changes.engine, "engine_version")
+		changes.differences = append(changes.differences, fmt.Sprintf("engine version changes from %s to %s", current.EngineVersion, desired.EngineVersion))
+	}
 	configs := false
 	for _, config := range []string{maxMemoryConfig, maxMemoryPolicyConfig} {
-		if current.EngineConfigs[config] != want[config] {
+		if current.EngineConfigs[config] != desired.EngineConfigs[config] {
 			configs = true
-			differences = append(differences, fmt.Sprintf("%s changes from %s to %s", config, cmp.Or(current.EngineConfigs[config], "unset"), want[config]))
+			changes.differences = append(changes.differences, fmt.Sprintf("%s changes from %s to %s", config, cmp.Or(current.EngineConfigs[config], "unset"), desired.EngineConfigs[config]))
 		}
 	}
 	if configs {
-		mask = append(mask, "engine_configs")
+		changes.engine = append(changes.engine, "engine_configs")
 	}
-	if replicas := replicasOf(current); replicas != s.replicas {
-		differences = append(differences, fmt.Sprintf("replica count changes from %d to %d", replicas, s.replicas))
+	if held, wanted := replicasOf(current), replicasOf(desired); held != wanted {
+		changes.replicas = true
+		changes.differences = append(changes.differences, fmt.Sprintf("replica count changes from %d to %d", held, wanted))
 	}
-	return mask, differences
+	patched, err := d.patched.Drift(current, &changes.patched)
+	if err != nil {
+		return storeChanges{}, err
+	}
+	changes.differences = append(changes.differences, patched...)
+	return changes, nil
+}
+
+func (d declaredStore) refuseZonesChange(current *gcloud.MemorystoreInstance) error {
+	held, wanted := zonesOf(current), zonesOf(d.desired())
+	if held.Mode == wanted.Mode && (wanted.Zone == "" || held.Zone == wanted.Zone) {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"a transform sets kv %s's %s.%s to %s, and its Memorystore instance keeps the %s it was made with: patch it back to %s",
+		d.name, transformSurface, zonesPath, describeZones(wanted), describeZones(held), describeZones(held))
+}
+
+func (d declaredStore) refuseEndpointMove(instance kvInstance, current *gcloud.MemorystoreInstance) error {
+	return gcloud.RefuseEndpointMove("kv "+d.name, "Memorystore instance "+instance.id, gcloud.StoreNetworks(current), d.network())
+}
+
+func (p *KV) refusePlacedNetworkAbsent(ctx context.Context, clients *gcloud.Clients, declared declaredStore) error {
+	if p.skipChecks || !declared.patched.Sets(surface.StorePlacement) {
+		return nil
+	}
+	return gcloud.RefuseNetworkAbsent(ctx, clients, "kv "+declared.name, declared.network())
 }
 
 func replicasOf(instance *gcloud.MemorystoreInstance) int {
@@ -203,32 +265,37 @@ func (p *KV) Provision(ctx context.Context, in resources.ProvisionRequest, progr
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	labels, err := names.LabelsFor(clients.Names, in.Ref, names.KVLabel, in.Resource.Name)
+	declared, err := p.declare(ctx, clients, in, store)
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	current, err := instance.service.ReadInstance(ctx, instance.path)
-	switch {
-	case gcloud.Absent(err):
-		desired := store.instance(clients.Project(), clients.NetworkPath(in.Ref.Tier), labels)
-		current, err = instance.create(ctx, clients, desired, progress)
-	case err != nil:
-		return provider.Binding{}, fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)
-	case gcloud.IsSettling(current.State):
-		if current, err = instance.service.ReadSettledInstance(ctx, instance.path, in.Resource.Name); err == nil {
-			if err = instance.refuseInactive(current, clients.Region); err == nil {
-				current, err = instance.update(ctx, store, current, progress)
+	var current *gcloud.MemorystoreInstance
+	err = declared.patched.Apply(ctx, func() error {
+		current, err = instance.service.ReadInstance(ctx, instance.path)
+		switch {
+		case gcloud.Absent(err):
+			if err = p.refusePlacedNetworkAbsent(ctx, clients, declared); err == nil {
+				current, err = instance.create(ctx, clients, declared.desired(), progress)
 			}
+		case err != nil:
+			err = fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)
+		case gcloud.IsSettling(current.State):
+			if current, err = instance.service.ReadSettledInstance(ctx, instance.path, in.Resource.Name); err == nil {
+				if err = instance.refuseInactive(current, clients.Region); err == nil {
+					current, err = instance.update(ctx, declared, current, progress)
+				}
+			}
+		case current.State != gcloud.InstanceActive:
+			err = instance.refuseInactive(current, clients.Region)
+		default:
+			current, err = instance.update(ctx, declared, current, progress)
 		}
-	case current.State != gcloud.InstanceActive:
-		err = instance.refuseInactive(current, clients.Region)
-	default:
-		current, err = instance.update(ctx, store, current, progress)
-	}
+		return err
+	})
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	return instance.readBinding(ctx, current, in.Resource)
+	return instance.readBinding(ctx, current, in.Resource, declared.network(), clients.Region)
 }
 
 func (p *KV) Plan(ctx context.Context, in resources.ProvisionRequest, _ *provider.Binding) (provider.ChangeAction, string, error) {
@@ -240,22 +307,32 @@ func (p *KV) Plan(ctx context.Context, in resources.ProvisionRequest, _ *provide
 	if err != nil {
 		return "", "", err
 	}
+	declared, err := p.declare(ctx, clients, in, store)
+	if err != nil {
+		return "", "", err
+	}
 	current, err := instance.service.ReadInstance(ctx, instance.path)
 	switch {
 	case gcloud.Absent(err):
-		return provider.ActionCreate, "", nil
+		return provider.ActionCreate, "", p.refusePlacedNetworkAbsent(ctx, clients, declared)
 	case err != nil:
 		return "", "", fmt.Errorf("read the Memorystore instance kv %s runs on: %w", in.Resource.Name, err)
-	case gcloud.IsSettling(current.State):
-		_, differences := store.changes(current)
-		settling := "Memorystore instance " + instance.id + " is " + current.State +
-			", so the deploy waits for it to settle and then applies any change to its node type, engine version, engine configs or replica count"
-		return provider.ActionUpdate, strings.Join(append([]string{settling}, differences...), "; "), nil
-	case current.State != gcloud.InstanceActive:
+	case current.State != gcloud.InstanceActive && !gcloud.IsSettling(current.State):
 		return "", "", instance.refuseInactive(current, clients.Region)
 	}
-	if _, differences := store.changes(current); len(differences) > 0 {
-		return provider.ActionUpdate, strings.Join(differences, "; "), nil
+	if err := declared.refuseEndpointMove(instance, current); err != nil {
+		return "", "", err
+	}
+	changes, err := declared.drift(current)
+	if err != nil {
+		return "", "", err
+	}
+	if gcloud.IsSettling(current.State) {
+		settling := "Memorystore instance " + instance.id + " is " + current.State + ", so the deploy waits for it to settle and then applies any change"
+		return provider.ActionUpdate, strings.Join(append([]string{settling}, changes.differences...), "; "), nil
+	}
+	if len(changes.differences) > 0 {
+		return provider.ActionUpdate, strings.Join(changes.differences, "; "), nil
 	}
 	return provider.ActionKeep, provider.ReasonCurrent, nil
 }
@@ -278,24 +355,33 @@ func (i kvInstance) create(ctx context.Context, clients *gcloud.Clients, desired
 	return i.service.ReadInstance(ctx, i.path)
 }
 
-func (i kvInstance) update(ctx context.Context, store kvStore, current *gcloud.MemorystoreInstance, progress progress.Log) (*gcloud.MemorystoreInstance, error) {
-	mask, differences := store.changes(current)
-	if len(differences) == 0 {
-		return current, nil
+func (i kvInstance) update(ctx context.Context, declared declaredStore, current *gcloud.MemorystoreInstance, progress progress.Log) (*gcloud.MemorystoreInstance, error) {
+	if err := declared.refuseEndpointMove(i, current); err != nil {
+		return nil, err
 	}
-	gcloud.EnsureProgress(progress).Say("Updating kv " + i.storeName + " on Memorystore instance " + i.id + ": " + strings.Join(differences, "; "))
-	if len(mask) > 0 {
-		if err := i.patch(ctx, mask, &gcloud.MemorystoreInstance{
-			NodeType:      store.node.nodeType,
-			EngineVersion: store.version,
-			EngineConfigs: store.engineConfigs(),
+	changes, err := declared.drift(current)
+	if err != nil || len(changes.differences) == 0 {
+		return current, err
+	}
+	gcloud.EnsureProgress(progress).Say("Updating kv " + i.storeName + " on Memorystore instance " + i.id + ": " + strings.Join(changes.differences, "; "))
+	desired := declared.desired()
+	if len(changes.engine) > 0 {
+		if err := i.patch(ctx, changes.engine, &gcloud.MemorystoreInstance{
+			NodeType:      desired.NodeType,
+			EngineVersion: desired.EngineVersion,
+			EngineConfigs: desired.EngineConfigs,
 		}); err != nil {
 			return nil, err
 		}
 	}
-	if replicasOf(current) != store.replicas {
-		replicas := store.replicas
+	if changes.replicas {
+		replicas := replicasOf(desired)
 		if err := i.patch(ctx, []string{"replica_count"}, &gcloud.MemorystoreInstance{ReplicaCount: &replicas}); err != nil {
+			return nil, err
+		}
+	}
+	if len(changes.patched.mask) > 0 {
+		if err := i.patch(ctx, changes.patched.mask, &changes.patched.changed); err != nil {
 			return nil, err
 		}
 	}
@@ -323,8 +409,8 @@ func (i kvInstance) refuseInactive(current *gcloud.MemorystoreInstance, region s
 		i.storeName, i.id, current.State, gcloud.InstanceActive, gcloud.InstanceActive, i.id, region)
 }
 
-func (i kvInstance) readBinding(ctx context.Context, current *gcloud.MemorystoreInstance, resource provider.Resource) (provider.Binding, error) {
-	host, port, err := primaryAddressOf(current, resource.Name)
+func (i kvInstance) readBinding(ctx context.Context, current *gcloud.MemorystoreInstance, resource provider.Resource, network, region string) (provider.Binding, error) {
+	host, port, err := primaryAddressOf(current, resource.Name, network, region)
 	if err != nil {
 		return provider.Binding{}, err
 	}
@@ -359,18 +445,20 @@ func (i kvInstance) readBinding(ctx context.Context, current *gcloud.Memorystore
 	}, nil
 }
 
-func primaryAddressOf(instance *gcloud.MemorystoreInstance, store string) (string, int, error) {
+func primaryAddressOf(instance *gcloud.MemorystoreInstance, store, network, region string) (string, int, error) {
 	for _, endpoint := range instance.Endpoints {
 		for _, connection := range endpoint.Connections {
 			auto := connection.PSCAutoConnection
-			if auto == nil || auto.IPAddress == "" || auto.ConnectionType != gcloud.PrimaryEndpoint {
+			if auto == nil || auto.IPAddress == "" || auto.ConnectionType != gcloud.PrimaryEndpoint || auto.Network != "" && auto.Network != network {
 				continue
 			}
 			return auto.IPAddress, cmp.Or(auto.Port, Port), nil
 		}
 	}
 	return "", 0, refusal.Refuse(refusal.CodeNotReady,
-		"the Memorystore instance kv %s runs on has no primary endpoint yet, so nothing names the address an app reaches it at", store)
+		"the Memorystore instance kv %s runs on has no primary endpoint on the %s network yet, so nothing names the address an app reaches it at.\n"+
+			"Check that the %s network has a Memorystore service connection policy in %s, then deploy again",
+		store, path.Base(network), path.Base(network), region)
 }
 
 func newestActiveTokenOf(tokens []gcloud.AuthToken, store string) (string, error) {
@@ -412,23 +500,45 @@ func (p *KV) Remove(ctx context.Context, ref provider.StackRef, binding provider
 		return err
 	}
 	gcloud.EnsureProgress(progress).Say("Removing kv " + binding.Name + ", its Memorystore instance " + instance.id + " and its data")
+	patches := surface.Record{Store: p.records, Key: surface.KeyFor(ref, transformKind, binding.Name)}
+	if err := instance.unprotect(ctx); err != nil {
+		return err
+	}
 	started, err := instance.service.DeleteInstance(ctx, instance.path)
 	if gcloud.Absent(err) {
-		return nil
+		return patches.Forget(ctx)
 	}
 	if err != nil {
 		return fmt.Errorf("delete the Memorystore instance kv %s runs on: %w", binding.Name, err)
 	}
-	_, err = instance.service.Awaited(ctx, "deleting kv "+binding.Name, started)
-	return err
+	if _, err := instance.service.Awaited(ctx, "deleting kv "+binding.Name, started); err != nil {
+		return err
+	}
+	return patches.Forget(ctx)
+}
+
+func (i kvInstance) unprotect(ctx context.Context) error {
+	current, err := i.service.ReadInstance(ctx, i.path)
+	switch {
+	case gcloud.Absent(err):
+		return nil
+	case err != nil:
+		return fmt.Errorf("read the Memorystore instance kv %s runs on: %w", i.storeName, err)
+	case !isProtected(current):
+		return nil
+	}
+	off := false
+	return i.patch(ctx, []string{"deletion_protection_enabled"}, &gcloud.MemorystoreInstance{DeletionProtectionEnabled: &off})
 }
 
 type KV struct {
 	openClients func(ctx context.Context) (*gcloud.Clients, error)
+	records     records.Store
+	skipChecks  bool
 }
 
-func New(openClients func(ctx context.Context) (*gcloud.Clients, error)) *KV {
-	return &KV{openClients: openClients}
+func New(openClients func(ctx context.Context) (*gcloud.Clients, error), store records.Store, skipChecks bool) *KV {
+	return &KV{openClients: openClients, records: store, skipChecks: skipChecks}
 }
 
 func (p *KV) Component() component.Component {
@@ -442,13 +552,15 @@ func (p *KV) Component() component.Component {
 			_, err := readKVStore(resource)
 			return err
 		},
-		Shape: shapeKV,
+		Shape:      shapeKV,
+		Transforms: map[provider.BindingType]*component.Transform{provider.BindingKV: transformTarget()},
 	}
 }
 
 func shapeKV(shape component.Shape, declared []provider.Resource) error {
+	tier := shape.Request.Deploy.Tier
 	for _, resource := range declared {
-		store, err := readKVStoreOn(resource, shape.Request.Deploy.Tier)
+		store, err := readKVStoreOn(resource, tier)
 		if err != nil {
 			return err
 		}
@@ -456,7 +568,16 @@ func shapeKV(shape component.Shape, declared []provider.Resource) error {
 		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.MemorystoreInstanceType, instance, shape.Region, store.shapeProperties(shape.Region))
+		result := shape.Transforms.For(transformKind, resource.Name)
+		known, unknown := storeSurface.SplitOutputs(result.Patches[transformSurface])
+		patched, err := storeSurface.Patch("kv "+resource.Name, *store.instance(shape.Names.Project(), shape.Names.NetworkPath(tier), nil), known, nil, surface.Recorded{})
+		if err != nil {
+			return err
+		}
+		shape.Tree.Add(shape.Environment, shape.Vendor, cost.MemorystoreInstanceType, instance, shape.Region, store.shapeProperties(shape.Region, &patched.Desired),
+			surface.ListPriced(unknown, pricedPaths)...)
 	}
 	return nil
 }
+
+var pricedPaths = map[string]string{"replicaCount": "replica_count"}

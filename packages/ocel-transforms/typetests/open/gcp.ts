@@ -85,3 +85,76 @@ export const realPath: LeafPaths<Unwrap<storage.BucketArgs>> = "versioning.enabl
 
 // @ts-expect-error a path is checked against the args @pulumi/gcp takes
 export const madeUpPath: LeafPaths<Unwrap<storage.BucketArgs>> = "versioning.on";
+
+export const tunedDatabase = defineTransform({
+  gcp: {
+    postgres: {
+      instance: {
+        settings: {
+          tier: "db-custom-2-7680",
+          availabilityType: "ZONAL",
+          diskSize: 50,
+          databaseFlags: [{ name: "log_min_duration_statement", value: "500" }],
+          maintenanceWindow: { day: 7, hour: 3 },
+          backupConfiguration: {
+            startTime: "02:00",
+            backupRetentionSettings: { retainedBackups: 14 },
+          },
+          ipConfiguration: {
+            pscConfigs: [{ pscAutoConnections: [{ consumerNetwork: bindings.custom.network.id }] }],
+          },
+        },
+      },
+    },
+  },
+});
+
+export const ownedDatabaseVersion = defineTransform({
+  gcp: {
+    postgres: {
+      instance: {
+        // @ts-expect-error ocel runs the version the database declares
+        databaseVersion: "POSTGRES_16",
+      },
+    },
+  },
+});
+
+export const ownedPublicAddress = defineTransform({
+  gcp: {
+    postgres: {
+      instance: {
+        settings: {
+          // @ts-expect-error ocel keeps the instance's public address off
+          ipConfiguration: { ipv4Enabled: true },
+        },
+      },
+    },
+  },
+});
+
+export const tunedStore = defineTransform({
+  gcp: {
+    kv: {
+      instance: {
+        replicaCount: 2,
+        zoneDistributionConfig: { mode: "SINGLE_ZONE", zone: "europe-west1-b" },
+        maintenancePolicy: {
+          weeklyMaintenanceWindows: [{ day: "SUNDAY", startTime: { hours: 3 } }],
+        },
+        desiredAutoCreatedEndpoints: [{ network: "shared" }],
+      },
+    },
+  },
+});
+
+export const ownedPersistence = defineTransform({
+  gcp: {
+    kv: {
+      instance: {
+        // @ts-expect-error append-only persistence is ocel's promise for a store
+        persistenceConfig: { mode: "RDB" },
+      },
+    },
+  },
+});

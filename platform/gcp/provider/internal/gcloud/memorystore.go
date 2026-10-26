@@ -49,6 +49,40 @@ type MemorystoreInstance struct {
 	PersistenceConfig         *PersistenceConfig `json:"persistenceConfig,omitempty"`
 	DeletionProtectionEnabled *bool              `json:"deletionProtectionEnabled,omitempty"`
 	Endpoints                 []InstanceEndpoint `json:"endpoints,omitempty"`
+	ZoneDistributionConfig    *ZoneDistribution  `json:"zoneDistributionConfig,omitempty"`
+	MaintenancePolicy         *MaintenancePolicy `json:"maintenancePolicy,omitempty"`
+	AutomatedBackupConfig     *AutomatedBackups  `json:"automatedBackupConfig,omitempty"`
+}
+
+type ZoneDistribution struct {
+	Mode string `json:"mode,omitempty"`
+	Zone string `json:"zone,omitempty"`
+}
+
+type MaintenancePolicy struct {
+	WeeklyMaintenanceWindow []WeeklyMaintenanceWindow `json:"weeklyMaintenanceWindow,omitempty"`
+}
+
+type WeeklyMaintenanceWindow struct {
+	Day       string     `json:"day,omitempty"`
+	StartTime *TimeOfDay `json:"startTime,omitempty"`
+}
+
+type TimeOfDay struct {
+	Hours   int `json:"hours,omitempty"`
+	Minutes int `json:"minutes,omitempty"`
+	Seconds int `json:"seconds,omitempty"`
+	Nanos   int `json:"nanos,omitempty"`
+}
+
+type AutomatedBackups struct {
+	AutomatedBackupMode    string                `json:"automatedBackupMode,omitempty"`
+	FixedFrequencySchedule *FixedFrequencyBackup `json:"fixedFrequencySchedule,omitempty"`
+	Retention              string                `json:"retention,omitempty"`
+}
+
+type FixedFrequencyBackup struct {
+	StartTime *TimeOfDay `json:"startTime,omitempty"`
 }
 
 type PersistenceConfig struct {

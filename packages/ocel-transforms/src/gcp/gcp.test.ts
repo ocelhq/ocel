@@ -96,3 +96,100 @@ describe("the gcp branch", () => {
     expect(() => evaluate(request(), modules)).toThrow(/gcp\.bucket\.bucket\.location/);
   });
 });
+
+describe("the gcp branch for a database and a store", () => {
+  function requesting(type: string, name: string): EvaluateRequest {
+    return {
+      provider: "gcp",
+      envTier: "production",
+      env: "production",
+      resources: [{ type, name }],
+    };
+  }
+
+  it("hands the provider a database's Cloud SQL instance settings", () => {
+    const modules = [
+      module(
+        "./database.transform.ts",
+        defineTransform({
+          gcp: {
+            postgres: {
+              instance: {
+                settings: {
+                  tier: "db-custom-2-7680",
+                  databaseFlags: [{ name: "log_min_duration_statement", value: "500" }],
+                  ipConfiguration: {
+                    pscConfigs: [{ pscAutoConnections: [{ consumerNetwork: "shared" }] }],
+                  },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ];
+
+    expect(evaluate(requesting("postgres", "orders"), modules).resources[0]?.patches).toEqual({
+      instance: {
+        settings: {
+          tier: "db-custom-2-7680",
+          databaseFlags: [{ name: "log_min_duration_statement", value: "500" }],
+          ipConfiguration: {
+            pscConfigs: [{ pscAutoConnections: [{ consumerNetwork: "shared" }] }],
+          },
+        },
+      },
+    });
+  });
+
+  it("refuses a database setting ocel owns, by name", () => {
+    const modules = [
+      module(
+        "./owned.transform.ts",
+        defineTransform({
+          gcp: {
+            postgres: {
+              instance: { settings: { ipConfiguration: { ipv4Enabled: true } } } as never,
+            },
+          },
+        }),
+      ),
+    ];
+
+    expect(() => evaluate(requesting("postgres", "orders"), modules)).toThrow(
+      /gcp\.postgres\.instance\.settings\.ipConfiguration\.ipv4Enabled/,
+    );
+  });
+
+  it("hands the provider a store's replicas and the network it is placed on", () => {
+    const modules = [
+      module(
+        "./store.transform.ts",
+        defineTransform({
+          gcp: {
+            kv: {
+              instance: { replicaCount: 2, desiredAutoCreatedEndpoints: [{ network: "shared" }] },
+            },
+          },
+        }),
+      ),
+    ];
+
+    expect(evaluate(requesting("kv", "cache"), modules).resources[0]?.patches).toEqual({
+      instance: { replicaCount: 2, desiredAutoCreatedEndpoints: [{ network: "shared" }] },
+    });
+  });
+
+  it("refuses a store setting ocel owns, by name", () => {
+    const modules = [
+      module(
+        "./owned.transform.ts",
+        defineTransform({ gcp: { kv: { instance: { nodeType: "STANDARD_SMALL" } as never } } }),
+      ),
+    ];
+
+    expect(() => evaluate(requesting("kv", "cache"), modules)).toThrow(
+      /gcp\.kv\.instance\.nodeType/,
+    );
+  });
+});
