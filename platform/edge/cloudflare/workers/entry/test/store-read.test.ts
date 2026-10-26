@@ -83,6 +83,14 @@ describe("reading a page from the durable store on a Serve miss", () => {
     expect(answer?.response.headers.has("x-next-cache-tags")).toBe(false);
   });
 
+  it("reads a page under /index at the key Next's cache handler writes it by", async () => {
+    const { deps } = harness({ [key("index/index/foo")]: entry() });
+
+    const answer = await readFromStore(call({ entryPath: "/index/foo" }), deps);
+
+    expect(await answer?.response.text()).toBe("<html>page</html>");
+  });
+
   it("answers an RSC request with the entry's flight payload", async () => {
     const { deps } = harness({ [key("blog/a")]: entry() });
 
