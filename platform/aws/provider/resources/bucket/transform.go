@@ -4,6 +4,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
@@ -33,8 +34,8 @@ func namesOf(bucket component.Name) Names {
 	return Names{Bucket: bucket, Completer: bucket.Child(uploadCompleterSuffix)}
 }
 
-func (n Names) Surfaces() map[string][]component.ResourceRef {
-	return map[string][]component.ResourceRef{
+func (n Names) Surfaces() map[string][]ocelpulumi.ResourceRef {
+	return map[string][]ocelpulumi.ResourceRef{
 		"bucket":                        {n.bucket()},
 		"publicAccessBlock":             {{Token: component.TokenS3PublicAccess, Name: n.Bucket.Part(publicAccessBlockPart)}},
 		"cors":                          {{Token: component.TokenS3CORS, Name: n.Bucket.Part(corsPart)}},
@@ -49,14 +50,14 @@ func (n Names) Surfaces() map[string][]component.ResourceRef {
 	}
 }
 
-func (n Names) bucket() component.ResourceRef {
-	return component.ResourceRef{Token: component.TokenS3Bucket, Name: n.Bucket.Pulumi}
+func (n Names) bucket() ocelpulumi.ResourceRef {
+	return ocelpulumi.ResourceRef{Token: component.TokenS3Bucket, Name: n.Bucket.Pulumi}
 }
 
-func (n Names) completer() component.ResourceRef {
-	return component.ResourceRef{Token: component.TokenLambdaFunction, Name: n.Completer.Pulumi}
+func (n Names) completer() ocelpulumi.ResourceRef {
+	return ocelpulumi.ResourceRef{Token: component.TokenLambdaFunction, Name: n.Completer.Pulumi}
 }
 
-func (n Names) completerLogGroup() component.ResourceRef {
-	return component.ResourceRef{Token: component.TokenLogGroup, Name: component.LambdaLogGroupName(n.Completer).Pulumi}
+func (n Names) completerLogGroup() ocelpulumi.ResourceRef {
+	return ocelpulumi.ResourceRef{Token: component.TokenLogGroup, Name: component.LambdaLogGroupName(n.Completer).Pulumi}
 }

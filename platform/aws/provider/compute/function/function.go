@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
@@ -389,12 +390,12 @@ func NamesFor(namespace, project string, stack naming.StackName, logicalName str
 	return Names{Function: component.NameOf(function), Role: role}, nil
 }
 
-func (n Names) Surfaces() map[string][]component.ResourceRef {
-	var urlPermissions []component.ResourceRef
+func (n Names) Surfaces() map[string][]ocelpulumi.ResourceRef {
+	var urlPermissions []ocelpulumi.ResourceRef
 	for _, permission := range functionurl.Public() {
-		urlPermissions = append(urlPermissions, component.ResourceRef{Token: component.TokenLambdaPermission, Name: urlPermissionName(n.Function, permission)})
+		urlPermissions = append(urlPermissions, ocelpulumi.ResourceRef{Token: component.TokenLambdaPermission, Name: urlPermissionName(n.Function, permission)})
 	}
-	return map[string][]component.ResourceRef{
+	return map[string][]ocelpulumi.ResourceRef{
 		"lambda":        {n.Lambda()},
 		"url":           {n.URL()},
 		"urlPermission": urlPermissions,
@@ -403,16 +404,16 @@ func (n Names) Surfaces() map[string][]component.ResourceRef {
 	}
 }
 
-func (n Names) Lambda() component.ResourceRef {
-	return component.ResourceRef{Token: component.TokenLambdaFunction, Name: n.Function.Pulumi}
+func (n Names) Lambda() ocelpulumi.ResourceRef {
+	return ocelpulumi.ResourceRef{Token: component.TokenLambdaFunction, Name: n.Function.Pulumi}
 }
 
-func (n Names) URL() component.ResourceRef {
-	return component.ResourceRef{Token: component.TokenLambdaFunctionURL, Name: n.Function.Part(urlPart)}
+func (n Names) URL() ocelpulumi.ResourceRef {
+	return ocelpulumi.ResourceRef{Token: component.TokenLambdaFunctionURL, Name: n.Function.Part(urlPart)}
 }
 
-func (n Names) LogGroup() component.ResourceRef {
-	return component.ResourceRef{Token: component.TokenLogGroup, Name: component.LambdaLogGroupName(n.Function).Pulumi}
+func (n Names) LogGroup() ocelpulumi.ResourceRef {
+	return ocelpulumi.ResourceRef{Token: component.TokenLogGroup, Name: component.LambdaLogGroupName(n.Function).Pulumi}
 }
 
 func urlPermissionName(function component.Name, permission functionurl.Permission) string {

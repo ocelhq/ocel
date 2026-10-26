@@ -24,9 +24,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
@@ -314,7 +314,7 @@ func namedFunction(stack naming.StackName, logical string) string {
 	return names.Function.Pulumi
 }
 
-func mustFunctionNames(t *testing.T, stack naming.StackName, logical string) map[string][]component.ResourceRef {
+func mustFunctionNames(t *testing.T, stack naming.StackName, logical string) map[string][]ocelpulumi.ResourceRef {
 	t.Helper()
 	names, err := function.NamesFor(testNamespace, "shop", stack, logical)
 	if err != nil {

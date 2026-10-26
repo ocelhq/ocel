@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
@@ -148,7 +149,7 @@ func namedRole(stack naming.StackName) component.Name {
 	return name
 }
 
-func mustSurfaces(t *testing.T, stack naming.StackName, logical string) map[string][]component.ResourceRef {
+func mustSurfaces(t *testing.T, stack naming.StackName, logical string) map[string][]ocelpulumi.ResourceRef {
 	t.Helper()
 	names, err := NamesFor(testNamespace, "shop", stack, logical)
 	if err != nil {

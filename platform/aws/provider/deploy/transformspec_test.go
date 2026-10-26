@@ -97,7 +97,7 @@ func (e patchingPass) Evaluate(_ context.Context, req transform.Request) ([]tran
 
 func placeholderFor(kind, name, property string) map[string]any {
 	return map[string]any{
-		outputPlaceholderKey: map[string]any{"type": kind, "name": name, "property": property},
+		"$ocelOutput": map[string]any{"type": kind, "name": name, "property": property},
 	}
 }
 
@@ -155,7 +155,7 @@ func TestAPatchLandsOnThePulumiResourceThatOcelConstructsForIt(t *testing.T) {
 		t.Fatalf("transformStackSpec() = %v", err)
 	}
 	names := mustFunctionNames(t, specUnderTransform().Ref.Name, "fn--api--users")
-	patch, claimed := transformed.patches[names["lambda"][0]]
+	patch, claimed := transformed.patched.For(names["lambda"][0])
 	if !claimed {
 		t.Fatalf("nothing was claimed for %q, want the lambda patch", names["lambda"][0])
 	}
@@ -211,7 +211,7 @@ func TestABucketWithNoDeclaredOriginsCanStillBeGivenCORSByATransform(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, registered := transformed.patches[target.Names["cors"][0]]; !registered {
+	if _, registered := transformed.patched.For(target.Names["cors"][0]); !registered {
 		t.Error("nothing was registered for the bucket's cors resource")
 	}
 }
@@ -223,13 +223,13 @@ func TestATransformReadsABindingOutputThroughTheSpecsOwnBindings(t *testing.T) {
 	spec := specUnderTransform()
 	spec.Bindings = bindings
 
-	transformed, err := transformStackSpec(context.Background(), testNamespace, testAccount, filledFromBinding(customBindingType, "legacy", "runtime"), awsresources.Registry(awsresources.Clients{}), spec)
+	transformed, err := transformStackSpec(context.Background(), testNamespace, testAccount, filledFromBinding("custom", "legacy", "runtime"), awsresources.Registry(awsresources.Clients{}), spec)
 	if err != nil {
 		t.Fatalf("transformStackSpec() = %v", err)
 	}
 	names := mustFunctionNames(t, spec.Ref.Name, "fn--api--users")
-	if got := transformed.patches[names["lambda"][0]]["runtime"]; got != "nodejs22.x" {
-		t.Errorf("the function runs %q, want the value the published binding records", got)
+	if got, _ := transformed.patched.For(names["lambda"][0]); got["runtime"] != "nodejs22.x" {
+		t.Errorf("the function runs %q, want the value the published binding records", got["runtime"])
 	}
 	if len(bindings.asked) != 1 || bindings.asked[0] != "legacy" {
 		t.Fatalf("the pass asked the spec's bindings for %v, want the one output the transform named", bindings.asked)
@@ -241,7 +241,7 @@ func TestATransformReadingABindingThisSpecProvisionsIsRefused(t *testing.T) {
 	spec.Bindings = &publishedReader{}
 
 	_, err := transformStackSpec(context.Background(), testNamespace, testAccount, filledFromBinding("postgres", "db", "runtime"), awsresources.Registry(awsresources.Clients{}), spec)
-	var provisioned *ProvisionedOutputError
+	var provisioned *transform.ProvisionedOutputError
 	if !errors.As(err, &provisioned) {
 		t.Fatalf("transformStackSpec() = %v, want it refused: this spec provisions \"db\" itself, so its outputs are not there to read", err)
 	}
@@ -253,7 +253,7 @@ func TestATransformReadingABindingThisProjectNeverBoundIsRefused(t *testing.T) {
 	spec.Bindings = &publishedReader{}
 
 	_, err := transformStackSpec(context.Background(), testNamespace, testAccount, filledFromBinding("postgres", "orders", "runtime"), awsresources.Registry(awsresources.Clients{}), spec)
-	var unbound *UnboundOutputError
+	var unbound *transform.UnboundOutputError
 	if !errors.As(err, &unbound) {
 		t.Fatalf("transformStackSpec() = %v, want an unbound-output refusal", err)
 	}
@@ -268,8 +268,8 @@ func TestATransformReadingAnUnpublishedRecordNamesWhatIsPublished(t *testing.T) 
 		{Type: provider.BindingBucket, Name: "archive", Properties: map[string]string{"bucket": "archive-bucket"}},
 	}}
 
-	_, err := transformStackSpec(context.Background(), testNamespace, testAccount, filledFromBinding(customBindingType, "absent", "runtime"), awsresources.Registry(awsresources.Clients{}), spec)
-	var unpublished *UnpublishedOutputError
+	_, err := transformStackSpec(context.Background(), testNamespace, testAccount, filledFromBinding("custom", "absent", "runtime"), awsresources.Registry(awsresources.Clients{}), spec)
+	var unpublished *transform.UnpublishedOutputError
 	if !errors.As(err, &unpublished) {
 		t.Fatalf("transformStackSpec() = %v, want an unpublished-output refusal", err)
 	}
@@ -290,8 +290,8 @@ func TestATransformReadsABoundResourceUnderTheNameItIsPublishedAs(t *testing.T) 
 		t.Fatalf("transformStackSpec() = %v, want the bound resource's own published record read", err)
 	}
 	names := mustFunctionNames(t, spec.Ref.Name, "fn--api--users")
-	if got := transformed.patches[names["lambda"][0]]["runtime"]; got != "nodejs22.x" {
-		t.Errorf("the function runs %q, want the value the bound record has", got)
+	if got, _ := transformed.patched.For(names["lambda"][0]); got["runtime"] != "nodejs22.x" {
+		t.Errorf("the function runs %q, want the value the bound record has", got["runtime"])
 	}
 }
 
@@ -303,11 +303,11 @@ func TestAStoreThatFailsToResolveABindingIsNotReportedAsABadProperty(t *testing.
 		failure:  torn,
 	}
 
-	_, err := transformStackSpec(context.Background(), testNamespace, testAccount, filledFromBinding(customBindingType, "legacy", "runtime"), awsresources.Registry(awsresources.Clients{}), spec)
+	_, err := transformStackSpec(context.Background(), testNamespace, testAccount, filledFromBinding("custom", "legacy", "runtime"), awsresources.Registry(awsresources.Clients{}), spec)
 	if !errors.Is(err, torn) {
 		t.Fatalf("transformStackSpec() = %v, want the store's own failure returned", err)
 	}
-	var property *OutputPropertyError
+	var property *transform.OutputPropertyError
 	if errors.As(err, &property) {
 		t.Error("a store that could not be read was reported as a record missing a property")
 	}
@@ -321,8 +321,8 @@ func TestABindingWithNoSuchPropertyNamesWhatItDoesHave(t *testing.T) {
 		Properties: map[string]string{"host": "db.internal", "port": "5432"},
 	}}}
 
-	_, err := transformStackSpec(context.Background(), testNamespace, testAccount, filledFromBinding(customBindingType, "legacy", "runtime"), awsresources.Registry(awsresources.Clients{}), spec)
-	var property *OutputPropertyError
+	_, err := transformStackSpec(context.Background(), testNamespace, testAccount, filledFromBinding("custom", "legacy", "runtime"), awsresources.Registry(awsresources.Clients{}), spec)
+	var property *transform.OutputPropertyError
 	if !errors.As(err, &property) {
 		t.Fatalf("transformStackSpec() = %v, want an OutputPropertyError", err)
 	}
@@ -339,7 +339,7 @@ func TestEveryOutputOffTheSameBindingResolvesItOnce(t *testing.T) {
 	spec.Bindings = bindings
 
 	pass := patchingPass{patch: func(patches []transform.Patches) {
-		placeholder := placeholderFor(customBindingType, "legacy", "runtime")
+		placeholder := placeholderFor("custom", "legacy", "runtime")
 		patches[len(patches)-1]["lambda"] = map[string]any{
 			"runtime":     placeholder,
 			"description": placeholder,

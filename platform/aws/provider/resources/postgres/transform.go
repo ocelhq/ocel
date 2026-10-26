@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"github.com/ocelhq/ocel/pkg/naming"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
@@ -25,8 +26,8 @@ func NamesFor(at component.Stack, logicalName string) (Names, error) {
 	}, nil
 }
 
-func (n Names) Surfaces() map[string][]component.ResourceRef {
-	return map[string][]component.ResourceRef{
+func (n Names) Surfaces() map[string][]ocelpulumi.ResourceRef {
+	return map[string][]ocelpulumi.ResourceRef{
 		"securityGroup": {n.securityGroup()},
 		"subnetGroup":   {n.subnetGroup()},
 		"cluster":       {n.cluster()},
@@ -34,18 +35,18 @@ func (n Names) Surfaces() map[string][]component.ResourceRef {
 	}
 }
 
-func (n Names) securityGroup() component.ResourceRef {
-	return component.ResourceRef{Token: component.TokenEC2SecurityGroup, Name: n.SecurityGroup}
+func (n Names) securityGroup() ocelpulumi.ResourceRef {
+	return ocelpulumi.ResourceRef{Token: component.TokenEC2SecurityGroup, Name: n.SecurityGroup}
 }
 
-func (n Names) subnetGroup() component.ResourceRef {
-	return component.ResourceRef{Token: component.TokenRDSSubnetGroup, Name: n.Subnets}
+func (n Names) subnetGroup() ocelpulumi.ResourceRef {
+	return ocelpulumi.ResourceRef{Token: component.TokenRDSSubnetGroup, Name: n.Subnets}
 }
 
-func (n Names) cluster() component.ResourceRef {
-	return component.ResourceRef{Token: component.TokenRDSCluster, Name: n.Cluster}
+func (n Names) cluster() ocelpulumi.ResourceRef {
+	return ocelpulumi.ResourceRef{Token: component.TokenRDSCluster, Name: n.Cluster}
 }
 
-func (n Names) instance() component.ResourceRef {
-	return component.ResourceRef{Token: component.TokenRDSClusterMember, Name: n.Instance}
+func (n Names) instance() ocelpulumi.ResourceRef {
+	return ocelpulumi.ResourceRef{Token: component.TokenRDSClusterMember, Name: n.Instance}
 }

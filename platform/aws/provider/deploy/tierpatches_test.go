@@ -11,9 +11,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
@@ -80,9 +80,8 @@ func TestATransformPatchesTheTiersNetworkAndEveryZoneOfASubnetKindItNames(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	indexed.claimed = map[component.ResourceRef]bool{}
-	claimed := func(ref component.ResourceRef, field string) bool {
-		merged, ok := indexed.claim(ref, pulumi.Map{})
+	claimed := func(ref ocelpulumi.ResourceRef, field string) bool {
+		merged, ok := indexed.patched.Claim(ref, pulumi.Map{})
 		_, set := merged[field]
 		return ok && set
 	}
@@ -177,7 +176,7 @@ func TestATransformThatPatchesTheNetworkFromABindingIsRefused(t *testing.T) {
 	t.Parallel()
 
 	pass := &fixedPass{result: transform.Result{Patches: transform.Patches{
-		"vpc": {"ipv6IpamPoolId": map[string]any{outputPlaceholderKey: map[string]any{"type": "custom", "name": "ipam", "property": "pool"}}},
+		"vpc": {"ipv6IpamPoolId": placeholderFor("custom", "ipam", "pool")},
 	}}}
 	_, err := evaluateTierPatches(context.Background(), pass, testNamespace, environment.TierProduction)
 	var refused refusal.Refusal

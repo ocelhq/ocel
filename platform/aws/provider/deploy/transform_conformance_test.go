@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
@@ -37,7 +38,7 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 	t.Parallel()
 
 	at := component.Stack{Ref: provider.StackRef{Tier: environment.TierProduction}, Namespace: testNamespace, Project: "proj", Env: "prod"}
-	transformed := func(c component.Component, declared provider.Resource) map[string][]component.ResourceRef {
+	transformed := func(c component.Component, declared provider.Resource) map[string][]pulumi.ResourceRef {
 		target, err := c.Transform(at, declared)
 		if err != nil {
 			t.Fatal(err)
@@ -52,7 +53,7 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rendered := map[string]map[string][]component.ResourceRef{
+	rendered := map[string]map[string][]pulumi.ResourceRef{
 		transformTypeFunction:  functionNames.Surfaces(),
 		transformTypeContainer: containerNames.Surfaces(),
 		"bucket":               transformed(bucket.New(component.Artifacts{}), provider.Resource{Name: "uploads", Type: provider.BindingBucket}),
@@ -88,7 +89,7 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 	}
 
 	filled := make([]transform.Result, len(results))
-	wanted := map[component.ResourceRef]bool{}
+	wanted := map[pulumi.ResourceRef]bool{}
 	for i, result := range results {
 		patches := transform.Patches{}
 		for key := range result.Patches {
@@ -105,11 +106,11 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 		t.Fatalf("index the patches every key names: %v", err)
 	}
 	for ref := range wanted {
-		if _, registered := indexed.patches[ref]; !registered {
+		if _, registered := indexed.patched.For(ref); !registered {
 			t.Errorf("nothing was registered for %s %s, so a patch on it would reach no resource", ref.Token, ref.Name)
 		}
 	}
-	if len(indexed.patches) != len(wanted) {
-		t.Errorf("indexPatches registered %d resources for the %d the keys name", len(indexed.patches), len(wanted))
+	if indexed.patched.Len() != len(wanted) {
+		t.Errorf("indexPatches registered %d resources for the %d the keys name", indexed.patched.Len(), len(wanted))
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
@@ -40,8 +41,8 @@ type ShapeScopes struct {
 }
 
 type shapedPatches struct {
-	patches map[component.ResourceRef]map[string]any
-	unknown map[component.ResourceRef][]string
+	patches map[ocelpulumi.ResourceRef]map[string]any
+	unknown map[ocelpulumi.ResourceRef][]string
 }
 
 func Shape(ctx context.Context, pass transform.Pass, namespace, region string, req provider.ShapeRequest, tree *pricing.Tree, scopes ShapeScopes) error {
@@ -99,7 +100,7 @@ type costShape struct {
 	patched shapedPatches
 }
 
-func (s costShape) Add(scope, typ, name string, properties map[string]any, ref component.ResourceRef) {
+func (s costShape) Add(scope, typ, name string, properties map[string]any, ref ocelpulumi.ResourceRef) {
 	unknown := s.patched.unknown[ref]
 	for key, value := range s.patched.patches[ref] {
 		field := snake(key)
@@ -296,7 +297,7 @@ func reachesVPCFromFunctions(req provider.ShapeRequest) bool {
 }
 
 func shapeTransforms(ctx context.Context, pass transform.Pass, registry component.Registry, at component.Stack, req provider.ShapeRequest) (shapedPatches, error) {
-	collected := shapedPatches{patches: map[component.ResourceRef]map[string]any{}, unknown: map[component.ResourceRef][]string{}}
+	collected := shapedPatches{patches: map[ocelpulumi.ResourceRef]map[string]any{}, unknown: map[ocelpulumi.ResourceRef][]string{}}
 	if pass == nil {
 		return collected, nil
 	}
@@ -345,8 +346,8 @@ func shapeTransforms(ctx context.Context, pass transform.Pass, registry componen
 	if len(results) != len(candidates) {
 		return collected, refusal.Refuse(refusal.CodeInvalid, "transforms returned %d results for %d resources", len(results), len(candidates))
 	}
-	unresolved := map[outputSite]bool{}
-	if err := walkOutputs(candidates, results, func(_ outputRef, at outputSite, authored any) (any, error) {
+	unresolved := map[transform.OutputSite]bool{}
+	if err := transform.WalkOutputs(request, results, func(_ transform.OutputRef, at transform.OutputSite, authored any) (any, error) {
 		unresolved[at] = true
 		return authored, nil
 	}); err != nil {
@@ -361,7 +362,7 @@ func shapeTransforms(ctx context.Context, pass transform.Pass, registry componen
 			}
 			for _, ref := range refs {
 				for field, value := range results[i].Patches[key] {
-					if unresolved[outputSite{Resource: candidate.key.Name, Surface: key, Field: field}] {
+					if unresolved[transform.OutputSite{Resource: candidate.key.Name, Surface: key, Field: field}] {
 						collected.unknown[ref] = append(collected.unknown[ref], snake(field))
 						continue
 					}

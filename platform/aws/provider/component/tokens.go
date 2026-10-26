@@ -27,11 +27,6 @@ const (
 	TokenAppSyncChannelNamespace     = "aws:appsync/channelNamespace:ChannelNamespace"
 )
 
-type ResourceRef struct {
-	Token string
-	Name  string
-}
-
 const (
 	TerraformLambdaFunction              = "aws_lambda_function"
 	TerraformSecurityGroup               = "aws_security_group"

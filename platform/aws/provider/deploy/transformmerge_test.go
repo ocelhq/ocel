@@ -1,42 +1,13 @@
 package deploy
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
-
-func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
-	t.Parallel()
-
-	if !emptyOutput(nil) {
-		t.Fatal("emptyOutput(nil) = false, and a record containing an explicit null would land in the patch as one")
-	}
-
-	stack := specUnderTransform().Ref.Name
-	candidates := []transformCandidate{
-		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: mustFunctionNames(t, stack, "fn--api--users")},
-	}
-	results := []transform.Result{{Patches: transform.Patches{
-		"lambda": map[string]any{"description": placeholderFor(customBindingType, "legacy", "subnetIds")},
-	}}}
-
-	err := resolveSpecOutputs(t.Context(), provider.StackSpec{
-		Bindings: &publishedReader{bindings: []provider.Binding{
-			{Type: provider.BindingPostgres, Name: "legacy", Properties: map[string]string{"subnetIds": ""}},
-		}},
-	}, candidates, results)
-	var empty *EmptyOutputError
-	if !errors.As(err, &empty) {
-		t.Fatalf("resolvePlanOutputs() = %v, want an EmptyOutputError rather than a null in the patch", err)
-	}
-}
 
 func mergedValue(t *testing.T, input sdk.Input) any {
 	t.Helper()
@@ -80,137 +51,6 @@ func awaited(t *testing.T, out sdk.AnyOutput) any {
 	case <-t.Context().Done():
 		t.Fatal("the merged value never resolved")
 		return nil
-	}
-}
-
-func TestTheMergeLayersAPatchOntoWhatOcelPlanned(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name  string
-		props sdk.Map
-		patch map[string]any
-		want  map[string]any
-	}{
-		{
-			name:  "a nested map keeps the siblings ocel filled",
-			props: sdk.Map{"scaling": sdk.Map{"minCapacity": sdk.Float64(0.5), "maxCapacity": sdk.Float64(4)}},
-			patch: map[string]any{"scaling": map[string]any{"minCapacity": float64(2)}},
-			want:  map[string]any{"scaling": map[string]any{"minCapacity": float64(2), "maxCapacity": float64(4)}},
-		},
-		{
-			name:  "a scalar replaces what ocel planned",
-			props: sdk.Map{"memorySize": sdk.Int(512)},
-			patch: map[string]any{"memorySize": float64(2048)},
-			want:  map[string]any{"memorySize": float64(2048)},
-		},
-		{
-			name:  "an array replaces rather than appends",
-			props: sdk.Map{"subnetIds": sdk.Array{sdk.String("a"), sdk.String("b")}},
-			patch: map[string]any{"subnetIds": []any{"c"}},
-			want:  map[string]any{"subnetIds": []any{"c"}},
-		},
-		{
-			name:  "a field ocel never set passes through",
-			props: sdk.Map{"memorySize": sdk.Int(512)},
-			patch: map[string]any{"timeout": float64(60)},
-			want:  map[string]any{"memorySize": 512, "timeout": float64(60)},
-		},
-		{
-			name:  "a nested patch over a value that is not a map replaces it whole",
-			props: sdk.Map{"vpcConfig": sdk.String("none")},
-			patch: map[string]any{"vpcConfig": map[string]any{"subnetIds": []any{"a"}}},
-			want:  map[string]any{"vpcConfig": map[string]any{"subnetIds": []any{"a"}}},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := mergedValue(t, mergeProps(tc.props, tc.patch))
-			merged, mapped := got.(map[string]any)
-			if !mapped {
-				t.Fatalf("mergeProps() = %#v, want a map", got)
-			}
-			if len(merged) != len(tc.want) {
-				t.Fatalf("mergeProps() = %#v, want %#v", merged, tc.want)
-			}
-			for key, want := range tc.want {
-				if !sameValue(merged[key], want) {
-					t.Errorf("mergeProps()[%q] = %#v, want %#v", key, merged[key], want)
-				}
-			}
-		})
-	}
-}
-
-func patchedFor(ref component.ResourceRef, patch map[string]any) *transformPatches {
-	return &transformPatches{
-		patches: map[component.ResourceRef]map[string]any{ref: patch},
-		sites:   map[component.ResourceRef]string{ref: "function api's lambda"},
-	}
-}
-
-func TestInstallRegistersATransformThatMergesTheClaimedResource(t *testing.T) {
-	t.Parallel()
-
-	ref := component.ResourceRef{Token: component.TokenLambdaFunction, Name: "shop-prod-api"}
-	patches := patchedFor(ref, map[string]any{"memorySize": float64(2048)})
-
-	registered := false
-	err := sdk.RunErr(func(pctx *sdk.Context) error {
-		if err := patches.install(pctx); err != nil {
-			return err
-		}
-		registered = true
-		return nil
-	}, sdk.WithMocks("shop", "prod--api", &inputRecorder{}))
-	if err != nil {
-		t.Fatalf("install() = %v", err)
-	}
-	if !registered {
-		t.Fatal("install() registered nothing, and a transform that registers nothing patches nothing")
-	}
-
-	merged, claimed := patches.claim(ref, sdk.Map{"memorySize": sdk.Int(512)})
-	if !claimed {
-		t.Fatal("the registered transform passed over the resource its patch names")
-	}
-	if got := mergedValue(t, merged["memorySize"]); !sameValue(got, float64(2048)) {
-		t.Errorf("memorySize = %#v, want the patched 2048", got)
-	}
-	if err := patches.refuseUnclaimed(); err != nil {
-		t.Errorf("refuseUnclaimed() = %v after the patch was claimed", err)
-	}
-}
-
-func TestAPatchNothingInTheProgramMatchesIsRefusedRatherThanDroppped(t *testing.T) {
-	t.Parallel()
-
-	ref := component.ResourceRef{Token: component.TokenLambdaFunction, Name: "shop-prod-api"}
-	patches := patchedFor(ref, map[string]any{"memorySize": float64(2048)})
-
-	if err := sdk.RunErr(func(pctx *sdk.Context) error {
-		return patches.install(pctx)
-	}, sdk.WithMocks("shop", "prod--api", &inputRecorder{})); err != nil {
-		t.Fatalf("install() = %v", err)
-	}
-
-	err := patches.refuseUnclaimed()
-	if err == nil {
-		t.Fatal("a patch that reached no resource passed silently, and a transform nothing applies is a deploy the user did not get")
-	}
-	if !strings.Contains(err.Error(), "function api's lambda") {
-		t.Errorf("refuseUnclaimed() = %v, want the patch named by where it was written", err)
-	}
-}
-
-func TestAResourceSharingANameWithAPatchedOneIsLeftAlone(t *testing.T) {
-	t.Parallel()
-
-	patches := patchedFor(component.ResourceRef{Token: component.TokenLambdaFunction, Name: "shared"}, map[string]any{"memorySize": float64(2048)})
-	patches.claimed = map[component.ResourceRef]bool{}
-
-	if _, claimed := patches.claim(component.ResourceRef{Token: component.TokenLogGroup, Name: "shared"}, sdk.Map{}); claimed {
-		t.Fatal("a log group claimed the lambda's patch because they share a name")
 	}
 }
 

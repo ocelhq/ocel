@@ -33,10 +33,3 @@ func quoteAll(names []string) string {
 	}
 	return strings.Join(quoted, ", ")
 }
-
-func describeCoordinate(tier, environment string) string {
-	if environment == "" {
-		return tier
-	}
-	return tier + "/" + environment
-}

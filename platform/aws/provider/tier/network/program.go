@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
@@ -185,23 +186,23 @@ func (w *work) run(ctx *pulumi.Context) error {
 	return nil
 }
 
-func ResourceNames(namespace string, tier environment.Tier) map[string][]component.ResourceRef {
+func ResourceNames(namespace string, tier environment.Tier) map[string][]ocelpulumi.ResourceRef {
 	name := func(words ...string) string { return nameFor(namespace, tier, words...) }
-	names := map[string][]component.ResourceRef{
+	names := map[string][]ocelpulumi.ResourceRef{
 		"vpc":                {{Token: tokenVPC, Name: name()}},
 		"internetGateway":    {{Token: tokenInternetGateway, Name: component.NameOf(name()).Part(gatewayPart)}},
 		"publicRouteTable":   {{Token: tokenRouteTable, Name: name(publicWord)}},
 		"isolatedRouteTable": {{Token: tokenRouteTable, Name: name(isolatedWord)}},
 	}
 	for _, service := range endpointServices {
-		names[service+"Endpoint"] = []component.ResourceRef{{Token: tokenVPCEndpoint, Name: name(service)}}
+		names[service+"Endpoint"] = []ocelpulumi.ResourceRef{{Token: tokenVPCEndpoint, Name: name(service)}}
 	}
 	for i := range Zones {
 		n := strconv.Itoa(i + 1)
 		for _, role := range []string{publicWord, privateWord, isolatedWord} {
-			names[role+"Subnet"] = append(names[role+"Subnet"], component.ResourceRef{Token: tokenSubnet, Name: name(role, n)})
+			names[role+"Subnet"] = append(names[role+"Subnet"], ocelpulumi.ResourceRef{Token: tokenSubnet, Name: name(role, n)})
 		}
-		names["privateRouteTable"] = append(names["privateRouteTable"], component.ResourceRef{Token: tokenRouteTable, Name: name(privateWord, n)})
+		names["privateRouteTable"] = append(names["privateRouteTable"], ocelpulumi.ResourceRef{Token: tokenRouteTable, Name: name(privateWord, n)})
 	}
 	return names
 }
