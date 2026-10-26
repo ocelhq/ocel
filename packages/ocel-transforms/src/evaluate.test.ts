@@ -110,6 +110,66 @@ describe("evaluate", () => {
     },
   );
 
+  it("patches a container app's task, service, target group, rule and role", () => {
+    const modules = [
+      module(
+        "./container.transform.ts",
+        defineTransform({
+          aws: {
+            container: {
+              task: { cpu: "1024", memory: "2048" },
+              service: { healthCheckGracePeriodSeconds: 120 },
+              targetGroup: { deregistrationDelay: 10 },
+              rule: { transforms: [] },
+              role: { description: "the web container" },
+            },
+          },
+        }),
+      ),
+    ];
+
+    expect(
+      evaluate(request({ resources: [{ type: "container", name: "web", app: "web" }] }), modules)
+        .resources[0]?.patches,
+    ).toEqual({
+      task: { cpu: "1024", memory: "2048" },
+      service: { healthCheckGracePeriodSeconds: 120 },
+      targetGroup: { deregistrationDelay: 10 },
+      rule: { transforms: [] },
+      role: { description: "the web container" },
+    });
+  });
+
+  it.each([
+    ["task", "containerDefinitions"],
+    ["task", "family"],
+    ["task", "runtimePlatform"],
+    ["task", "taskRoleArn"],
+    ["task", "executionRoleArn"],
+    ["service", "taskDefinition"],
+    ["service", "cluster"],
+    ["service", "networkConfiguration"],
+    ["service", "loadBalancers"],
+    ["service", "desiredCount"],
+    ["targetGroup", "vpcId"],
+    ["targetGroup", "port"],
+    ["rule", "conditions"],
+    ["rule", "priority"],
+    ["role", "assumeRolePolicy"],
+    ["role", "permissionsBoundary"],
+  ])("refuses %s.%s on a container app, which ocel fills from what it built", (key, field) => {
+    const modules = [
+      module(
+        "./container.transform.ts",
+        defineTransform({ aws: { container: { [key]: { [field]: "whatever" } } } } as never),
+      ),
+    ];
+
+    expect(() =>
+      evaluate(request({ resources: [{ type: "container", name: "web", app: "web" }] }), modules),
+    ).toThrow(new RegExp(`aws\\.container\\.${key}\\.${field}`));
+  });
+
   it("drops a kv store to one node", () => {
     const modules = [
       module(

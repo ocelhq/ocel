@@ -1,4 +1,4 @@
-import type { cloudwatch, ec2, elasticache, iam, lambda, rds, s3 } from "@pulumi/aws";
+import type { cloudwatch, ec2, ecs, elasticache, iam, lambda, lb, rds, s3 } from "@pulumi/aws";
 import type { Unwrap } from "@pulumi/pulumi";
 import type { Patch } from "../patch.js";
 
@@ -12,6 +12,18 @@ export interface AwsResourceArgs {
     url: lambda.FunctionUrlArgs;
     urlPermission: lambda.PermissionArgs;
     logGroup: cloudwatch.LogGroupArgs;
+    role: iam.RoleArgs;
+  };
+  /**
+   * A container app: its Fargate task and service, the target group and
+   * listener rule that route the app's requests to it, and the task role, which
+   * exists once the app reaches a binding, a task or a live variable.
+   */
+  container: {
+    task: ecs.TaskDefinitionArgs;
+    service: ecs.ServiceArgs;
+    targetGroup: lb.TargetGroupArgs;
+    rule: lb.ListenerRuleArgs;
     role: iam.RoleArgs;
   };
   bucket: {
@@ -83,7 +95,7 @@ type OwnedFieldNames = {
  * The fields ocel fills from its own state — the names it minted, the ARNs it
  * created, the code it uploaded and the runtime that code was built for, the
  * environment it sealed, the tags it sweeps by. A patch naming one is refused
- * where it is written, and the deploy refuses it again by name.
+ * where it is written.
  */
 export const awsOwnedFields = {
   function: {
@@ -108,6 +120,40 @@ export const awsOwnedFields = {
     url: ["authorizationType", "functionName", "qualifier"],
     urlPermission: ["action", "function", "functionUrlAuthType", "principal", "qualifier"],
     logGroup: ["name", "namePrefix", "tags"],
+    role: [
+      "assumeRolePolicy",
+      "inlinePolicies",
+      "managedPolicyArns",
+      "name",
+      "namePrefix",
+      "permissionsBoundary",
+      "tags",
+    ],
+  },
+  container: {
+    task: [
+      "containerDefinitions",
+      "executionRoleArn",
+      "family",
+      "networkMode",
+      "requiresCompatibilities",
+      "runtimePlatform",
+      "tags",
+      "taskRoleArn",
+    ],
+    service: [
+      "cluster",
+      "desiredCount",
+      "launchType",
+      "loadBalancers",
+      "name",
+      "networkConfiguration",
+      "tags",
+      "taskDefinition",
+      "waitForSteadyState",
+    ],
+    targetGroup: ["name", "namePrefix", "port", "protocol", "tags", "targetType", "vpcId"],
+    rule: ["actions", "conditions", "listenerArn", "priority", "tags"],
     role: [
       "assumeRolePolicy",
       "inlinePolicies",
