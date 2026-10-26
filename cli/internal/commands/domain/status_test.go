@@ -104,6 +104,28 @@ func statusReads(t *testing.T, project clitest.FakeProject) int {
 	return len(clitest.RequestsTo[*contractv1.HostnameRequest](t, project.Requests, contractv1connect.ProviderServiceGetHostnameStatusProcedure))
 }
 
+func TestDomainStatusNamesItsLiveCheckOfTheHostnamesUnderCheck(t *testing.T) {
+	project := deployedProject(t, productionConfig("", "shop.app.com"))
+	issuedCertificate(project)
+	attach(t, project)
+	invocation := newTestInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stderr)
+	if err := runDomainStatus(context.Background(), invocation, project.Root, domainOptions{}, quickDomainWait, &stdout); err != nil {
+		t.Fatalf("runDomainStatus err = %v; stderr=%s", err, stderr.String())
+	}
+	for line := range strings.Lines(stderr.String()) {
+		if strings.Contains(line, "Checked the production hostnames") {
+			if !strings.Contains(line, "[check]") {
+				t.Errorf("the check was reported as %q, want it under [check]", line)
+			}
+			return
+		}
+	}
+	t.Errorf("stderr = %q, want the live check of the hostnames reported", stderr.String())
+}
+
 func TestDomainStatusShowsEachHostnamesCertificateRecordsProbeAndWhatIsOutstanding(t *testing.T) {
 	t.Run("status shows the certificate, the records, the probe and what serves each host", func(t *testing.T) {
 		project := deployedProject(t, productionConfig("", "shop.app.com"))
