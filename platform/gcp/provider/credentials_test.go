@@ -235,3 +235,20 @@ func TestADeployCredentialReadsOnlyItsOwnTiersLogs(t *testing.T) {
 		}
 	}
 }
+
+func TestBothCredentialsNameWhatLetsOcelSwitchOnAServiceThatIsOff(t *testing.T) {
+	t.Parallel()
+
+	bootstrapped, err := Credentials{Project: Named("acme-prod"), Namespace: "ocel"}.Permissions(edge.PurposeBootstrap, environment.TierProduction)
+	if err != nil {
+		t.Fatalf("Permissions(bootstrap) = %v", err)
+	}
+	bootstrapWant := "roles/serviceusage.serviceUsageAdmin: " + credential.SwitchOnWhy
+	if !slices.Contains(strings.Split(bootstrapped.Document, "\n"), bootstrapWant) {
+		t.Errorf("Permissions(bootstrap) =\n%s\nwant the line %s", bootstrapped.Document, bootstrapWant)
+	}
+	want := "a custom role holding serviceusage.services.enable, serviceusage.operations.get, unconditioned: " + credential.SwitchOnWhy
+	if lines := renderedDeploy(t, environment.TierProduction); !slices.Contains(lines, want) {
+		t.Errorf("Permissions(deploy) =\n%s\nwant the line %s", strings.Join(lines, "\n"), want)
+	}
+}

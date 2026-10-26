@@ -222,10 +222,13 @@ func TestAPlanSaysWhatABootstrapDoesToTheOriginSecret(t *testing.T) {
 			}
 			added := h.secrets.VersionsAdded()
 
-			change, err := cloudflareorigin.PlannedOriginSecret(t.Context(), h.clients, environment.TierProduction, cloudflareKind, tc.now)
-			if err != nil {
-				t.Fatalf("PlannedOriginSecret() = %v", err)
+			var held cloudflareorigin.Assets
+			var err error
+			if held.Secret, held.SecretHeld, err = cloudflareorigin.ReadOriginSecret(t.Context(), h.clients, environment.TierProduction, cloudflareKind); err != nil {
+				t.Fatalf("ReadOriginSecret() = %v", err)
 			}
+			planned := held.Planned(h.clients, environment.TierProduction, cloudflareKind, tc.now)
+			change := planned[slices.IndexFunc(planned, func(change provider.Change) bool { return change.Kind == string(bootstrap.KindSecret) })]
 			want := provider.Change{Kind: string(bootstrap.KindSecret), Name: h.originSecretName(environment.TierProduction), Action: tc.action}
 			if change.Kind != want.Kind || change.Name != want.Name || change.Action != want.Action || (change.Reason == "") != (tc.action == provider.ActionCreate) {
 				t.Errorf("change = %+v, want %+v with a reason unless it is a create", change, want)

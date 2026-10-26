@@ -169,6 +169,9 @@ func (b Engine) surveyReading(ctx context.Context, tier environment.Tier, resour
 }
 
 func (b Engine) recordedBuckets(ctx context.Context, tier environment.Tier) (naming.Buckets, error) {
+	if b.IsOff(FirestoreAPI) {
+		return naming.Buckets{}, nil
+	}
 	database, err := b.databasePresence(ctx, b.Clients.RecordsDatabase(tier))
 	if err != nil || !database.Present {
 		return naming.Buckets{}, err
@@ -183,7 +186,7 @@ type stamped struct {
 }
 
 func (b Engine) stamped(ctx context.Context, bucket string) (stamped, error) {
-	if bucket == "" {
+	if bucket == "" || b.IsOff(StorageAPI) {
 		return stamped{}, nil
 	}
 	client, err := b.Clients.Storage()
@@ -216,13 +219,16 @@ type Presence struct {
 }
 
 func (b Engine) PresenceOf(ctx context.Context, read Survey, target Resource) (Presence, error) {
-	surveyed := target.KindOps().survey
-	if surveyed == nil {
+	ops := target.KindOps()
+	if ops.survey == nil {
 		return Presence{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", target.Kind)
 	}
-	found, err := surveyed(ctx, b, read, target)
-	if err != nil {
-		return Presence{}, err
+	if b.IsOff(ops.api) {
+		return Presence{}, nil
+	}
+	found, err := ops.survey(ctx, b, read, target)
+	if err != nil || b.IsOff(resourceManagerAPI) {
+		return found, err
 	}
 	return b.untaggedPresence(ctx, read, target, found)
 }

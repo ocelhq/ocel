@@ -57,6 +57,7 @@ type Provider struct {
 	resolved       *gcloud.Clients
 	clientsChecked bool
 	surveyed       bootstrap.Surveys
+	serviceStates  bootstrap.ServiceStates
 
 	images *run.Images
 
@@ -167,16 +168,7 @@ func (p *Provider) KeyValues() records.Store {
 
 func (p *Provider) Cipher() seal.Cipher { return cipher{p: p} }
 
-func (p *Provider) Credentials() provider.Credentials {
-	return Credentials{
-		Project:   p,
-		Region:    p.options.Region,
-		Tokens:    p.tokens,
-		Endpoint:  p.endpoint,
-		Projects:  resourceManager{endpoint: p.endpoint},
-		Namespace: p.namespace,
-	}
-}
+func (p *Provider) Credentials() provider.Credentials { return p.credentials() }
 
 func (p *Provider) Edges() provider.Edges { return p.edges() }
 

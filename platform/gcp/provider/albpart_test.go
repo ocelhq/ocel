@@ -167,8 +167,8 @@ func TestADeployMayAddAndRetireTheALBsGateRepositoryAndTheBaseKeepsTheCDNPurgeRo
 	if !slices.Contains(googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, false)), role.ID()) {
 		t.Errorf("the base provisions %v, want %s: a deploy grants Next apps behind the alb a role only a bootstrap may make", googletest.IdsOf(bootstrap.Resources(names, environment.TierProduction, false)), role.ID())
 	}
-	if slices.ContainsFunc(composed(bootstrap.Engine{}).Parts(), func(f provider.Part) bool { return strings.Contains(f.Name, "alb-edge") }) {
-		t.Errorf("Parts() = %v, want no alb-edge part: the first deploy behind the alb adds its load balancer", composed(bootstrap.Engine{}).Parts())
+	if slices.ContainsFunc(composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}}).Parts(), func(f provider.Part) bool { return strings.Contains(f.Name, "alb-edge") }) {
+		t.Errorf("Parts() = %v, want no alb-edge part: the first deploy behind the alb adds its load balancer", composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}}).Parts())
 	}
 }
 

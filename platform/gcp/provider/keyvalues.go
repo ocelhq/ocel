@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
@@ -18,7 +19,7 @@ func (s keyValues) open(ctx context.Context) (records.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ports.KeyValues{Clients: resolved.Workload()}, nil
+	return ports.KeyValues{Clients: resolved.Workload(), FirestoreOff: s.p.serviceStates.IsOff(bootstrap.FirestoreAPI)}, nil
 }
 
 func (s keyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {

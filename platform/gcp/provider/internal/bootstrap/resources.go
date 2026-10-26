@@ -13,14 +13,30 @@ import (
 
 const StampObject = "ocel/bootstrap.json"
 
+const (
+	FirestoreAPI       = "firestore.googleapis.com"
+	StorageAPI         = "storage.googleapis.com"
+	kmsAPI             = "cloudkms.googleapis.com"
+	IAMAPI             = "iam.googleapis.com"
+	SecretManagerAPI   = "secretmanager.googleapis.com"
+	resourceManagerAPI = "cloudresourcemanager.googleapis.com"
+	repositoryAPI      = "artifactregistry.googleapis.com"
+	loggingAPI         = "logging.googleapis.com"
+	RunAPI             = "run.googleapis.com"
+	schedulerAPI       = "cloudscheduler.googleapis.com"
+	queueAPI           = "cloudtasks.googleapis.com"
+	pubsubAPI          = "pubsub.googleapis.com"
+)
+
 var BootstrapAPIs = []string{
-	"firestore.googleapis.com",
-	"storage.googleapis.com",
-	"secretmanager.googleapis.com",
-	"artifactregistry.googleapis.com",
-	"iam.googleapis.com",
-	"cloudresourcemanager.googleapis.com",
-	"logging.googleapis.com",
+	FirestoreAPI,
+	StorageAPI,
+	SecretManagerAPI,
+	repositoryAPI,
+	IAMAPI,
+	resourceManagerAPI,
+	loggingAPI,
+	RunAPI,
 }
 
 type Resource struct {

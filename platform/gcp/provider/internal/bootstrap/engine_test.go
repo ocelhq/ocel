@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -29,13 +30,16 @@ func TestTheCommandThatEmptiesATierDestroysItsProjectsOnThatTierAlone(t *testing
 func describing(t *testing.T, skipChecks bool) (Engine, *atomic.Int32) {
 	t.Helper()
 	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if (&googletest.ServiceUsage{}).Serve(w, r) {
+			return
+		}
 		calls.Add(1)
 		http.NotFound(w, nil)
 	}))
 	t.Cleanup(server.Close)
 	clients := &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL, Records: fake.NewKeyValues()}
-	return Engine{Clients: clients, Surveyed: &Surveys{}, SkipChecks: skipChecks}, &calls
+	return Engine{ServiceStates: &ServiceStates{}, Clients: clients, Surveyed: &Surveys{}, SkipChecks: skipChecks}, &calls
 }
 
 func TestABootstrapStatusReadsTheBootstrapsResourcesOnlyWhenTheChecksAreNotSkipped(t *testing.T) {
@@ -59,7 +63,7 @@ func TestABootstrapStatusReadsTheBootstrapsResourcesOnlyWhenTheChecksAreNotSkipp
 func TestABootstrapWhoseResourcesWereNotReadIsCurrentWhenItsStampNamesWhatThisBuildProvisions(t *testing.T) {
 	t.Parallel()
 
-	b := Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
+	b := Engine{ServiceStates: &ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
 	stamped := func(digest string, resourcesRead bool) Survey {
 		read := b.newSurvey(environment.TierProduction)
 		read.Present, read.ResourcesRead = true, resourcesRead

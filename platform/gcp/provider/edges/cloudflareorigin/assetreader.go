@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
@@ -12,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
@@ -125,35 +127,57 @@ func TakeAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tie
 	return err
 }
 
-func PlannedAssetStore(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
-	account := c.AssetReaderAccount(tier)
-	accountPresent, err := c.AccountExists(ctx, account)
-	if err != nil {
-		return nil, err
-	}
-	keyActive, err := hasActiveAssetReaderKey(ctx, c, tier, kind)
-	if err != nil {
-		return nil, err
-	}
-	return []provider.Change{
-		{Kind: string(bootstrap.KindServiceAccount), Name: account, Action: provider.KeepOrCreate(accountPresent)},
-		{Kind: assetStoreKeyKind, Name: c.AssetReaderAccountEmail(tier), Action: provider.KeepOrCreate(keyActive)},
-	}, nil
+type Assets struct {
+	Account    bool
+	Key        bool
+	Secret     originsecret.Secret
+	SecretHeld bool
 }
 
-func PlannedAssetStoreRemoval(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
-	planned, err := PlannedAssetStore(ctx, c, tier, kind)
-	if err != nil {
-		return nil, err
-	}
-	for i := range planned {
-		if planned[i].Action == provider.ActionKeep {
-			planned[i].Action, planned[i].Reason = provider.ActionDelete, ""
-			continue
+func ReadAssets(ctx context.Context, b bootstrap.Engine, tier environment.Tier, kind edge.Kind) (Assets, error) {
+	c := b.Clients
+	var held Assets
+	var err error
+	if !b.IsOff(bootstrap.IAMAPI) {
+		if held.Account, err = c.AccountExists(ctx, c.AssetReaderAccount(tier)); err != nil {
+			return Assets{}, err
 		}
-		planned[i].Action, planned[i].Reason = provider.ActionKeep, bootstrap.ReasonAbsent
 	}
-	return planned, nil
+	if b.IsOff(bootstrap.SecretManagerAPI) {
+		return held, nil
+	}
+	if !b.IsOff(bootstrap.StorageAPI) {
+		if held.Key, err = hasActiveAssetReaderKey(ctx, c, tier, kind); err != nil {
+			return Assets{}, err
+		}
+	}
+	held.Secret, held.SecretHeld, err = ReadOriginSecret(ctx, c, tier, kind)
+	return held, err
+}
+
+func (a Assets) Planned(c *gcloud.Clients, tier environment.Tier, kind edge.Kind, now time.Time) []provider.Change {
+	secret := provider.Change{Kind: string(bootstrap.KindSecret), Name: c.OriginSecret(tier, kind)}
+	secret.Action, secret.Reason = a.Secret.PlanChange(now)
+	return []provider.Change{
+		{Kind: string(bootstrap.KindServiceAccount), Name: c.AssetReaderAccount(tier), Action: provider.KeepOrCreate(a.Account)},
+		{Kind: assetStoreKeyKind, Name: c.AssetReaderAccountEmail(tier), Action: provider.KeepOrCreate(a.Key)},
+		secret,
+	}
+}
+
+func (a Assets) PlannedRemoval(c *gcloud.Clients, tier environment.Tier, kind edge.Kind) []provider.Change {
+	return []provider.Change{
+		plannedRemoval(string(bootstrap.KindServiceAccount), c.AssetReaderAccount(tier), a.Account),
+		plannedRemoval(assetStoreKeyKind, c.AssetReaderAccountEmail(tier), a.Key),
+		plannedRemoval(string(bootstrap.KindSecret), c.OriginSecret(tier, kind), a.SecretHeld),
+	}
+}
+
+func plannedRemoval(kind, name string, held bool) provider.Change {
+	if held {
+		return provider.Change{Kind: kind, Name: name, Action: provider.ActionDelete}
+	}
+	return provider.Change{Kind: kind, Name: name, Action: provider.ActionKeep, Reason: bootstrap.ReasonAbsent}
 }
 
 func hasActiveAssetReaderKey(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) (bool, error) {

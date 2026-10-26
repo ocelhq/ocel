@@ -35,6 +35,8 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, err
 		Records:        g.p.KeyValues(),
 		WrittenBy:      g.p.writtenBy,
 		Surveyed:       &g.p.surveyed,
+		ServiceStates:  &g.p.serviceStates,
+		Principal:      g.p.credentials().PrincipalName,
 		SkipChecks:     g.p.skipChecks,
 		Removable:      tierParts(network.Patches{}),
 		Accounts:       tierAccounts(g.p.components()),
@@ -50,6 +52,9 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, err
 func (g bootstrapGate) openTierBootstrap(ctx context.Context, tier environment.Tier) (bootstrap.Engine, error) {
 	b, err := g.openBootstrap(ctx)
 	if err != nil {
+		return bootstrap.Engine{}, err
+	}
+	if err := b.ReadServices(ctx, tier); err != nil {
 		return bootstrap.Engine{}, err
 	}
 	return withNetworkPatches(ctx, b, tier, "", transform.Result{})

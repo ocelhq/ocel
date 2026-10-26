@@ -18,6 +18,7 @@ import (
 const reasonUngranted = "this credential may not act as it"
 
 var accountKind = KindOps{
+	api:       IAMAPI,
 	tagged:    accountTagged,
 	noun:      "service account",
 	terraform: cost.ServiceAccountType,

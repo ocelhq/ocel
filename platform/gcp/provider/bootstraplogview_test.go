@@ -39,7 +39,7 @@ func TestTheBaseGivesEachTierALogViewOfItsOwnCloudRunEntries(t *testing.T) {
 func TestABootstrapMakesItsTiersLogViewOnTheDefaultBucket(t *testing.T) {
 	t.Parallel()
 	views := googletest.NewLogViews()
-	b := bootstrap.Engine{Clients: views.Open(t)}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: views.Open(t)}
 	ctx := context.Background()
 	tier := environment.TierPreview
 	read := bootstrap.Survey{Tier: tier, Names: b.Clients.Names}
@@ -68,7 +68,7 @@ func TestALogViewFilteredToOtherEntriesIsMended(t *testing.T) {
 	views := googletest.NewLogViews()
 	path := googletest.Names.LogViewPath(environment.TierPreview)
 	views.Views[path] = &logging.LogView{Name: path, Filter: `resource.type="cloud_run_revision"`}
-	b := bootstrap.Engine{Clients: views.Open(t)}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: views.Open(t)}
 	ctx := context.Background()
 	read := bootstrap.Survey{Tier: environment.TierPreview, Names: b.Clients.Names}
 	view := logViewOf(environment.TierPreview)
@@ -90,7 +90,7 @@ func TestALogViewFilteredToOtherEntriesIsMended(t *testing.T) {
 func TestRemovingATierDeletesItsLogView(t *testing.T) {
 	t.Parallel()
 	views := googletest.NewLogViews()
-	b := bootstrap.Engine{Clients: views.Open(t)}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: views.Open(t)}
 	ctx := context.Background()
 	tier := environment.TierProduction
 	view := logViewOf(tier)

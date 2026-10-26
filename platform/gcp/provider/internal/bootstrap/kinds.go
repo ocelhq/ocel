@@ -39,6 +39,7 @@ const (
 const LocationGlobal = "global"
 
 type KindOps struct {
+	api           string
 	noun          string
 	terraform     string
 	properties    func(region string, target Resource) map[string]any
@@ -74,8 +75,8 @@ func init() {
 		KindQueue:          queueKind,
 		KindTierTag:        tierTagKind,
 		KindLogView:        logViewKind,
-		KindService:        {noun: "Cloud Run service", terraform: cost.CloudRunServiceType},
-		KindSchedule:       {noun: "Cloud Scheduler job", terraform: cost.SchedulerJobType},
+		KindService:        {api: RunAPI, noun: "Cloud Run service", terraform: cost.CloudRunServiceType},
+		KindSchedule:       {api: schedulerAPI, noun: "Cloud Scheduler job", terraform: cost.SchedulerJobType},
 	}
 }
 

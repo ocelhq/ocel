@@ -24,6 +24,7 @@ func TierLogFilter(tier environment.Tier) string {
 }
 
 var logViewKind = KindOps{
+	api:           loggingAPI,
 	noun:          "log view",
 	terraform:     cost.LogViewType,
 	emulatorSkips: true,

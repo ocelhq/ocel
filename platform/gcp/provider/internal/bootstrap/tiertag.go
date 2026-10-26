@@ -25,6 +25,7 @@ const (
 )
 
 var tierTagKind = KindOps{
+	api:       resourceManagerAPI,
 	noun:      "tag key",
 	terraform: cost.TagKeyType,
 	survey: func(ctx context.Context, b Engine, _ Survey, _ Resource) (Presence, error) {

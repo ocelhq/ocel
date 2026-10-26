@@ -305,7 +305,7 @@ func TestABootstrapResourceAlreadyCurrentIsNotedOnlyAtDebug(t *testing.T) {
 	read := bootstrap.Survey{Held: map[string]bool{target.ID(): true}}
 	progress := &fake.Log{}
 
-	if err := (composed(bootstrap.Engine{})).Provision(context.Background(), read, target, progress); err != nil {
+	if err := (composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}})).Provision(context.Background(), read, target, progress); err != nil {
 		t.Fatalf("provision() = %v", err)
 	}
 	want := []string{"DEBUG The Artifact Registry repository ocel-acme-prod-production is already current"}
@@ -341,7 +341,7 @@ func TestRemovingATierDeletesItsOwnRecordsDatabaseWhileItsSiblingIsInstalled(t *
 func replacingTheTierKey(t *testing.T) (bootstrap.Engine, *googletest.IAM) {
 	t.Helper()
 	server := googletest.GrantedIAM()
-	b := composed(bootstrap.Engine{Clients: server.Open(t), Records: fake.NewKeyValues()})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.Open(t), Records: fake.NewKeyValues()})
 	server.Destroyed = map[string]bool{gcloud.KeyPath(b.Clients, string(environment.TierProduction)): true}
 	return b, server
 }
@@ -433,10 +433,11 @@ func bootstrappingOver(t *testing.T, server *googletest.IAM, installed ...string
 		}
 	})
 	b := composed(bootstrap.Engine{
-		Clients:  clients,
-		Records:  fake.NewKeyValues(),
-		Surveyed: &bootstrap.Surveys{},
-		Edges:    &frontRegistry{front: &countingFront{installed: true}},
+		ServiceStates: &bootstrap.ServiceStates{},
+		Clients:       clients,
+		Records:       fake.NewKeyValues(),
+		Surveyed:      &bootstrap.Surveys{},
+		Edges:         &frontRegistry{front: &countingFront{installed: true}},
 	})
 	b.SweepAccounts = func(context.Context, bootstrap.Engine, provider.BootstrapRequest, progress.Log) error { return nil }
 	read := surveyed(installed...)

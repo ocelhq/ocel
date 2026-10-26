@@ -9,16 +9,14 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
-const (
-	EnabledService              = "ENABLED"
-	testedPermissionsPerRequest = 100
-)
+const testedPermissionsPerRequest = 100
 
 var BootstrapGrants = gcloud.Grants{
 	{Role: "roles/datastore.owner", Permissions: []string{
@@ -176,16 +174,8 @@ var bootstrapRoles = []string{
 	gcloud.TierTagUserRole,
 }
 
-func BootstrapRoles() []string { return slices.Clone(bootstrapRoles) }
-
-func (b Engine) preflight(ctx context.Context, read Survey, parts []string) error {
-	if err := b.RefuseServicesOff(ctx, BootstrapAPIs); err != nil {
-		return err
-	}
-	if err := b.Permitted(ctx, parts); err != nil {
-		return err
-	}
-	return b.RegionServed(ctx, read)
+func BootstrapRoles() []string {
+	return append(slices.Clone(bootstrapRoles), ServicesRole+": "+credential.SwitchOnWhy)
 }
 
 func GrantsFor(parts []string) gcloud.Grants {
@@ -196,39 +186,6 @@ func GrantsFor(parts []string) gcloud.Grants {
 }
 
 func PermissionsFor(parts []string) []string { return GrantsFor(parts).Permissions() }
-
-func (b Engine) ListServicesOff(ctx context.Context, apis []string) ([]string, error) {
-	if len(apis) == 0 {
-		return nil, nil
-	}
-	service, err := b.Clients.Services()
-	if err != nil {
-		return nil, err
-	}
-	var off []string
-	for _, api := range apis {
-		name := "projects/" + b.Clients.Project() + "/services/" + api
-		apiService, err := googleretry.Attempted(ctx, service.Services.Get(name).Context(ctx).Do)
-		if err != nil {
-			return nil, fmt.Errorf("read whether %s is on in project %s: %w", api, b.Clients.Project(), err)
-		}
-		if apiService.State != EnabledService {
-			off = append(off, api)
-		}
-	}
-	return off, nil
-}
-
-func (b Engine) RefuseServicesOff(ctx context.Context, apis []string) error {
-	off, err := b.ListServicesOff(ctx, apis)
-	if err != nil || len(off) == 0 {
-		return err
-	}
-	return refusal.Refuse(refusal.CodeNotReady,
-		"project %s has %s switched off, and ocel provisions resources rather than switching on the services that host them.\n"+
-			"Run `gcloud services enable %s --project %s`, then try again",
-		b.Clients.Project(), strings.Join(off, ", "), strings.Join(off, " "), b.Clients.Project())
-}
 
 func (b Engine) heldPermissions(ctx context.Context, needed []string) ([]string, error) {
 	service, err := b.Clients.Projects()
@@ -248,6 +205,9 @@ func (b Engine) heldPermissions(ctx context.Context, needed []string) ([]string,
 }
 
 func (b Engine) Permitted(ctx context.Context, parts []string) error {
+	if b.IsOff(resourceManagerAPI) {
+		return nil
+	}
 	grants := GrantsFor(parts)
 	needed := grants.Permissions()
 	granted, err := b.heldPermissions(ctx, needed)
@@ -267,8 +227,59 @@ func (b Engine) Permitted(ctx context.Context, parts []string) error {
 		strings.Join(missing, ", "), b.Clients.Project(), strings.Join(grants.RolesGranting(missing), ", "))
 }
 
+func (b Engine) preflight(ctx context.Context, req provider.BootstrapRequest, removing []string) ([]string, error) {
+	if _, err := b.ListServicesOff(ctx, b.touchedAPIs(req.Tier)); err != nil {
+		return nil, err
+	}
+	parts, err := b.partsApplyMakes(ctx, req, removing)
+	if err != nil {
+		return nil, err
+	}
+	switching, err := b.ServicesToSwitchOn(ctx, req.Tier, parts, BootstrapAPIs)
+	if err != nil {
+		return nil, err
+	}
+	if err := b.Permitted(ctx, req.Parts); err != nil {
+		return nil, err
+	}
+	return switching, b.RegionServed(ctx, b.newSurvey(req.Tier))
+}
+
+func (b Engine) partsApplyMakes(ctx context.Context, req provider.BootstrapRequest, removing []string) ([]string, error) {
+	parts := slices.Clone(req.Parts)
+	if len(b.fronted(req.Parts)) > 0 {
+		parts = append(parts, frontedParts...)
+	}
+	for _, each := range b.Removable {
+		if each.Deployed == nil && each.Work == nil || slices.Contains(removing, each.Name) {
+			continue
+		}
+		_, recorded, err := b.readPart(ctx, req.Tier, each.Name)
+		if err != nil {
+			return nil, err
+		}
+		if recorded {
+			parts = append(parts, each.Name)
+		}
+	}
+	return parts, nil
+}
+
+func (b Engine) refuseRunRegionUnserved(ctx context.Context) error {
+	if b.SkipChecks || b.Clients.Emulated() || b.IsOff(RunAPI) {
+		return nil
+	}
+	return b.Clients.RefuseRegionNotServed(ctx)
+}
+
 func (b Engine) RegionServed(ctx context.Context, read Survey) error {
 	if read.Emulated {
+		return nil
+	}
+	if err := b.refuseRunRegionUnserved(ctx); err != nil {
+		return err
+	}
+	if b.IsOff(FirestoreAPI) {
 		return nil
 	}
 	service, err := b.Clients.Databases()

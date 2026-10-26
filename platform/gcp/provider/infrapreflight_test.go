@@ -7,16 +7,19 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 )
 
@@ -122,5 +125,111 @@ func TestAnInfraRunOnThisProviderRunsItsOwnPreflight(t *testing.T) {
 
 	if pushing(t, "").Hooks().InfraPreflight == nil {
 		t.Error("the gcp provider's hooks leave InfraPreflight nil, so an infra run provisions a database before the network it needs is added")
+	}
+}
+
+var infraPartAPIs = []string{"cloudkms.googleapis.com", "compute.googleapis.com", "memorystore.googleapis.com", "sqladmin.googleapis.com",
+	"networkconnectivity.googleapis.com", "serviceconsumermanagement.googleapis.com", "servicenetworking.googleapis.com"}
+
+func TestAnInfraRunsPlanShowsTheServicesOfThePartsItAddsSwitchedOnInOneReadAndSwitchesNothingOn(t *testing.T) {
+	t.Parallel()
+	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: slices.Clone(infraPartAPIs)}}
+	p := pushing(t, f.serve(t))
+	pre := declaringADatabase("17")
+	pre.Deploy.Slug = "shop"
+
+	plan, err := p.PlanInfraPreflight(t.Context(), pre)
+	if err != nil {
+		t.Fatalf("PlanInfraPreflight() = %v", err)
+	}
+
+	if got := switchedOnInPlan(plan); !slices.Equal(got, infraPartAPIs) {
+		t.Errorf("the infra run's plan switches on %v, want %v: the keys and private-network parts its database needs", got, infraPartAPIs)
+	}
+	if f.usage.BatchGets != 1 || f.usage.Gets != 0 {
+		t.Errorf("read the services in %d batches and %d single reads, want one batch", f.usage.BatchGets, f.usage.Gets)
+	}
+	if len(f.usage.Enabled) > 0 {
+		t.Errorf("PlanInfraPreflight() switched on %v, want nothing", f.usage.Enabled)
+	}
+}
+
+func TestAnInfraRunSwitchesOnTheServicesOfThePartsItAddsBeforeItReadsAnyOfThem(t *testing.T) {
+	t.Parallel()
+	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: slices.Clone(infraPartAPIs)}}
+	p := pushing(t, f.serve(t))
+	recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys)
+	pre := declaringADatabase("17")
+	pre.Deploy.Slug = "shop"
+
+	if err := p.ApplyInfraPreflight(t.Context(), pre); err == nil {
+		t.Fatal("ApplyInfraPreflight() = nil, want the fresh project's first read of the network refused")
+	}
+
+	if got := f.usage.EnabledIDs(); !slices.Equal(got, infraPartAPIs) {
+		t.Errorf("ApplyInfraPreflight() switched on %v, want %v", got, infraPartAPIs)
+	}
+	calls := f.called()
+	enabled := slices.IndexFunc(calls, func(call string) bool { return strings.HasSuffix(call, ":batchEnable") })
+	reads := f.readsBeyondServiceUsage()
+	if enabled < 0 || len(reads) == 0 || slices.Index(calls, reads[0]) < enabled {
+		t.Errorf("ApplyInfraPreflight() called %v, want every service its parts use switched on before its first read", calls)
+	}
+}
+
+func TestAnInfraRunWhoseCredentialMayNotSwitchServicesOnIsRefusedBeforeItAddsAnything(t *testing.T) {
+	t.Parallel()
+	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: []string{"cloudkms.googleapis.com"}}, withheld: []string{"serviceusage.services.enable"}}
+	p := pushing(t, f.serve(t))
+	pre := declaringADatabase("17")
+	pre.Deploy.Slug = "shop"
+
+	for name, run := range map[string]func() error{
+		"plan":  func() error { _, err := p.PlanInfraPreflight(t.Context(), pre); return err },
+		"apply": func() error { return p.ApplyInfraPreflight(t.Context(), pre) },
+	} {
+		err := run()
+
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied || !strings.Contains(refused.Message, "gcloud services enable cloudkms.googleapis.com --project acme-prod") {
+			t.Errorf("%s = %v, want a %s refusal naming the command that switches cloudkms.googleapis.com on", name, err, refusal.CodeDenied)
+		}
+	}
+	if len(f.usage.Enabled) > 0 {
+		t.Errorf("switched on %v, want nothing", f.usage.Enabled)
+	}
+}
+
+func TestAnInfraRunAsksWhetherTheServicesOfThePartsItAddsAreOnOnlyWhenTheChecksAreNotSkipped(t *testing.T) {
+	pre := provider.DeployPreflight{
+		Deploy:    provider.DeploySpec{Tier: environment.TierProduction, Slug: "shop"},
+		Resources: []provider.Resource{{Name: "topic-orders", Declared: "orders", Type: provider.BindingTopic, Topic: &provider.TopicSpec{}}},
+	}
+	for skipChecks, wantAsked := range map[bool]bool{false: true, true: false} {
+		for name, run := range map[string]func(*Provider) error{
+			"PlanInfraPreflight()":  func(p *Provider) error { _, err := p.PlanInfraPreflight(t.Context(), pre); return err },
+			"ApplyInfraPreflight()": func(p *Provider) error { return p.ApplyInfraPreflight(t.Context(), pre) },
+		} {
+			var asked atomic.Int32
+			served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !(&googletest.ServiceUsage{}).Serve(w, r) {
+					t.Errorf("%s called %s %s, want at most whether the services of the parts it adds are on", name, r.Method, r.URL.Path)
+					http.NotFound(w, r)
+					return
+				}
+				asked.Add(1)
+			}))
+			t.Cleanup(served.Close)
+			p := pushing(t, served.URL)
+			p.skipChecks = skipChecks
+			recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys, bootstrap.Topics)
+
+			if err := run(p); err != nil {
+				t.Fatalf("%s with the checks skipped %t = %v", name, skipChecks, err)
+			}
+			if got := asked.Load() > 0; got != wantAsked {
+				t.Errorf("%s with the checks skipped %t made %d Service Usage requests, want asked %t: the harness that skips them runs in a project it has already deployed into", name, skipChecks, asked.Load(), wantAsked)
+			}
+		}
 	}
 }

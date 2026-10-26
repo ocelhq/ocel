@@ -49,7 +49,7 @@ func stateBucketHolding(t *testing.T, objects ...string) (bootstrap.Engine, boot
 	tier := environment.TierProduction
 	buckets := googletest.TierBuckets(tier)
 	server.holding(&raw.Bucket{Name: buckets[naming.StorageState]}, append([]string{bootstrap.StampObject}, objects...)...)
-	b := bootstrap.Engine{Clients: googletest.Clients(served.URL)}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: googletest.Clients(served.URL)}
 	return b, bootstrap.Survey{Tier: tier, Buckets: buckets}, server
 }
 

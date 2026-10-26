@@ -15,6 +15,7 @@ import (
 const reasonPassphraseReplaced = "its latest version is disabled or destroyed"
 
 var secretKind = KindOps{
+	api:              SecretManagerAPI,
 	tagged:           secretTagged,
 	taggedAtCreation: true,
 	noun:             "secret",

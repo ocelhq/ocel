@@ -61,13 +61,10 @@ func recordedCurrent(t *testing.T, p *Provider, tier environment.Tier, parts ...
 func servingOnlyEnabledAPIs(t *testing.T) string {
 	t.Helper()
 	served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || !strings.Contains(r.URL.Path, "/projects/acme-prod/services/") {
+		if r.Method != http.MethodGet || !(&googletest.ServiceUsage{}).Serve(w, r) {
 			t.Errorf("a plain deploy's preflight called %s %s, want only whether the APIs it runs on are on", r.Method, r.URL.Path)
 			http.NotFound(w, r)
-			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		googletest.WriteBody(w, map[string]any{"name": r.URL.Path, "state": bootstrap.EnabledService})
 	}))
 	t.Cleanup(served.Close)
 	return served.URL
@@ -202,7 +199,7 @@ func TestADeployBehindAnEdgeThatServesFromTheTierAddsTheEdgeBucketAndTheKeys(t *
 }
 
 func TestADryDeployOfARealtimeChannelPlansTheRealtimePartAndMakesNothing(t *testing.T) {
-	p := failingOnAnyCall(t)
+	p := pushing(t, servingOnlyEnabledAPIs(t))
 	pre := provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: environment.TierProduction}, Resources: []provider.Resource{{Name: "chat", Type: provider.BindingRealtime}}}
 
 	plan, err := p.PlanPreflight(context.Background(), pre)
@@ -260,7 +257,7 @@ func usedPart(t *testing.T, b bootstrap.Engine, tier environment.Tier, part stri
 func TestAPartADeployAddedIsKeptWhileAProjectUsesItAndRetiresWithItsLastUser(t *testing.T) {
 	ctx := context.Background()
 	tier := environment.TierProduction
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts(network.Patches{})})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts(network.Patches{})})
 	usedPart(t, b, tier, bootstrap.RealtimePart, "shop")
 
 	var refused refusal.Refusal
@@ -290,7 +287,7 @@ func TestAPartADeployAddedIsKeptWhileAProjectUsesItAndRetiresWithItsLastUser(t *
 func TestTheKeysAreKeptWhileAnyProjectOfTheTierIsRecorded(t *testing.T) {
 	ctx := context.Background()
 	tier := environment.TierProduction
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts(network.Patches{})})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts(network.Patches{})})
 	usedPart(t, b, tier, bootstrap.KeysPart)
 	if _, err := b.Records.Write(ctx, records.Entry{Key: stackrecords.ProjectKey(tier, "docs"), Value: []byte(`{}`)}); err != nil {
 		t.Fatal(err)

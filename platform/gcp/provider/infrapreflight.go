@@ -16,16 +16,31 @@ func (p *Provider) PlanInfraPreflight(ctx context.Context, pre provider.DeployPr
 	if err != nil {
 		return provider.Plan{}, err
 	}
+	var plan provider.Plan
+	if p.readsServices(parts, nil) {
+		switching, err := b.ServicesToSwitchOn(ctx, pre.Deploy.Tier, parts, nil)
+		if err != nil {
+			return provider.Plan{}, err
+		}
+		plan.Groups = b.PlanSwitchOn(switching)
+	}
 	if b, err = p.withDeployNetworkPatches(ctx, b, pre.Deploy, parts); err != nil {
 		return provider.Plan{}, err
 	}
 	groups, err := b.PlanParts(ctx, pre.Deploy.Tier, parts)
-	return provider.Plan{Groups: groups}, err
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	plan.Groups = append(plan.Groups, groups...)
+	return plan, nil
 }
 
 func (p *Provider) ApplyInfraPreflight(ctx context.Context, pre provider.DeployPreflight) error {
 	parts, err := p.listPartsResourcesNeed(ctx, pre)
 	if err != nil || len(parts) == 0 {
+		return err
+	}
+	if err := p.switchOnServices(ctx, pre, parts, nil); err != nil {
 		return err
 	}
 	if err := p.addParts(ctx, pre, parts); err != nil {

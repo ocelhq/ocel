@@ -86,7 +86,7 @@ func TestTheBaseHoldsWhatEveryDeployNeedsAndWhatOnlyABootstrapCredentialMakes(t 
 	}
 }
 
-func TestTheBaseChecksOnlyTheAPIsItsOwnItemsAreServedBy(t *testing.T) {
+func TestTheBaseChecksTheAPIsItsOwnItemsAreServedByAndCloudRunWhoseRegionsEveryRunIsCheckedAgainst(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
@@ -97,6 +97,7 @@ func TestTheBaseChecksOnlyTheAPIsItsOwnItemsAreServedBy(t *testing.T) {
 		"iam.googleapis.com",
 		"cloudresourcemanager.googleapis.com",
 		"logging.googleapis.com",
+		"run.googleapis.com",
 	}
 	if !slices.Equal(bootstrap.BootstrapAPIs, want) {
 		t.Errorf("a bootstrap checks %v are on, want %v: each part checks its own APIs when a deploy adds it", bootstrap.BootstrapAPIs, want)

@@ -159,13 +159,12 @@ func TestADeployAsksWhetherTheAPIsItRunsOnAreOnOnlyWhenTheChecksAreNotSkipped(t 
 	for skipChecks, wantAsked := range map[bool]bool{false: true, true: false} {
 		var asked atomic.Int32
 		served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !strings.Contains(r.URL.Path, "/projects/acme-prod/services/") {
+			if !(&googletest.ServiceUsage{}).Serve(w, r) {
 				t.Errorf("preflight called %s %s, want at most whether the APIs the deploy runs on are on", r.Method, r.URL.Path)
 				http.NotFound(w, r)
 				return
 			}
 			asked.Add(1)
-			googletest.WriteBody(w, map[string]any{"name": r.URL.Path, "state": bootstrap.EnabledService})
 		}))
 		t.Cleanup(served.Close)
 		p := pushing(t, served.URL)
@@ -234,6 +233,21 @@ func TestADryDeployDeclaringADatabasePlansThePrivateNetworkAndMakesNothing(t *te
 	}
 	if len(planned) != 2 || planned[0].Part != bootstrap.KeysPart || planned[1].Part != network.PartName || planned[1].Action != provider.ActionCreate || len(planned[1].Changes) != 4 {
 		t.Errorf("a dry deploy planned %+v, want the keys its password is sealed under and the %s part created with its four resources", planned, network.PartName)
+	}
+}
+
+func TestADryDeployWithTheChecksSkippedStillPlansThePartsItAdds(t *testing.T) {
+	p, _ := deployingNetworks(t)
+	p.skipChecks = true
+
+	plan, err := p.PlanPreflight(context.Background(), declaringADatabase("17"))
+	if err != nil {
+		t.Fatalf("PlanPreflight() = %v", err)
+	}
+
+	planned := plan.Groups
+	if len(planned) != 2 || planned[0].Part != bootstrap.KeysPart || planned[1].Part != network.PartName {
+		t.Errorf("a dry deploy with the checks skipped planned %+v, want the keys and the %s part: skipping the checks skips reading the services, not the parts", planned, network.PartName)
 	}
 }
 
@@ -398,5 +412,72 @@ func TestRemovingAProjectWithItsOwnDatabaseForgetsItSoItsNextDeployMakesItAgain(
 	}
 	if planned := plannedBy(t, p, deployingProject("shop")); !plansOwnDatabase(planned, ports.OwnDatabase("ocel", environment.TierProduction, "shop")) {
 		t.Errorf("a dry deploy after shop left the tier planned %+v, want its database made again", planned)
+	}
+}
+
+func TestADeployPlanShowsTheServicesItRunsOnSwitchedOnAndOnlyItsApplySwitchesThemOn(t *testing.T) {
+	t.Parallel()
+	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: []string{"run.googleapis.com"}}}
+	p := pushing(t, f.serve(t))
+	pre := deployingApps(environment.TierProduction, shippingApp("api", buildoutput.FrameworkGo))
+
+	plan, err := p.PlanPreflight(t.Context(), pre)
+	if err != nil {
+		t.Fatalf("PlanPreflight() = %v", err)
+	}
+	if got := switchedOnInPlan(plan); !slices.Equal(got, []string{"run.googleapis.com"}) {
+		t.Errorf("the deploy plan switches on %v, want run.googleapis.com", got)
+	}
+	if len(f.usage.Enabled) > 0 {
+		t.Fatalf("PlanPreflight() switched on %v, want nothing", f.usage.Enabled)
+	}
+
+	if err := p.ApplyPreflight(t.Context(), pre); err != nil {
+		t.Fatalf("ApplyPreflight() = %v", err)
+	}
+	if got := f.usage.EnabledIDs(); !slices.Equal(got, []string{"run.googleapis.com"}) {
+		t.Errorf("ApplyPreflight() switched on %v, want run.googleapis.com", got)
+	}
+}
+
+func TestADeployReadsWhetherTheServicesOfEveryPartItAddsAreOnInOnePass(t *testing.T) {
+	t.Parallel()
+	networkAPIs := []string{"compute.googleapis.com", "memorystore.googleapis.com", "sqladmin.googleapis.com",
+		"networkconnectivity.googleapis.com", "serviceconsumermanagement.googleapis.com", "servicenetworking.googleapis.com"}
+	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: append([]string{"cloudkms.googleapis.com"}, networkAPIs...)}}
+	p := pushing(t, f.serve(t))
+
+	plan, err := p.PlanPreflight(t.Context(), declaringADatabase("17"))
+	if err != nil {
+		t.Fatalf("PlanPreflight() = %v", err)
+	}
+
+	if got, want := switchedOnInPlan(plan), append([]string{"cloudkms.googleapis.com"}, networkAPIs...); !slices.Equal(got, want) {
+		t.Errorf("the deploy plan switches on %v, want %v: the keys and private-network parts it adds", got, want)
+	}
+	if f.usage.BatchGets != 1 || f.usage.Gets != 0 {
+		t.Errorf("read the services in %d batches and %d single reads, want one batch", f.usage.BatchGets, f.usage.Gets)
+	}
+}
+
+func TestADeployWhoseCredentialMayNotSwitchServicesOnIsRefusedBeforeItAddsAnything(t *testing.T) {
+	t.Parallel()
+	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: []string{"run.googleapis.com"}}, withheld: []string{"serviceusage.services.enable"}}
+	p := pushing(t, f.serve(t))
+	pre := deployingApps(environment.TierProduction, shippingApp("api", buildoutput.FrameworkGo))
+
+	for name, run := range map[string]func() error{
+		"plan":  func() error { _, err := p.PlanPreflight(t.Context(), pre); return err },
+		"apply": func() error { return p.ApplyPreflight(t.Context(), pre) },
+	} {
+		err := run()
+
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied || !strings.Contains(refused.Message, "gcloud services enable run.googleapis.com --project acme-prod") {
+			t.Errorf("%s = %v, want a %s refusal naming the command that switches run.googleapis.com on", name, err, refusal.CodeDenied)
+		}
+	}
+	if len(f.usage.Enabled) > 0 {
+		t.Errorf("switched on %v, want nothing", f.usage.Enabled)
 	}
 }

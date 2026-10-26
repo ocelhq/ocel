@@ -29,6 +29,7 @@ import (
 type IAM struct {
 	kmspb.UnimplementedKeyManagementServiceServer
 	iampb.UnimplementedIAMPolicyServer
+	ServiceUsage
 
 	Mu        sync.Mutex
 	rings     map[string]bool
@@ -86,8 +87,6 @@ type IAM struct {
 
 	TierTags      *TierTags
 	DeletedTagged []string
-
-	ServicesOff []string
 }
 
 func UniqueIDOf(account string) string {
@@ -324,12 +323,7 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 			s.serveAccountPermissions(w, r, strings.TrimSuffix(path[strings.LastIndex(path, "/")+1:], ":testIamPermissions"))
 		case strings.HasPrefix(path, "/storage/v1/b/") && strings.HasSuffix(path, "/iam"):
 			s.serveBucketPolicy(w, r, strings.TrimSuffix(strings.TrimPrefix(path, "/storage/v1/b/"), "/iam"))
-		case r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/projects/acme-prod/services/"):
-			state := "ENABLED"
-			if slices.Contains(s.ServicesOff, strings.TrimPrefix(path, "/v1/projects/acme-prod/services/")) {
-				state = "DISABLED"
-			}
-			_ = json.NewEncoder(w).Encode(map[string]string{"name": path, "state": state})
+		case s.ServiceUsage.Serve(w, r):
 		case r.Method == http.MethodGet && path == "/v1/projects/acme-prod":
 			_, _ = w.Write([]byte(`{"projectId":"acme-prod","projectNumber":"123456789"}`))
 		case r.Method == http.MethodPost && path == "/v1/projects/acme-prod:testIamPermissions":
@@ -516,8 +510,8 @@ func (s *IAM) Serve(t *testing.T, rest http.HandlerFunc) *gcloud.Clients {
 			grpcServer.ServeHTTP(w, r)
 			return
 		}
-		if api := restAPI(r.URL.Path); slices.Contains(s.ServicesOff, api) {
-			writeServiceDisabled(w, api)
+		if api := restAPI(r.URL.Path); s.IsOff(api) {
+			WriteServiceDisabled(w, api)
 			return
 		}
 		rest(w, r)
@@ -553,7 +547,7 @@ func serviceDisabled(api string) string {
 	return api + " has not been used in project " + Project + " before or it is disabled"
 }
 
-func writeServiceDisabled(w http.ResponseWriter, api string) {
+func WriteServiceDisabled(w http.ResponseWriter, api string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusForbidden)
 	_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"` + serviceDisabled(api) + `.",` +
@@ -561,7 +555,7 @@ func writeServiceDisabled(w http.ResponseWriter, api string) {
 }
 
 func (s *IAM) refuseCallsToServicesOff(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	if api := grpcAPI(info.FullMethod, req); api != "" && slices.Contains(s.ServicesOff, api) {
+	if api := grpcAPI(info.FullMethod, req); api != "" && s.IsOff(api) {
 		return nil, status.Error(codes.PermissionDenied, serviceDisabled(api))
 	}
 	return handler(ctx, req)

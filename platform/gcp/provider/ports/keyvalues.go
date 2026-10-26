@@ -28,7 +28,8 @@ const (
 )
 
 type KeyValues struct {
-	Clients *Clients
+	Clients      *Clients
+	FirestoreOff bool
 }
 
 func (s KeyValues) open(ctx context.Context, in records.Partition) (*firestore.Client, *firestore.CollectionRef, error) {
@@ -69,6 +70,12 @@ func (s KeyValues) refuseAbsentDocument(ctx context.Context, collection *firesto
 func (s KeyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	if err := records.RefuseMalformedKey(key); err != nil {
 		return records.Entry{}, err
+	}
+	if s.FirestoreOff {
+		if _, owned := ProjectOfRecords(key.Partition); owned {
+			return records.Entry{}, records.ErrNotFound
+		}
+		return records.Entry{}, s.refuseUnbootstrapped(key.Partition.Tier)
 	}
 	_, collection, err := s.open(ctx, key.Partition)
 	if err != nil {
@@ -184,6 +191,15 @@ func (s KeyValues) Remove(ctx context.Context, key records.Key, expected records
 }
 
 func (s KeyValues) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
+	if err := records.RefuseMalformedPartition(in); err != nil {
+		return nil, err
+	}
+	if s.FirestoreOff {
+		if _, owned := ProjectOfRecords(in); owned {
+			return nil, nil
+		}
+		return nil, s.refuseUnbootstrapped(in.Tier)
+	}
 	_, collection, err := s.open(ctx, in)
 	if err != nil {
 		return nil, err

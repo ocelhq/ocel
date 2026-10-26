@@ -65,6 +65,7 @@ const (
 
 var Part = bootstrap.RemovablePart{
 	Part:     provider.Part{Name: PartName, Summary: bastionSummary},
+	APIs:     bastionAPIs,
 	Plan:     bastionRemovals,
 	Remove:   removeBastion,
 	Take:     removeBastion,

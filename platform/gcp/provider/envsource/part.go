@@ -232,6 +232,7 @@ func removeEnvSourceSyncPart(ctx context.Context, b bootstrap.Engine, tier envir
 
 var Part = bootstrap.RemovablePart{
 	Part:     provider.Part{Name: PartName, Summary: envSourceSyncSummary},
+	APIs:     SyncAPIs,
 	Plan:     envSourceSyncRemovals,
 	Remove:   removeEnvSourceSyncPart,
 	Take:     removeEnvSourceSync,

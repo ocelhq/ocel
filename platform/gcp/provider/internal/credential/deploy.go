@@ -33,6 +33,14 @@ const (
 	modifiedGrantsByRole = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])"
 )
 
+const (
+	ServicesEnablePermission     = "serviceusage.services.enable"
+	ServicesOperationsPermission = "serviceusage.operations.get"
+	SwitchOnWhy                  = "it lets ocel switch on a service a run needs while it is off, and a credential without it runs only where every one is on"
+)
+
+var SwitchOnPermissions = []string{ServicesEnablePermission, ServicesOperationsPermission}
+
 var TieredRoles = []string{RunRole, TopicsRole, BucketsRole, SecretsRole, RepositoriesRole, DatabasesRole, InstancesRole, AccountsRole, RunAsRole}
 
 var projectPermissions = []string{
@@ -138,6 +146,13 @@ func (d Deploy) Billing() Grant {
 	}
 }
 
+func (d Deploy) Services() Grant {
+	return Grant{
+		Permissions: SwitchOnPermissions,
+		Why:         SwitchOnWhy,
+	}
+}
+
 func (d Deploy) AppGrants() Grant {
 	grantable := append(slices.Clone(appGrantedRoles), d.names.CDNPurgeRolePath())
 	quoted := make([]string, len(grantable))
@@ -151,7 +166,7 @@ func (d Deploy) AppGrants() Grant {
 }
 
 func (d Deploy) Grants() []Grant {
-	grants := make([]Grant, 0, len(TieredRoles)+12)
+	grants := make([]Grant, 0, len(TieredRoles)+13)
 	for _, role := range TieredRoles {
 		grants = append(grants, d.Tiered(role))
 	}
@@ -167,5 +182,6 @@ func (d Deploy) Grants() []Grant {
 		d.Parts(),
 		d.ProjectPermissions(),
 		d.Billing(),
+		d.Services(),
 	)
 }

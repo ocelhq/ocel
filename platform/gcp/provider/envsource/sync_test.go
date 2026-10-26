@@ -70,7 +70,7 @@ func TestEachTierSyncsAsAnAccountOfItsOwnThatEveryReadNamesTheSame(t *testing.T)
 func TestTheSyncAccountMayWriteThisDatabaseAndSealAndOpenUnderItsTierKeyAlone(t *testing.T) {
 	t.Parallel()
 	server := googletest.GrantedIAM()
-	b := syncComposed(bootstrap.Engine{Clients: server.Open(t)})
+	b := syncComposed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.Open(t)})
 	read := bootstrap.Survey{Tier: environment.TierProduction, Names: b.Clients.Names}
 	ctx := context.Background()
 	name := b.Clients.EnvSourceSyncAccount(environment.TierProduction)
@@ -121,7 +121,7 @@ func TestTheSyncAccountMayWriteThisDatabaseAndSealAndOpenUnderItsTierKeyAlone(t 
 
 func TestASyncAccountThatMayNotWriteIsSurveyedAsMendable(t *testing.T) {
 	t.Parallel()
-	b := syncComposed(bootstrap.Engine{Clients: googletest.GrantedIAM().Open(t)})
+	b := syncComposed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: googletest.GrantedIAM().Open(t)})
 
 	found, err := b.AccountPresence(context.Background(), environment.TierProduction, b.Clients.EnvSourceSyncAccount(environment.TierProduction))
 	if err != nil || !found.Present || found.Mends != reasonUnwritable {
@@ -415,7 +415,7 @@ func TestTakingTheSyncServiceTwiceIsNothingToDo(t *testing.T) {
 
 func TestTheScheduleCallsTheServiceEveryMinuteWithAnIDTokenForTheSyncAccount(t *testing.T) {
 	t.Parallel()
-	b := syncComposed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
+	b := syncComposed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
 	tier := environment.TierProduction
 	name := b.Clients.EnvSourceSync(tier)
 	schedule := syncJob(b, tier, name, googletest.ServedAt(name))
@@ -546,7 +546,7 @@ func TestAScheduleWithNoServiceToCallIsRefusedAndOneThatOutlivedItsServiceIsMend
 
 func TestAScheduleCallingAsAnotherAccountIsMended(t *testing.T) {
 	t.Parallel()
-	b := syncComposed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
+	b := syncComposed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
 	tier := environment.TierProduction
 	uri := googletest.ServedAt(b.Clients.EnvSourceSync(tier))
 	desired := syncJob(b, tier, b.Clients.EnvSourceSync(tier), uri)

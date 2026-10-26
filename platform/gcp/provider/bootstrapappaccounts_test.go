@@ -146,7 +146,7 @@ func sweepingWith(t *testing.T, s *serviceAccountListing, server *googletest.IAM
 			t.Fatalf("record %s: %v", recorded.stack, err)
 		}
 	}
-	return composed(bootstrap.Engine{Clients: server.Serve(t, s.handler(t)), Records: records}), &fake.Log{}
+	return composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.Serve(t, s.handler(t)), Records: records}), &fake.Log{}
 }
 
 const sweptEnv = "pr-8"
@@ -232,7 +232,7 @@ func TestABootstrapDeletesTheAccountOfAnAppWhoseProjectOnlyHoldsOtherAppsAndInfr
 func TestABootstrapKeepsEveryTierAccountWhateverItsDescriptionSays(t *testing.T) {
 	t.Parallel()
 	names := sweepNamed()
-	held := composed(bootstrap.Engine{Clients: names})
+	held := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: names})
 	forged := release.AppAccountDescription(environment.TierPreview, "shop", sweptEnv, "web")
 	var accounts []listedAccount
 	for _, tier := range []environment.Tier{environment.TierPreview, environment.TierProduction} {

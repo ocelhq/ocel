@@ -51,7 +51,7 @@ func TestNoTierKeepsADatabaseOfRunsOrTagRecordsAndADeployMayMakeEachProjectsOwn(
 			}
 		}
 	}
-	for _, offered := range composed(bootstrap.Engine{}).Parts() {
+	for _, offered := range composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}}).Parts() {
 		if offered.Name == "tasks" || offered.Name == "tag-database" {
 			t.Errorf("the bootstrap offers the %s part, and runs and tag records are kept in the database each project keeps its records in", offered.Name)
 		}

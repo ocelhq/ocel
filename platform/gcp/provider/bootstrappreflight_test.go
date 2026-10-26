@@ -39,7 +39,7 @@ func servingFirestoreIn(t *testing.T, regions ...string) *gcloud.Clients {
 func TestARegionCloudRunServesAndFirestoreDoesNotIsRefusedNamingTheOnesFirestoreServes(t *testing.T) {
 	t.Parallel()
 
-	b := composed(bootstrap.Engine{Clients: servingFirestoreIn(t, "us-east1", "europe-west1")})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: servingFirestoreIn(t, "us-east1", "europe-west1")})
 
 	err := b.RegionServed(context.Background(), bootstrap.Survey{Region: "europe-west12"})
 
@@ -57,7 +57,7 @@ func TestARegionCloudRunServesAndFirestoreDoesNotIsRefusedNamingTheOnesFirestore
 func TestARegionFirestoreServesIsAdmitted(t *testing.T) {
 	t.Parallel()
 
-	b := composed(bootstrap.Engine{Clients: servingFirestoreIn(t, "us-east1", "europe-west1")})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: servingFirestoreIn(t, "us-east1", "europe-west1")})
 
 	if err := b.RegionServed(context.Background(), bootstrap.Survey{Region: "europe-west1"}); err != nil {
 		t.Errorf("regionServed(europe-west1) = %v, want it admitted", err)
@@ -102,7 +102,7 @@ func TestAProjectOwnerIsPermittedABootstrapThoughOnlyTheBucketsItCreatesGrantItT
 		json.NewEncoder(w).Encode(map[string][]string{"permissions": granted})
 	}))
 	t.Cleanup(server.Close)
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}})
 
 	if err := b.Permitted(context.Background(), []string{bootstrap.CloudflareOriginPart}); err != nil {
 		t.Fatalf("permitted: %v", err)
@@ -152,7 +152,7 @@ func TestARefusedCredentialIsToldOnlyWhatItLacksAndTheRolesThatGrantIt(t *testin
 			want:     "this credential lacks storage.hmacKeys.create on project acme-prod; grant it roles/storage.hmacKeyAdmin",
 		},
 	} {
-		b := composed(bootstrap.Engine{Clients: withholding(t, tc.withheld...)})
+		b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: withholding(t, tc.withheld...)})
 
 		err := b.Permitted(context.Background(), tc.parts)
 
@@ -197,5 +197,18 @@ func TestABootstrapCredentialMayBillItsCallsToTheProjectItBootstraps(t *testing.
 
 	if !slices.Contains(bootstrap.BootstrapRoles(), "roles/serviceusage.serviceUsageConsumer") {
 		t.Errorf("a bootstrap credential is granted %v, want roles/serviceusage.serviceUsageConsumer: a user's credential names the project as the quota project of every call, and Google refuses each with USER_PROJECT_DENIED without serviceusage.services.use", bootstrap.BootstrapRoles())
+	}
+}
+
+func TestNeitherABootstrapNorThePartsRoleAsksForThePermissionToSwitchServicesOn(t *testing.T) {
+	t.Parallel()
+
+	for _, parts := range [][]string{nil, {bootstrap.CloudflareOriginPart}} {
+		if slices.Contains(bootstrap.PermissionsFor(parts), "serviceusage.services.enable") {
+			t.Errorf("a bootstrap with parts %v demands serviceusage.services.enable, which only a run that finds a service off needs", parts)
+		}
+	}
+	if slices.Contains(bootstrap.NewPartsRole(names.New("ocel", "acme-prod")).Permissions, "serviceusage.services.enable") {
+		t.Error("the parts role holds serviceusage.services.enable, and it lets a deploy add the parts it needs and nothing else")
 	}
 }

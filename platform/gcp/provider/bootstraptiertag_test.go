@@ -54,7 +54,7 @@ func TestRemovingATierKeepsTheTierTagKeyEveryOtherTierAndNamespaceBindsTo(t *tes
 func tierTagEngine(t *testing.T, tags *googletest.TierTags) (bootstrap.Engine, bootstrap.Survey) {
 	t.Helper()
 	clients := tags.Tagged(googletest.Clients(tags.URL))
-	return bootstrap.Engine{Clients: clients}, bootstrap.Survey{Tier: environment.TierProduction, Names: clients.Names, Held: map[string]bool{}, Mending: map[string]string{}}
+	return bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: clients}, bootstrap.Survey{Tier: environment.TierProduction, Names: clients.Names, Held: map[string]bool{}, Mending: map[string]string{}}
 }
 
 func TestABootstrapMakesTheTierTagKeyUnderTheProjectWithAValueForEachTier(t *testing.T) {
@@ -180,7 +180,7 @@ func passphraseEngine(t *testing.T) (bootstrap.Engine, bootstrap.Survey, *google
 	t.Cleanup(server.Close)
 	clients := tags.Tagged(googletest.Clients(server.URL))
 	read := bootstrap.Survey{Tier: environment.TierPreview, Names: clients.Names, Held: map[string]bool{}}
-	return bootstrap.Engine{Clients: clients}, read, secrets, tags
+	return bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: clients}, read, secrets, tags
 }
 
 func TestTheTiersPassphraseSecretCarriesItsTiersTagFromItsCreation(t *testing.T) {
@@ -251,7 +251,7 @@ func TestABootstrapAccountCarriesItsTiersTagBeforeItIsGrantedAnything(t *testing
 	tags.Tagged(c)
 	const probe = "ocel-prod-probe"
 	var boundWhenGranted []string
-	b := bootstrap.Engine{Clients: c, Accounts: []bootstrap.Account{{
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: c, Accounts: []bootstrap.Account{{
 		Name: func(names.Names, environment.Tier) string { return probe },
 		Purpose: func(bootstrap.Engine, environment.Tier) bootstrap.AccountPurpose {
 			return bootstrap.AccountPurpose{Grant: func(context.Context, bootstrap.Engine, environment.Tier) error {

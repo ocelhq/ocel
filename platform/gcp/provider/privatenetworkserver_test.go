@@ -54,7 +54,7 @@ func servingNetworks(t *testing.T) (bootstrap.Engine, *networkServer) {
 	t.Cleanup(served.Close)
 	names := names.New("ocel", "acme-prod")
 	registry := &frontRegistry{front: &countingFront{}}
-	return composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: served.URL}, Edges: registry}), server
+	return composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: served.URL}, Edges: registry}), server
 }
 
 func deployingNetworks(t *testing.T) (*Provider, *networkServer) {
@@ -72,8 +72,7 @@ func (s *networkServer) serve(t *testing.T) http.HandlerFunc {
 		at := r.URL.Path
 		name := path.Base(at)
 		switch {
-		case r.Method == http.MethodGet && strings.Contains(at, "/projects/acme-prod/services/"):
-			googletest.WriteBody(w, map[string]any{"name": at, "state": bootstrap.EnabledService})
+		case (&googletest.ServiceUsage{}).Serve(w, r):
 		case strings.Contains(at, "/instances"):
 			s.databases.Serve(w, r)
 		case strings.Contains(at, "/operations/"):

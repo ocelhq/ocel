@@ -16,7 +16,7 @@ func TestAPlanToRemoveATierListsTheBastionItsForwardsMadeAndNothingWhenItMadeNon
 	t.Parallel()
 	target := echoTarget(t)
 	h := newBastionHarness(t, target)
-	b := bootstrap.Engine{Clients: h.b.clients, TearDown: h.b.tearDown}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: h.b.clients, TearDown: h.b.tearDown}
 
 	none, err := bastionRemovals(context.Background(), b, environment.TierProduction)
 	if err != nil || len(none) != 0 {
@@ -45,7 +45,7 @@ func TestRemovingATierTakesItsBastionDown(t *testing.T) {
 	target := echoTarget(t)
 	h := newBastionHarness(t, target)
 	h.forward(t, target)
-	b := bootstrap.Engine{Clients: h.b.clients, TearDown: h.b.tearDown}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: h.b.clients, TearDown: h.b.tearDown}
 	log := &fake.Log{}
 
 	if err := removeBastion(context.Background(), b, environment.TierProduction, log); err != nil {
@@ -68,7 +68,7 @@ func TestRemovingTheBastionByNamePlansItsServiceAndAccountAndTakesThemDown(t *te
 	target := echoTarget(t)
 	h := newBastionHarness(t, target)
 	h.forward(t, target)
-	b := bootstrap.Engine{Clients: h.b.clients, TearDown: h.b.tearDown, Records: fake.NewKeyValues(), Removable: []bootstrap.RemovablePart{Part}}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: h.b.clients, TearDown: h.b.tearDown, Records: fake.NewKeyValues(), Removable: []bootstrap.RemovablePart{Part}}
 	ctx := context.Background()
 
 	groups, err := b.PlanRemovedParts(ctx, environment.TierProduction, []string{PartName}, false, nil)
@@ -88,7 +88,7 @@ func TestATierWithCloudRunOffDescribesPlansAndRemovesNoBastion(t *testing.T) {
 	server := googletest.GrantedIAM()
 	server.Accounts = map[string]bool{}
 	server.ServicesOff = []string{"run.googleapis.com"}
-	b := bootstrap.Engine{Clients: server.Open(t)}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.Open(t)}
 	ctx := context.Background()
 	tier := environment.TierProduction
 

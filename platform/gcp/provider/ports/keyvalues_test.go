@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
@@ -156,5 +157,30 @@ func TestAListingWhoseConnectionDropsMidwayIsReadAgainWhole(t *testing.T) {
 	}
 	if got := fake.asked.Load(); got != 2 {
 		t.Errorf("the partition was queried %d times, want 2: once on the dropped connection and once after", got)
+	}
+}
+
+func TestTheRecordsOfATierWhoseFirestoreIsOffReadAsAProjectsAbsentRecordsOrAnUnbootstrappedTierWithoutACall(t *testing.T) {
+	fake := &droppingFirestore{}
+	store := droppingKeyValues(t, fake)
+	store.FirestoreOff = true
+	tier := records.Partition{Tier: environment.TierProduction, Root: "stacks", Path: []string{"shop"}}
+	project := records.Partition{Tier: environment.TierProduction, Root: variablestore.RootValues, Path: []string{"shop"}}
+
+	if _, err := store.Read(context.Background(), project.Key("api")); !errors.Is(err, records.ErrNotFound) {
+		t.Errorf("Read() of a project's records = %v, want ErrNotFound", err)
+	}
+	if listed, err := store.List(context.Background(), project); err != nil || len(listed) > 0 {
+		t.Errorf("List() of a project's records = %v, %v, want nothing", listed, err)
+	}
+	_, read := store.Read(context.Background(), tier.Key("api"))
+	_, listed := store.List(context.Background(), tier)
+	for name, err := range map[string]error{"Read": read, "List": listed} {
+		if !errors.Is(err, ErrNoRecordsDatabase) {
+			t.Errorf("%s() of the tier's records = %v, want the refusal of a tier with no records database", name, err)
+		}
+	}
+	if got := fake.asked.Load(); got != 0 {
+		t.Errorf("Firestore was asked %d times, want none while it is off", got)
 	}
 }

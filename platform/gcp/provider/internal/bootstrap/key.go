@@ -21,6 +21,7 @@ const (
 )
 
 var keyKind = KindOps{
+	api:         kmsAPI,
 	noun:        "KMS key",
 	terraform:   cost.KMSCryptoKeyType,
 	replaceable: true,

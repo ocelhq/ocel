@@ -98,7 +98,7 @@ func (s *roleServer) handler(t *testing.T) http.HandlerFunc {
 
 func (s *roleServer) bootstrap(t *testing.T) bootstrap.Engine {
 	t.Helper()
-	return composed(bootstrap.Engine{Clients: (&googletest.IAM{}).Serve(t, s.handler(t))})
+	return composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: (&googletest.IAM{}).Serve(t, s.handler(t))})
 }
 
 func TestRemovingABootstrapKeepsItsCustomRoles(t *testing.T) {

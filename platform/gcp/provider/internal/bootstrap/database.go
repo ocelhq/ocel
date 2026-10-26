@@ -37,6 +37,7 @@ const (
 )
 
 var databaseKind = KindOps{
+	api:           FirestoreAPI,
 	noun:          "Firestore database",
 	terraform:     cost.FirestoreDatabaseType,
 	emulatorKeeps: reasonEmulated,

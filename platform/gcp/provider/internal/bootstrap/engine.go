@@ -31,13 +31,15 @@ const (
 )
 
 type Engine struct {
-	Clients    *gcloud.Clients
-	Edges      provider.Edges
-	Stores     gcloud.Memorystore
-	Records    records.Store
-	WrittenBy  provider.WrittenBy
-	Surveyed   *Surveys
-	SkipChecks bool
+	Clients       *gcloud.Clients
+	Edges         provider.Edges
+	Stores        gcloud.Memorystore
+	Records       records.Store
+	WrittenBy     provider.WrittenBy
+	Surveyed      *Surveys
+	ServiceStates *ServiceStates
+	Principal     func(ctx context.Context) (string, error)
+	SkipChecks    bool
 
 	PushBinary     func(ctx context.Context, tier environment.Tier, name, ref string, binary []byte, path string) error
 	DeployAndRoute func(ctx context.Context, s run.Serving, progress progress.Log) (run.Release, error)
@@ -51,6 +53,9 @@ type Engine struct {
 }
 
 func (b Engine) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
+	if err := b.ReadServices(ctx, tier); err != nil {
+		return provider.BootstrapDescription{}, err
+	}
 	read, err := b.surveyReading(ctx, tier, !b.SkipChecks)
 	if err != nil {
 		return provider.BootstrapDescription{}, err
@@ -144,11 +149,12 @@ func (s *Surveys) forget(tier environment.Tier) {
 
 func (b Engine) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
 	named, req := b.SplitRemovals(req)
-	read, err := b.surveyFor(ctx, req.Tier)
+	switching, err := b.preflight(ctx, req, named)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if err := b.preflight(ctx, read, req.Parts); err != nil {
+	read, err := b.surveyFor(ctx, req.Tier)
+	if err != nil {
 		return provider.Plan{}, err
 	}
 	if err := b.partsFree(ctx, req.Tier, droppedParts(read.Stamp.Parts, req)); err != nil {
@@ -188,7 +194,7 @@ func (b Engine) Plan(ctx context.Context, req provider.BootstrapRequest) (provid
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return provider.Plan{Groups: slices.Concat(bootstrapplan.PrefixWithVendor(gcloud.Vendor, append(append(groups, fronts...), params)), added, removed)}, nil
+	return provider.Plan{Groups: slices.Concat(b.PlanSwitchOn(switching), bootstrapplan.PrefixWithVendor(gcloud.Vendor, append(append(groups, fronts...), params)), added, removed)}, nil
 }
 
 func Planned(read Survey, items []Resource) []provider.Change {
@@ -223,15 +229,25 @@ func sharedWith(tier environment.Tier) string {
 
 func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
 	named, req := b.SplitRemovals(req)
+	switching, err := b.preflight(ctx, req, named)
+	if err != nil {
+		return err
+	}
+	if len(switching) > 0 {
+		if err := b.switchOn(ctx, switching, progress); err != nil {
+			return err
+		}
+		b.Surveyed.forget(req.Tier)
+		if _, err := b.preflight(ctx, req, named); err != nil {
+			return err
+		}
+	}
 	read, err := b.surveyFor(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
 	defer b.Surveyed.forget(req.Tier)
 	items := Resources(read.Names, req.Tier, read.Emulated)
-	if err := b.preflight(ctx, read, req.Parts); err != nil {
-		return err
-	}
 	replacedParts, err := b.SurveyReplacedParts(ctx, read, named)
 	if err != nil {
 		return err

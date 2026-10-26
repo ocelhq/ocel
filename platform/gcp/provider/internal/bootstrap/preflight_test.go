@@ -35,7 +35,7 @@ func TestMoreThanAHundredPermissionsAreAskedAboutInBatchesGoogleAccepts(t *testi
 		json.NewEncoder(w).Encode(map[string][]string{"permissions": request.Permissions})
 	}))
 	t.Cleanup(server.Close)
-	b := Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}}
+	b := Engine{ServiceStates: &ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}}
 
 	granted, err := b.heldPermissions(context.Background(), needed)
 	if err != nil {

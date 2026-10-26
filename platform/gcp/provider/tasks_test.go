@@ -34,7 +34,7 @@ func TestTheFirstTopicOrTaskAddsThePushAccountAndDelayQueueAndNoBootstrapMakesTh
 
 func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing.T) {
 	t.Parallel()
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
 
 	for _, api := range []string{"pubsub.googleapis.com", "cloudtasks.googleapis.com"} {
 		if !slices.Contains(bootstrap.Topics.APIs, api) {
@@ -98,7 +98,7 @@ func TestEveryListingOfATiersRunsByTopicConsumerStatusAndTagHasItsIndex(t *testi
 func TestTheDelayQueueIsMadeGrantingNoOne(t *testing.T) {
 	t.Parallel()
 	server := googletest.GrantedIAM()
-	b := composed(bootstrap.Engine{Clients: server.Open(t)})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.Open(t)})
 
 	if err := b.EnsureDelayQueue(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("ensureDelayQueue() = %v", err)
@@ -142,7 +142,7 @@ func TestABootstrapChecksFirestoreIndexPermissionsByTheirCurrentNames(t *testing
 func TestRemovingABootstrapPurgesItsDelayQueueAndKeepsIt(t *testing.T) {
 	t.Parallel()
 	server := googletest.GrantedIAM()
-	b := composed(bootstrap.Engine{Clients: server.Open(t)})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.Open(t)})
 	ctx := context.Background()
 	tier := environment.TierProduction
 	read := bootstrap.Survey{Tier: tier, Names: b.Clients.Names, Emulated: true}
