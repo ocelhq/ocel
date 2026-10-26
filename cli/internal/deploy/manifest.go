@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
+	"github.com/ocelhq/ocel/cli/internal/portforward"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -167,7 +168,7 @@ func (d *deployRun) build(ctx context.Context, steps *buildSteps, c collected, s
 	deliverForwards(forwards, values)
 	if runsPreBuild {
 		if err := d.runPreBuild(ctx, *d.preBuild, forwards, values, len(c.resources)); err != nil {
-			return build.Output{}, errors.Join(err, forwards.Close())
+			return build.Output{}, errors.Join(err, closeForwards(steps, cfg.Slug, forwards))
 		}
 	}
 	var built build.Output
@@ -178,7 +179,17 @@ func (d *deployRun) build(ctx context.Context, steps *buildSteps, c collected, s
 		}
 		return variables.RecordClientValues(cfg.Dir, d.env, c.clients)
 	})
-	return built, errors.Join(err, forwards.Close())
+	return built, errors.Join(err, closeForwards(steps, cfg.Slug, forwards))
+}
+
+func closeForwards(steps *buildSteps, slug string, forwards *portforward.Forwards) error {
+	if forwards == nil {
+		return nil
+	}
+	releasing := steps.open(slug, progress.Releasing.Title("the forwarded ports"))
+	err := forwards.Close()
+	releasing.End(err)
+	return err
 }
 
 func (d *deployRun) assemble(c collected, built build.Output) (*contractv1.Manifest, error) {

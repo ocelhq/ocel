@@ -220,6 +220,18 @@ func TestTheForwardingStepIsNamedUnderBuildWhileItRuns(t *testing.T) {
 	assertReportedUnder(t, said, "Forwarded ports to main in ", "build")
 }
 
+func TestTheClosingOfTheForwardsIsNamedUnderBuild(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	writeNextUsageProject(t, fixture.Root, "")
+	forwardingPorts(t, fixture)
+	capturingBuild(t, &dependencies)
+
+	said := deployedSaying(t, dependencies, fixture, deployOptions{yes: true})
+
+	assertReportedUnder(t, said, "Released the forwarded ports in ", "build")
+}
+
 func TestWhatTheProviderSaysWhileForwardingPortsIsShownInTheBuild(t *testing.T) {
 	dependencies := newTestDependencies()
 	fixture := setUpDeployProject(t)
