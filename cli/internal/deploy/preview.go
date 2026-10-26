@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -99,7 +100,9 @@ func RemovePreview(ctx context.Context, dependencies Dependencies, cwd, name str
 	var removed *consolev1.EnvironmentEvent
 	err = dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}}, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider := p.Run, p.Check, p.Provider
+		reading := check.Child(cfg.Slug, progress.Reading.Title("preview "+env.GetIdentity()))
 		recorded, err := readPreview(ctx, provider, cfg.Slug, env)
+		reading.End(err)
 		if err != nil {
 			return err
 		}
@@ -195,12 +198,16 @@ func previewListResult(previews []*contractv1.PreviewEnvironment) *resultv1.Prev
 
 func listPreviews(ctx context.Context, dependencies Dependencies, target commands.Target) (previews []*contractv1.PreviewEnvironment, err error) {
 	err = dependencies.WithProvider(ctx, target.Project, "ocel preview ls", commands.OpenOptions{Cloud: target.Cloud}, func(ctx context.Context, p commands.ProviderRun) error {
-		p.Check.End(nil)
-		return p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
-			listed, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: target.Project.Slug})
+		slug := target.Project.Slug
+		reading := p.Check.Child(slug, progress.Reading.Title("the previews of "+slug))
+		err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+			listed, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: slug})
 			previews = listed.GetEnvironments()
 			return err
 		})
+		reading.End(err)
+		p.Check.End(err)
+		return err
 	})
 	return previews, err
 }
