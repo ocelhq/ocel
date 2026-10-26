@@ -3,7 +3,34 @@ package deploy
 import (
 	"context"
 	"io"
+	"strings"
+	"testing"
+
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
+
+type onStarted func(title string)
+
+func (f onStarted) Receive(ev *streamv1.RunEvent) {
+	if ev.GetOperation().GetStarted() != nil {
+		f(ev.GetOperation().GetMessage())
+	}
+}
+
+func (onStarted) Close() error { return nil }
+
+func assertReportedUnder(t *testing.T, out, said, phase string) {
+	t.Helper()
+	for line := range strings.Lines(out) {
+		if strings.Contains(line, said) {
+			if !strings.Contains(line, "["+phase+"]") {
+				t.Errorf("%q was reported as %q, want it under [%s]", said, line, phase)
+			}
+			return
+		}
+	}
+	t.Errorf("stdout = %q, want %q reported under [%s]", out, said, phase)
+}
 
 type deployOptions struct {
 	yes      bool

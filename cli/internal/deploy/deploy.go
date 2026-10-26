@@ -102,7 +102,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 
 		d := newDeployRun(dependencies, target, cfg, provider, env, facts, infra, opts, dependencies.IsBrowserReachable(stdin))
 		phase := run.Phase(progressv1.Phase_PHASE_BUILD)
-		releaseOutput, err := holdBuildOutput(ctx, cfg, phase)
+		releaseOutput, err := build.LockOutput(ctx, phase, cfg)
 		if err != nil {
 			phase.End(err)
 			return err
