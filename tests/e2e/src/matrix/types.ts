@@ -82,6 +82,7 @@ export type ConfigDelta = {
   computes?: Record<string, Compute>;
   edge?: Edge;
   tunnel?: boolean;
+  cache?: boolean;
   registry?: RegistryConfig;
   image?: ContainerImage;
 };
@@ -150,13 +151,20 @@ export type Cell = {
   target: TargetName;
 };
 
-function isKeptByItsOwnHeaders(target: TargetName, { edge, image }: ConfigDelta) {
-  return image !== undefined && (target === "aws" || edge === "alb");
+function isKeptByItsOwnHeaders(target: TargetName, { edge, cache, image }: ConfigDelta) {
+  return image !== undefined && (target === "aws" || edge === "alb" || cache === true);
+}
+
+function isPassedThroughCloudflare(target: TargetName, { edge, cache }: ConfigDelta) {
+  return target === "vps" && edge === "cloudflare" && !cache;
 }
 
 export function cacheLayerOf(target: TargetName, variant: Variant): CacheLayer {
   if (isKeptByItsOwnHeaders(target, variant.config)) {
     return "app-headers";
+  }
+  if (isPassedThroughCloudflare(target, variant.config)) {
+    return "origin";
   }
   if (variant.config.edge !== undefined || target === "aws") {
     return "edge";

@@ -21,11 +21,14 @@ import type { Fixture, Variant } from "./matrix/types";
 import {
   alb,
   cloudflare,
+  cloudflareCachingABox,
+  cloudflareCachingContainersShielded,
   cloudflareInFrontOfContainers,
   cloudflareInFrontOfMixedComputes,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
   cloudflareTunnel,
+  cloudflareTunnelCaching,
   container,
   defaults,
   dockerfile,
@@ -260,6 +263,36 @@ describe("overlayFor", () => {
     expect(JSON.parse(renderJsonConfig("{}", overlay)).provider.vps.edge).toEqual({
       cloudflare: { tunnel: true },
     });
+  });
+
+  it("asks the cloudflare edge of a vps cache cell to cache the box's containers", () => {
+    const overlay = overlayFor(cell(deploy.node, cloudflareCachingABox), "vps", {
+      OCEL_E2E_ZONE: "j.example",
+    });
+    expect(overlay).toMatchObject({ edge: "cloudflare", cache: true, dns: "cloudflare" });
+    expect(renderConfig(TS_BASE, overlay)).toContain("    edge: cloudflare({ cache: true }),");
+    expect(JSON.parse(renderJsonConfig("{}", overlay)).provider.vps.edge).toEqual({
+      cloudflare: { cache: true },
+    });
+  });
+
+  it("hands a vps cell that tunnels and caches both options of the cloudflare edge", () => {
+    const overlay = overlayFor(cell(deploy.node, cloudflareTunnelCaching), "vps", {
+      OCEL_E2E_ZONE: "j.example",
+    });
+    expect(renderConfig(TS_BASE, overlay)).toContain(
+      "    edge: cloudflare({ tunnel: true, cache: true }),",
+    );
+    expect(JSON.parse(renderJsonConfig("{}", overlay)).provider.vps.edge).toEqual({
+      cloudflare: { tunnel: true, cache: true },
+    });
+  });
+
+  it("asks the cloudflare edge of an aws cache cell to cache its containers", () => {
+    const overlay = overlayFor(cell(deploy.node, cloudflareCachingContainersShielded), "aws", {
+      OCEL_E2E_ZONE: "j.example",
+    });
+    expect(renderConfig(TS_BASE, overlay)).toContain("edge: cloudflare({ cache: true })");
   });
 
   it("writes a vps cloudflare cell's records through Cloudflare, since the edge only forwards a record that exists", () => {

@@ -10,8 +10,6 @@ import {
   lanesCheck,
   malformedQueryCheck,
   missingImmutableChunkCheck,
-  nextCacheChecks,
-  nextDataCacheChecks,
   nextOriginDataCacheChecks,
   nodeRuntimeChecks,
   orderedKeysInParallelCheck,
@@ -48,11 +46,19 @@ import {
   albInFrontOfNextContainer,
   apiGateway,
   cloudflare,
+  cloudflareCachingABox,
+  cloudflareCachingContainerDockerfile,
+  cloudflareCachingContainers,
+  cloudflareCachingContainersShielded,
+  cloudflareCachingDockerfile,
+  cloudflareCachingNextContainer,
+  cloudflareCachingNextOnABox,
   cloudflareInFrontOfContainers,
   cloudflareInFrontOfMixedComputes,
   cloudflareOnABox,
   cloudflareOnGoogleCloud,
   cloudflareTunnel,
+  cloudflareTunnelCaching,
   cloudfrontShielded,
   container,
   containerDockerfile,
@@ -64,7 +70,6 @@ import {
 const DEPLOY_NEXT_BEARING = [deploy.next, deploy.workspace];
 const SDK_NEXT_BEARING = [sdk.next, sdk.workspace];
 const EVERY_NEXT_BEARING = [...DEPLOY_NEXT_BEARING, lifecycle.next, ...SDK_NEXT_BEARING];
-const NEXT_CACHE = [...nextCacheChecks, ...nextDataCacheChecks];
 const RUNTIME_NEUTRAL_DEPLOYS = [deploy.node, deploy.go, deploy.python, deploy.rust];
 const TIMED_STREAMS = [streamCheck, sseCheck, sseSilenceCheck];
 
@@ -179,19 +184,6 @@ export const gaps: Gap[] = [
         on: ["gcp.floci"],
         fixtures: [sdk.node, sdk.go, sdk.python, sdk.rust],
         fails: [check(realtimeHandlerDefaultsCheck)],
-      },
-    ],
-  },
-  {
-    id: "cloudflare-proxies-a-box-uncached",
-    reason: "Cloudflare in front of a box proxies container apps without caching them",
-    issue: 1457,
-    where: [
-      {
-        on: ["vps", "vps.incus"],
-        fixtures: [lifecycle.next],
-        variants: [cloudflareOnABox, cloudflareTunnel],
-        fails: [check(NEXT_CACHE)],
       },
     ],
   },
@@ -320,13 +312,28 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws.floci"],
-        variants: [cloudflare, cloudflareInFrontOfContainers, cloudflareInFrontOfMixedComputes],
+        variants: [
+          cloudflare,
+          cloudflareInFrontOfContainers,
+          cloudflareInFrontOfMixedComputes,
+          cloudflareCachingContainersShielded,
+          cloudflareCachingNextContainer,
+          cloudflareCachingContainerDockerfile,
+        ],
         fails: [step.deploy],
         skipsCell: true,
       },
       {
         on: ["gcp.floci"],
-        variants: [cloudflareOnGoogleCloud, alb, albInFrontOfNextContainer, albContainerDockerfile],
+        variants: [
+          cloudflareOnGoogleCloud,
+          alb,
+          albInFrontOfNextContainer,
+          albContainerDockerfile,
+          cloudflareCachingContainers,
+          cloudflareCachingNextContainer,
+          cloudflareCachingContainerDockerfile,
+        ],
         fails: [step.deploy],
         skipsCell: true,
       },
@@ -337,7 +344,17 @@ export const gaps: Gap[] = [
     reason:
       "Cloudflare forwards to a public origin, and an incus VM is reachable only from the machine it runs on",
     where: [
-      { on: ["vps.incus"], variants: [cloudflareOnABox], fails: [step.deploy], skipsCell: true },
+      {
+        on: ["vps.incus"],
+        variants: [
+          cloudflareOnABox,
+          cloudflareCachingABox,
+          cloudflareCachingNextOnABox,
+          cloudflareCachingDockerfile,
+        ],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
     ],
   },
   {
@@ -345,7 +362,12 @@ export const gaps: Gap[] = [
     reason:
       "a tunnel cell asks the box's own address for the hostname, and deploys into the E2E Cloudflare account, which only the nightly real-VPS lane reaches",
     where: [
-      { on: ["vps.incus"], variants: [cloudflareTunnel], fails: [step.deploy], skipsCell: true },
+      {
+        on: ["vps.incus"],
+        variants: [cloudflareTunnel, cloudflareTunnelCaching],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
     ],
   },
   {
@@ -361,6 +383,24 @@ export const gaps: Gap[] = [
         skipsCell: true,
       },
       {
+        on: ["vps"],
+        variants: [cloudflareCachingABox, cloudflareCachingNextOnABox, cloudflareCachingDockerfile],
+        whileUnset: ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+      {
+        on: ["gcp"],
+        variants: [
+          cloudflareCachingContainers,
+          cloudflareCachingNextContainer,
+          cloudflareCachingContainerDockerfile,
+        ],
+        whileUnset: ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+      {
         on: ["gcp"],
         variants: [alb, albInFrontOfNextContainer, albContainerDockerfile],
         whileUnset: ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
@@ -369,14 +409,20 @@ export const gaps: Gap[] = [
       },
       {
         on: ["vps"],
-        variants: [cloudflareTunnel],
+        variants: [cloudflareTunnel, cloudflareTunnelCaching],
         whileUnset: ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
         fails: [step.deploy],
         skipsCell: true,
       },
       {
         on: ["aws"],
-        variants: [cloudflareInFrontOfContainers, cloudflareInFrontOfMixedComputes],
+        variants: [
+          cloudflareInFrontOfContainers,
+          cloudflareInFrontOfMixedComputes,
+          cloudflareCachingContainersShielded,
+          cloudflareCachingNextContainer,
+          cloudflareCachingContainerDockerfile,
+        ],
         whileUnset: ["OCEL_E2E_ZONE", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
         fails: [step.deploy],
         skipsCell: true,
@@ -386,12 +432,12 @@ export const gaps: Gap[] = [
   {
     id: "google-cloud-origins-serve-no-edge-runtime",
     reason:
-      "a Google Cloud origin serves no edge runtime, so a route that declares it runs on node and stamps itself nodejs, where ocel's Next adapter built the app",
+      "a Google Cloud origin serves no edge runtime, so where no worker runs the app's edge code a route that declares it runs on node and stamps itself nodejs",
     where: [
       {
         on: ["gcp", "gcp.floci"],
         fixtures: [deploy.next, lifecycle.next, sdk.next],
-        variants: [defaults, container, alb, albInFrontOfNextContainer, cloudflareOnGoogleCloud],
+        variants: [defaults, container, alb, albInFrontOfNextContainer],
         fails: [check(runtimeStampCheck)],
       },
     ],

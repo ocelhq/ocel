@@ -213,8 +213,12 @@ describe("sweepStaleFromZone", () => {
     expect(listings.map((one) => one.url.searchParams.get("name.endswith"))).toEqual([
       "-deploy-node-cloudflare.j.example",
       "-deploy-node-cloudflare-tunnel.j.example",
+      "-deploy-node-cloudflare-cache.j.example",
+      "-deploy-node-cloudflare-tunnel-cache.j.example",
       "-lifecycle-next-cloudflare.j.example",
       "-lifecycle-next-cloudflare-tunnel.j.example",
+      "-lifecycle-next-cloudflare-cache.j.example",
+      "-sdk-next-cloudflare-dockerfile-cache.j.example",
     ]);
     for (const one of listings) {
       expect(one.url.pathname).toBe("/client/v4/zones/z1/dns_records");
@@ -336,8 +340,11 @@ describe("sweepStaleFromZone on gcp", () => {
       "-deploy-next-alb-container-dockerfile.j.example false",
       "-deploy-next-alb-container.j.example false",
       "-deploy-next-alb.j.example false",
+      "-deploy-next-cloudflare-container-cache.j.example true",
+      "-deploy-next-cloudflare-dockerfile-cache.j.example true",
       "-deploy-next-cloudflare.j.example true",
       "-deploy-node-alb.j.example false",
+      "-deploy-node-cloudflare-container-cache.j.example true",
       "-deploy-node-cloudflare.j.example true",
     ]);
   });
@@ -373,8 +380,12 @@ describe("sweepRunFromZone", () => {
     expect(listings.map((one) => one.url.searchParams.get("name.exact"))).toEqual([
       "web-j-111-deploy-node-cloudflare.j.example",
       "web-j-111-deploy-node-cloudflare-tunnel.j.example",
+      "web-j-111-deploy-node-cloudflare-cache.j.example",
+      "web-j-111-deploy-node-cloudflare-tunnel-cache.j.example",
       "web-j-111-lifecycle-next-cloudflare.j.example",
       "web-j-111-lifecycle-next-cloudflare-tunnel.j.example",
+      "web-j-111-lifecycle-next-cloudflare-cache.j.example",
+      "web-j-111-sdk-next-cloudflare-dockerfile-cache.j.example",
     ]);
     expect(deleted(asked)).toEqual([
       "/zones/z1/dns_records/dead",
