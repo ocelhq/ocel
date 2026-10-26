@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
@@ -47,12 +48,17 @@ func TestATransformPatchesEveryResourceTheProviderConstructs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	containerNames, err := container.NamesFor(testNamespace, "proj", naming.AppStack("prod", "web", fixedRelease(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
 	rendered := map[string]map[string][]component.ResourceRef{
-		transformTypeFunction: functionNames.Surfaces(),
-		"bucket":              transformed(bucket.New(component.Artifacts{}), provider.Resource{Name: "uploads", Type: provider.BindingBucket}),
-		"postgres":            transformed(postgres.New(nil), provider.Resource{Name: "main", Type: provider.BindingPostgres}),
-		"kv":                  transformed(kv.New(kv.Tokens{}), provider.Resource{Name: "cache", Type: provider.BindingKV}),
-		transformTypeNetwork:  network.ResourceNames(testNamespace, environment.TierProduction),
+		transformTypeFunction:  functionNames.Surfaces(),
+		transformTypeContainer: containerNames.Surfaces(),
+		"bucket":               transformed(bucket.New(component.Artifacts{}), provider.Resource{Name: "uploads", Type: provider.BindingBucket}),
+		"postgres":             transformed(postgres.New(nil), provider.Resource{Name: "main", Type: provider.BindingPostgres}),
+		"kv":                   transformed(kv.New(kv.Tokens{}), provider.Resource{Name: "cache", Type: provider.BindingKV}),
+		transformTypeNetwork:   network.ResourceNames(testNamespace, environment.TierProduction),
 	}
 	maps.Copy(rendered[transformTypeNetwork], functionnetwork.ResourceNames(testNamespace, environment.TierProduction))
 
