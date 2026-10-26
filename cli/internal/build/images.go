@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 func (t tools) images(ctx context.Context, cfg *project.Project, variables map[string]AppVariables, archs map[string]string, workers HostedWorkers, log Log) (refs map[string]string, err error) {
@@ -227,8 +228,11 @@ func RefuseUnbuildableImages(ctx context.Context, span *run.Span, cfg *project.P
 			span.Say(notice)
 		}
 	}
-	if err := image.RefuseUnusableDaemon(ctx, slices.Compact(slices.Sorted(slices.Values(imageArchs)))...); err != nil {
-		return fmt.Errorf("building the container image for %s happens on this machine, before anything is provisioned:\n    %w", english.And(english.Quoted(containers)), err)
+	checking := span.Child(cfg.Slug, progress.Checking.Title("the container builder on this machine"))
+	err := image.RefuseUnusableDaemon(ctx, slices.Compact(slices.Sorted(slices.Values(imageArchs)))...)
+	if err != nil {
+		err = fmt.Errorf("building the container image for %s happens on this machine, before anything is provisioned:\n    %w", english.And(english.Quoted(containers)), err)
 	}
-	return nil
+	checking.End(err)
+	return err
 }
