@@ -100,6 +100,43 @@ func TestProvisionInfraRefusesAnEnvironmentAnotherDeployProvisionedInfraFor(t *t
 	refusedBusy(t, result, "ProvisionInfra()")
 }
 
+func refusedInsideTheCheckingSpan(t *testing.T, events []*progressv1.OperationEvent) {
+	t.Helper()
+	var started, failed bool
+	for _, ev := range events {
+		started = started || ev.GetMessage() == "Checking the bootstrap, domains and bindings for shop"
+		failed = failed || ev.GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR
+	}
+	if !started || !failed {
+		t.Errorf("the events = %v, want the claim of the environment refused inside the span checking the bootstrap", events)
+	}
+}
+
+func TestProvisionInfraTakesItsEnvironmentInsideItsFirstSpan(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+	req := infraRequest(deployRequest())
+	req.LeaseToken = otherEnvironmentLease
+
+	stream, err := client.ProvisionInfra(context.Background(), req)
+	if err != nil {
+		t.Fatalf("ProvisionInfra() error = %v", err)
+	}
+	defer stream.Close()
+	var events []*progressv1.OperationEvent
+	var result *progressv1.OperationResult
+	for stream.Receive() {
+		events = append(events, stream.Msg())
+		if got := stream.Msg().GetResult(); got != nil {
+			result = got
+		}
+	}
+
+	refusedBusy(t, result, "ProvisionInfra()")
+	refusedInsideTheCheckingSpan(t, events)
+}
+
 func TestADeployRefusesAnEnvironmentAnotherDeployProvisionedInfraFor(t *testing.T) {
 	builtProject(t)
 	client, vendor := deployServed(t)
@@ -112,6 +149,17 @@ func TestADeployRefusesAnEnvironmentAnotherDeployProvisionedInfraFor(t *testing.
 	if specs := vendor.FakeStacks().Provisioned(); len(specs) != provisioned {
 		t.Errorf("the refused deploy provisioned %d more stacks, want none: it never held the environment", len(specs)-provisioned)
 	}
+}
+
+func TestADeployClaimsItsEnvironmentInsideItsFirstSpan(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	provisionedInfra(t, client, infraRequest(deployRequest()))
+
+	result, events := deploy(t, client, deployRequest())
+
+	refusedBusy(t, result, "Deploy()")
+	refusedInsideTheCheckingSpan(t, events)
 }
 
 func TestADeployOverTheInfraItsLeaseProvisionedFreesTheEnvironmentWhenItEnds(t *testing.T) {
@@ -285,6 +333,29 @@ func TestADeployWhoseLeaseAnotherDeployTookOverIsRefusedBeforeItPromotes(t *test
 	refusedBusy(t, result, "Deploy()")
 	if _, promoted := spanStatuses(events)[promotionSpan]; promoted {
 		t.Error("the deploy promoted after another deploy took its lease over, want it stopped before promotion")
+	}
+}
+
+func TestADeployNamesItsCheckThatItStillHoldsTheEnvironmentBeforeItSwitchesTraffic(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	result, events := deploy(t, client, deployRequest())
+
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+	checked, switching := -1, -1
+	for i, ev := range events {
+		if ev.GetEnded().GetTitle() == "Checked that no other deploy to prod is running" {
+			checked = i
+		}
+		if switching < 0 && strings.HasPrefix(ev.GetMessage(), "Switching traffic to promotion") {
+			switching = i
+		}
+	}
+	if checked < 0 || switching < 0 || checked > switching {
+		t.Errorf("the check ended at event %d and the switch started at %d, want the deploy to name its check that it still holds prod before it switches traffic", checked, switching)
 	}
 }
 

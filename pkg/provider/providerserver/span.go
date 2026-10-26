@@ -21,6 +21,7 @@ const (
 	SpanHostnames   = "hostnames"
 	SpanPromotion   = "promotion"
 	SpanConnector   = "connector"
+	SpanLease       = "lease"
 )
 
 type SpanID [8]byte
