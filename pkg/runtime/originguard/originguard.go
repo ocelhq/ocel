@@ -2,6 +2,7 @@ package originguard
 
 import (
 	"cmp"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"fmt"
@@ -27,6 +28,11 @@ const (
 )
 
 const AppUnansweredHeader = "X-Ocel-App-Unanswered"
+
+const (
+	RequestIDHeader = "X-Ocel-Request-Id"
+	EntryHeader     = "X-Ocel-Entry"
+)
 
 type Guard struct {
 	expected [][sha256.Size]byte
@@ -109,6 +115,12 @@ func Handler(opts Options) http.Handler {
 			r.Out.Host = r.In.Host
 			r.Out.Header.Del(edge.OriginSecretHeader)
 			r.Out.Header.Del(ProbeTokenHeader)
+			if opts.Guard != nil {
+				r.Out.Header.Set(RequestIDHeader, rand.Text())
+			} else {
+				r.Out.Header.Del(RequestIDHeader)
+				r.Out.Header.Del(EntryHeader)
+			}
 			if strings.EqualFold(strings.TrimSpace(r.In.Header.Get("Upgrade")), "h2c") {
 				r.Out.Header.Del("Upgrade")
 				r.Out.Header.Del("Connection")
