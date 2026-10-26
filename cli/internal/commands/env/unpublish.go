@@ -16,8 +16,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
@@ -54,17 +56,21 @@ func runEnvUnpublish(ctx context.Context, dependencies Dependencies, cwd, publis
 	if err != nil {
 		return err
 	}
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env unpublish", []cloudv1.Scope{cloudv1.Scope_SCOPE_VARIABLES_WRITE}, stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env unpublish", []cloudv1.Scope{cloudv1.Scope_SCOPE_VARIABLES_WRITE}, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
 		}
-		resp, err := variableStore.UnpublishValues(ctx, &variablestorev1.UnpublishValuesRequest{
-			Slug:        cfg.Slug,
-			Tier:        opts.tier(),
-			Environment: opts.environment,
-			Publisher:   publisher,
-			Published:   written,
+		var resp *variablestorev1.UnpublishValuesResponse
+		err = runInSpan(run, progressv1.Phase_PHASE_DESTROY, cfg, progress.Removing.Title(describeTierValues(opts)+" "+publisher+" published"), func() (err error) {
+			resp, err = variableStore.UnpublishValues(ctx, &variablestorev1.UnpublishValuesRequest{
+				Slug:        cfg.Slug,
+				Tier:        opts.tier(),
+				Environment: opts.environment,
+				Publisher:   publisher,
+				Published:   written,
+			})
+			return err
 		})
 		if err != nil {
 			return err

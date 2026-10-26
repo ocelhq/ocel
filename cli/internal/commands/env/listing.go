@@ -15,8 +15,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
@@ -35,15 +37,19 @@ func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts
 			Tier: opts.tier(),
 			Slug: cfg.Slug,
 		}
-		resp, err := variableStore.ListValues(ctx, req)
-		if err != nil {
-			return err
-		}
+		var resp *variablestorev1.ListValuesResponse
 		var environments []string
-		if opts.preview && overridden(resp.GetValues()) {
-			if environments, err = variables.ListEnvironmentNames(ctx, provider, cfg.Slug); err != nil {
+		err = runInSpan(run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title(describeTierValues(opts)), func() (err error) {
+			if resp, err = variableStore.ListValues(ctx, req); err != nil {
 				return err
 			}
+			if opts.preview && overridden(resp.GetValues()) {
+				environments, err = variables.ListEnvironmentNames(ctx, provider, cfg.Slug)
+			}
+			return err
+		})
+		if err != nil {
+			return err
 		}
 		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
 			return writeEnvListJSON(stdout, req, resp.GetValues(), environments, definitions)

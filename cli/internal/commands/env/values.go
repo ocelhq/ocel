@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variables/wording"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
@@ -65,36 +66,47 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 		if err != nil {
 			return err
 		}
-		values := envValues(provider, cfg, opts)
-		var owner variables.EnvSource
-		if opts.environment == "" {
-			if owner, err = values.DescribeEnvSource(ctx); err != nil {
-				return err
-			}
-		}
+		keys := make([]string, 0, len(pairs))
 		for _, pair := range pairs {
-			at := envCoordinate(pair.key, opts)
-			if owner.CanSet(at) {
-				if err := setInEnvSource(ctx, values, owner.ID, at, pair.value, definitions, stdout); err != nil {
-					return err
-				}
-				continue
-			}
-			seen, err := values.Version(ctx, at)
-			if err != nil {
-				return err
-			}
-			version, err := values.Set(ctx, at, pair.value, &seen)
-			if err != nil {
-				return staleCell(err, pair.key, opts)
-			}
-			fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), version)
+			keys = append(keys, pair.key)
 		}
-		if err := printGroupProgress(ctx, variableStore, cfg.Slug, definitions, groups, opts, pairs, stdout); err != nil {
+		err = runInSpan(run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeValues(keys, opts)), func() error {
+			return setPairs(ctx, envValues(provider, cfg, opts), pairs, opts, definitions, stdout)
+		})
+		if err != nil {
 			return err
 		}
-		return nil
+		return printGroupProgress(ctx, run, variableStore, cfg, definitions, groups, opts, pairs, stdout)
 	})
+}
+
+func setPairs(ctx context.Context, values variables.Store, pairs []envSetPair, opts envOptions, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
+	var owner variables.EnvSource
+	if opts.environment == "" {
+		var err error
+		if owner, err = values.DescribeEnvSource(ctx); err != nil {
+			return err
+		}
+	}
+	for _, pair := range pairs {
+		at := envCoordinate(pair.key, opts)
+		if owner.CanSet(at) {
+			if err := setInEnvSource(ctx, values, owner.ID, at, pair.value, definitions, stdout); err != nil {
+				return err
+			}
+			continue
+		}
+		seen, err := values.Version(ctx, at)
+		if err != nil {
+			return err
+		}
+		version, err := values.Set(ctx, at, pair.value, &seen)
+		if err != nil {
+			return staleCell(err, pair.key, opts)
+		}
+		fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), version)
+	}
+	return nil
 }
 
 func setInEnvSource(ctx context.Context, values variables.Store, id string, at variables.Coordinate, value string, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
@@ -133,7 +145,11 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 			Reveal:     opts.reveal,
 		}
-		resp, err := variableStore.GetValue(ctx, req)
+		var resp *variablestorev1.GetValueResponse
+		err = runInSpan(run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title(describeValues([]string{key}, opts)), func() (err error) {
+			resp, err = variableStore.GetValue(ctx, req)
+			return err
+		})
 		if err != nil {
 			return err
 		}
@@ -197,13 +213,17 @@ func runEnvRemove(ctx context.Context, dependencies Dependencies, cwd, key strin
 		}
 		values := envValues(provider, cfg, opts)
 		at := envCoordinate(key, opts)
-		seen, err := values.Version(ctx, at)
+		var deleted bool
+		err = runInSpan(run, progressv1.Phase_PHASE_DESTROY, cfg, progress.Removing.Title(describeValues([]string{key}, opts)), func() error {
+			seen, err := values.Version(ctx, at)
+			if err != nil {
+				return err
+			}
+			deleted, err = values.Delete(ctx, at, &seen)
+			return staleCell(err, key, opts)
+		})
 		if err != nil {
 			return err
-		}
-		deleted, err := values.Delete(ctx, at, &seen)
-		if err != nil {
-			return staleCell(err, key, opts)
 		}
 		if !deleted {
 			fmt.Fprintf(stdout, "No value was set for %s.\n", describeCell(key, opts))
@@ -214,10 +234,7 @@ func runEnvRemove(ctx context.Context, dependencies Dependencies, cwd, key strin
 		if err != nil {
 			return err
 		}
-		if err := printGroupProgress(ctx, variableStore, cfg.Slug, definitions, groups, opts, []envSetPair{{key: key}}, stdout); err != nil {
-			return err
-		}
-		return nil
+		return printGroupProgress(ctx, run, variableStore, cfg, definitions, groups, opts, []envSetPair{{key: key}}, stdout)
 	})
 }
 
@@ -241,7 +258,7 @@ func writeEnvGetJSON(stdout io.Writer, req *variablestorev1.GetValueRequest, res
 }
 
 func runEnvHistory(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env history", nil, stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env history", nil, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
@@ -250,7 +267,11 @@ func runEnvHistory(ctx context.Context, dependencies Dependencies, cwd, key stri
 			Tier:       opts.tier(),
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 		}
-		resp, err := variableStore.ListVersions(ctx, req)
+		var resp *variablestorev1.ListVersionsResponse
+		err = runInSpan(run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title("the history of "+describeValues([]string{key}, opts)), func() (err error) {
+			resp, err = variableStore.ListVersions(ctx, req)
+			return err
+		})
 		if err != nil {
 			return err
 		}

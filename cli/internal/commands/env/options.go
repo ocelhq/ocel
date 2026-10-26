@@ -1,7 +1,10 @@
 package env
 
 import (
+	"fmt"
+
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -61,6 +64,22 @@ func describeCell(key string, opts envOptions) string {
 	if opts.folder != "" {
 		out += " in " + opts.folder
 	}
+	if opts.environment != "" {
+		out += " for " + opts.environment
+	}
+	return out
+}
+
+func describeValues(keys []string, opts envOptions) string {
+	noun := "value"
+	if len(keys) > 1 {
+		noun = "values"
+	}
+	return fmt.Sprintf("the %s %s of %s", tierName(opts), noun, describeCell(english.And(keys), opts))
+}
+
+func describeTierValues(opts envOptions) string {
+	out := "the " + tierName(opts) + " values"
 	if opts.environment != "" {
 		out += " for " + opts.environment
 	}

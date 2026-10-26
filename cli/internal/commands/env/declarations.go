@@ -15,31 +15,35 @@ import (
 )
 
 func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *project.Project, provider *providerprocess.Provider, key string, opts envOptions, run *run.Run) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
-	prepared, err := declaration.Prepare(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	fingerprint := prepared.Fingerprint()
-
-	cache, cacheErr := openVariableCache()
-	if cacheErr == nil {
-		if definitions, groups, ok := cache.LoadContaining(cfg.Dir, fingerprint, key); ok {
-			return withImpliedDeclarations(cfg, opts, definitions, groups)
+	var definitions []*resourcesv1.VariableDefinition
+	var groups []*resourcesv1.GroupDefinition
+	err := collecting(run, cfg, func(output io.Writer) error {
+		prepared, err := declaration.Prepare(cfg)
+		if err != nil {
+			return err
 		}
-	}
+		fingerprint := prepared.Fingerprint()
 
-	declarations := projectDeclarations(cfg, provider, opts)
-	err = collecting(run, cfg, func(output io.Writer) error {
-		_, err := declaration.CollectPrepared(ctx, cfg, declarations, prepared, io.Discard, output)
-		return err
+		cache, cacheErr := openVariableCache()
+		if cacheErr == nil {
+			var cached bool
+			if definitions, groups, cached = cache.LoadContaining(cfg.Dir, fingerprint, key); cached {
+				return nil
+			}
+		}
+
+		declarations := projectDeclarations(cfg, provider, opts)
+		if _, err := declaration.CollectPrepared(ctx, cfg, declarations, prepared, io.Discard, output); err != nil {
+			return err
+		}
+		definitions, groups = declarations.Definitions(), declarations.Groups()
+		if cacheErr == nil {
+			_ = cache.Save(cfg.Dir, fingerprint, definitions, groups)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, nil, err
-	}
-
-	definitions, groups := declarations.Definitions(), declarations.Groups()
-	if cacheErr == nil {
-		_ = cache.Save(cfg.Dir, fingerprint, definitions, groups)
 	}
 	return withImpliedDeclarations(cfg, opts, definitions, groups)
 }

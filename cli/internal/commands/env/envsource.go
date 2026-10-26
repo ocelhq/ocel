@@ -16,8 +16,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/envsource"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
@@ -71,8 +73,12 @@ func deployCommand(opts envOptions) string {
 }
 
 func runEnvSync(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env sync", []cloudv1.Scope{cloudv1.Scope_SCOPE_VARIABLES_WRITE}, stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
-		synced, err := variables.Store{Provider: provider, Project: cfg, Tier: opts.tier()}.SyncRegisteredEnvSource(ctx)
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env sync", []cloudv1.Scope{cloudv1.Scope_SCOPE_VARIABLES_WRITE}, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+		var synced *variablestorev1.SyncEnvSourceResponse
+		err := runInSpan(run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeTierValues(opts)+" from their env source"), func() (err error) {
+			synced, err = variables.Store{Provider: provider, Project: cfg, Tier: opts.tier()}.SyncRegisteredEnvSource(ctx)
+			return err
+		})
 		if err != nil {
 			return err
 		}
@@ -92,13 +98,17 @@ func runEnvSync(ctx context.Context, dependencies Dependencies, cwd string, opts
 }
 
 func runEnvSource(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env source", nil, stderr, func(ctx context.Context, _ *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env source", nil, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
 		}
 		req := &variablestorev1.DescribeEnvSourceRequest{Tier: opts.tier(), Slug: cfg.Slug}
-		described, err := variableStore.DescribeEnvSource(ctx, req)
+		var described *variablestorev1.DescribeEnvSourceResponse
+		err = runInSpan(run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title("the env source of "+describeTierValues(opts)), func() (err error) {
+			described, err = variableStore.DescribeEnvSource(ctx, req)
+			return err
+		})
 		if err != nil {
 			return err
 		}

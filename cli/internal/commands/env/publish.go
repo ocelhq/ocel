@@ -17,8 +17,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
@@ -78,12 +80,16 @@ func runEnvPublish(ctx context.Context, dependencies Dependencies, cwd, publishe
 		if err != nil {
 			return err
 		}
-		resp, err := variableStore.PublishValues(ctx, &variablestorev1.PublishValuesRequest{
-			Slug:        cfg.Slug,
-			Tier:        opts.tier(),
-			Environment: opts.environment,
-			Publisher:   publisher,
-			Published:   published,
+		var resp *variablestorev1.PublishValuesResponse
+		err = runInSpan(run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeTierValues(opts)+" "+publisher+" publishes"), func() (err error) {
+			resp, err = variableStore.PublishValues(ctx, &variablestorev1.PublishValuesRequest{
+				Slug:        cfg.Slug,
+				Tier:        opts.tier(),
+				Environment: opts.environment,
+				Publisher:   publisher,
+				Published:   published,
+			})
+			return err
 		})
 		if err != nil {
 			return err
