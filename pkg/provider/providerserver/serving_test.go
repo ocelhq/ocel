@@ -174,6 +174,19 @@ func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveDispatchedBy(t *tes
 	}
 }
 
+func TestANextContainerBuiltFromItsOwnImageIsHandedNoISRLedger(t *testing.T) {
+	query := servingQuery(t.TempDir(), "web", buildoutput.FrameworkNext)
+	query.Compute = provider.ComputeContainer
+
+	facts, err := providerserver.AppServingFor(query)
+	if err != nil {
+		t.Fatalf("AppServingFor() = %v", err)
+	}
+	if facts.ISR != nil {
+		t.Errorf("ISR = %+v, want none: next start in the app's own image keeps its own cache", facts.ISR)
+	}
+}
+
 func TestAContainerAppIsForwardedToAndNeverDispatchedByEitherSide(t *testing.T) {
 	root := servingRoot(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "index"}, []byte(`{"routes":[]}`))
 	for name, runsCode := range map[string]bool{"an edge that runs code": true, "an edge that runs none": false} {
