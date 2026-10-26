@@ -43,7 +43,17 @@ func RunDeployed(ctx context.Context, opts Options, deployed Deployed) error {
 	}
 	opts.Stdout, opts.Stderr = stdout, stderr
 	ran := RunProjected(ctx, opts, live)
-	return errors.Join(ran, stdout.Flush(), stderr.Flush(), forwards.Close())
+	return errors.Join(ran, stdout.Flush(), stderr.Flush(), closeForwards(opts, forwards))
+}
+
+func closeForwards(opts Options, forwards *portforward.Forwards) error {
+	if forwards == nil {
+		return nil
+	}
+	span := opts.session().Child(opts.Project.Slug, closingForwardsTitle)
+	err := forwards.Close()
+	span.End(err)
+	return err
 }
 
 func forwardDeployed(ctx context.Context, opts Options, deployed Deployed) (*portforward.Forwards, error) {
