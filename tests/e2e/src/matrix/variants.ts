@@ -8,6 +8,7 @@ import {
 import { imageShowsNoBindingCheck } from "../checks/prerender";
 import { revisionTagChecks } from "../checks/revisionTag";
 import { TUNNELED_ORIGIN_CHECKS } from "../checks/tunnel";
+import { workersCacheChecks } from "../checks/workersCache";
 import { JOURNEY_REGISTRY, REGISTRY_TOKEN_ENV } from "../registry/settings";
 import { DEFAULT_VARIANT, TARGETS, type Variant, variant } from "./types";
 
@@ -64,6 +65,47 @@ export const cloudflareOnGoogleCloud = variant("cloudflare", {
   checks: revisionTagChecks,
 });
 
+const CACHING_CONTAINERS = {
+  edge: "cloudflare",
+  compute: "container",
+  cache: true,
+} as const;
+
+export const cloudflareCachingContainers = variant("cloudflare-container-cache", {
+  offeredOn: ["gcp"],
+  config: CACHING_CONTAINERS,
+  checks: workersCacheChecks,
+});
+
+export const cloudflareCachingContainersShielded = variant("cloudflare-container-cache", {
+  offeredOn: ["aws"],
+  config: CACHING_CONTAINERS,
+  checks: [...CLIENT_CERTIFICATE_CHECKS, ...workersCacheChecks],
+});
+
+export const cloudflareCachingNextContainer = variant("cloudflare-container-cache", {
+  offeredOn: ["aws", "gcp"],
+  config: CACHING_CONTAINERS,
+});
+
+export const cloudflareCachingABox = variant("cloudflare-cache", {
+  offeredOn: ["vps"],
+  config: { edge: "cloudflare", cache: true },
+  checks: [...SHIELDED_ORIGIN_CHECKS, ...workersCacheChecks],
+});
+
+export const cloudflareCachingNextOnABox = variant("cloudflare-cache", {
+  offeredOn: ["vps"],
+  config: { edge: "cloudflare", cache: true },
+  checks: SHIELDED_ORIGIN_CHECKS,
+});
+
+export const cloudflareTunnelCaching = variant("cloudflare-tunnel-cache", {
+  offeredOn: ["vps"],
+  config: { edge: "cloudflare", tunnel: true, cache: true },
+  checks: [...TUNNELED_ORIGIN_CHECKS, ...workersCacheChecks],
+});
+
 export const alb = variant("alb", { offeredOn: ["gcp"], config: { edge: "alb" } });
 
 export const albInFrontOfNext = { ...alb, checks: backendBucketChecks };
@@ -86,13 +128,26 @@ export const albContainerDockerfile = variant("alb-container-dockerfile", {
   config: { edge: "alb", compute: "container", image: NEXT_START },
 });
 
+export const cloudflareCachingContainerDockerfile = variant("cloudflare-dockerfile-cache", {
+  offeredOn: ["aws", "gcp"],
+  config: { ...CACHING_CONTAINERS, image: NEXT_START },
+});
+
 export const registry = variant("registry", {
   offeredOn: ["vps"],
   config: { registry: { server: JOURNEY_REGISTRY, password: `\${${REGISTRY_TOKEN_ENV}}` } },
 });
 
+const PRERENDER_DOCKERFILE = { dockerfile: "prerender.Dockerfile" };
+
 export const dockerfile = variant("dockerfile", {
   offeredOn: ["vps"],
-  config: { image: { dockerfile: "prerender.Dockerfile" } },
+  config: { image: PRERENDER_DOCKERFILE },
   checks: [imageShowsNoBindingCheck],
+});
+
+export const cloudflareCachingDockerfile = variant("cloudflare-dockerfile-cache", {
+  offeredOn: ["vps"],
+  config: { edge: "cloudflare", cache: true, image: PRERENDER_DOCKERFILE },
+  checks: [...SHIELDED_ORIGIN_CHECKS, imageShowsNoBindingCheck],
 });

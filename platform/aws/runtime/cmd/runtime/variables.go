@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables/baked"
+	"github.com/ocelhq/ocel/pkg/runtime/baked"
 )
 
 func bakedVariablesEnv(envelope, taskRoot string) ([]string, error) {

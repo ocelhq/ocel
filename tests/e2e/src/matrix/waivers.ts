@@ -10,7 +10,7 @@ function isServed(
   if (config.image) return true;
   switch (target) {
     case "aws":
-      if (config.edge === "cloudflare") return compute !== "container";
+      if (config.edge === "cloudflare") return compute !== "container" || config.cache === true;
       return config.edge !== "api-gateway" && need === "edge-cache";
     case "gcp":
       if (config.edge === "cloudflare") return true;

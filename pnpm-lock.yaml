@@ -1126,9 +1126,6 @@ importers:
       '@framework/next-image-optimizer':
         specifier: workspace:*
         version: link:../../../frameworks/next/image-optimizer
-      '@framework/next-router':
-        specifier: workspace:*
-        version: link:../../../frameworks/next/router
       '@framework/next-runtime':
         specifier: workspace:*
         version: link:../../../frameworks/next/runtime

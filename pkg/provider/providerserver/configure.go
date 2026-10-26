@@ -6,6 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
@@ -66,17 +67,25 @@ func ListDispatchedComputes(p provider.Provider, front edge.Edge) ([]provider.Co
 	}
 	var dispatched []provider.Compute
 	for _, compute := range p.Facts().Computes {
-		kind, paired := p.Facts().PairedRouter(front.Kind(), compute)
-		if !paired {
-			continue
-		}
-		opened, err := p.Routers().Open(kind)
+		opened, paired, err := OpenDispatchingRouter(p, front, compute)
 		if err != nil {
 			return nil, err
 		}
-		if opened.Facts().Dispatches {
+		if paired && opened.Facts().Dispatches {
 			dispatched = append(dispatched, compute)
 		}
 	}
 	return dispatched, nil
+}
+
+func OpenDispatchingRouter(p provider.Provider, front edge.Edge, compute provider.Compute) (router.Router, bool, error) {
+	kind, paired := readPairingFacts(p, front).PairedRouter(front.Kind(), compute)
+	if !paired {
+		return nil, false, nil
+	}
+	if by, fronted := listFrontingRouters(p.Facts(), front)[kind]; fronted {
+		kind = by
+	}
+	opened, err := p.Routers().Open(kind)
+	return opened, err == nil, err
 }

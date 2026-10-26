@@ -1,13 +1,13 @@
 import { newInProcessImageOrigin } from "@framework/next-image-optimizer/in-process-origin";
-import {
-  type DispatchHost,
-  newDispatchInvoke,
-  readDispatchHost,
-} from "@framework/next-runtime/dispatch-host";
 import type { NextHost } from "@framework/next-runtime/host";
-import { fetchUndecoded } from "@framework/node-runtime/undecoded-fetch";
+import {
+  newImageEndpointInvoke,
+  servesImageEndpoint,
+} from "@framework/next-runtime/image-endpoint";
+import type { Invoke } from "@framework/node-runtime/host";
 import { readStorageCoordinate } from "@platform/edge-contract/runtime-env";
-import { newDiskAssetBucket, newDiskObjectStore } from "./disk-assets.mjs";
+import { newDiskObjectStore } from "./disk-assets.mjs";
+import { openEdgePurge } from "./edge-purge.mjs";
 
 const buildDirVar = "OCEL_BUILD_DIR";
 
@@ -17,22 +17,21 @@ function requiredDir(env: NodeJS.ProcessEnv, name: string): string {
   return dir;
 }
 
-export function readVpsDispatchHost(env: NodeJS.ProcessEnv, localOrigin: string): DispatchHost {
-  const buildDir = requiredDir(env, buildDirVar);
+function newVpsImageEndpointInvoke(next: Invoke, env: NodeJS.ProcessEnv): Invoke {
   const storage = readStorageCoordinate(env);
-  return readDispatchHost(env, localOrigin, {
-    ...(storage && {
-      assetBucket: newDiskAssetBucket(buildDir, storage),
-      imageOrigin: newInProcessImageOrigin(newDiskObjectStore(buildDir, storage)),
-    }),
-    originFetch: fetchUndecoded,
-  });
+  if (!storage || !servesImageEndpoint(env)) return next;
+  const buildDir = requiredDir(env, buildDirVar);
+  return newImageEndpointInvoke(
+    next,
+    newInProcessImageOrigin(newDiskObjectStore(buildDir, storage)),
+  );
 }
 
 export function newVpsNextHost(env: NodeJS.ProcessEnv): NextHost {
   requiredDir(env, buildDirVar);
+  const edgePurge = openEdgePurge(env);
   return {
-    newDispatchInvoke: async (localOrigin) =>
-      newDispatchInvoke(readVpsDispatchHost(env, localOrigin)),
+    ...(edgePurge && { edgePurge }),
+    newOriginInvoke: async (next) => newVpsImageEndpointInvoke(next, env),
   };
 }

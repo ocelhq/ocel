@@ -7,7 +7,7 @@ import { cloudCdnShapedTagsPerObject } from "./cloud-cdn.mjs";
 import { newCloudStorage } from "./cloud-storage.mjs";
 import { newGcpDispatchInvoke } from "./dispatch-host.mjs";
 import { newFirestore } from "./firestore.mjs";
-import { newImageEndpointInvoke } from "./image-endpoint.mjs";
+import { newGcpImageEndpointInvoke } from "./image-endpoint.mjs";
 import { newInstanceCacheStore, newInstanceUseCacheStore } from "./instance-stores.mjs";
 import { newFirestoreTagRecords, withCdnPurge } from "./tag-records.mjs";
 import { newGcpUseCacheStore } from "./use-cache-store.mjs";
@@ -52,7 +52,7 @@ export function newGcpNextHost(env: NodeJS.ProcessEnv): NextHost {
       shared
         ? newGcpUseCacheStore(shared.storage.cache, shared.coordinate, shared.tags)
         : newInstanceUseCacheStore(cache),
-    newOriginInvoke: async (next) => newImageEndpointInvoke(next, env),
+    newOriginInvoke: async (next) => newGcpImageEndpointInvoke(next, env),
     newDispatchInvoke: async (localOrigin) => newGcpDispatchInvoke(localOrigin, env),
   };
 }

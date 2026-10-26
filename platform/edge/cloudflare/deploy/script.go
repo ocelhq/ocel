@@ -222,6 +222,13 @@ func scriptBindings(worker workerScript, includeAssets bool) []map[string]any {
 			"service": service,
 		})
 	}
+	for name, bucket := range worker.R2Buckets {
+		bindings = append(bindings, map[string]any{
+			"type":        "r2_bucket",
+			"name":        name,
+			"bucket_name": bucket,
+		})
+	}
 	for name, text := range worker.Variables {
 		bindings = append(bindings, map[string]any{
 			"type": "plain_text",

@@ -8,10 +8,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
 
-func ListDispatchedComputes(t *testing.T, p provider.Provider, front edge.Kind) []provider.Compute {
+func ListDispatchedComputes(t *testing.T, p provider.Provider, front edge.Kind, options provider.Options) []provider.Compute {
 	t.Helper()
 
-	opened, err := p.Edges().Open(front, nil)
+	opened, err := p.Edges().Open(front, options)
 	if err != nil {
 		t.Fatalf("Edges().Open(%s) = %v", front, err)
 	}

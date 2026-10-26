@@ -79,6 +79,8 @@ type private struct {
 	EntryWorker string   `json:"entryWorker,omitempty"`
 	EnvelopeKey string   `json:"envelopeKey,omitempty"`
 	Routed      []string `json:"routed,omitempty"`
+	Fronted     []string `json:"fronted,omitempty"`
+	FrontedBy   string   `json:"frontedBy,omitempty"`
 }
 
 func (own private) wrapsEnvelopes() bool {
@@ -120,8 +122,15 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, err
 	}
 	if !spec.PruneOnly {
-		if err := p.refuseBootstrapBehind(ctx, accountID, names, spec.Tier, bootstrapCaller{worker: "the entry worker this deploy uploads", retry: "deploy again"}); err != nil {
+		behind, err := p.listWorkersBehind(ctx, accountID, names, spec.Tier)
+		if err != nil {
 			return nil, err
+		}
+		if len(behind) > 0 {
+			if err := p.forgetStoreVersion(ctx, spec.Tier); err != nil {
+				return nil, err
+			}
+			return nil, p.refuseBootstrapBehind(behind, spec.Tier, bootstrapCaller{worker: "the entry worker this deploy uploads", retry: "deploy again"})
 		}
 	}
 
@@ -142,9 +151,15 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		envelopeKey = minted
 	}
 
+	fronted := p.listFrontedHosts(spec)
+	frontedBy := frontingWorker(spec, program, names, fronted)
 	generic, err := genericWorker(spec, program, envelopeKey)
 	if err != nil {
 		return nil, err
+	}
+	generic = withKeptObjects(generic, p.keptBucketName(names, spec.Tier))
+	if p.options.Cache {
+		generic = withVar(generic, cachesContainersBinding, "1")
 	}
 	stamp, err := specStamp(spec, program, generic)
 	if err != nil {
@@ -160,7 +175,7 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, fmt.Errorf("publish the %s gate of %s: %w", spec.Tier, slug, err)
 	}
 	opened := func(state edge.StackState) (edge.EdgeStack, error) {
-		own := private{EnvelopeKey: envelopeKey, Routed: routed}
+		own := private{EnvelopeKey: envelopeKey, Routed: routed, Fronted: fronted, FrontedBy: frontedBy}
 		if !spec.PruneOnly {
 			own.EntryWorker = program.name
 		}
@@ -217,6 +232,9 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, err
 	}
 	routed = slices.Clone(spec.Domains)
+	if err := p.reconcileFrontedRoutes(ctx, accountID, prior, frontedRoutes{hosts: fronted, by: frontedBy, previously: recorded.Fronted, previouslyBy: recorded.FrontedBy}); err != nil {
+		return nil, err
+	}
 	if upToDate {
 		return openedAsDeployed(prior)
 	}

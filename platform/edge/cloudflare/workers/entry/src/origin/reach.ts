@@ -9,16 +9,18 @@ import { AwsClient } from "aws4fetch";
 import type { Env } from "../env";
 import type { StoredRecord } from "../releases";
 import type { StoreSource } from "../store-read";
+import { frontedFetch } from "./fronted";
 import { type OriginSecrets, originSecretFetch, presentedSecret } from "./origin-secret";
 import { sigv4OriginFetch } from "./sigv4";
-import { type OpenedStore, type OriginObjects, openStore } from "./store";
+import { type OpenedStore, type OriginObjects, openKeptObjects, openStore } from "./store";
 
-export type OriginEnv = Pick<Env, "OCEL_ORIGIN">;
+export type OriginEnv = Pick<Env, "OCEL_ORIGIN" | "OCEL_OBJECTS">;
 
-export type ReachedRecord = Pick<StoredRecord, "originSecretFingerprint">;
+export type ReachedRecord = Pick<StoredRecord, "originSecretFingerprint" | "fronted">;
 
 export interface Origin {
   fetchFor(record: ReachedRecord): typeof fetch;
+  imageFetchFor(record: ReachedRecord): typeof fetch;
   isThrottle: OriginThrottle;
   objects?: OriginObjects;
   entries?: StoreSource;
@@ -27,7 +29,8 @@ export interface Origin {
 
 type ReadReach =
   | { kind: "sigv4"; signedFetch: typeof fetch }
-  | { kind: "origin-secret"; secrets: OriginSecrets };
+  | { kind: "origin-secret"; secrets: OriginSecrets }
+  | { kind: "fronted" };
 
 interface ReadOrigin {
   reach: ReadReach;
@@ -91,6 +94,7 @@ function readSecrets(reach: Fields): OriginSecrets {
 function readReach(reach: Fields): ReadReach {
   const kind = reach.kind;
   if (kind === "origin-secret") return { kind, secrets: readSecrets(reach) };
+  if (kind === "fronted") return { kind };
   if (kind !== "sigv4") {
     refuse(`names the reach ${JSON.stringify(kind)}, which this worker does not know`);
   }
@@ -190,23 +194,34 @@ function readHeldOrigin(raw: string | undefined): ReadOrigin {
   return origin;
 }
 
-function newFetchFor(reach: ReadReach): (record: ReachedRecord) => typeof fetch {
+function newFetchFor(
+  reached: (record: ReachedRecord) => typeof fetch,
+): (record: ReachedRecord) => typeof fetch {
+  return (record) => (record.fronted ? frontedFetch : reached(record));
+}
+
+function newReachedFetch(reach: ReadReach): (record: ReachedRecord) => typeof fetch {
   switch (reach.kind) {
     case "sigv4":
       return () => reach.signedFetch;
     case "origin-secret":
       return (record) =>
         originSecretFetch(presentedSecret(reach.secrets, record.originSecretFingerprint));
+    case "fronted":
+      return () => frontedFetch;
   }
 }
 
 export function openOrigin(env: OriginEnv): Origin {
   const { reach, isThrottle, store, images } = readHeldOrigin(env.OCEL_ORIGIN);
+  const kept = env.OCEL_OBJECTS ? openKeptObjects(env.OCEL_OBJECTS) : undefined;
+  const reached = newReachedFetch(reach);
   return {
-    fetchFor: newFetchFor(reach),
+    fetchFor: newFetchFor(reached),
+    imageFetchFor: reached,
     isThrottle,
-    objects: store?.objects,
-    entries: store?.entries,
+    objects: kept ?? store?.objects,
+    entries: kept ? undefined : store?.entries,
     images,
   };
 }

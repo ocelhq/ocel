@@ -12,10 +12,14 @@ import (
 )
 
 func (x *Proxy) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
-	if _, err := x.p.readTierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack"); err != nil {
+	accountID, err := x.p.readTierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack")
+	if err != nil {
 		return nil, err
 	}
-	next := prior
+	next, err := x.p.retireFronting(ctx, accountID, prior)
+	if err != nil {
+		return nil, err
+	}
 	next.Slug, next.Tier = spec.Slug, spec.Tier
 	next.PreviewBase = ""
 	for _, domain := range spec.Domains {

@@ -46,7 +46,7 @@ func listForwardedHostnames(p provider.Provider, front edge.Edge, tier environme
 	}
 	var forwarded []string
 	for _, hostname := range req.GetDomains() {
-		kind, paired := readDomainRouter(p.Facts(), front.Kind(), req.GetDomainApps()[hostname], req.GetContainers())
+		kind, paired := readDomainRouter(readPairingFacts(p, front), front.Kind(), req.GetDomainApps()[hostname], req.GetContainers())
 		if !paired {
 			continue
 		}

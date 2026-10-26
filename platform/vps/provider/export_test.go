@@ -13,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/seal"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/resources/bucket"
@@ -23,6 +25,21 @@ import (
 )
 
 var ProviderOver = newProvider
+
+var NewFrontedEnv = newFrontedEnv
+
+type KeptDelivery struct {
+	RouteTableKey, BundleKey, Envelope string
+}
+
+func KeepReleaseObjects(ctx context.Context, endpoint, credential string, spec provider.StackSpec) (KeptDelivery, error) {
+	held := fronting{
+		store: edge.ReleasesStore{Endpoint: endpoint, BootstrapCredential: credential},
+		kept:  cloudflare.NewKeptObjects("ocel", cloudflare.Origin{}),
+	}
+	delivered, err := keepReleaseObjects(ctx, held, spec, progress.Discard())
+	return KeptDelivery{RouteTableKey: delivered.routeTableKey, BundleKey: delivered.bundleKey, Envelope: delivered.envelope}, err
+}
 
 const (
 	RealtimeGatewayMemoryBytes = realtime.GatewayMemoryBytes
@@ -129,12 +146,76 @@ func Exposed(inner provider.Bootstrap, gate func(context.Context) error, refuseC
 }
 
 func Fronted(inner provider.Bootstrap, gate func(context.Context) error, front edge.Edge) provider.Bootstrap {
-	return fronted{elevating: elevating{Bootstrap: inner, elevated: gate}, front: front}
+	return fronted{elevating: elevating{Bootstrap: inner, elevated: gate}, front: front, forget: func(context.Context, environment.Tier) error { return nil }}
 }
 
 func (p *Provider) Host() *host.Host { return p.host }
 
 func (p *Provider) Recording(store records.Store) { p.keyValues = store }
+
+func (p *Provider) Sealing(cipher seal.Cipher) { p.cipher = cipher }
+
+func (p *Provider) RecordFronting(ctx context.Context, tier environment.Tier, credential, seed, store, endpoint string, projects ...string) error {
+	return records.Change(ctx, p.keyValues, frontingRecordKey(tier), func(records.Entry) ([]byte, bool, error) {
+		sealed, err := p.sealFrontingRecord(ctx, tier, frontingRecord{Credential: credential, PurgeSeed: seed, Store: store, Endpoint: endpoint, StoreVersion: cloudflare.ComputeStoreVersion(), Projects: projects})
+		return sealed, true, err
+	})
+}
+
+func (p *Provider) RecordFrontingStoreVersion(ctx context.Context, tier environment.Tier, version string) error {
+	return records.Change(ctx, p.keyValues, frontingRecordKey(tier), func(entry records.Entry) ([]byte, bool, error) {
+		record, err := p.openFrontingRecord(ctx, tier, entry.Value)
+		if err != nil {
+			return nil, false, err
+		}
+		record.StoreVersion = version
+		sealed, err := p.sealFrontingRecord(ctx, tier, record)
+		return sealed, true, err
+	})
+}
+
+func (p *Provider) ReadFrontingStoreVersion(ctx context.Context, tier environment.Tier) (string, error) {
+	record, _, err := p.readFronting(ctx, tier)
+	return record.StoreVersion, err
+}
+
+func (p *Provider) InstallingStores(install func(ctx context.Context, tier environment.Tier, credential string) (edge.ReleasesStore, error)) {
+	p.installStore = install
+}
+
+var ForgetFrontingStoreVersion = (*Provider).forgetFrontingStoreVersion
+
+func (p *Provider) TearingDownStores(teardown func(ctx context.Context, tier environment.Tier) error) {
+	p.tearDownStore = teardown
+}
+
+func (p *Provider) Deploying(project string) { p.project = project }
+
+func FrontingRecordKey(tier environment.Tier) records.Key { return frontingRecordKey(tier) }
+
+func (p *Provider) RecordFrontingRetiring(ctx context.Context, tier environment.Tier, since time.Time) error {
+	return records.Change(ctx, p.keyValues, frontingRecordKey(tier), func(entry records.Entry) ([]byte, bool, error) {
+		record, err := p.openFrontingRecord(ctx, tier, entry.Value)
+		if err != nil {
+			return nil, false, err
+		}
+		record.Projects, record.Retiring = nil, since
+		sealed, err := p.sealFrontingRecord(ctx, tier, record)
+		return sealed, true, err
+	})
+}
+
+func (p *Provider) IsFrontingRecorded(ctx context.Context, tier environment.Tier) (bool, error) {
+	_, held, err := p.readFronting(ctx, tier)
+	return held, err
+}
+
+func (p *Provider) ReadFrontedProjects(ctx context.Context, tier environment.Tier) ([]string, error) {
+	record, _, err := p.readFronting(ctx, tier)
+	return record.Projects, err
+}
+
+var ForgetFrontedProject = (*Provider).forgetFrontedProject
 
 func (p *Provider) Resolving(look Lookup) { p.resolve = look }
 

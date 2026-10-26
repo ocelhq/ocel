@@ -21,6 +21,9 @@ type EdgeState struct {
 	Routers map[router.Kind]router.StackState `json:"routers,omitempty"`
 	Apps    map[string]router.Kind            `json:"apps,omitempty"`
 	Hosts   map[string]HostnameState          `json:"hosts,omitempty"`
+
+	Fronts               bool  `json:"fronts,omitempty"`
+	FrontingChangedAfter int64 `json:"frontingChangedAfter,omitempty"`
 }
 
 func (s *EdgeState) Pair(kind router.Kind, state router.StackState, apps []string) {
@@ -55,6 +58,7 @@ type HostnameState struct {
 	OriginCertificateID        string    `json:"originCertificateId,omitempty"`
 	OriginCertificateExpiresAt time.Time `json:"originCertificateExpiresAt,omitzero"`
 	Tunneled                   bool      `json:"tunneled,omitempty"`
+	Fronted                    bool      `json:"fronted,omitempty"`
 }
 
 func (s *HostnameState) Supersede(cert provider.Certificate) {

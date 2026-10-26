@@ -151,6 +151,9 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (ssh.Re
 	if sealed, sealing := b.sealing(command, input); sealing {
 		return sealed, nil
 	}
+	if strings.Contains(command, shell.Words([]string{boxapi.LiveBinary, boxapi.RecordsCommand})) && strings.Contains(command, "'"+boxapi.RecordsVerbGet+"'") {
+		return ssh.Result{Code: boxapi.ExitNotFound}, nil
+	}
 	if strings.Contains(command, "/kept/") {
 		if strings.Contains(command, "ln ") && b.kept == "" {
 			b.kept = input

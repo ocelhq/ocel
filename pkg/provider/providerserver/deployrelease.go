@@ -133,6 +133,7 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, release appStack, r
 		Physical:                physicalOf(result.Containers, entry.App),
 		Revisions:               revisionsOf(result, entry.App, logical),
 		Origin:                  origin,
+		Fronted:                 r.isFronted(entry.App),
 		HealthPath:              healthPathOf(entry, result.Containers),
 		HealthPathDiscovered:    entry.HealthCheckPath == "" && discoveredHealthPathOf(result.Containers, entry.App) != "",
 		FunctionURLs:            urls,

@@ -490,3 +490,52 @@ func batchSizes(batches [][]string) []int {
 	}
 	return sizes
 }
+
+func TestTheCloudflareProxyRetiresTheWorkerACachingEdgeFrontedTheProjectWith(t *testing.T) {
+	store, held := fakeStoreFor(t, "s3cr3t")
+	m := proxyZoneMock()
+	const entry = "ocel-prod-4c73ed-entry-acme-750baa"
+	m.existingRoutes = []map[string]any{
+		{"id": "fronted", "pattern": "api.app.com/*", "script": entry},
+		{"id": "routed", "pattern": "*.preview.app.com/*", "script": entry},
+	}
+	prior := testState(store.URL, "s3cr3t")
+	prior.Slug = "acme"
+	prior.PurgeURL = "https://" + entry + ".acct-sub.workers.dev" + purgePath
+	prior.Records = []edge.Record{{Name: "api.app.com", Type: edge.RecordTypeCNAME, Value: albAddress, Proxied: true}}
+	prior.Private = edge.Own(private{EntryWorker: entry, Fronted: []string{"api.app.com"}, FrontedBy: entry, Routed: []string{"*.preview.app.com"}})
+
+	stack, err := m.proxy(t).Reconcile(context.Background(), proxySpec(), prior)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	for _, route := range m.existingRoutes {
+		if route["pattern"] == "*.preview.app.com/*" {
+			t.Errorf("the zone still routes %v, want the worker's own route gone with it", route)
+		}
+		if script, named := route["script"]; route["pattern"] == "api.app.com/*" && named && script != nil && script != "" {
+			t.Errorf("api.app.com/* runs %v, want it forwarded with no worker again", script)
+		}
+	}
+	if !slices.Contains(m.deletedScripts, entry) {
+		t.Errorf("deleted scripts %v, want the entry worker %s", m.deletedScripts, entry)
+	}
+	held.mu.Lock()
+	destroyed := held.live == ""
+	held.mu.Unlock()
+	if !destroyed {
+		t.Error("the project's releases store instance is still live, want it destroyed with the worker that read it")
+	}
+	state := stack.State()
+	var own private
+	if err := state.Private.Into(&own); err != nil {
+		t.Fatal(err)
+	}
+	if own.EntryWorker != "" || len(own.Fronted) != 0 || state.Secret != "" || state.PurgeURL != "" {
+		t.Errorf("the proxy keeps %+v with secret %q and purge URL %q, want nothing of the worker", own, state.Secret, state.PurgeURL)
+	}
+	if !slices.ContainsFunc(state.Records, func(rec edge.Record) bool { return rec.Name == "api.app.com" }) {
+		t.Errorf("the proxy keeps records %v, want api.app.com still forwarded", state.Records)
+	}
+}

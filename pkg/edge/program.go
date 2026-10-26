@@ -34,6 +34,7 @@ type ReachKind string
 const (
 	ReachSigV4        ReachKind = "sigv4"
 	ReachOriginSecret ReachKind = "origin-secret"
+	ReachFronted      ReachKind = "fronted"
 )
 
 type Reach struct {
@@ -101,6 +102,7 @@ func (o OriginReach) RefuseIncomplete() error {
 			o.Reach.PreviousSecret == "" && o.Reach.PreviousFingerprint != "" {
 			errs = append(errs, errors.New("the origin names a previous origin secret without its fingerprint, so the edge could not tell which releases hold it"))
 		}
+	case ReachFronted:
 	case "":
 		errs = append(errs, errUnnamedReach)
 	default:

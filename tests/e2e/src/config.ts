@@ -48,6 +48,7 @@ export type Overlay = TargetConfigDelta & {
   computes?: Record<string, Compute>;
   edge?: Edge;
   tunnel?: boolean;
+  cache?: boolean;
   dns?: "cloudflare";
   hostnames?: Record<string, string>;
   previewDomain?: string;
@@ -152,7 +153,7 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
     }
     case "vps": {
       const front = frontNamed(env);
-      const { edge, tunnel, image } = cell.variant.config;
+      const { edge, tunnel, cache, image } = cell.variant.config;
       return {
         target,
         slug: cell.slug,
@@ -165,6 +166,7 @@ export function overlayFor(cell: PlannedCell, target: TargetName, env: NodeJS.Pr
         ...(front ? { proxy: front.proxy } : {}),
         ...(edge ? { edge } : {}),
         ...(tunnel ? { tunnel } : {}),
+        ...(cache ? { cache } : {}),
         ...(edge === "cloudflare" ? { dns: "cloudflare" as const } : {}),
       };
     }
@@ -192,11 +194,24 @@ function readsOf(name: string, vars: Record<string, string>): string[] {
   return Object.entries(vars).map(([key, variable]) => `${key}: ${name}.${variable}`);
 }
 
+function edgeOptionsOf(overlay: Overlay): Record<string, true> | undefined {
+  const options: Record<string, true> = {
+    ...(overlay.tunnel ? { tunnel: true as const } : {}),
+    ...(overlay.cache ? { cache: true as const } : {}),
+  };
+  return Object.keys(options).length === 0 ? undefined : options;
+}
+
 function frontOf(overlay: Overlay): string[] {
   const front: string[] = [];
   if (overlay.edge) {
-    const options = overlay.tunnel ? "{ tunnel: true }" : "";
-    front.push(`edge: ${EDGE_IMPORTS[overlay.edge].name}(${options})`);
+    const options = edgeOptionsOf(overlay);
+    const written = options
+      ? `{ ${Object.keys(options)
+          .map((key) => `${key}: true`)
+          .join(", ")} }`
+      : "";
+    front.push(`edge: ${EDGE_IMPORTS[overlay.edge].name}(${written})`);
   }
   if (overlay.dns) {
     front.push(`dns: cloudflareDns()`);
@@ -375,7 +390,7 @@ function appDocument(app: App, overlay: Overlay): App {
 function frontDocumentOf(overlay: Overlay): Record<string, unknown> {
   return {
     ...(overlay.edge
-      ? { edge: overlay.tunnel ? { [overlay.edge]: { tunnel: true } } : overlay.edge }
+      ? { edge: edgeOptionsOf(overlay) ? { [overlay.edge]: edgeOptionsOf(overlay) } : overlay.edge }
       : {}),
     ...(overlay.dns ? { dns: overlay.dns } : {}),
   };

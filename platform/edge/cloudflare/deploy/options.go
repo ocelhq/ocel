@@ -6,6 +6,7 @@ import (
 
 type Options struct {
 	Tunnel bool `json:"tunnel,omitempty" doc:"Reach the origin through a tunnel it opens to Cloudflare, instead of at its address. A VPS always does."`
+	Cache  bool `json:"cache,omitempty" doc:"Serve the project's container apps through its worker. A Next app ocel's adapter built is routed, cached and purged on revalidation as a serverless Next app is; any other app is kept by the cache headers it sends. On AWS and a VPS the worker fronts the load balancer or the box, and a box's files are kept in an R2 bucket per tier; on Google Cloud the worker already serves container apps and also keeps what they mark cacheable. Every request through the worker is billed, cache hits included."`
 }
 
 func (Options) Doc() string {

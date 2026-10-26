@@ -280,7 +280,7 @@ func (r *deployRun) rememberProject(ctx context.Context) error {
 func (r *deployRun) checkNeeds(ctx context.Context) error {
 	check := EdgeNeedCheck{
 		Edge:          r.front,
-		Router:        r.readPairedRouter,
+		Router:        r.readDispatchingRouter,
 		Root:          r.artifactRoot,
 		AllowDegraded: r.allowDegraded,
 		Degraded: func(app string, need edge.Need, detail string) {

@@ -44,7 +44,10 @@ func (s *stack) bindForwarded(ctx context.Context, names originNames, binding ed
 	}
 	var served []string
 	if s.state.Tier != environment.TierPreview {
-		served = []string{s.own.EntryWorker}
+		served = append(served, s.own.EntryWorker)
+	}
+	if s.isFronted(binding.Hostname) {
+		served = append(served, s.own.FrontedBy)
 	}
 	restoreRoute, err := s.p.ensureRouteWithoutWorker(ctx, names.origin, zone.accountID, zone.zoneID, routePattern(binding.Hostname), served)
 	if err != nil {
@@ -53,7 +56,7 @@ func (s *stack) bindForwarded(ctx context.Context, names originNames, binding ed
 	if err := s.p.bindOrigin(ctx, &s.state, zone, owner, binding); err != nil {
 		return errors.Join(err, restoreRoute(ctx))
 	}
-	return nil
+	return s.frontForwardedRoute(ctx, zone, binding.Hostname)
 }
 
 func (s *stack) unbindForwarded(ctx context.Context, names originNames, accountID, hostname string) error {
@@ -70,11 +73,26 @@ func (s *stack) unbindForwarded(ctx context.Context, names originNames, accountI
 		return err
 	}
 	if forwarded {
-		if err := s.p.detachRoute(ctx, zone.zoneID, routePattern(hostname), []string{""}); err != nil {
+		if err := s.p.detachRoute(ctx, zone.zoneID, routePattern(hostname), []string{"", s.own.EntryWorker, s.own.FrontedBy}); err != nil {
 			return err
 		}
 	}
 	return s.p.unbindOrigin(ctx, &s.state, zone, owner, hostname)
+}
+
+func (s *stack) frontForwardedRoute(ctx context.Context, zone zoneAccess, hostname string) error {
+	if !s.isFronted(hostname) {
+		return nil
+	}
+	repointed, err := s.p.repointZoneRoute(ctx, s.p.routeSnapshot(), zone.zoneID, hostname, "", s.own.FrontedBy)
+	if err != nil || repointed {
+		return err
+	}
+	return fmt.Errorf("the route that forwards %s is gone, so the entry worker cannot front it: bind it again", hostname)
+}
+
+func (s *stack) isFronted(hostname string) bool {
+	return slices.Contains(s.own.Fronted, hostname) && s.p.options.Cache && s.own.FrontedBy != ""
 }
 
 func (s *stack) stopForwarding(ctx context.Context, names originNames, zone zoneAccess, hostname string) error {

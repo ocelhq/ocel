@@ -79,7 +79,7 @@ func (p *cloudflare) adoption(ctx context.Context, tier environment.Tier) (edge.
 	if err != nil {
 		return edge.Adoption{}, err
 	}
-	workers, err := names.bootstrapWorkers(tier)
+	workers, err := names.bootstrapWorkers(tier, p.keptBucketName(names, tier))
 	if err != nil {
 		return edge.Adoption{}, err
 	}
@@ -126,7 +126,7 @@ type bootstrapState struct {
 }
 
 func (p *cloudflare) readState(ctx context.Context, accountID string, names originNames, tier environment.Tier) (bootstrapState, error) {
-	planned, err := names.bootstrapWorkers(tier)
+	planned, err := names.bootstrapWorkers(tier, p.keptBucketName(names, tier))
 	if err != nil {
 		return bootstrapState{}, err
 	}
@@ -307,6 +307,8 @@ func comparableBinding(kind string, declared map[string]any) (binding, bool) {
 		ref.value = fmt.Sprint(declared["service"])
 	case "plain_text":
 		ref.value = fmt.Sprint(declared["text"])
+	case "r2_bucket":
+		ref.value = fmt.Sprint(declared["bucket_name"])
 	case "worker_loader":
 	default:
 		return binding{}, false
@@ -323,6 +325,8 @@ func deployedBindings(settings *workers.ScriptScriptAndVersionSettingGetResponse
 			ref.value = deployed.Service
 		case "plain_text":
 			ref.value = deployed.Text
+		case "r2_bucket":
+			ref.value = deployed.BucketName
 		case durableObjectBindingType:
 			ref.value = deployed.ClassName
 		case "worker_loader":

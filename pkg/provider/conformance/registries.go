@@ -154,6 +154,15 @@ func RunRouters(t *testing.T, facts provider.Facts, edges provider.Edges, router
 					t.Errorf("the %q router is paired for container apps and reaches no container", pairing.Router)
 				}
 			}
+			if pairing.FrontedBy != "" {
+				fronting, err := routers.Open(pairing.FrontedBy)
+				switch {
+				case err != nil:
+					t.Errorf("Open(%q) = %v, want the router the %q edge fronts the %q router with", pairing.FrontedBy, err, pairing.Edge, pairing.Router)
+				case !fronting.Facts().Dispatches:
+					t.Errorf("the %q edge fronts the %q router with %q, which dispatches no path, and its code serves a fronted app by dispatching it", pairing.Edge, pairing.Router, pairing.FrontedBy)
+				}
+			}
 			front, err := edges.Open(pairing.Edge, nil)
 			if err != nil {
 				continue

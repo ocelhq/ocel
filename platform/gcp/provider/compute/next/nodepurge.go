@@ -17,7 +17,7 @@ func NewNodePurgeEnv(spec provider.StackSpec, purgeSecret string) map[string]str
 	}
 	env := map[string]string{processenv.StorageCoordinateEnvVar: spec.App.StorageCoordinate.StorageCoordinate()}
 	if signs {
-		env[purgeSecretEnvVar] = purgeSecret
+		env[edge.PurgeSecretVar] = purgeSecret
 		env[edge.PurgeURLVar] = isr.PurgeURL
 	}
 	return env

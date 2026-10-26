@@ -29,6 +29,10 @@ func TestAnOriginReachedOneWayIsComplete(t *testing.T) {
 			Reach:    Reach{Kind: ReachOriginSecret, Secret: "s1"},
 			Throttle: Throttle{Status: 429, BodyContains: "no available instance"},
 		},
+		"through the hostname it was asked for": {
+			Reach:    Reach{Kind: ReachFronted},
+			Throttle: Throttle{Status: 429},
+		},
 		"by a secret during its rotation": {
 			Reach:    Reach{Kind: ReachOriginSecret, Secret: "s2", PreviousSecret: "s1", PreviousFingerprint: OriginSecretFingerprint("s1")},
 			Throttle: Throttle{Status: 429, BodyContains: "no available instance"},
@@ -46,18 +50,19 @@ func TestAnOriginReachThatLeavesTheEdgeGuessingIsRefused(t *testing.T) {
 	signed := Reach{Kind: ReachSigV4, Service: "lambda", Region: "eu-west-2", AccessKeyID: "AKIA", SecretAccessKey: "s"}
 	throttled := Throttle{Status: 429}
 	for name, reach := range map[string]OriginReach{
-		"no reach":                                {Throttle: throttled},
-		"an unknown reach":                        {Reach: Reach{Kind: "carrier-pigeon"}, Throttle: throttled},
-		"signing with no key":                     {Reach: Reach{Kind: ReachSigV4, Service: "lambda", Region: "eu-west-2"}, Throttle: throttled},
-		"a secret naming none":                    {Reach: Reach{Kind: ReachOriginSecret}, Throttle: throttled},
-		"a secret and keys":                       {Reach: Reach{Kind: ReachOriginSecret, Secret: "s1", AccessKeyID: "AKIA", SecretAccessKey: "s"}, Throttle: throttled},
-		"only a previous secret":                  {Reach: Reach{Kind: ReachOriginSecret, PreviousSecret: "s1", PreviousFingerprint: OriginSecretFingerprint("s1")}, Throttle: throttled},
-		"a previous secret with no fingerprint":   {Reach: Reach{Kind: ReachOriginSecret, Secret: "s2", PreviousSecret: "s1"}, Throttle: throttled},
-		"a previous fingerprint with no secret":   {Reach: Reach{Kind: ReachOriginSecret, Secret: "s2", PreviousFingerprint: OriginSecretFingerprint("s1")}, Throttle: throttled},
-		"a previous secret under another's print": {Reach: Reach{Kind: ReachOriginSecret, Secret: "s2", PreviousSecret: "s1", PreviousFingerprint: OriginSecretFingerprint("s2")}, Throttle: throttled},
-		"signing and a secret":                    {Reach: Reach{Kind: ReachSigV4, Service: "lambda", Region: "eu-west-2", AccessKeyID: "AKIA", SecretAccessKey: "s", Secret: "s1"}, Throttle: throttled},
-		"a store with no key":                     {Reach: signed, Store: &OriginStore{URL: "https://store.example", Region: "auto"}, Throttle: throttled},
-		"no throttle status":                      {Reach: signed},
+		"no reach":                                  {Throttle: throttled},
+		"an unknown reach":                          {Reach: Reach{Kind: "carrier-pigeon"}, Throttle: throttled},
+		"signing with no key":                       {Reach: Reach{Kind: ReachSigV4, Service: "lambda", Region: "eu-west-2"}, Throttle: throttled},
+		"a secret naming none":                      {Reach: Reach{Kind: ReachOriginSecret}, Throttle: throttled},
+		"a secret and keys":                         {Reach: Reach{Kind: ReachOriginSecret, Secret: "s1", AccessKeyID: "AKIA", SecretAccessKey: "s"}, Throttle: throttled},
+		"only a previous secret":                    {Reach: Reach{Kind: ReachOriginSecret, PreviousSecret: "s1", PreviousFingerprint: OriginSecretFingerprint("s1")}, Throttle: throttled},
+		"a previous secret with no fingerprint":     {Reach: Reach{Kind: ReachOriginSecret, Secret: "s2", PreviousSecret: "s1"}, Throttle: throttled},
+		"a previous fingerprint with no secret":     {Reach: Reach{Kind: ReachOriginSecret, Secret: "s2", PreviousFingerprint: OriginSecretFingerprint("s1")}, Throttle: throttled},
+		"a previous secret under another's print":   {Reach: Reach{Kind: ReachOriginSecret, Secret: "s2", PreviousSecret: "s1", PreviousFingerprint: OriginSecretFingerprint("s2")}, Throttle: throttled},
+		"through the hostname, presenting a secret": {Reach: Reach{Kind: ReachFronted, Secret: "s1"}, Throttle: throttled},
+		"signing and a secret":                      {Reach: Reach{Kind: ReachSigV4, Service: "lambda", Region: "eu-west-2", AccessKeyID: "AKIA", SecretAccessKey: "s", Secret: "s1"}, Throttle: throttled},
+		"a store with no key":                       {Reach: signed, Store: &OriginStore{URL: "https://store.example", Region: "auto"}, Throttle: throttled},
+		"no throttle status":                        {Reach: signed},
 	} {
 		if err := reach.RefuseIncomplete(); err == nil {
 			t.Errorf("%s: RefuseIncomplete() = nil, want the reach refused", name)

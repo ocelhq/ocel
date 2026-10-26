@@ -342,7 +342,7 @@ func (r *deployRun) isRecorded(ctx context.Context, stack naming.StackName) (boo
 }
 
 func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
-	paired := r.readPairedRouter(entry.App).Facts()
+	paired := r.readDispatchingRouter(entry.App).Facts()
 	facts, err := AppServingFor(AppServingInput{
 		Root:              r.artifactRoot,
 		Project:           naming.Sanitize(r.spec.Slug),

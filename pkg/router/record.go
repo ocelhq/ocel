@@ -19,6 +19,7 @@ type ReleaseRecord struct {
 	Physical                string              `json:"physical,omitempty"`
 	Revisions               map[string]string   `json:"revisions,omitempty"`
 	Origin                  string              `json:"origin,omitempty"`
+	Fronted                 bool                `json:"fronted,omitempty"`
 	HealthPath              string              `json:"healthPath,omitempty"`
 	HealthPathDiscovered    bool                `json:"healthPathDiscovered,omitempty"`
 	RouteTable              *RouteTableLocation `json:"routeTable,omitempty"`

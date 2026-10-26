@@ -862,6 +862,29 @@ func TestANextContainerBuiltFromItsFunctionCloudflareForwardsToThePublicLoadBala
 	}
 }
 
+func TestANextContainerBuiltFromItsFunctionCloudflareFrontsIsToldTheWorkerCachesWhatItMarksUnderTheReleaseItsTagsAreClearedBy(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := revalidatingNextContainer(t)
+	front, err := edges.Registry{}.Open(cloudflare.Kind, provider.Options{"cache": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec.Edge = front
+	spec.App.Router = alb.Kind
+	env := definitionEnvOf(t, runContainerProgram(t, cfg, spec))
+
+	for name, want := range map[string]string{
+		edge.EdgeCacheVar:     string(edge.EdgeCacheMarked),
+		edge.CacheTagPurgeVar: "1",
+		edge.ReleaseTokenVar:  spec.Ref.Name.Release.String(),
+	} {
+		if env[name] != want {
+			t.Errorf("%s = %q, want %q: the worker fronting the load balancer keeps what the container tags, and its purge clears it", name, env[name], want)
+		}
+	}
+}
+
 func TestANextContainerBuiltFromItsOwnImageIsHandedNoCacheAndNoRoleForIt(t *testing.T) {
 	t.Parallel()
 

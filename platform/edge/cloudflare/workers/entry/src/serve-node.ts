@@ -21,6 +21,7 @@ import {
   buildOriginCall,
   buildServeRequest,
   dropBodyForHead,
+  isCacheableAtTheEdge,
   isRead,
   RENDER_RELEASE_HEADER,
   type RenderRelease,
@@ -36,14 +37,13 @@ export interface ServeNodePorts {
   origin: string;
   routes: CompiledRouteTable | undefined;
   forward: (request: Request) => Promise<Response>;
+  cachesUnrouted?: boolean;
 }
 
 const CONDITIONAL_HEADERS = ["if-none-match", "if-modified-since"] as const;
 
 function canBeCached(request: Request): boolean {
-  return (
-    !request.headers.has("authorization") && !needsSlashNormalization(readRawPath(request.url))
-  );
+  return isCacheableAtTheEdge(request) && !needsSlashNormalization(readRawPath(request.url));
 }
 
 function answerRedirect(
@@ -66,7 +66,7 @@ function findEdgeRedirect(
 }
 
 export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Promise<Response> {
-  const { serving, app, origin, routes, forward } = ports;
+  const { serving, app, origin, routes, forward, cachesUnrouted } = ports;
 
   async function forwardUncached(request: Request): Promise<Response> {
     const response = await forward(request);
@@ -128,18 +128,20 @@ export function serveNodeOrigin(ports: ServeNodePorts): (request: Request) => Pr
     return rendered;
   }
 
+  function serveByAppHeaders(request: Request): Promise<Response> {
+    return canBeCached(request) && !hasDraftCookie(request)
+      ? serveCached(request, undefined, request.headers.has("cookie"))
+      : forwardUncached(request);
+  }
+
   return async (request) => {
-    if (!routes) return forwardUncached(request);
+    if (!routes) return cachesUnrouted ? serveByAppHeaders(request) : forwardUncached(request);
     const url = new URL(request.url);
     const redirect = findEdgeRedirect(routes, request, url);
     if (redirect) return answerRedirect(routes, url, redirect);
 
     const rule = findRoute(routes, url.pathname)?.route.cache;
-    if (!rule) {
-      return isRead(request) && canBeCached(request) && !hasDraftCookie(request)
-        ? serveCached(request, undefined, request.headers.has("cookie"))
-        : forwardUncached(request);
-    }
+    if (!rule) return serveByAppHeaders(request);
     switch (
       readBypass({
         token: rule.bypassToken,

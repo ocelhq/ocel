@@ -28,7 +28,7 @@ type Routers struct {
 func newRouters(edges *Edges) *Routers {
 	routers := &Routers{edges: edges, planes: map[router.Kind]*DataPlane{}}
 	for _, kind := range edges.kinds() {
-		routers.planes[edges.Edge(kind).routedBy] = &DataPlane{served: map[projectPointer]map[string]string{}, kept: map[projectPointer][]router.Promotion{}, writes: map[projectPointer]int{}, hosts: map[string]projectPointer{}}
+		routers.planes[edges.Edge(kind).routedBy] = newDataPlane()
 	}
 	return routers
 }
@@ -63,9 +63,13 @@ func (r *Routers) DataPlane(kind router.Kind) *DataPlane {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.planes[kind] == nil {
-		r.planes[kind] = &DataPlane{served: map[projectPointer]map[string]string{}, kept: map[projectPointer][]router.Promotion{}, writes: map[projectPointer]int{}, hosts: map[string]projectPointer{}}
+		r.planes[kind] = newDataPlane()
 	}
 	return r.planes[kind]
+}
+
+func newDataPlane() *DataPlane {
+	return &DataPlane{served: map[projectPointer]map[string]string{}, records: map[projectPointer]map[string]router.ReleaseRecord{}, kept: map[projectPointer][]router.Promotion{}, writes: map[projectPointer]int{}, hosts: map[string]projectPointer{}}
 }
 
 type DataPlane struct {
@@ -79,6 +83,7 @@ type DataPlane struct {
 	progress   progress.Log
 	propagates *router.Propagation
 	served     map[projectPointer]map[string]string
+	records    map[projectPointer]map[string]router.ReleaseRecord
 	kept       map[projectPointer][]router.Promotion
 	writes     map[projectPointer]int
 	hosts      map[string]projectPointer
@@ -98,6 +103,12 @@ func (d *DataPlane) Releases(slug string, tier environment.Tier, pointer string)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return maps.Clone(d.served[pointerOf(edge.StackState{Slug: slug, Tier: tier}, pointer)])
+}
+
+func (d *DataPlane) Records(slug string, tier environment.Tier, pointer string) map[string]router.ReleaseRecord {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return maps.Clone(d.records[pointerOf(edge.StackState{Slug: slug, Tier: tier}, pointer)])
 }
 
 func (d *DataPlane) Kept(slug string, tier environment.Tier, pointer string) []router.Promotion {
@@ -209,6 +220,7 @@ func (d *DataPlane) serveOver(at projectPointer, releases map[string]string, mov
 		return false
 	}
 	d.served[at] = maps.Clone(releases)
+	d.records[at] = maps.Clone(move.Records)
 	d.kept[at] = slices.Clone(move.Kept)
 	d.writes[at]++
 	d.unrouteHosts(at, move.ListHostsToWithdraw())
@@ -241,6 +253,7 @@ func (d *DataPlane) remove(at projectPointer, hosts []edge.PreviewHost) error {
 		return failure
 	}
 	delete(d.served, at)
+	delete(d.records, at)
 	d.writes[at]++
 	d.unrouteHosts(at, hosts)
 	return nil

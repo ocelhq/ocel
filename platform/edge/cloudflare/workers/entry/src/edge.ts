@@ -1,4 +1,8 @@
-import { type EdgeBundle, edgeBundleVersion } from "@platform/edge-contract/edge-bundle";
+import {
+  EDGE_BUNDLE_OBJECT_FILE,
+  type EdgeBundle,
+  edgeBundleVersion,
+} from "@platform/edge-contract/edge-bundle";
 import { parseObjectKey } from "@platform/edge-contract/storage-key";
 import type { ServedCode, ServedRecord } from "./served-record";
 import { renderWorkersShim, WORKERS_SHIM_MODULE } from "./workers-shim";
@@ -24,15 +28,13 @@ export interface EdgeVariables {
   releaseFingerprint?: string;
 }
 
-const BUNDLE_FILE = "bundle.json";
-
 export function ownBundleKey(bundleKey: string, slug: string, app: string): boolean {
   const parsed = parseObjectKey(bundleKey);
   return (
     parsed?.kind === "bundles" &&
     parsed.project === slug &&
     parsed.app === app &&
-    parsed.rest === BUNDLE_FILE
+    parsed.rest === EDGE_BUNDLE_OBJECT_FILE
   );
 }
 

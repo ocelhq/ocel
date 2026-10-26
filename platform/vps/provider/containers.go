@@ -3,6 +3,7 @@ package vps
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -29,6 +30,10 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if strings.TrimSpace(app.Image) == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image", app.App)
+	}
+	if app.IsBuiltFromFunction() && !isFrontedApp(spec) {
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"app %s was built by ocel's Next adapter, which a box runs only behind cloudflare({ cache: true }): rebuild it", app.App)
 	}
 	physical, err := release.ContainerName(spec.Ref.Project, spec.Ref.Name, "", app.Image)
 	if err != nil {
@@ -70,7 +75,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		Tier: spec.Ref.Tier, Env: app.Values.ContainerEnv, HealthPath: healthPath, Manifest: manifest, Resolved: true,
 	}
 	if app.IsBuiltFromFunction() {
-		run.Env = newFunctionEnv(app)
+		if run.Env, err = p.newBuiltEnv(ctx, spec); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := p.containers.Run(ctx, run); err != nil {
 		return nil, err
@@ -100,6 +107,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 }
 
 func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, _ provider.ImageStore, progress progress.Log) error {
+	if err := p.forgetReleaseObjects(ctx, ref); err != nil {
+		return fmt.Errorf("remove what Cloudflare keeps of %s: %w", ref.Name, err)
+	}
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue
@@ -155,4 +165,14 @@ func liveBindings(values provider.AppValues) []live.Binding {
 		})
 	}
 	return declared
+}
+
+func (p *Provider) newBuiltEnv(ctx context.Context, spec provider.StackSpec) (map[string]string, error) {
+	env := newFunctionEnv(spec.App)
+	record, _, err := p.readFronting(ctx, spec.Ref.Tier)
+	if err != nil {
+		return nil, err
+	}
+	maps.Copy(env, newFrontedEnv(spec, frontedPurgeSecret(record, spec)))
+	return env, nil
 }

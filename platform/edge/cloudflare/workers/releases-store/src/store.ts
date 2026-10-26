@@ -301,6 +301,24 @@ export function readPointerRecord(
   return selectServedResult(rows, app, knownRelease);
 }
 
+export function listOtherAppReleases(store: SqlStore, storageCoordinate: string): string[] {
+  const coordinate = parseStorageCoordinate(storageCoordinate);
+  if (coordinate === undefined) return [];
+  const app = `${coordinate.project}/${coordinate.env}/${coordinate.app}/`;
+  return store.sql
+    .exec<{ storage_coordinate: string }>(
+      `SELECT storage_coordinate FROM (
+         SELECT storage_coordinate FROM builds
+         UNION SELECT json_extract(data, '$.storageCoordinate') FROM served
+       ) WHERE substr(storage_coordinate, 1, ?) = ? AND storage_coordinate != ?`,
+      app.length,
+      app,
+      storageCoordinate,
+    )
+    .toArray()
+    .map((row) => row.storage_coordinate);
+}
+
 export type ServedRecordResult<Record = StoredRecord> =
   | { kind: "record"; record: Record }
   | { kind: "not-served" }

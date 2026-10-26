@@ -82,6 +82,9 @@ func mergeEdgeState(base, mine, current stackrecords.EdgeState) stackrecords.Edg
 	merged.Routers = mergeEntries(base.Routers, mine.Routers, current.Routers)
 	merged.Apps = mergeEntries(base.Apps, mine.Apps, current.Apps)
 	merged.Hosts = mergeEntries(base.Hosts, mine.Hosts, current.Hosts)
+	if mine.Fronts != base.Fronts || mine.FrontingChangedAfter != base.FrontingChangedAfter {
+		merged.Fronts, merged.FrontingChangedAfter = mine.Fronts, mine.FrontingChangedAfter
+	}
 	return merged
 }
 

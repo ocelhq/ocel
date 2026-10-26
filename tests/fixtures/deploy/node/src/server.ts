@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { probes } from "./probes";
 
@@ -17,6 +18,15 @@ app.get("/ocel.svg", (_req, res) => {
   res.setHeader("content-type", "image/svg+xml");
   res.setHeader("content-length", String(OCEL_SVG_BYTES.byteLength));
   res.end(OCEL_SVG_BYTES);
+});
+
+app.get("/cache/public", (_req, res) => {
+  res.setHeader("cache-control", "public, max-age=300");
+  res.json({ rendered: randomUUID() });
+});
+
+app.get("/cache/fresh", (_req, res) => {
+  res.json({ rendered: randomUUID() });
 });
 
 app.use("/api/probes", probes);

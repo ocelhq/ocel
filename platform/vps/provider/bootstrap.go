@@ -53,7 +53,8 @@ func (e exposed) Apply(ctx context.Context, req provider.BootstrapRequest, progr
 
 type fronted struct {
 	elevating
-	front edge.Edge
+	front  edge.Edge
+	forget func(context.Context, environment.Tier) error
 }
 
 func (f fronted) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
@@ -102,6 +103,9 @@ func (f fronted) Remove(ctx context.Context, tier environment.Tier, progress pro
 	}
 	if err := f.front.Teardown(ctx, tier); err != nil {
 		return fmt.Errorf("tear the %s edge down for tier %s: %w", f.front.Kind(), tier, err)
+	}
+	if err := f.forget(ctx, tier); err != nil {
+		return fmt.Errorf("remove what the %s edge keeps for tier %s: %w", f.front.Kind(), tier, err)
 	}
 	return f.Bootstrap.Remove(ctx, tier, progress)
 }

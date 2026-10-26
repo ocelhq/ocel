@@ -17,3 +17,4 @@ export * from "./static";
 export * from "./sveltekit";
 export * from "./tasks";
 export * from "./wire";
+export * from "./workersCache";

@@ -16,6 +16,7 @@ import { isStorageCoordinate, parseStorageCoordinate } from "@platform/edge-cont
 import { createReleaseEdgeInvoker, ownBundleKey } from "./edge";
 import type { Env } from "./env";
 import { newPurgeQueuePort, openPurgeQueue } from "./exports";
+import { readFrontedOrigin } from "./origin/fronted";
 import { openOrigin } from "./origin/reach";
 import type { OriginObjects } from "./origin/store";
 import { PPR_SHELL_VARIANT } from "./ppr";
@@ -227,17 +228,19 @@ function isReleaseImageOptimizer(
   images: OriginImages | undefined,
   record: StoredRecord,
   optimizerUrl: string,
+  host: string,
 ): boolean {
   if (images?.optimizerUrl !== undefined && optimizerUrl === images.optimizerUrl) return true;
   try {
     const url = new URL(optimizerUrl);
-    return url.pathname === originImagePath && isReleaseOrigin(record, url.origin);
+    return url.pathname === originImagePath && isReleaseOrigin(record, url.origin, host);
   } catch {
     return false;
   }
 }
 
-function isReleaseOrigin(record: StoredRecord, origin: string): boolean {
+function isReleaseOrigin(record: StoredRecord, origin: string, host: string): boolean {
+  if (record.fronted) return origin === readFrontedOrigin(host);
   return listOriginUrls(record).some((url) => {
     try {
       return new URL(url).origin === origin;
@@ -330,16 +333,16 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
 
   private async fromImage(
     request: Request,
-    { release }: RenderCall,
+    { host, release }: RenderCall,
     optimizerUrl: string,
   ): Promise<Response> {
     const origin = openOrigin(this.env);
     const found = await readRenderRecord(this.env, request, release);
-    if (!found || !isReleaseImageOptimizer(origin.images, found.record, optimizerUrl)) {
+    if (!found || !isReleaseImageOptimizer(origin.images, found.record, optimizerUrl, host)) {
       return respondRefused("the image optimizer is not one of the served release's");
     }
     const call = readImageCall(request.headers.get(IMAGE_CALL_HEADER));
-    const optimize = functionUrlImageOrigin(optimizerUrl, origin.fetchFor(found.record));
+    const optimize = functionUrlImageOrigin(optimizerUrl, origin.imageFetchFor(found.record));
     if (!call || !optimize) return respondRefused("there is no image to optimize");
     const optimized = servedImage(
       withoutServeMarkers(await optimize(call.payload)),
@@ -354,7 +357,7 @@ export class Serve extends WorkerEntrypoint<Env, ServeProps> {
     keyedUrl: string,
   ): Promise<Response> {
     const found = await readRenderRecord(this.env, request, release);
-    if (!found || !isReleaseOrigin(found.record, new URL(keyedUrl).origin)) {
+    if (!found || !isReleaseOrigin(found.record, new URL(keyedUrl).origin, host)) {
       return respondRefused("the origin is not one of the served release's functions");
     }
     const cached = { release, pathname: new URL(keyedUrl).pathname };

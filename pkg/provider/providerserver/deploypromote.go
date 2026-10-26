@@ -41,6 +41,7 @@ func (r *deployRun) promote(ctx context.Context, promotion router.Promotion) err
 			if err := r.checkpointPromoted(ctx); err != nil {
 				return err
 			}
+			r.rebindHostsWhoseFrontingChanged(ctx, progress)
 			if err := r.reclaimDropped(ctx, r.teardown(), r.spec.Pointer, dropped, progress); err != nil {
 				progress.Warn(unreclaimedWarning(promotion.PromotionID, err))
 			}

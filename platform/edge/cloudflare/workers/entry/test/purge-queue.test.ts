@@ -247,9 +247,76 @@ describe("the PurgeQueue's tag times", () => {
   });
 });
 
+describe("the PurgeQueue raising a tag for an app that keeps other releases", () => {
+  const OTHER = "p1/prod/web/r00000000";
+
+  async function raisedWithOthers(tags: string[], others: string[] = [OTHER]) {
+    const queue = freshQueue();
+    const purged: string[] = [];
+    await runInDurableObject(queue, async (instance) => {
+      instance.serve = {
+        purgeTags: async (_mode, batch) => {
+          purged.push(...batch);
+          return { ok: true };
+        },
+      };
+      instance.releases = {
+        readServedRecord: async () => ({ kind: "not-served" }),
+        listOtherAppReleases: async () => others,
+      };
+    });
+    const raisedAt = Date.now();
+    await queue.raise(
+      SCOPE,
+      "purge",
+      tags.map((tag) => ({ tag, raisedAt })),
+    );
+    return { queue, purged, raisedAt };
+  }
+
+  it("purges the tag on every other release too, so a rollback serves none of their pages stale", async () => {
+    const { queue, purged, raisedAt } = await raisedWithOthers(["r00000001|posts"]);
+
+    expect([...purged].sort()).toEqual(["r00000000|posts", "r00000001|posts"]);
+    expect(await queue.readTimes(["r00000000|posts"])).toEqual({
+      "r00000000|posts": { purgedAt: raisedAt },
+    });
+  });
+
+  it("purges a release named as a whole on that release alone", async () => {
+    const { purged } = await raisedWithOthers(["r00000001"]);
+
+    expect(purged).toEqual(["r00000001"]);
+  });
+
+  it("purges the tag on its own release when the releases store cannot list the others", async () => {
+    const queue = freshQueue();
+    const purged: string[] = [];
+    await runInDurableObject(queue, async (instance) => {
+      instance.serve = {
+        purgeTags: async (_mode, batch) => {
+          purged.push(...batch);
+          return { ok: true };
+        },
+      };
+      instance.releases = {
+        readServedRecord: async () => ({ kind: "not-served" }),
+        listOtherAppReleases: async () => {
+          throw new Error("releases store is down");
+        },
+      };
+    });
+
+    await queue.raise(SCOPE, "purge", [{ tag: "r00000001|posts", raisedAt: Date.now() }]);
+
+    expect(purged).toEqual(["r00000001|posts"]);
+  });
+});
+
 describe("the PurgeQueue retiring a release", () => {
   type Served = "record" | "not-served" | "forgotten";
   const released = (answer: () => Promise<Served>) => ({
+    listOtherAppReleases: async () => [],
     readServedRecord: async () => {
       const kind = await answer();
       return kind === "record" ? { kind, record: {} as never } : { kind };

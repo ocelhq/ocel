@@ -2,6 +2,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 
 import { authorized, bearer } from "./auth";
 import type { Env } from "./env";
+import { putObjects, removeObjects } from "./objects";
 import { ReleasesStore } from "./releases-do";
 import type { KeptRelease, PointerMove, PointerRecordResult, ServedRecordResult } from "./store";
 
@@ -51,6 +52,16 @@ export default class extends WorkerEntrypoint<Env> {
         return new Response(`project ${slug} already has an identity`, { status: 409 });
       }
       return new Response(null, { status: 204 });
+    }
+
+    if (request.method === "POST" && (sub === "/objects" || sub === "/objects/remove")) {
+      if (!(await authorized(request, this.env.BOOTSTRAP_SECRET))) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      if (!this.env.OBJECTS) return new Response("this store keeps no objects", { status: 404 });
+      return sub === "/objects"
+        ? putObjects(request, this.env.OBJECTS, slug)
+        : removeObjects(request, this.env.OBJECTS, slug);
     }
 
     const token = bearer(request);
@@ -156,6 +167,10 @@ export default class extends WorkerEntrypoint<Env> {
     storageCoordinate: string;
   }): Promise<ServedRecordResult> {
     return stub(this.env, args.slug).readServedRecord(args.storageCoordinate);
+  }
+
+  async listOtherAppReleases(args: { slug: string; storageCoordinate: string }): Promise<string[]> {
+    return stub(this.env, args.slug).listOtherAppReleases(args.storageCoordinate);
   }
 
   async readGate(args: { slug: string }): Promise<string | undefined> {

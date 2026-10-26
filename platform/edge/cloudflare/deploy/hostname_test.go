@@ -85,6 +85,8 @@ type cfMock struct {
 
 	tunnels tunnelMock
 
+	keptBuckets map[string]bool
+
 	bootstrapInstalled bool
 }
 
@@ -577,7 +579,30 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	}
 	mux.HandleFunc("/user/tokens", refuse)
 	mux.HandleFunc("/user/tokens/", refuse)
-	mux.HandleFunc("/accounts/acct/r2/", refuse)
+	mux.HandleFunc("/accounts/acct/r2/", func(w http.ResponseWriter, r *http.Request) {
+		if m.keptBuckets == nil {
+			refuse(w, r)
+			return
+		}
+		name := strings.TrimPrefix(r.URL.Path, "/accounts/acct/r2/buckets")
+		name = strings.TrimPrefix(name, "/")
+		switch {
+		case r.Method == http.MethodPost && name == "":
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			m.keptBuckets[fmt.Sprint(body["name"])] = true
+			writeResult(w, map[string]any{"name": body["name"]})
+		case r.Method == http.MethodGet && m.keptBuckets[name]:
+			writeResult(w, map[string]any{"name": name})
+		case r.Method == http.MethodDelete && m.keptBuckets[name]:
+			delete(m.keptBuckets, name)
+			writeResult(w, map[string]any{})
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"success":false,"errors":[{"code":10006,"message":"The specified bucket does not exist."}]}`))
+		}
+	})
 
 	m.serveTunnels(mux)
 

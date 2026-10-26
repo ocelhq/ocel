@@ -76,6 +76,7 @@ func (p *cloudflare) Facts() edge.Facts {
 		Gates:                 true,
 		ServesUnbound:         true,
 		ProxiesRecords:        true,
+		FrontsOrigins:         p.options.Cache,
 		ProxiedRecordNote:     "Turn the Cloudflare proxy (orange cloud) on for these records: each value is a placeholder Cloudflare answers behind.",
 		ShieldsOrigin:         true,
 		OriginFacingRanges:    listOriginFacingRanges(),

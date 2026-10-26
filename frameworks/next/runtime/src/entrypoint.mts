@@ -34,6 +34,7 @@ import {
 import { getNextHost, refuseIncompleteHost } from "./host.mjs";
 import { newIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { purgedSince, purgeMark } from "./purge-signal.mjs";
+import { installPurgingFileSystemCache } from "./purging-file-system-cache.mjs";
 import type { RequestHeaders } from "./request-headers.mjs";
 import { noteRscRequest } from "./rsc-request.mjs";
 import { noteServedRoute, noteUncachedRender } from "./served-route.mjs";
@@ -76,6 +77,9 @@ async function boot(): Promise<void> {
   }
 
   installCompileCacheWarm(mod?.warm);
+
+  const { edgePurge } = getNextHost();
+  if (!CacheHandler && edgePurge) installPurgingFileSystemCache(dirname(handlerPath), edgePurge);
 
   if (CacheHandler) mirrorTagsInto(loadTagsManifest(dirname(handlerPath)));
 

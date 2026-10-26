@@ -28,6 +28,7 @@ import {
   taskConcurrencyCheck,
   tasksWireChecks,
   todoAndDocumentChecks,
+  workersCacheChecks,
 } from "../checks";
 import { PREVIEW_TITLES } from "../checks/previews";
 import { JSON_BASE } from "../config";
@@ -651,19 +652,51 @@ describe("the Next cache a cell is held to", () => {
     }
   });
 
-  it("holds a Next app Cloudflare fronts on a box to the edge's cache, listed red under #1457", () => {
-    for (const lane of ["vps", "vps.incus"] as const) {
+  it("holds a Next container ocel's adapter built that Cloudflare's worker caches on a box, aws or gcp to the edge's cache, expecting it green", () => {
+    const cached = {
+      vps: ["lifecycle/next-cloudflare-cache"],
+      aws: ["deploy/next-cloudflare-container-cache"],
+      gcp: ["deploy/next-cloudflare-container-cache"],
+    } as const;
+    for (const [lane, cells] of Object.entries(cached) as [Lane, readonly string[]][]) {
       const planned = planOn(lane, ZONED, EVERY_CELL);
-      for (const cell of ["lifecycle/next-cloudflare", "lifecycle/next-cloudflare-tunnel"]) {
+      for (const cell of cells) {
         const titles = titlesOf(planned, cell);
-        expect(cacheTitlesIn(titles, ORIGIN_TITLES)).toEqual([]);
-        const cached = cacheTitlesIn(titles, EDGE_TITLES);
-        expect(cached).not.toEqual([]);
-        for (const title of cached) {
-          expect(
-            planned.expectedFailures[`${cell}/web`]?.[title]?.map((gap) => gap.issue),
-          ).toContain(1457);
-        }
+        expect({ cell, origin: cacheTitlesIn(titles, ORIGIN_TITLES) }).toEqual({
+          cell,
+          origin: [],
+        });
+        expect(cacheTitlesIn(titles, EDGE_TITLES)).not.toEqual([]);
+        const listed = Object.keys(planned.expectedFailures[`${cell}/web`] ?? {});
+        expect({ cell, red: cacheTitlesIn(listed, EDGE_TITLES) }).toEqual({ cell, red: [] });
+      }
+    }
+  });
+
+  it("holds a Next app Cloudflare passes through on a box to the Next server's own cache", () => {
+    const planned = planOn("vps", ZONED, EVERY_CELL);
+    for (const cell of ["lifecycle/next-cloudflare", "lifecycle/next-cloudflare-tunnel"]) {
+      const titles = titlesOf(planned, cell);
+      expect({ cell, edge: cacheTitlesIn(titles, EDGE_TITLES) }).toEqual({ cell, edge: [] });
+      expect(cacheTitlesIn(titles, ORIGIN_TITLES)).not.toEqual([]);
+    }
+  });
+
+  it("holds a Next app built from a Dockerfile behind Cloudflare's caching worker to neither cache suite, since the worker keeps its pages by their own headers", () => {
+    const kept = {
+      vps: ["sdk/next-cloudflare-dockerfile-cache"],
+      aws: ["deploy/next-cloudflare-dockerfile-cache"],
+      gcp: ["deploy/next-cloudflare-dockerfile-cache"],
+    } as const;
+    for (const [lane, cells] of Object.entries(kept) as [Lane, readonly string[]][]) {
+      const planned = planOn(lane, ZONED, EVERY_CELL);
+      for (const cell of cells) {
+        const titles = titlesOf(planned, cell);
+        expect({
+          cell,
+          edge: cacheTitlesIn(titles, EDGE_TITLES),
+          origin: cacheTitlesIn(titles, ORIGIN_TITLES),
+        }).toEqual({ cell, edge: [], origin: [] });
       }
     }
   });
@@ -1075,5 +1108,62 @@ describe("deploy/sveltekit behind api-gateway on floci's aws", () => {
 
   it("expects nothing of it red on aws", () => {
     expect(listedOn("aws")).toEqual({});
+  });
+});
+
+describe("Cloudflare's worker caching container apps", () => {
+  const EVERY_CELL = { ...NO_FILTER, runSkipped: true };
+  const KEPT_TITLES = workersCacheChecks.map((one) => one.title);
+  const CACHING = {
+    aws: ["deploy/node-cloudflare-container-cache"],
+    gcp: ["deploy/node-cloudflare-container-cache"],
+    vps: ["deploy/node-cloudflare-cache", "deploy/node-cloudflare-tunnel-cache"],
+  } as const;
+
+  it("checks what the worker keeps of a plain container on every target, expecting it green", () => {
+    for (const [lane, cells] of Object.entries(CACHING) as [Lane, readonly string[]][]) {
+      const planned = planOn(lane, ZONED_RUN, EVERY_CELL);
+      for (const cell of cells) {
+        const titles =
+          planned.cells.find((one) => one.name === cell)?.steps.map((one) => one.title) ?? [];
+        const checked = titles.filter((title) => KEPT_TITLES.some((kept) => title.endsWith(kept)));
+        expect({ cell, checked: checked.length }).toEqual({ cell, checked: KEPT_TITLES.length });
+        expect({ cell, red: Object.keys(planned.expectedFailures[`${cell}/web`] ?? {}) }).toEqual({
+          cell,
+          red: [],
+        });
+      }
+    }
+  });
+
+  it("deploys every caching cell where the run names a zone, and skips it where it names none", () => {
+    for (const [lane, cells] of Object.entries(CACHING) as [Lane, readonly string[]][]) {
+      for (const cell of cells) {
+        expect(skippedBy(planOn(lane, ZONED_RUN), cell)).toEqual([]);
+        expect(skippedBy(planOn(lane), cell)).toContain("no-cloudflare-zone");
+      }
+    }
+  });
+
+  it("checks the worker's cache on no cell whose app keeps nothing for it", () => {
+    for (const lane of LANES) {
+      for (const cell of planOn(lane, ZONED_RUN, EVERY_CELL).cells) {
+        if (cell.name.startsWith("deploy/node-") && cell.name.endsWith("-cache")) continue;
+        const titles = cell.steps.map((one) => one.title);
+        expect({
+          cell: cell.name,
+          checked: titles.some((title) => KEPT_TITLES.some((kept) => title.endsWith(kept))),
+        }).toEqual({ cell: cell.name, checked: false });
+      }
+    }
+  });
+});
+
+describe("serverless Next behind CloudFront on aws", () => {
+  it("deploys, since #923 stopped CloudFront answering 403 to every request", () => {
+    const planned = planOn("aws");
+    for (const cell of ["deploy/next", "deploy/workspace"]) {
+      expect({ cell, skipped: skippedBy(planned, cell) }).toEqual({ cell, skipped: [] });
+    }
   });
 });

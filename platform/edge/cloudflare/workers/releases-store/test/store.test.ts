@@ -484,6 +484,28 @@ describe("the builds a pointer served before", () => {
     );
   });
 
+  it("lists the storage coordinate of every other release of an app it serves or keeps, on any pointer", async () => {
+    const store = storeStub();
+    await promote(store, [build(1)], 1);
+    await promote(store, [build(2)], 2);
+    await store.movePointer(
+      makePointerMove({ pointer: "pr-42", promotionId: "promo-pr", records: [build(9)] }),
+    );
+    await promote(
+      store,
+      [build(3), build(3, { app: "admin", storageCoordinate: "p1/prod/admin/r00000003" })],
+      3,
+    );
+
+    const listed = await store.listOtherAppReleases("p1/prod/web/r00000003");
+
+    expect([...listed].sort()).toEqual([
+      "p1/prod/web/r00000001",
+      "p1/prod/web/r00000002",
+      "p1/prod/web/r00000009",
+    ]);
+  });
+
   it("forgets the builds of a pointer it removes", async () => {
     const store = storeStub();
     const preview = (n: number, replaces?: string) =>

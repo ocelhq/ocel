@@ -3,8 +3,30 @@ package baked
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/base64"
 	"testing"
 )
+
+func TestValuesSealedUnderANewKeyOpenWithTheKeyTheirEnvelopeCarries(t *testing.T) {
+	t.Parallel()
+
+	values := map[string]string{"STRIPE_API_KEY": "sk-live-abc"}
+	sealed, envelope, err := SealUnderNewKey(values)
+	if err != nil {
+		t.Fatalf("SealUnderNewKey: %v", err)
+	}
+	k, err := base64.StdEncoding.DecodeString(envelope)
+	if err != nil {
+		t.Fatalf("envelope %q is not base64: %v", envelope, err)
+	}
+	opened, err := Open(k, sealed)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if opened["STRIPE_API_KEY"] != "sk-live-abc" {
+		t.Errorf("opened %v, want the values sealed", opened)
+	}
+}
 
 func key(t *testing.T) []byte {
 	t.Helper()

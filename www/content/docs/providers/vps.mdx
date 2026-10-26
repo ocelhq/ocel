@@ -185,6 +185,36 @@ In TypeScript, `edge: cloudflare({ tunnel: true })`.
 - One `ocel-tunnel` container (`cloudflared`, pinned, updates off) serves every project on the
   box that sets `tunnel`.
 
+### Caching at Cloudflare
+
+Set `cache` and the project's Cloudflare worker serves the box's apps, as it serves a function
+on another provider:
+
+```json
+"edge": { "cloudflare": { "cache": true } }
+```
+
+In TypeScript, `edge: cloudflare({ cache: true })`; it works with `tunnel` too. A Next app with no
+Dockerfile is then built by ocel's Next adapter, as a serverless Next app is, and routed, cached
+and purged at Cloudflare, middleware and the edge runtime included; `image.command` and
+`image.context` are refused on it. Its container runs Next's own cache, and in an app that
+revalidates keeps none of it on its disk, so every start, a rollback included, begins empty: the
+worker keeps the pages. What the worker keeps of any other app is in
+[caching container apps](/docs/providers/cloudflare#caching-container-apps).
+
+- The Cloudflare token also needs **Workers Scripts · Edit**, **Workers Routes · Edit** and
+  **Workers R2 Storage · Edit**.
+- The first deploy that sets it installs the tier's releases store and an R2 bucket for the files
+  the worker serves; the box keeps the credential that writes them, sealed. A deploy by another
+  version of ocel installs that version's releases store; `ocel bootstrap` installs none on a box.
+- A Next app built from your own Dockerfile is kept by its own cache headers, as any other app
+  is, and a revalidation inside it purges nothing at Cloudflare.
+- A revalidation in a Next app ocel's adapter built purges the worker's copy of what it names, on
+  every release of the app the box keeps.
+- `/_next/image` is optimized by the box from the build's own files, and kept by the worker.
+- Turning `cache` on or off is a deploy: the box keeps serving while the next one moves the
+  project's hosts. A rollback to a promotion deployed before the change is refused.
+
 ## Behind your own proxy
 
 If the box already runs a proxy on ports 80 and 443, name it with `proxy` and ocel runs no
@@ -423,8 +453,9 @@ restored as the base of a fresh AOF; a bucket store from a read-only mount.
 Containers log with Docker's `local` driver, at most 100 MiB each. Read them with
 [`ocel logs`](/docs/cli/logs).
 
-Nothing ocel runs on the box caches responses. A Next app runs as a plain Next server under `next
-start`, built by Railpack or from a Dockerfile, the one `image.dockerfile` names or the one beside
+Nothing ocel runs on the box caches responses. Unless [Cloudflare caches](#caching-at-cloudflare)
+in front of it, a Next app runs as a plain Next server under `next start`, built by Railpack or
+from a Dockerfile, the one `image.dockerfile` names or the one beside
 the app, so Next's own cache inside the container is the only one, and a deploy that replaces the
 container starts it over from what the build prerendered. Its build reads its public values:
 Railpack's build step is handed them, and a Dockerfile reads them as build arguments; see

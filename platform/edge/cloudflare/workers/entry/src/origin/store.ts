@@ -38,3 +38,14 @@ export function openStore(store: OriginStore): OpenedStore {
   const objects = openObjects(client, store.url.replace(/\/$/, ""));
   return { objects, entries: store.holdsEntries ? openEntrySource(objects) : undefined };
 }
+
+export function openKeptObjects(bucket: R2Bucket): OriginObjects {
+  return {
+    objectUrl: (key) => `r2:${key}`,
+    async readObject(key) {
+      const object = await bucket.get(key);
+      if (object === null) return new Response(null, { status: 404 });
+      return new Response(object.body, { headers: { etag: object.httpEtag } });
+    },
+  };
+}

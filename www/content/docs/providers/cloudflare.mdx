@@ -46,6 +46,8 @@ account's zones for the token.
 | Zone Read, DNS Edit on the zone | always; this is all `dns: "cloudflare"` alone needs |
 | Zone Settings Read, SSL and Certificates Edit, Cache Purge on the zone; Account Settings Read on the account | with the Cloudflare edge |
 | Cloudflare Tunnel Edit on the account | with `tunnel` |
+| Workers Scripts Edit on the account, Workers Routes Edit on the zone | with `cache` |
+| Workers R2 Storage Edit on the account | with `cache` on a VPS box |
 
 Unless the edge sets `tunnel`, the zone's SSL mode must be **Full (strict)**.
 
@@ -63,7 +65,9 @@ then bootstrap again under the new one.
 | [VPS](/docs/providers/vps) | — | forwarded to the box, or through a tunnel |
 
 Forwarded means a proxied record per hostname and no worker. A promote purges what Cloudflare
-cached for the hostnames it moved to the new release.
+cached for the hostnames it moved to the new release. With `cache` set, the project's worker
+serves a forwarded container app instead, and the record still points at its origin
+([below](#caching-container-apps)).
 
 `cloudflare({ tunnel: true })` (`{ "cloudflare": { "tunnel": true } }` in JSON) reaches a VPS
 box through a Cloudflare Tunnel instead of at its address, with no certificates and no SSL mode
@@ -123,9 +127,11 @@ export default defineConfig({
   taken its deployments down.
 
 The edge serves a stale page while the app renders a fresh one, and purges a revalidated tag. The
-worker reads static files and route tables from the tier's edge bucket, which holds only what an
-edge may serve, over its S3-compatible API, with an HMAC key that may read that bucket and nothing
-else.
+worker runs a Next app's middleware and its edge-runtime routes itself, from the edge bundle the
+build left, with the app's plain values and its sensitive ones sealed beside the bundle. The
+worker reads static files, route tables and edge bundles from the tier's edge bucket, which holds
+only what an edge may serve, over its S3-compatible API, with an HMAC key that may read that
+bucket and nothing else.
 
 ## Container apps on AWS
 
@@ -136,9 +142,10 @@ https with a 301 (an AWS load balancer cannot send a 308). Each hostname gets an
 certificate, validated through the DNS writer. A container preview gets a proxied record of its own and
 runs no worker.
 
-Middleware, the edge runtime and edge caching need the worker, so a container app behind
-Cloudflare is served streaming alone. A deploy that needs more is refused unless
-`allowDegraded` names the need.
+Middleware, the edge runtime and edge caching need the worker, so without `cache` a container app
+behind Cloudflare is served streaming alone, and a deploy that needs more is refused unless
+`allowDegraded` names the need. With `cache` set the worker serves it in front of the load
+balancer, every need included ([below](#caching-container-apps)).
 
 Limits across every project in the tier. AWS raises the first three on request, and a deploy
 that reaches one is refused naming the Service Quotas entry (Elastic Load Balancing):
@@ -152,6 +159,60 @@ that reaches one is refused naming the Service Quotas entry (Elastic Load Balanc
 
 A certificate ocel did not request for a hostname (one reused from ACM, or the shared
 `--preview` wildcard) stays on the load balancer after the hostname goes.
+
+## Caching container apps
+
+`cloudflare({ cache: true })` (`{ "cloudflare": { "cache": true } }` in JSON) has the project's
+worker serve its container apps on AWS and on a VPS box, as it serves a function. The worker
+holds each release's record in its releases store, routes the request, and reaches the app
+through the hostname it was asked for: the record still points at the load balancer, the box or
+the tunnel. On Google Cloud the worker serves container apps without the option, and `cache`
+makes it keep what a container app marks cacheable too.
+
+A Next app ocel's Next adapter built into a container is served as a serverless Next app is: the
+worker routes it by its route table, runs its middleware and edge-runtime routes, keeps its pages
+in [Workers Cache](https://developers.cloudflare.com/workers/runtime-apis/cache/) and serves a
+partial prerender's shell from there, bypasses the cache in draft mode, serves the files of the
+build a page was rendered with (`?dpl`), and purges what a revalidation names. A revalidation is
+purged on every release of the app the project still serves or keeps, so a rollback serves the
+pages it named fresh, and every other page of the release it rolls back to from the cache. A Next
+app built from your own Dockerfile is a container app like any other: the worker keeps what its own
+cache headers allow, as below, and a revalidation inside it purges nothing there.
+
+What the worker keeps of any other container app:
+
+- only a `GET` or `HEAD` over https that carries no `Authorization`, asks for no protocol
+  upgrade and accepts no event stream; every other request goes straight to the origin;
+- only a response that has `Cache-Control`, `CDN-Cache-Control` or `Expires` allowing it, sets
+  no cookie and is not an event stream, kept under the app's release: a deploy starts cold, and a
+  rollback to an earlier release is warm again;
+- each page under its path and query alone, not its cookies. An app that personalises a page by
+  cookie sends `private` or `no-store` on it. A `Vary` header the worker does not key on keeps a
+  response out of the cache;
+- `CDN-Cache-Control` before `Cache-Control`. A request with `Range` for a kept page is answered
+  with the whole page.
+
+A container preview is served by the worker too, as production is, on the project's own preview
+domain or on the shared `--preview` wildcard.
+
+A box keeps no bucket, so behind a box the edge keeps the files the worker serves from (static
+files, route tables, edge bundles) in an R2 bucket of its own, one per tier, created by the first
+deploy that sets `cache`. A release's files go when its release does, and the bucket goes once no
+project on the box sets `cache`, or with `ocel bootstrap destroy`.
+
+Turning `cache` on for a project already deployed on a box hands its hosts to the worker on the
+next deploy, once that deploy has promoted. Turning it off routes them straight to the box again
+when the next deploy starts, deletes the project's worker, its records in the releases store and
+the files the edge keeps for it, and the tier's releases store and bucket once no project on the
+box sets `cache`. The box keeps serving through either change.
+
+On any origin, a promotion is served only as it was deployed, with or without the worker in
+front: once turning `cache` on or off has changed that, `ocel rollback` refuses a promotion
+deployed before the change.
+
+Every request through the worker is billed as a Workers request, kept or not, and a kept one
+costs two (the worker and its cache). Cloudflare's zone cache, which `cache` replaces for these
+apps, is free.
 
 ## Previews behind Cloudflare
 
