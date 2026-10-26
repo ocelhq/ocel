@@ -222,9 +222,9 @@ func TestACommitErasesTheLivePrintsTheBlockAndRedrawsTheLiveLineInOneSynchronize
 	rig.clock.pass(2 * time.Second)
 	web.End(nil)
 
-	want := "\x1b[?2026h\r\x1b[K      [build] ⠋              0s\x1b[?2026l" +
+	want := "\x1b[?2026h\r\x1b[K      [build] ⠋ Building     0s\x1b[?2026l" +
 		"\x1b[?2026h\r\x1b[K      [build] ⠋ web:   0/1 · 0s\x1b[?2026l" +
-		"\x1b[?2026h\r\x1b[KINFO  [build] ✓ web: Built web in 2s\n\r\x1b[K      [build] ⠋        1/1 · 2s\x1b[?2026l" +
+		"\x1b[?2026h\r\x1b[KINFO  [build] ✓ web: Built web in 2s\n\r\x1b[K      [build] ⠋ Build  1/1 · 2s\x1b[?2026l" +
 		"\x1b[?2026h\r\x1b[K\x1b[?2026l"
 	if got := rig.closed(t); got != want {
 		t.Fatalf("wrote\n%q\nwant\n%q", got, want)
@@ -354,7 +354,7 @@ func TestWithColourTheLiveLinesSpinnerIsCyanItsSubjectBoldAndWhatItSaysAndItsTal
 	rig.run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
 
 	tag := "\x1b[90m[\x1b[0m\x1b[35mbuild\x1b[0m\x1b[90m]\x1b[0m"
-	want := "\x1b[?2026h\r\x1b[K      " + tag + " \x1b[36m⠋\x1b[0m" + strings.Repeat(" ", 30) + "\x1b[90m0s\x1b[0m\x1b[?2026l" +
+	want := "\x1b[?2026h\r\x1b[K      " + tag + " \x1b[36m⠋\x1b[0m Building" + strings.Repeat(" ", 21) + "\x1b[90m0s\x1b[0m\x1b[?2026l" +
 		"\x1b[?2026h\r\x1b[K      " + tag + " \x1b[36m⠋\x1b[0m \x1b[1mweb\x1b[22m: \x1b[90mBuilding web\x1b[0m" + strings.Repeat(" ", 6) + "\x1b[90m0/1 · 0s\x1b[0m\x1b[?2026l"
 	if got := rig.out.String(); got != want {
 		t.Fatalf("wrote\n%q\nwant\n%q", got, want)

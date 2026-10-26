@@ -282,13 +282,28 @@ func TestASpanOutsideAnyPhaseIsShownWithoutABracket(t *testing.T) {
 	}
 }
 
-func TestAPhaseWithNoSpansYetShowsNoDoneOverTotal(t *testing.T) {
+func TestAPhaseWithNoSpansYetIsNamedByWhatItDoesWithNoDoneOverTotal(t *testing.T) {
 	t.Parallel()
 
 	run, live, _ := liveRun(t)
 	run.Phase(progressv1.Phase_PHASE_BUILD)
 
-	if got, want := shownText(t, live, 80), "      [build] ⠋"; got != want {
+	if got, want := shownText(t, live, 80), "      [build] ⠋ Building"; got != want {
 		t.Fatalf("the live line shows\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestAPhaseThatHasEndedLeavesNoLiveLine(t *testing.T) {
+	t.Parallel()
+
+	run, live, c := liveRun(t)
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+	web := build.Child("web", progress.Building.Title("web"))
+	web.End(nil)
+	build.End(nil)
+	c.pass(8 * time.Second)
+
+	if got := live.render(80); got != "" {
+		t.Fatalf("render(80) = %q, want no live line: the build phase is over and nothing is running", got)
 	}
 }
