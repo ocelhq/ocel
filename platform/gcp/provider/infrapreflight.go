@@ -8,7 +8,7 @@ import (
 )
 
 func (p *Provider) PlanInfraPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
-	parts, err := p.listPartsResourcesNeed(pre)
+	parts, err := p.listPartsResourcesNeed(ctx, pre)
 	if err != nil || len(parts) == 0 {
 		return provider.Plan{}, err
 	}
@@ -16,12 +16,15 @@ func (p *Provider) PlanInfraPreflight(ctx context.Context, pre provider.DeployPr
 	if err != nil {
 		return provider.Plan{}, err
 	}
+	if b, err = p.withDeployNetworkPatches(ctx, b, pre.Deploy, parts); err != nil {
+		return provider.Plan{}, err
+	}
 	groups, err := b.PlanParts(ctx, pre.Deploy.Tier, parts)
 	return provider.Plan{Groups: groups}, err
 }
 
 func (p *Provider) ApplyInfraPreflight(ctx context.Context, pre provider.DeployPreflight) error {
-	parts, err := p.listPartsResourcesNeed(pre)
+	parts, err := p.listPartsResourcesNeed(ctx, pre)
 	if err != nil || len(parts) == 0 {
 		return err
 	}
@@ -31,9 +34,13 @@ func (p *Provider) ApplyInfraPreflight(ctx context.Context, pre provider.DeployP
 	return stackrecords.AddPartsUsed(ctx, p.KeyValues(), pre.Deploy.Tier, pre.Deploy.Slug, parts)
 }
 
-func (p *Provider) listPartsResourcesNeed(pre provider.DeployPreflight) ([]string, error) {
+func (p *Provider) listPartsResourcesNeed(ctx context.Context, pre provider.DeployPreflight) ([]string, error) {
 	if len(pre.Resources) == 0 {
 		return nil, nil
 	}
-	return deployUse{deploy: pre.Deploy, resources: pre.Resources}.partNames(p.components())
+	parts, err := deployUse{deploy: pre.Deploy, resources: pre.Resources}.partNames(p.components())
+	if err != nil {
+		return nil, err
+	}
+	return p.withoutUnusedNetwork(ctx, pre, parts)
 }

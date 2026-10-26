@@ -3,7 +3,9 @@ package gcp
 import (
 	"context"
 	"net"
+	"path"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -12,6 +14,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/bastion"
 	"github.com/ocelhq/ocel/platform/gcp/provider/bucket"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -31,7 +35,16 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if err != nil {
 		return nil, err
 	}
-	opened, err := bastion.New(c, p.services(), p.pushBinary).ForwardPorts(ctx, req.Tier, targets, progress, req.ReportFailure)
+	for _, binding := range req.Bindings {
+		if err := refuseElsewhere(ctx, c, req.Tier, binding); err != nil {
+			return nil, err
+		}
+	}
+	reach, err := network.ReadRange(ctx, c, req.Tier)
+	if err != nil {
+		return nil, err
+	}
+	opened, err := bastion.New(c, p.services(), p.pushBinary).ForwardPorts(ctx, req.Tier, reach, targets, progress, req.ReportFailure)
 	if err != nil {
 		return nil, err
 	}
@@ -40,6 +53,16 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 		forwards[i] = provider.PortForward{Binding: req.Bindings[i].Name, LocalAddress: forward.Address(), Close: forward.Close}
 	}
 	return forwards, nil
+}
+
+func refuseElsewhere(ctx context.Context, c *gcloud.Clients, tier environment.Tier, binding provider.Binding) error {
+	on, err := network.ReadEndpointNetwork(ctx, c, tier, binding)
+	if err != nil || on == "" || on == c.NetworkPath(tier) {
+		return err
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"%s %s is on the %s network, and the bastion forwards ports only into the %s network of tier %s: reach it from a machine on %s",
+		binding.Type, binding.Name, path.Base(on), c.Network(tier), tier, path.Base(on))
 }
 
 func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {

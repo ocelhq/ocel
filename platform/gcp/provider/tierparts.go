@@ -22,13 +22,15 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
-func tierParts() []bootstrap.RemovablePart {
+func tierParts(networkPatches network.Patches) []bootstrap.RemovablePart {
 	return []bootstrap.RemovablePart{
 		bootstrap.Keys.Removable(),
 		variables.SharedDatabasePart(appDatabaseLayouts()...),
 		bootstrap.EdgeBucket.Removable(),
 		bootstrap.CacheBucket.Removable(),
-		{Part: provider.Part{Name: network.PartName, Summary: network.Summary}, Deployed: network.NewPart},
+		{Part: provider.Part{Name: network.PartName, Summary: network.Summary}, Deployed: func(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
+			return network.NewPart(b, tier, networkPatches)
+		}},
 		albpart.Part,
 		bootstrap.Realtime.Removable(),
 		bootstrap.Topics.Removable(),
@@ -75,7 +77,7 @@ func (u deployUse) partNames(registry component.Registry) ([]string, error) {
 		used = append(used, albpart.PartName)
 	}
 	var ordered []string
-	for _, each := range tierParts() {
+	for _, each := range tierParts(network.Patches{}) {
 		if slices.Contains(used, each.Name) {
 			ordered = append(ordered, each.Name)
 		}

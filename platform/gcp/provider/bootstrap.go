@@ -6,15 +6,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
+	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 type bootstrapGate struct{ p *Provider }
 
 func (g bootstrapGate) Parts() []provider.Part {
-	return bootstrap.Engine{Removable: tierParts()}.Parts()
+	return bootstrap.Engine{Removable: tierParts(network.Patches{})}.Parts()
 }
 
 func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, error) {
@@ -34,7 +36,7 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, err
 		WrittenBy:      g.p.writtenBy,
 		Surveyed:       &g.p.surveyed,
 		SkipChecks:     g.p.skipChecks,
-		Removable:      tierParts(),
+		Removable:      tierParts(network.Patches{}),
 		Accounts:       tierAccounts(g.p.components()),
 		FrontParts:     tierFronts(),
 		TakeRecords:    variables.TakeProjectRecords,
@@ -45,8 +47,16 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, err
 	}, nil
 }
 
-func (g bootstrapGate) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
+func (g bootstrapGate) openTierBootstrap(ctx context.Context, tier environment.Tier) (bootstrap.Engine, error) {
 	b, err := g.openBootstrap(ctx)
+	if err != nil {
+		return bootstrap.Engine{}, err
+	}
+	return withNetworkPatches(ctx, b, tier, "", transform.Result{})
+}
+
+func (g bootstrapGate) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
+	b, err := g.openTierBootstrap(ctx, tier)
 	if err != nil {
 		return provider.BootstrapDescription{}, err
 	}
@@ -54,7 +64,7 @@ func (g bootstrapGate) Describe(ctx context.Context, tier environment.Tier) (pro
 }
 
 func (g bootstrapGate) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
-	b, err := g.openBootstrap(ctx)
+	b, err := g.openTierBootstrap(ctx, req.Tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -62,7 +72,7 @@ func (g bootstrapGate) Plan(ctx context.Context, req provider.BootstrapRequest) 
 }
 
 func (g bootstrapGate) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	b, err := g.openBootstrap(ctx)
+	b, err := g.openTierBootstrap(ctx, req.Tier)
 	if err != nil {
 		return err
 	}
@@ -86,7 +96,7 @@ func (g bootstrapGate) Remove(ctx context.Context, tier environment.Tier, progre
 }
 
 func (g bootstrapGate) DescribeParts(ctx context.Context, described provider.BootstrapDescription) ([]provider.BootstrapPart, error) {
-	b, err := g.openBootstrap(ctx)
+	b, err := g.openTierBootstrap(ctx, described.Tier)
 	if err != nil {
 		return nil, err
 	}

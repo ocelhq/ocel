@@ -1,4 +1,13 @@
-import type { cloudrunv2, cloudscheduler, memorystore, pubsub, sql, storage } from "@pulumi/gcp";
+import type {
+  cloudrunv2,
+  cloudscheduler,
+  compute,
+  memorystore,
+  networkconnectivity,
+  pubsub,
+  sql,
+  storage,
+} from "@pulumi/gcp";
 import type { Unwrap } from "@pulumi/pulumi";
 import type { Patch } from "../patch.js";
 
@@ -84,6 +93,28 @@ export interface GcpResourceArgs {
    */
   worker: {
     service: cloudrunv2.ServiceArgs;
+  };
+  /**
+   * The network of the tier, shared by every project deployed to it: the
+   * subnetwork Cloud Run reaches kv stores and databases from, and the service
+   * connection policies Memorystore and Cloud SQL connect through. A rule sees
+   * no `env` or `app` for it, and no binding fills it. Patches from the
+   * projects of one tier must agree: a deploy whose patches differ from the
+   * ones the network carries makes it again with its own, and a deploy that
+   * patches nothing in it leaves it as it is.
+   */
+  network: {
+    /** The tier's VPC network. Its `mtu` is set when ocel creates it, and fixed after. */
+    network: compute.NetworkArgs;
+    /**
+     * The tier's subnetwork. Its `ipCidrRange` is a `/16` to a `/26` inside
+     * 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16, 10.240.0.0/20 when left
+     * off, and fixed once the subnetwork exists: a deploy that asks for
+     * another range is refused.
+     */
+    subnetwork: compute.SubnetworkArgs;
+    /** Both service connection policies, the one for Memorystore and the one for Cloud SQL. */
+    connectionPolicy: networkconnectivity.ServiceConnectionPolicyArgs;
   };
 }
 
@@ -239,6 +270,21 @@ export const gcpAllowedPaths = {
   function: { service: appServicePaths },
   container: { service: appServicePaths },
   worker: { service: workerServicePaths },
+  network: {
+    network: ["mtu"],
+    subnetwork: [
+      "ipCidrRange",
+      "logConfig.aggregationInterval",
+      "logConfig.filterExpr",
+      "logConfig.flowSampling",
+      "logConfig.metadata",
+      "logConfig.metadataFields",
+      "privateIpGoogleAccess",
+      "secondaryIpRanges.ipCidrRange",
+      "secondaryIpRanges.rangeName",
+    ],
+    connectionPolicy: ["pscConfig.limit"],
+  },
 } as const satisfies AllowedPathNames;
 
 type GcpAllowed = typeof gcpAllowedPaths;
@@ -257,15 +303,29 @@ type PickPaths<T, P extends string> = T extends readonly (infer E)[]
         [K in keyof T & Head<P>]?: K extends P ? T[K] : PickPaths<NonNullable<T[K]>, Rest<P, K>>;
       };
 
+type Translated<T extends GcpResourceType, K extends keyof GcpResourceArgs[T]> = PickPaths<
+  Unwrap<GcpResourceArgs[T][K]>,
+  AllowedNames<GcpAllowed[T][K & keyof GcpAllowed[T]]>
+>;
+
+type WrittenDown<T> = T extends undefined | null
+  ? never
+  : T extends readonly (infer E)[]
+    ? WrittenDown<E>[]
+    : T extends object
+      ? { readonly [K in keyof T]?: WrittenDown<T[K]> }
+      : T;
+
 /**
  * What a rule may patch under `gcp`: the args `@pulumi/gcp` takes for the
  * resource, cut down to the paths ocel translates. A binding output can take
- * the place of any leaf.
+ * the place of any leaf but the network's: it belongs to every project of the
+ * tier, so no project's binding fills it.
  */
 export type GcpSurfaces = {
   [T in GcpResourceType]: {
-    [K in keyof GcpResourceArgs[T]]: Patch<
-      PickPaths<Unwrap<GcpResourceArgs[T][K]>, AllowedNames<GcpAllowed[T][K & keyof GcpAllowed[T]]>>
-    >;
+    [K in keyof GcpResourceArgs[T]]: T extends "network"
+      ? WrittenDown<Translated<T, K>>
+      : Patch<Translated<T, K>>;
   };
 };

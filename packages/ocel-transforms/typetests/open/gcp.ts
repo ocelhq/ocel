@@ -335,3 +335,42 @@ export const workerTimeout = defineTransform({
 
 export const realServicePath: LeafPaths<Unwrap<cloudrunv2.ServiceArgs>> =
   "template.containers.resources.limits.nvidia.com/gpu";
+
+export const tierNetwork = defineTransform({
+  gcp: {
+    network: {
+      network: { mtu: 1500 },
+      subnetwork: {
+        ipCidrRange: "10.96.0.0/20",
+        privateIpGoogleAccess: true,
+        logConfig: { flowSampling: 0.25 },
+        secondaryIpRanges: [{ rangeName: "pods", ipCidrRange: "10.100.0.0/20" }],
+      },
+      connectionPolicy: { pscConfig: { limit: "20" } },
+    },
+  },
+});
+
+export const tierNetworkFromBinding = defineTransform({
+  gcp: {
+    network: {
+      connectionPolicy: {
+        pscConfig: {
+          // @ts-expect-error the network belongs to every project of the tier, so no project's binding fills it
+          limit: bindings.custom.limits.connections,
+        },
+      },
+    },
+  },
+});
+
+export const ownedRouting = defineTransform({
+  gcp: {
+    network: {
+      network: {
+        // @ts-expect-error ocel routes the tier's network regionally
+        routingMode: "GLOBAL",
+      },
+    },
+  },
+});

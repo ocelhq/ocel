@@ -21,7 +21,7 @@ const (
 )
 
 func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
-	parts, err := p.partsUsedBy(pre)
+	parts, err := p.partsUsedBy(ctx, pre)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -32,6 +32,9 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 	}
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
 	if err != nil {
+		return provider.Plan{}, err
+	}
+	if b, err = p.withDeployNetworkPatches(ctx, b, pre.Deploy, parts); err != nil {
 		return provider.Plan{}, err
 	}
 	if err := b.RefuseServicesOff(ctx, apis); err != nil {
@@ -52,7 +55,7 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 }
 
 func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPreflight) error {
-	parts, err := p.partsUsedBy(pre)
+	parts, err := p.partsUsedBy(ctx, pre)
 	if err != nil {
 		return err
 	}
@@ -105,10 +108,6 @@ func (p *Provider) warnStaleOriginSecret(ctx context.Context, pre provider.Deplo
 
 func servesCompute(app provider.AppEntry) bool {
 	return app.Compute() == provider.ComputeContainer || len(app.Manifest.GetServerless().GetFunctions()) > 0
-}
-
-func (p *Provider) partsUsedBy(pre provider.DeployPreflight) ([]string, error) {
-	return newDeployUse(pre).partNames(p.components())
 }
 
 func (p *Provider) listAPIsToCheck(pre provider.DeployPreflight) []string {
@@ -166,6 +165,9 @@ func (p *Provider) addParts(ctx context.Context, pre provider.DeployPreflight, n
 	}
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
 	if err != nil {
+		return err
+	}
+	if b, err = p.withDeployNetworkPatches(ctx, b, pre.Deploy, names); err != nil {
 		return err
 	}
 	return b.AddParts(ctx, pre, names)

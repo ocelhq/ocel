@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 )
 
 const (
@@ -31,6 +32,7 @@ const (
 	MemorystoreServiceClass = "gcp-memorystore"
 	CloudSQLServiceClass    = "google-cloud-sql"
 	regionalRouting         = "REGIONAL"
+	defaultMTU              = 1460
 )
 
 type connectionPolicy struct {
@@ -53,17 +55,22 @@ var networkAPIs = []string{
 	"servicenetworking.googleapis.com",
 }
 
-const (
-	PartName = "private-network"
-	Summary  = "a network of the tier's own with one subnetwork, " + SubnetRange + ", which Cloud Run's agent may attach services to, and the service connection policies Memorystore and Cloud SQL reach it through: " +
-		"what kv stores, databases and the apps bound to them are connected over, with no recurring cost of its own"
+const PartName = "private-network"
 
+var Summary = summaryOf(SubnetRange)
+
+func summaryOf(subnetRange string) string {
+	return "a network of the tier's own with one subnetwork, " + subnetRange + ", which Cloud Run's agent may attach services to, and the service connection policies Memorystore and Cloud SQL reach it through: " +
+		"what kv stores, databases and the apps bound to them are connected over, with no recurring cost of its own"
+}
+
+const (
 	KindNetwork          bootstrap.Kind = "compute:network"
 	KindSubnetwork       bootstrap.Kind = "compute:subnetwork"
 	KindConnectionPolicy bootstrap.Kind = "networkconnectivity:serviceconnectionpolicy"
 )
 
-func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
+func NewPart(b bootstrap.Engine, tier environment.Tier, patches Patches) bootstrap.Part {
 	resources := []provider.PhysicalResource{
 		{Kind: string(KindNetwork), ID: b.Clients.Network(tier)},
 		{Kind: string(KindSubnetwork), ID: b.Clients.Subnetwork(tier)},
@@ -71,20 +78,28 @@ func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
 	for _, policy := range connectionPolicies {
 		resources = append(resources, provider.PhysicalResource{Kind: string(KindConnectionPolicy), ID: b.Clients.ConnectionPolicy(tier, policy.name)})
 	}
-	return bootstrap.Part{
+	content := SubnetRange + " " + NetworkUserRole
+	if digest := patches.Digest(); digest != "" {
+		content += " " + digest
+	}
+	part := bootstrap.Part{
 		Name:      PartName,
-		Summary:   Summary,
-		Content:   SubnetRange + " " + NetworkUserRole,
+		Summary:   summaryOf(patches.subnetRange(b, tier)),
+		Content:   content,
 		APIs:      networkAPIs,
 		Resources: resources,
 		Shape:     Shape(b.Clients.Names, tier, b.Clients.Region),
-		Make:      func(ctx context.Context) error { return Make(ctx, b, tier) },
+		Make:      func(ctx context.Context) error { return Make(ctx, b, tier, patches) },
 		Users:     func(ctx context.Context) ([]string, error) { return listNetworkUsers(ctx, b, tier) },
 		RefuseInUse: func(ctx context.Context, removal bootstrap.PartRemoval) error {
 			return refuseNetworkInUse(ctx, b, tier, removal)
 		},
 		Remove: func(ctx context.Context) error { return Remove(ctx, b, tier) },
 	}
+	if patches.isChanged() {
+		part.UpdateReason = "the transforms that patch the network of the " + string(tier) + " tier differ from the ones it records, so this deploy makes it again with them, for every project in the tier"
+	}
+	return part
 }
 
 func Shape(names names.Names, tier environment.Tier, region string) []pricing.Shaped {
@@ -98,66 +113,135 @@ func Shape(names names.Names, tier environment.Tier, region string) []pricing.Sh
 	return shaped
 }
 
-func Make(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
+func Make(ctx context.Context, b bootstrap.Engine, tier environment.Tier, patches Patches) error {
+	patched, err := patches.patch(b, tier)
+	if err != nil {
+		return err
+	}
 	engine, err := b.Clients.Compute()
 	if err != nil {
 		return err
 	}
-	if err := ensureNetwork(ctx, b, engine, tier); err != nil {
+	applied := patched.applied()
+	if err := patches.record(ctx, b.Records, tier, joinApplied(patches.recorded.Applied, applied)); err != nil {
 		return err
 	}
-	if err := ensureSubnetwork(ctx, b, engine, tier); err != nil {
+	if err := ensureNetwork(ctx, b, engine, tier, patched.network); err != nil {
+		return err
+	}
+	if err := ensureSubnetwork(ctx, b, engine, tier, patched.subnetwork); err != nil {
 		return err
 	}
 	if err := letCloudRunUseSubnetwork(ctx, b, engine, tier); err != nil {
 		return err
 	}
-	for _, policy := range connectionPolicies {
-		if err := ensureConnectionPolicy(ctx, b, tier, policy); err != nil {
+	for i, policy := range connectionPolicies {
+		if err := ensureConnectionPolicy(ctx, b, tier, policy, patched.policies[i]); err != nil {
 			return err
 		}
 	}
-	return nil
+	return patches.record(ctx, b.Records, tier, applied)
 }
 
-func ensureNetwork(ctx context.Context, b bootstrap.Engine, engine *compute.Service, tier environment.Tier) error {
+func desiredNetwork(b bootstrap.Engine, tier environment.Tier) compute.Network {
+	return compute.Network{
+		Name:                  b.Clients.Network(tier),
+		Description:           "the network ocel's " + string(tier) + " kv stores and databases are reached over",
+		AutoCreateSubnetworks: false,
+		RoutingConfig:         &compute.NetworkRoutingConfig{RoutingMode: regionalRouting},
+		ForceSendFields:       []string{"AutoCreateSubnetworks"},
+	}
+}
+
+func ensureNetwork(ctx context.Context, b bootstrap.Engine, engine *compute.Service, tier environment.Tier, patched surface.Patched[compute.Network, compute.Network]) error {
 	name := b.Clients.Network(tier)
-	_, err := googleretry.Attempted(ctx, engine.Networks.Get(b.Clients.Project(), name).Context(ctx).Do)
+	current, err := googleretry.Attempted(ctx, engine.Networks.Get(b.Clients.Project(), name).Context(ctx).Do)
 	if err == nil {
-		return nil
+		return refuseNewMTU(tier, current, patched)
 	}
 	if !gcloud.Absent(err) {
 		return fmt.Errorf("read the %s network: %w", name, err)
 	}
+	desired := patched.Desired
 	return computeAwaited(ctx, b, engine, "", "create the "+name+" network", func(call ...googleapi.CallOption) (*compute.Operation, error) {
-		return engine.Networks.Insert(b.Clients.Project(), &compute.Network{
-			Name:                  name,
-			Description:           "the network ocel's " + string(tier) + " kv stores and databases are reached over",
-			AutoCreateSubnetworks: false,
-			RoutingConfig:         &compute.NetworkRoutingConfig{RoutingMode: regionalRouting},
-			ForceSendFields:       []string{"AutoCreateSubnetworks"},
-		}).Context(ctx).Do(call...)
+		return engine.Networks.Insert(b.Clients.Project(), &desired).Context(ctx).Do(call...)
 	})
 }
 
-func ensureSubnetwork(ctx context.Context, b bootstrap.Engine, engine *compute.Service, tier environment.Tier) error {
-	name := b.Clients.Subnetwork(tier)
-	_, err := googleretry.Attempted(ctx, engine.Subnetworks.Get(b.Clients.Project(), b.Clients.Region, name).Context(ctx).Do)
-	if err == nil {
+func refuseNewMTU(tier environment.Tier, current *compute.Network, patched surface.Patched[compute.Network, compute.Network]) error {
+	held := current.Mtu
+	if held == 0 {
+		held = defaultMTU
+	}
+	if !patched.Sets("mtu") || patched.Desired.Mtu == held {
 		return nil
 	}
-	if !gcloud.Absent(err) {
+	return refusal.Refuse(refusal.CodeInvalid,
+		"the %s tier's network was created with an MTU of %d, and a transform's `network.mtu` now asks for %d; ocel sets a network's MTU only when it creates it. "+
+			"Set it back to %d, or remove everything in the tier's network and `%s --remove %s` first",
+		tier, held, patched.Desired.Mtu, held, provider.BootstrapCommand(tier), PartName)
+}
+
+func desiredSubnetwork(b bootstrap.Engine, tier environment.Tier) compute.Subnetwork {
+	return compute.Subnetwork{
+		Name:        b.Clients.Subnetwork(tier),
+		Description: "the subnetwork Cloud Run reaches ocel's " + string(tier) + " kv stores and databases from",
+		Network:     b.Clients.NetworkPath(tier),
+		Region:      b.Clients.Region,
+		IpCidrRange: SubnetRange,
+	}
+}
+
+func ensureSubnetwork(ctx context.Context, b bootstrap.Engine, engine *compute.Service, tier environment.Tier, patched surface.Patched[compute.Subnetwork, subnetworkUpdate]) error {
+	project, region, name := b.Clients.Project(), b.Clients.Region, b.Clients.Subnetwork(tier)
+	current, err := googleretry.Attempted(ctx, engine.Subnetworks.Get(project, region, name).Context(ctx).Do)
+	if gcloud.Absent(err) {
+		desired := patched.Desired
+		return computeAwaited(ctx, b, engine, region, "create the "+name+" subnetwork", func(call ...googleapi.CallOption) (*compute.Operation, error) {
+			return engine.Subnetworks.Insert(project, region, &desired).Context(ctx).Do(call...)
+		})
+	}
+	if err != nil {
 		return fmt.Errorf("read the %s subnetwork: %w", name, err)
 	}
-	return computeAwaited(ctx, b, engine, b.Clients.Region, "create the "+name+" subnetwork", func(call ...googleapi.CallOption) (*compute.Operation, error) {
-		return engine.Subnetworks.Insert(b.Clients.Project(), b.Clients.Region, &compute.Subnetwork{
-			Name:        name,
-			Description: "the subnetwork Cloud Run reaches ocel's " + string(tier) + " kv stores and databases from",
-			Network:     b.Clients.NetworkPath(tier),
-			Region:      b.Clients.Region,
-			IpCidrRange: SubnetRange,
-		}).Context(ctx).Do(call...)
+	if err := refuseNewRange(tier, current, patched); err != nil {
+		return err
+	}
+	var update subnetworkUpdate
+	if _, err := patched.Drift(current, &update); err != nil {
+		return err
+	}
+	if on := update.privateIpGoogleAccess; on != nil {
+		if err := computeAwaited(ctx, b, engine, region, "set private Google access on the "+name+" subnetwork", func(call ...googleapi.CallOption) (*compute.Operation, error) {
+			return engine.Subnetworks.SetPrivateIpGoogleAccess(project, region, name, &compute.SubnetworksSetPrivateIpGoogleAccessRequest{
+				PrivateIpGoogleAccess: *on, ForceSendFields: []string{"PrivateIpGoogleAccess"},
+			}).Context(ctx).Do(call...)
+		}); err != nil {
+			return err
+		}
+	}
+	if !update.hasFields() {
+		return nil
+	}
+	if update.privateIpGoogleAccess != nil {
+		if current, err = googleretry.Attempted(ctx, engine.Subnetworks.Get(project, region, name).Context(ctx).Do); err != nil {
+			return fmt.Errorf("read the %s subnetwork: %w", name, err)
+		}
+	}
+	update.fields.Fingerprint = current.Fingerprint
+	return computeAwaited(ctx, b, engine, region, "update the "+name+" subnetwork", func(call ...googleapi.CallOption) (*compute.Operation, error) {
+		return engine.Subnetworks.Patch(project, region, name, &update.fields).Context(ctx).Do(call...)
 	})
+}
+
+func refuseNewRange(tier environment.Tier, current *compute.Subnetwork, patched surface.Patched[compute.Subnetwork, subnetworkUpdate]) error {
+	if !patched.Sets("ipCidrRange") || patched.Desired.IpCidrRange == current.IpCidrRange {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"the %s tier's network was created with %s, and a transform's `subnetwork.ipCidrRange` now asks for %s; a subnetwork's range cannot change without replacing it and everything connected through it. "+
+			"Set it back to %s, or remove everything in the tier's network and `%s --remove %s` first",
+		tier, current.IpCidrRange, patched.Desired.IpCidrRange, current.IpCidrRange, provider.BootstrapCommand(tier), PartName)
 }
 
 func letCloudRunUseSubnetwork(ctx context.Context, b bootstrap.Engine, engine *compute.Service, tier environment.Tier) error {
@@ -214,26 +298,31 @@ func connectionPolicyPath(b bootstrap.Engine, tier environment.Tier, policy conn
 	return b.Clients.Location() + "/serviceConnectionPolicies/" + b.Clients.ConnectionPolicy(tier, policy.name)
 }
 
-func ensureConnectionPolicy(ctx context.Context, b bootstrap.Engine, tier environment.Tier, policy connectionPolicy) error {
+func desiredPolicy(b bootstrap.Engine, tier environment.Tier, policy connectionPolicy) networkconnectivity.ServiceConnectionPolicy {
+	return networkconnectivity.ServiceConnectionPolicy{
+		Description:  "lets " + policy.service + " connect ocel's " + string(tier) + " resources into " + b.Clients.Network(tier),
+		Network:      b.Clients.NetworkPath(tier),
+		ServiceClass: policy.class,
+		PscConfig:    &networkconnectivity.PscConfig{Subnetworks: []string{b.Clients.SubnetworkPath(b.Clients.Region, tier)}},
+	}
+}
+
+func ensureConnectionPolicy(ctx context.Context, b bootstrap.Engine, tier environment.Tier, policy connectionPolicy, patched surface.Patched[networkconnectivity.ServiceConnectionPolicy, policyUpdate]) error {
 	service, err := b.Clients.Connectivity()
 	if err != nil {
 		return err
 	}
 	policies := service.Projects.Locations.ServiceConnectionPolicies
 	named := b.Clients.ConnectionPolicy(tier, policy.name)
-	_, err = googleretry.Attempted(ctx, policies.Get(connectionPolicyPath(b, tier, policy)).Context(ctx).Do)
+	current, err := googleretry.Attempted(ctx, policies.Get(connectionPolicyPath(b, tier, policy)).Context(ctx).Do)
 	if err == nil {
-		return nil
+		return updateConnectionPolicy(ctx, b, service, current, named, connectionPolicyPath(b, tier, policy), patched)
 	}
 	if !gcloud.Absent(err) {
 		return fmt.Errorf("read the %s service connection policy: %w", named, err)
 	}
-	started, err := googleretry.Attempted(ctx, policies.Create(b.Clients.Location(), &networkconnectivity.ServiceConnectionPolicy{
-		Description:  "lets " + policy.service + " connect ocel's " + string(tier) + " resources into " + b.Clients.Network(tier),
-		Network:      b.Clients.NetworkPath(tier),
-		ServiceClass: policy.class,
-		PscConfig:    &networkconnectivity.PscConfig{Subnetworks: []string{b.Clients.SubnetworkPath(b.Clients.Region, tier)}},
-	}).ServiceConnectionPolicyId(named).Context(ctx).Do)
+	desired := patched.Desired
+	started, err := googleretry.Attempted(ctx, policies.Create(b.Clients.Location(), &desired).ServiceConnectionPolicyId(named).Context(ctx).Do)
 	if gcloud.Taken(err) {
 		return nil
 	}
@@ -241,6 +330,26 @@ func ensureConnectionPolicy(ctx context.Context, b bootstrap.Engine, tier enviro
 		return fmt.Errorf("create the %s service connection policy: %w", named, err)
 	}
 	return connectivityAwaited(ctx, b, service, "creating the "+named+" service connection policy", started)
+}
+
+func updateConnectionPolicy(
+	ctx context.Context, b bootstrap.Engine,
+	service *networkconnectivity.Service,
+	current *networkconnectivity.ServiceConnectionPolicy,
+	named, at string,
+	patched surface.Patched[networkconnectivity.ServiceConnectionPolicy, policyUpdate],
+) error {
+	update := newPolicyUpdate(current)
+	if _, err := patched.Drift(current, &update); err != nil || len(update.mask) == 0 {
+		return err
+	}
+	update.policy.Etag = current.Etag
+	started, err := googleretry.Attempted(ctx, service.Projects.Locations.ServiceConnectionPolicies.Patch(at, &update.policy).
+		UpdateMask(strings.Join(update.mask, ",")).Context(ctx).Do)
+	if err != nil {
+		return fmt.Errorf("update the %s service connection policy: %w", named, err)
+	}
+	return connectivityAwaited(ctx, b, service, "updating the "+named+" service connection policy", started)
 }
 
 const (
@@ -300,12 +409,19 @@ func listStoresOn(ctx context.Context, b bootstrap.Engine, tier environment.Tier
 	if err != nil {
 		return nil, err
 	}
-	connected, next, err := b.Stores.ListInstances(ctx, b.Clients.Location(), filter, resourcesNamedOnNetwork, "")
+	own := b.Clients.NetworkPath(tier)
+	listOn := func(token string) ([]gcloud.MemorystoreInstance, string, error) {
+		listed, next, err := b.Stores.ListInstances(ctx, b.Clients.Location(), filter, resourcesNamedOnNetwork, token)
+		return slices.DeleteFunc(listed, func(instance gcloud.MemorystoreInstance) bool {
+			return !gcloud.CanBeOn(gcloud.StoreNetworks(&instance), own)
+		}), next, err
+	}
+	connected, next, err := listOn("")
 	for page := 1; err == nil && len(connected) == 0 && next != ""; page++ {
 		if page == StorePagesRead {
-			return nil, fmt.Errorf("read which kv stores are on the %s network: Memorystore answered %d pages with no store and named another, so nothing says the network is free", b.Clients.Network(tier), StorePagesRead)
+			return nil, fmt.Errorf("read which kv stores are on the %s network: Memorystore answered %d pages with no store on it and named another, so nothing says the network is free", b.Clients.Network(tier), StorePagesRead)
 		}
-		connected, next, err = b.Stores.ListInstances(ctx, b.Clients.Location(), filter, resourcesNamedOnNetwork, next)
+		connected, next, err = listOn(next)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read which kv stores are on the %s network: %w", b.Clients.Network(tier), err)
@@ -340,6 +456,9 @@ func listDatabasesOn(ctx context.Context, b bootstrap.Engine, tier environment.T
 	}
 	named := make([]connectedResource, 0, len(listed.Items)+1)
 	for _, instance := range listed.Items {
+		if !gcloud.CanBeOn(gcloud.DatabaseNetworks(instance), b.Clients.NetworkPath(tier)) {
+			continue
+		}
 		labels := map[string]string{}
 		if instance.Settings != nil {
 			labels = instance.Settings.UserLabels
@@ -410,7 +529,7 @@ func Remove(ctx context.Context, b bootstrap.Engine, tier environment.Tier) erro
 	}); err != nil && !gcloud.Absent(err) {
 		return err
 	}
-	return nil
+	return forgetPatches(ctx, b.Records, tier)
 }
 
 func computeAwaited(

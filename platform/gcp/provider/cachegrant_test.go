@@ -371,7 +371,7 @@ func TestARevalidatingNodeBuildIsGrantedNoPagesAndNothingOnAnEdgeBucketItsDeploy
 		Deploy: provider.DeploySpec{Tier: tier, Apps: []provider.AppEntry{shippingApp("api", buildoutput.FrameworkNode)}},
 		Uses:   []buildoutput.Uses{{Revalidation: true}},
 	}
-	parts, err := pushing(t, "").partsUsedBy(pre)
+	parts, err := pushing(t, "").partsUsedBy(context.Background(), pre)
 	if err != nil || slices.Contains(parts, bootstrap.EdgeBucketPart) {
 		t.Fatalf("partsUsedBy() of a revalidating node build on the direct edge = %v, %v, want no edge bucket", parts, err)
 	}

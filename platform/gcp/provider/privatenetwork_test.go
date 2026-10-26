@@ -51,7 +51,7 @@ func TestThePrivateNetworkIsAPartADeployAdds(t *testing.T) {
 		t.Errorf("credentialParts() = %v, want no %q part only the bootstrap credential adds: the first deploy declaring a database or a store adds the network", bootstrap.CredentialParts(), network.PartName)
 	}
 	b, _ := servingNetworks(t)
-	net := network.NewPart(b, environment.TierProduction)
+	net := network.NewPart(b, environment.TierProduction, network.Patches{})
 	if net.Name != network.PartName || !strings.Contains(network.Summary, network.SubnetRange) || len(net.Shape) != len(net.Resources) {
 		t.Errorf("the network part is %+v, want it named %s, its summary naming its range and each resource priced", net, network.PartName)
 	}
@@ -60,7 +60,7 @@ func TestThePrivateNetworkIsAPartADeployAdds(t *testing.T) {
 func TestThePrivateNetworkChecksItsServicesAndADeployCredentialMayAddIt(t *testing.T) {
 	t.Parallel()
 	b, _ := servingNetworks(t)
-	network := network.NewPart(b, environment.TierProduction)
+	network := network.NewPart(b, environment.TierProduction, network.Patches{})
 
 	for _, api := range []string{"memorystore.googleapis.com", "sqladmin.googleapis.com", "networkconnectivity.googleapis.com", "serviceconsumermanagement.googleapis.com", "servicenetworking.googleapis.com", "compute.googleapis.com"} {
 		if !slices.Contains(network.APIs, api) {
@@ -71,6 +71,7 @@ func TestThePrivateNetworkChecksItsServicesAndADeployCredentialMayAddIt(t *testi
 	for _, permission := range []string{
 		"networkconnectivity.serviceConnectionPolicies.create", "compute.networks.create", "compute.subnetworks.create", "compute.regionOperations.get", "serviceusage.services.get",
 		"compute.subnetworks.getIamPolicy", "compute.subnetworks.setIamPolicy",
+		"compute.subnetworks.update", "compute.subnetworks.setPrivateIpGoogleAccess", "networkconnectivity.serviceConnectionPolicies.update",
 	} {
 		if !slices.Contains(parts, permission) {
 			t.Errorf("the parts role holds %v, want %s among them: a deploy adds the network and lets Cloud Run's agent attach services to its subnetwork", parts, permission)
@@ -96,7 +97,7 @@ func TestThePrivateNetworkChecksItsServicesAndADeployCredentialMayAddIt(t *testi
 func TestMakingThePrivateNetworkRaisesTheTiersNetworkSubnetworkAndPolicies(t *testing.T) {
 	b, server := servingNetworks(t)
 
-	if err := network.Make(context.Background(), b, environment.TierProduction); err != nil {
+	if err := network.Make(context.Background(), b, environment.TierProduction, network.Patches{}); err != nil {
 		t.Fatalf("makeNetwork() = %v", err)
 	}
 
@@ -132,7 +133,7 @@ func TestMakingThePrivateNetworkAgainWritesNothing(t *testing.T) {
 	b, server := servingNetworks(t)
 	server.installed()
 
-	if err := network.Make(context.Background(), b, environment.TierProduction); err != nil {
+	if err := network.Make(context.Background(), b, environment.TierProduction, network.Patches{}); err != nil {
 		t.Fatalf("makeNetwork() = %v", err)
 	}
 	if got := server.wrote(); len(got) != 0 {
@@ -189,7 +190,7 @@ func TestAConnectionPolicyCreateAnsweredWithAnUnnamedUnfinishedOperationIsAnErro
 	b, server := servingNetworks(t)
 	server.unnamed = true
 
-	err := network.Make(context.Background(), b, environment.TierProduction)
+	err := network.Make(context.Background(), b, environment.TierProduction, network.Patches{})
 	if err == nil || !strings.Contains(err.Error(), "no name") {
 		t.Errorf("makeNetwork() = %v, want an operation nothing can poll named as an error rather than taken as done", err)
 	}
@@ -317,5 +318,44 @@ func TestABootstrapMakesARecordedPrivateNetworkAgainWhenItWasTakenDownByHand(t *
 	}
 	if !slices.Contains(repaired, network.PartName) || server.networks["ocel-prod-network"] == nil || len(server.policies) != 2 {
 		t.Errorf("repairParts() = %v leaving %v and %v, want the recorded network made again", repaired, server.networks, server.policies)
+	}
+}
+
+func TestTheTiersPrivateNetworkIsNotHeldInUseByStoresAndDatabasesATransformPutOnAnotherNetwork(t *testing.T) {
+	b, networks, stores := servingNetworksAndStores(t)
+	networks.installed()
+	shared := "projects/acme-prod/global/networks/shared"
+	stores.HoldingOn(connectedStore, storeLabels(environment.TierProduction), shared)
+	networks.databases.HoldingOn(connectedDatabase, map[string]string{
+		"ocel-namespace": "ocel", "ocel-tier": "production", "ocel-project": "shop", "ocel-environment": "prod", "ocel-postgres": "orders",
+	}, shared)
+	recordingNetwork(t, &b)
+	ctx := context.Background()
+
+	if err := b.RefusePartsInUse(ctx, environment.TierProduction); err != nil {
+		t.Errorf("refusePartsInUse() with a store and a database on the network shared = %v, want the tier's own network free to remove", err)
+	}
+	parts, err := b.ListDescribedParts(ctx, environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parts) != 1 || len(parts[0].UsedBy) != 0 {
+		t.Errorf("listDescribedParts() = %+v, want the network used by no project: shop's store and database are on shared", parts)
+	}
+}
+
+func TestTheTiersPrivateNetworkIsHeldInUseByAStoreAndADatabaseConnectedToIt(t *testing.T) {
+	b, networks, stores := servingNetworksAndStores(t)
+	networks.installed()
+	own := "projects/acme-prod/global/networks/ocel-prod-network"
+	stores.HoldingOn(connectedStore, storeLabels(environment.TierProduction), own)
+	networks.databases.HoldingOn(connectedDatabase, map[string]string{
+		"ocel-namespace": "ocel", "ocel-tier": "production", "ocel-project": "shop", "ocel-environment": "prod", "ocel-postgres": "orders",
+	}, own)
+	recordingNetwork(t, &b)
+
+	err := b.RefusePartsInUse(context.Background(), environment.TierProduction)
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid || !strings.Contains(err.Error(), "kv cache") || !strings.Contains(err.Error(), "postgres orders") {
+		t.Errorf("refusePartsInUse() with a store and a database connected to the tier's network = %v, want a refusal naming both", err)
 	}
 }

@@ -28,9 +28,12 @@ var networkPartPermissions = []string{
 	"compute.subnetworks.use",
 	"compute.subnetworks.getIamPolicy",
 	"compute.subnetworks.setIamPolicy",
+	"compute.subnetworks.update",
+	"compute.subnetworks.setPrivateIpGoogleAccess",
 	"compute.globalOperations.get",
 	"compute.regionOperations.get",
 	"networkconnectivity.serviceConnectionPolicies.create",
 	"networkconnectivity.serviceConnectionPolicies.get",
+	"networkconnectivity.serviceConnectionPolicies.update",
 	"networkconnectivity.operations.get",
 }

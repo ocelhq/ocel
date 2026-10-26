@@ -21,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
-	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/kv"
@@ -59,12 +58,11 @@ func (b Bastion) audience(tier environment.Tier) string {
 	return b.clients.Project() + "/" + b.clients.Bastion(tier)
 }
 
-func bastionDestinations() []relay.Destination {
-	network := netip.MustParsePrefix(network.SubnetRange)
-	return []relay.Destination{{Network: network, Port: postgres.Port}, {Network: network, Port: kv.Port}}
+func bastionDestinations(reach netip.Prefix) []relay.Destination {
+	return []relay.Destination{{Network: reach, Port: postgres.Port}, {Network: reach, Port: kv.Port}}
 }
 
-func (b Bastion) serving(tier environment.Tier, image string) run.Serving {
+func (b Bastion) serving(tier environment.Tier, image string, reach netip.Prefix) run.Serving {
 	return run.Serving{
 		Service:     b.clients.Bastion(tier),
 		Tier:        tier,
@@ -77,7 +75,7 @@ func (b Bastion) serving(tier environment.Tier, image string) run.Serving {
 		Timeout:     run.MaxRequestTimeout,
 		Egress:      &run.PrivateEgress{Network: b.clients.NetworkPath(tier), Subnetwork: b.clients.SubnetworkPath(b.clients.Region, tier)},
 		Audiences:   []string{b.audience(tier)},
-		Env:         map[string]string{relay.AllowedEnv: relay.FormatDestinations(bastionDestinations())},
+		Env:         map[string]string{relay.AllowedEnv: relay.FormatDestinations(bastionDestinations(reach))},
 	}
 }
 
@@ -99,11 +97,11 @@ func (b Bastion) read(ctx context.Context, tier environment.Tier) (*runv2.Google
 	return found, nil
 }
 
-func (b Bastion) provision(ctx context.Context, tier environment.Tier, progress progress.Log) (string, error) {
+func (b Bastion) provision(ctx context.Context, tier environment.Tier, reach netip.Prefix, progress progress.Log) (string, error) {
 	var url string
 	var err error
 	for range bastionCreateTries {
-		if url, err = b.provisionService(ctx, tier, progress); !gcloud.Taken(err) {
+		if url, err = b.provisionService(ctx, tier, reach, progress); !gcloud.Taken(err) {
 			break
 		}
 	}
@@ -123,13 +121,13 @@ func (b Bastion) provision(ctx context.Context, tier environment.Tier, progress 
 	return url, nil
 }
 
-func (b Bastion) provisionService(ctx context.Context, tier environment.Tier, progress progress.Log) (string, error) {
+func (b Bastion) provisionService(ctx context.Context, tier environment.Tier, reach netip.Prefix, progress progress.Log) (string, error) {
 	current, err := b.read(ctx, tier)
 	if err != nil {
 		return "", err
 	}
 	image := b.imageRef(tier)
-	desired := b.serving(tier, image)
+	desired := b.serving(tier, image, reach)
 	wanted, err := run.ServiceOf(desired)
 	if err != nil {
 		return "", err
@@ -195,12 +193,12 @@ func (b Bastion) removeAccount(ctx context.Context, tier environment.Tier, progr
 	return err
 }
 
-func (b Bastion) ForwardPorts(ctx context.Context, tier environment.Tier, targets []string, progress progress.Log, reportFailure func(error)) ([]*relay.Forward, error) {
+func (b Bastion) ForwardPorts(ctx context.Context, tier environment.Tier, reach netip.Prefix, targets []string, progress progress.Log, reportFailure func(error)) ([]*relay.Forward, error) {
 	tokens := &identityTokens{prove: b.prove, audience: b.audience(tier), now: time.Now}
 	if _, err := tokens.mintOrReuse(ctx); err != nil {
 		return nil, err
 	}
-	url, err := b.provision(ctx, tier, progress)
+	url, err := b.provision(ctx, tier, reach, progress)
 	if err != nil {
 		return nil, err
 	}

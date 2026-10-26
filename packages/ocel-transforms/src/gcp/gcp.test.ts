@@ -152,6 +152,49 @@ describe("the gcp branch", () => {
     expect(() => evaluate(asked, modules)).toThrow(/gcp\.worker\.service\.template\.timeout/);
   });
 
+  it("hands the provider the tier network's patches, and refuses a field ocel keeps", () => {
+    const tier: EvaluateRequest = {
+      provider: "gcp",
+      envTier: "production",
+      env: "",
+      resources: [{ type: "network", name: "production" }],
+    };
+    const patched = module(
+      "./network.transform.ts",
+      defineTransform({
+        gcp: {
+          network: { subnetwork: { ipCidrRange: "10.96.0.0/20", privateIpGoogleAccess: true } },
+        },
+      }),
+    );
+    const owned = module(
+      "./owned.transform.ts",
+      defineTransform({ gcp: { network: { subnetwork: { region: "us-east1" } as never } } }),
+    );
+
+    expect(evaluate(tier, [patched]).resources[0]?.patches).toEqual({
+      subnetwork: { ipCidrRange: "10.96.0.0/20", privateIpGoogleAccess: true },
+    });
+    expect(() => evaluate(tier, [owned])).toThrow(/gcp\.network\.subnetwork\.region/);
+  });
+
+  it("hands the provider an empty object over paths it translates, which turns flow logs on at Google's defaults", () => {
+    const tier: EvaluateRequest = {
+      provider: "gcp",
+      envTier: "production",
+      env: "",
+      resources: [{ type: "network", name: "production" }],
+    };
+    const logged = module(
+      "./logs.transform.ts",
+      defineTransform({ gcp: { network: { subnetwork: { logConfig: {} } } } }),
+    );
+
+    expect(evaluate(tier, [logged]).resources[0]?.patches).toEqual({
+      subnetwork: { logConfig: {} },
+    });
+  });
+
   it("refuses a field ocel sets itself, by name", () => {
     const modules = [
       module(
