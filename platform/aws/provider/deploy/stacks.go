@@ -601,7 +601,7 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 		return preparedStack{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s provisions an app and this spec names none", spec.Ref.Name)
 	}
-	transformed, err := transformStackSpec(ctx, r.cfg.Namespace, r.cfg.Transform, r.registry, spec)
+	transformed, err := transformStackSpec(ctx, r.cfg.Namespace, r.cfg.AccountID, r.cfg.Transform, r.registry, spec)
 	if err != nil {
 		return preparedStack{}, err
 	}

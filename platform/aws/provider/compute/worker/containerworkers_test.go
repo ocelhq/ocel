@@ -212,6 +212,20 @@ func TestAContainerWorkersTaskRoleReachesOnlyTheQueuesItServesAndItsOwnService(t
 	}
 }
 
+func TestAContainerWorkersTaskRoleCarriesTheManagedPoliciesATransformAttachesToItsApp(t *testing.T) {
+	t.Parallel()
+
+	const granted = "arn:aws:iam::123456789012:policy/reports-read"
+	_, _, hosted := hostingContainerWorkers(t, mediaOnContainers)
+	hosted.web.ManagedPolicies = []string{granted}
+
+	rec := programRecorded(t, hosted)
+
+	if !slices.Contains(rec.attached, granted) {
+		t.Errorf("attached %v, want %s: the workers run the app's code, so they reach what the app was granted", rec.attached, granted)
+	}
+}
+
 func TestAContainerWorkersStackExportsEachWorkersServiceForTheDeployToRecord(t *testing.T) {
 	t.Parallel()
 

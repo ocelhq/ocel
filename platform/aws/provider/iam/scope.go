@@ -1,6 +1,9 @@
 package iam
 
 import (
+	"slices"
+	"strings"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -216,11 +219,29 @@ func (s Scope) TaggedOnCreateOnlyForItsTier() map[string]any {
 	return MergeConditions(s.TaggedOnCreateForItsTier(), s.TaggedOnlyAsItsTier())
 }
 
+var serviceRolePolicyARNs = []string{LambdaBasicExecutionPolicyARN, LambdaVPCAccessPolicyARN, ECSTaskExecutionPolicyARN}
+
 func AttachedPolicyIsAServiceRole() map[string]any {
 	return map[string]any{
-		"ArnEquals": map[string]any{"iam:PolicyARN": []string{LambdaBasicExecutionPolicyARN, LambdaVPCAccessPolicyARN, ECSTaskExecutionPolicyARN}},
+		"ArnEquals": map[string]any{"iam:PolicyARN": slices.Clone(serviceRolePolicyARNs)},
 	}
 }
+
+func AttachedPolicyIsAServiceRoleOrInCallerAccount() map[string]any {
+	return map[string]any{
+		"ArnLike": map[string]any{"iam:PolicyARN": append(slices.Clone(serviceRolePolicyARNs), CallerAccountPolicyARNs)},
+	}
+}
+
+func IsAServiceRoleOrInAccount(policyARN, account string) bool {
+	if slices.Contains(serviceRolePolicyARNs, policyARN) {
+		return true
+	}
+	name, inAccount := strings.CutPrefix(policyARN, AccountPolicyARNPrefix(account))
+	return inAccount && name != ""
+}
+
+func AccountPolicyARNPrefix(account string) string { return "arn:aws:iam::" + account + ":policy/" }
 
 func PassedTo(service any) map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"iam:PassedToService": service}}

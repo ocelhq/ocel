@@ -140,6 +140,41 @@ describe("evaluate", () => {
     });
   });
 
+  it.each(["function", "container"])(
+    "hands the provider the managed policies a rule attaches to a %s's role",
+    (type) => {
+      const modules = [
+        module(
+          "./grants.transform.ts",
+          defineTransform(({ bindings }) => ({
+            aws: {
+              [type]: {
+                role: {
+                  managedPolicyArns: [
+                    "arn:aws:iam::123456789012:policy/reports-read",
+                    bindings.custom!.grants!.policyArn!,
+                  ],
+                },
+              },
+            },
+          })),
+        ),
+      ];
+
+      expect(
+        evaluate(request({ resources: [{ type, name: "web", app: "web" }] }), modules).resources[0]
+          ?.patches,
+      ).toEqual({
+        role: {
+          managedPolicyArns: [
+            "arn:aws:iam::123456789012:policy/reports-read",
+            { $ocelOutput: { type: "custom", name: "grants", property: "policyArn" } },
+          ],
+        },
+      });
+    },
+  );
+
   it.each([
     ["task", "containerDefinitions"],
     ["task", "family"],

@@ -8,6 +8,7 @@ declare module "@ocel/transforms" {
 
   interface Bindings {
     custom: {
+      grants: { policyArn: string };
       network: { securityGroupIds: string[]; subnetIds: string[] };
     };
     postgres: {

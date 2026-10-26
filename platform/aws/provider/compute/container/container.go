@@ -78,19 +78,20 @@ type RulesAPI interface {
 }
 
 type Definition struct {
-	App           string
-	Arch          string
-	Image         string
-	Instances     provider.Instances
-	Env           map[string]string
-	Tags          map[string]string
-	TransformTags map[string]string
-	Boundary      string
-	RolePath      string
-	Region        string
-	Policies      []iam.BindingPolicy
-	Variables     variables.Reader
-	Infra         containers.Infrastructure
+	App             string
+	Arch            string
+	Image           string
+	Instances       provider.Instances
+	Env             map[string]string
+	Tags            map[string]string
+	TransformTags   map[string]string
+	Boundary        string
+	RolePath        string
+	Region          string
+	Policies        []iam.BindingPolicy
+	ManagedPolicies []string
+	Variables       variables.Reader
+	Infra           containers.Infrastructure
 
 	tier        environment.Tier
 	priority    int
@@ -379,7 +380,7 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 
 	var taskRole pulumi.StringPtrInput
 	var before []pulumi.Resource
-	if len(d.Policies) > 0 || d.tasksPolicy != "" || d.readsLive() {
+	if len(d.Policies) > 0 || len(d.ManagedPolicies) > 0 || d.tasksPolicy != "" || d.readsLive() {
 		role, granted, err := d.taskRole(ctx, names.Role)
 		if err != nil {
 			return err
@@ -583,6 +584,7 @@ func (d *Definition) taskRole(ctx *pulumi.Context, name component.Name) (*awsiam
 		Boundary:    d.Boundary,
 		Path:        d.RolePath,
 		Tags:        d.taggedWith(d.TransformTags),
+		Managed:     d.ManagedPolicies,
 		Policies:    documents,
 	})
 }

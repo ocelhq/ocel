@@ -219,7 +219,7 @@ func TestATransformDropsAStoreToOneNodeWithNoFailover(t *testing.T) {
 			"multiAzEnabled":           false,
 		}
 	}}
-	transformed, err := transformStackSpec(context.Background(), testNamespace, pass, awsresources.Registry(awsresources.Clients{}), provider.StackSpec{
+	transformed, err := transformStackSpec(context.Background(), testNamespace, testAccount, pass, awsresources.Registry(awsresources.Clients{}), provider.StackSpec{
 		Ref:       conformanceInfra,
 		Kind:      provider.StackInfra,
 		Recorded:  true,

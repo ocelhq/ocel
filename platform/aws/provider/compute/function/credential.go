@@ -73,7 +73,7 @@ func Credential(s iam.Scope) []iam.Statement {
 		{
 			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			Resources: s.AppBoundaryRoles(),
-			Condition: iam.MergeConditions(iam.AttachedPolicyIsAServiceRole(), s.WithinAppBoundary(), s.TaggedForItsTier()),
+			Condition: iam.MergeConditions(iam.AttachedPolicyIsAServiceRoleOrInCallerAccount(), s.WithinAppBoundary(), s.TaggedForItsTier()),
 		},
 		{
 			Actions:   []string{"iam:PassRole"},

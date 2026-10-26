@@ -139,6 +139,7 @@ func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches
 		Cache:     cache, Bytecode: bytecode,
 		Variables: variables.Reader{KeyARN: r.cfg.VariablesKeyARN}, Boundary: r.cfg.AppBoundaryARN, Path: r.cfg.AppRolePath,
 		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Dispatch: dispatch,
+		ManagedPolicies: transformed.managedPoliciesOf(transformTypeFunction, logical...),
 	}
 	if topic.ReachesTasks(app) {
 		wakes, err := container.WorkerServiceARNs(r.cfg.stateTable(), r.cfg.Namespace, r.cfg.Tier, project, stack.Env, app.DeploymentWorkers)

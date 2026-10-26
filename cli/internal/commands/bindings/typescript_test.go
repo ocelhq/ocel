@@ -22,6 +22,11 @@ func TestTheBindingTypesNameEveryRecordAndPropertyAndNoValue(t *testing.T) {
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", External: "sst-pg-orders"},
 		}, []*variablestorev1.BindingSummary{
 			{
+				Name:       "grants",
+				Type:       bindingsv1.BindingType_BINDING_TYPE_CUSTOM,
+				Properties: []*variablestorev1.PropertyShape{shape("policyArn", "string", false)},
+			},
+			{
 				Name: "network",
 				Type: bindingsv1.BindingType_BINDING_TYPE_CUSTOM,
 				Properties: []*variablestorev1.PropertyShape{
