@@ -1,4 +1,4 @@
-import type { memorystore, sql, storage } from "@pulumi/gcp";
+import type { cloudscheduler, memorystore, pubsub, sql, storage } from "@pulumi/gcp";
 import type { Unwrap } from "@pulumi/pulumi";
 import type { Patch } from "../patch.js";
 
@@ -34,6 +34,37 @@ export interface GcpResourceArgs {
   kv: {
     instance: memorystore.InstanceArgs;
   };
+  /**
+   * A topic: its Pub/Sub topic, and the push subscription each consumer's
+   * worker makes. A rule's tags become labels on both.
+   */
+  topic: {
+    /**
+     * The Pub/Sub topic. A `kmsKeyName` must already let the project's Pub/Sub
+     * service agent (`service-<project number>@gcp-sa-pubsub.iam.gserviceaccount.com`)
+     * encrypt and decrypt with it: ocel grants nothing on a key it does not own.
+     */
+    topic: pubsub.TopicArgs;
+    /**
+     * Every consumer's subscription, alike. A message is redelivered until the
+     * run it started settles, so a subscription never dead-letters.
+     */
+    subscription: pubsub.SubscriptionArgs;
+  };
+  /**
+   * A task: its Pub/Sub topic and its consumer's subscription, patched as a
+   * topic's are, and the Cloud Scheduler job that publishes to it on its cron.
+   */
+  task: {
+    topic: pubsub.TopicArgs;
+    subscription: pubsub.SubscriptionArgs;
+    /**
+     * The job that fires a task with a cron; a task with none refuses a patch
+     * here. Cloud Scheduler ignores `attemptDeadline` for a Pub/Sub target, so
+     * it is not patched.
+     */
+    job: cloudscheduler.JobArgs;
+  };
 }
 
 /** The ocel resource types the GCP provider renders patchable resources for. */
@@ -59,6 +90,15 @@ type AllowedPathNames = {
     [K in keyof GcpResourceArgs[T]]: readonly LeafPaths<Unwrap<GcpResourceArgs[T][K]>>[];
   };
 };
+
+const topicPaths = [
+  "kmsKeyName",
+  "messageRetentionDuration",
+  "messageStoragePolicy.allowedPersistenceRegions",
+  "messageStoragePolicy.enforceInTransit",
+] as const;
+
+const subscriptionPaths = ["messageRetentionDuration", "retainAckedMessages"] as const;
 
 /**
  * The paths a rule may set under `gcp`, the only ones ocel translates into
@@ -134,6 +174,22 @@ export const gcpAllowedPaths = {
       "replicaCount",
       "zoneDistributionConfig.mode",
       "zoneDistributionConfig.zone",
+    ],
+  },
+  topic: {
+    topic: topicPaths,
+    subscription: subscriptionPaths,
+  },
+  task: {
+    topic: topicPaths,
+    subscription: subscriptionPaths,
+    job: [
+      "description",
+      "retryConfig.maxBackoffDuration",
+      "retryConfig.maxDoublings",
+      "retryConfig.maxRetryDuration",
+      "retryConfig.minBackoffDuration",
+      "retryConfig.retryCount",
     ],
   },
 } as const satisfies AllowedPathNames;

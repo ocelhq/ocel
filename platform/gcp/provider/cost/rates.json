@@ -1056,6 +1056,20 @@
       "verified": "2026-10-02"
     },
     {
+      "id": "gcp/pubsub/storage",
+      "region": "",
+      "unit": "GiB-month",
+      "note": "billed for what a topic retains for its message retention, and what a subscription retains of acknowledged messages",
+      "steps": [
+        {
+          "start": "0",
+          "price": "0.27"
+        }
+      ],
+      "source": "https://cloud.google.com/pubsub/pricing",
+      "verified": "2026-10-26"
+    },
+    {
       "id": "gcp/tasks/operations",
       "region": "",
       "unit": "operations",

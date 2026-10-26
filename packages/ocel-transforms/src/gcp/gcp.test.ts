@@ -95,6 +95,70 @@ describe("the gcp branch", () => {
 
     expect(() => evaluate(request(), modules)).toThrow(/gcp\.bucket\.bucket\.location/);
   });
+
+  it("hands a topic's and a task's Pub/Sub topic patch to the provider under each kind", () => {
+    const modules = [
+      module(
+        "./queues.transform.ts",
+        defineTransform({
+          gcp: {
+            topic: { topic: { messageRetentionDuration: "86400s" } },
+            task: {
+              topic: { kmsKeyName: "projects/acme/locations/europe-west1/keyRings/r/cryptoKeys/k" },
+            },
+          },
+        }),
+      ),
+    ];
+    const asked: EvaluateRequest = {
+      ...request(),
+      resources: [
+        { type: "topic", name: "orders" },
+        { type: "task", name: "resize" },
+      ],
+    };
+
+    expect(evaluate(asked, modules).resources.map((resource) => resource.patches)).toEqual([
+      { topic: { messageRetentionDuration: "86400s" } },
+      { topic: { kmsKeyName: "projects/acme/locations/europe-west1/keyRings/r/cryptoKeys/k" } },
+    ]);
+  });
+
+  it("refuses a topic field ocel sets itself, by name", () => {
+    const modules = [
+      module(
+        "./owned.transform.ts",
+        defineTransform({
+          gcp: { topic: { topic: { schemaSettings: { schema: "s" } } as never } },
+        }),
+      ),
+    ];
+
+    expect(() =>
+      evaluate({ ...request(), resources: [{ type: "topic", name: "orders" }] }, modules),
+    ).toThrow(/gcp\.topic\.topic\.schemaSettings/);
+  });
+
+  it("refuses a dead-letter policy on a subscription, by name", () => {
+    const modules = [
+      module(
+        "./dead.transform.ts",
+        defineTransform({
+          gcp: {
+            task: {
+              subscription: {
+                deadLetterPolicy: { deadLetterTopic: "projects/acme/topics/dead" },
+              } as never,
+            },
+          },
+        }),
+      ),
+    ];
+
+    expect(() =>
+      evaluate({ ...request(), resources: [{ type: "task", name: "resize" }] }, modules),
+    ).toThrow(/gcp\.task\.subscription\.deadLetterPolicy/);
+  });
 });
 
 describe("the gcp branch for a database and a store", () => {

@@ -50,6 +50,7 @@ require (
 	github.com/docker/docker-credential-helpers v0.9.8 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/evanw/esbuild v0.28.1 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect

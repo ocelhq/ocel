@@ -46,6 +46,9 @@ const (
 	sqlRegional         = "REGIONAL"
 	sqlHighAvailability = "-ha"
 	secondsPerHour      = 3600
+
+	messageRetention = "message_retention_duration"
+	retainsAcked     = "retain_acked_messages"
 )
 
 var (
@@ -98,8 +101,8 @@ var formulas = pricing.Table{
 	"google_compute_network":                                free,
 	"google_compute_subnetwork":                             free,
 	"google_network_connectivity_service_connection_policy": free,
-	"google_pubsub_topic":                                   pubSubThroughput("Publish throughput"),
-	"google_pubsub_subscription":                            pubSubThroughput("Delivery throughput"),
+	"google_pubsub_topic":                                   pubSubTopic,
+	"google_pubsub_subscription":                            pubSubSubscription,
 	"google_cloud_tasks_queue":                              tasksQueue,
 	"google_tags_tag_key":                                   free,
 	"google_logging_log_view":                               free,
@@ -187,6 +190,34 @@ func pubSubThroughput(name string) func(*pricing.Subject) {
 		r.Add(pricing.Component{Name: name, Unit: "GiB", Rate: "gcp/pubsub/throughput", UsageBased: true,
 			Quantity: r.Usage(usageMessages, messagesBand).Div(kibPerGiB)})
 	}
+}
+
+func pubSubTopic(r *pricing.Subject) {
+	pubSubThroughput("Publish throughput")(r)
+	if r.Unknown(messageRetention) || r.Has(messageRetention) {
+		messageStorage(r)
+	}
+}
+
+func pubSubSubscription(r *pricing.Subject) {
+	pubSubThroughput("Delivery throughput")(r)
+	if r.Unknown(retainsAcked) || r.Bool(retainsAcked) {
+		messageStorage(r, retainsAcked)
+	}
+}
+
+func messageStorage(r *pricing.Subject, needs ...string) {
+	share := retainedShare(r.String(messageRetention))
+	r.Add(pricing.Component{Name: "Message storage", Unit: "GiB-month", Rate: "gcp/pubsub/storage", UsageBased: true,
+		Quantity: r.Usage(usageMessages, messagesBand).Div(kibPerGiB).Mul(share), Needs: append(needs, messageRetention)})
+}
+
+func retainedShare(retention string) decimal.Decimal {
+	seconds, err := decimal.NewFromString(strings.TrimSuffix(retention, "s"))
+	if err != nil || !strings.HasSuffix(retention, "s") {
+		return decimal.Zero
+	}
+	return decimal.Min(seconds.Div(pricing.MonthlyHours.Mul(decimal.NewFromInt(secondsPerHour))), decimal.NewFromInt(1))
 }
 
 func tasksQueue(r *pricing.Subject) {
