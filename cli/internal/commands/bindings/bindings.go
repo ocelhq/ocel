@@ -37,6 +37,7 @@ type bindingsOptions struct {
 	preview     bool
 	environment string
 	owner       string
+	atVersion   uint64
 }
 
 func (o bindingsOptions) checkEnvironment() error {
@@ -103,7 +104,11 @@ func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rm <NAME>",
 		Short: "Remove a binding, whatever published it",
-		Args:  cobra.ExactArgs(1),
+		Long: "Remove a binding, whatever published it.\n\n" +
+			"With --at-version, the binding is removed only while it is still at the version " +
+			"`ocel bindings set` reported writing, so a tool removing what it published leaves a binding " +
+			"it has published again since.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
 				return runBindingsRemove(ctx, invocation, cwd, args[0], opts, cmd.OutOrStdout())
@@ -111,6 +116,7 @@ func newRemoveCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	addCoordinateFlags(cmd, &opts)
+	cmd.Flags().Uint64Var(&opts.atVersion, "at-version", 0, "Remove the binding only while it is at this `version`")
 	return commands.DeclareResult(commands.DeclareMutating(cmd), &resultv1.BindingRemoveResult{})
 }
 
@@ -317,17 +323,25 @@ func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd,
 		if err != nil {
 			return "", err
 		}
-		resp, err := client.RemoveBinding(ctx, &variablestorev1.RemoveBindingRequest{
+		req := &variablestorev1.RemoveBindingRequest{
 			Slug:        cfg.Slug,
 			Tier:        opts.tier(),
 			Environment: opts.environment,
 			Name:        name,
-		})
+		}
+		if opts.atVersion > 0 {
+			req.ExpectedVersion = &opts.atVersion
+		}
+		resp, err := client.RemoveBinding(ctx, req)
 		if err != nil {
 			return "", err
 		}
 		headline := "Removed " + describeBinding(name, opts)
-		if !resp.GetRemoved() {
+		switch {
+		case resp.GetRemoved():
+		case opts.atVersion > 0:
+			headline = fmt.Sprintf("Left %s, which is no longer at version %d", describeBinding(name, opts), opts.atVersion)
+		default:
 			headline = fmt.Sprintf("No binding named %s is published", describeBinding(name, opts))
 		}
 		if invocation.Presentation(stdout).Format == terminal.FormatJSON {

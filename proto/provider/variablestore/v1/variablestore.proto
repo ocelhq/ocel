@@ -339,6 +339,8 @@ message RemoveBindingRequest {
   ];
 
   string name = 4 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  optional uint64 expected_version = 5 [(buf.validate.field).uint64.gt = 0];
 }
 
 message RemoveBindingResponse {

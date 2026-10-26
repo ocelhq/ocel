@@ -7,6 +7,8 @@ description: "Remove a binding, whatever published it."
 ocel bindings rm <NAME> [flags]
 ```
 
+With `--at-version`, the binding is removed only while it is still at the version `ocel bindings set` reported writing, so a tool removing what it published leaves a binding it has published again since.
+
 ## Arguments
 
 | Argument | Takes |
@@ -17,6 +19,7 @@ ocel bindings rm <NAME> [flags]
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
+| `--at-version` | `uint64` | `0` | Remove the binding only while it is at this version |
 | `--environment` | `string` |  | Address the binding this named preview environment has instead of the one bound to all environments |
 | `--preview` | `bool` | `false` | Act on the preview bootstrap instead of production |
 

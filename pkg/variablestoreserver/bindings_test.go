@@ -1,6 +1,7 @@
 package variablestoreserver_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
@@ -109,5 +111,39 @@ func TestTheSealedValueCarriesTheGrantsAndTheRecordOnlyItsShape(t *testing.T) {
 	}
 	if record.GetBinding().GetPostgres() == nil || record.GetBinding().GetSource() != "pulumi" || !proto.Equal(record.GetGrants()[0], published.GetGrants()[0]) {
 		t.Errorf("record has postgres %t, source %q, grants %v, want its type, source and grants kept for a listing", record.GetBinding().GetPostgres() != nil, record.GetBinding().GetSource(), record.GetGrants())
+	}
+}
+
+func TestRemovingABindingAtTheVersionItWroteLeavesOneWrittenSince(t *testing.T) {
+	variables, _ := served(t)
+	ctx := context.Background()
+	set := &variablestorev1.SetBindingRequest{
+		Slug:      slug,
+		Tier:      environmentv1.Tier_TIER_PRODUCTION,
+		Published: &variablestorev1.PublishedBinding{Binding: &bindingsv1.Binding{Name: "orders", Source: "pulumi", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db.internal"}}}},
+		Owner:     "urn:pulumi:prod::infra",
+	}
+	first, err := variables.SetBinding(ctx, set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := variables.SetBinding(ctx, set)
+	if err != nil {
+		t.Fatalf("SetBinding() by the same program from a moved call = %v, want it written", err)
+	}
+
+	remove := func(version uint64) bool {
+		t.Helper()
+		removed, err := variables.RemoveBinding(ctx, &variablestorev1.RemoveBindingRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Name: "orders", ExpectedVersion: &version})
+		if err != nil {
+			t.Fatalf("RemoveBinding(version %d) = %v", version, err)
+		}
+		return removed.GetRemoved()
+	}
+	if remove(first.GetVersion()) {
+		t.Fatal("RemoveBinding() at the first version removed the binding written again since")
+	}
+	if !remove(second.GetVersion()) {
+		t.Fatal("RemoveBinding() at the current version kept the binding")
 	}
 }

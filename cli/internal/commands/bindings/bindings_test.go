@@ -218,6 +218,27 @@ func TestBindingsSetPublishesOneRecordUnderItsPublishersName(t *testing.T) {
 		}
 	})
 
+	t.Run("rm at a version leaves a binding its publisher wrote again since", func(t *testing.T) {
+		root := setUpBindingFixture(t)
+		opts := bindingsOptions{owner: "urn:pulumi:prod::infra"}
+		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), opts)
+		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), opts)
+
+		var stdout, stderr bytes.Buffer
+		if err := runBindingsRemove(context.Background(), newStreamedInvocation(&stderr), root, "main", bindingsOptions{atVersion: 1}, &stdout); err != nil {
+			t.Fatalf("runBindingsRemove at version 1 err = %v; stderr=%s", err, stderr.String())
+		}
+		if after := bindingList(t, root, bindingsOptions{}); !strings.Contains(after, "main") {
+			t.Errorf("ls after rm at version 1 = %q, want version 2 kept", after)
+		}
+		if err := runBindingsRemove(context.Background(), newStreamedInvocation(&stderr), root, "main", bindingsOptions{atVersion: 2}, &stdout); err != nil {
+			t.Fatalf("runBindingsRemove at version 2 err = %v; stderr=%s", err, stderr.String())
+		}
+		if after := bindingList(t, root, bindingsOptions{}); strings.Contains(after, "main") {
+			t.Errorf("ls after rm at version 2 = %q, want the binding gone", after)
+		}
+	})
+
 	t.Run("reports nothing to remove", func(t *testing.T) {
 		root := setUpBindingFixture(t)
 

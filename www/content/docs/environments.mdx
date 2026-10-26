@@ -118,7 +118,7 @@ into a tier's store by the program that makes it, with `bind.variables` from
 [`@ocel/pulumi`](https://www.npmjs.com/package/@ocel/pulumi) or
 [`@ocel/sst`](https://www.npmjs.com/package/@ocel/sst):
 
-```ts title="infra/index.ts"
+```ts title="pulumi/index.ts"
 import * as random from "@pulumi/random";
 import { bind } from "@ocel/pulumi";
 
@@ -146,8 +146,9 @@ the call lists:
 - Each run publishes the whole set again, so a key the call stops listing is removed. Removing
   the call removes only the values it wrote and no call has written since, so moving the call
   under a component, or out of one, keeps them.
-- One call publishes for one tier, or one preview environment, and works before the project's
-  first deploy. A second call in the program for the same tier or environment is refused.
+- One call publishes for one project and one tier, or one preview environment, and works before
+  the project's first deploy. A second call in the program for the same project and tier or
+  environment is refused.
 
 ### Variables in config
 

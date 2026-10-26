@@ -79,6 +79,13 @@ func (h *Service) RemoveBinding(ctx context.Context, req *variablestorev1.Remove
 	if err != nil {
 		return nil, err
 	}
+	if req.ExpectedVersion != nil {
+		removed, err := store.RemoveUnchangedBindings(ctx, scope, req.GetEnvironment(), map[string]int64{req.GetName(): int64(req.GetExpectedVersion())})
+		if err != nil {
+			return nil, bindingsError(err)
+		}
+		return &variablestorev1.RemoveBindingResponse{Removed: len(removed) > 0}, nil
+	}
 	removed, err := store.RemoveBinding(ctx, scope, req.GetEnvironment(), req.GetName())
 	if err != nil {
 		return nil, bindingsError(err)

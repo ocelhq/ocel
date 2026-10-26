@@ -1885,13 +1885,14 @@ func (x *SetBindingResponse) GetVersion() uint64 {
 }
 
 type RemoveBindingRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	Tier          v1.Tier                `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
-	Environment   string                 `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
-	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Slug            string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
+	Tier            v1.Tier                `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Environment     string                 `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
+	Name            string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	ExpectedVersion *uint64                `protobuf:"varint,5,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RemoveBindingRequest) Reset() {
@@ -1950,6 +1951,13 @@ func (x *RemoveBindingRequest) GetName() string {
 		return x.Name
 	}
 	return ""
+}
+
+func (x *RemoveBindingRequest) GetExpectedVersion() uint64 {
+	if x != nil && x.ExpectedVersion != nil {
+		return *x.ExpectedVersion
+	}
+	return 0
 }
 
 type RemoveBindingResponse struct {
@@ -3278,14 +3286,16 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n" +
 	"\x06values\x18\x03 \x03(\tR\x06values\".\n" +
 	"\x12SetBindingResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x04R\aversion\"\x9b\x04\n" +
+	"\aversion\x18\x01 \x01(\x04R\aversion\"\xe9\x04\n" +
 	"\x14RemoveBindingRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xdf\x01\n" +
 	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xad\x01\xbaH\xa9\x01\xba\x01\xa5\x01\n" +
 	"\x1avariablestore.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xb6\x01\n" +
 	"\venvironment\x18\x03 \x01(\tB\x93\x01\xbaH\x8f\x01\xba\x01t\n" +
 	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\venvironment\x121\n" +
-	"\x04name\x18\x04 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x04name\"1\n" +
+	"\x04name\x18\x04 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x04name\x127\n" +
+	"\x10expected_version\x18\x05 \x01(\x04B\a\xbaH\x042\x02 \x00H\x00R\x0fexpectedVersion\x88\x01\x01B\x13\n" +
+	"\x11_expected_version\"1\n" +
 	"\x15RemoveBindingResponse\x12\x18\n" +
 	"\aremoved\x18\x01 \x01(\bR\aremoved\"\xe7\x03\n" +
 	"\x13ListBindingsRequest\x125\n" +
@@ -3580,6 +3590,7 @@ func file_provider_variablestore_v1_variablestore_proto_init() {
 	file_provider_variablestore_v1_variablestore_proto_msgTypes[1].OneofWrappers = []any{}
 	file_provider_variablestore_v1_variablestore_proto_msgTypes[3].OneofWrappers = []any{}
 	file_provider_variablestore_v1_variablestore_proto_msgTypes[12].OneofWrappers = []any{}
+	file_provider_variablestore_v1_variablestore_proto_msgTypes[33].OneofWrappers = []any{}
 	file_provider_variablestore_v1_variablestore_proto_msgTypes[46].OneofWrappers = []any{
 		(*SyncEnvSourceRequest_EnvSource)(nil),
 		(*SyncEnvSourceRequest_Registered)(nil),
