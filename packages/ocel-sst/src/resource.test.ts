@@ -55,14 +55,12 @@ const secretValues = new Set<unknown>();
 beforeEach(() => {
   built.length = 0;
   secretValues.clear();
-  run.mockReturnValue({ status: 0, stderr: "" } as never);
+  run.mockReturnValue({ status: 0, stdout: bindingSet("1"), stderr: "" } as never);
   vi.stubEnv("OCEL_CLI", ocelCLI);
   Object.assign(globalThis, {
     $util: {
       getStack: () => "production",
       getProject: () => "shop",
-      createUrn: (name: string, type: string, parent: { urn: string }) =>
-        `${parent.urn}$${type}::${name}`,
       output: (value: unknown) => value,
       isSecret: async (value: unknown) => secretValues.has(value),
       dynamic: { Resource: FakeResource },
@@ -90,6 +88,10 @@ function latest(): Built {
   return one;
 }
 
+function bindingSet(version: string): string {
+  return `${JSON.stringify({ ok: true, data: { version } })}\n`;
+}
+
 function written(...keys: string[]): string {
   const values = keys.map((key) => ({ coordinate: { key }, version: "1" }));
   return `${JSON.stringify({ ok: true, data: { written: values } })}\n`;
@@ -102,16 +104,17 @@ function argv() {
 }
 
 describe("declaring a postgres binding", () => {
-  it("builds one resource per call, owned by that resource alone", () => {
+  const stack = {};
+
+  it("builds one resource per call, owned by the program it runs in", () => {
     const one = declare();
 
-    expect(one.name).toBe("ocel-binding-orders");
+    expect(one.name).toBe("ocel-binding-production-orders-dc162db0");
     expect(one.props).toMatchObject({
       name: "orders",
       tier: "production",
       directory: root,
-      owner:
-        "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders",
+      owner: "urn:pulumi:production::shop",
       properties,
     });
   });
@@ -124,7 +127,7 @@ describe("declaring a postgres binding", () => {
     });
   });
 
-  it("owns the binding by the urn it has under the parent it hangs from", () => {
+  it("owns the binding as the program wherever the call hangs, so moving the call keeps it", () => {
     const parent = {
       urn: "urn:pulumi:production::shop::pulumi:pulumi:Stack$aws:rds/instance:Instance::db",
     };
@@ -132,9 +135,14 @@ describe("declaring a postgres binding", () => {
     const one = declare({ parent });
 
     expect(one.opts).toMatchObject({ parent });
-    expect(one.props.owner).toBe(
-      "urn:pulumi:production::shop::pulumi:pulumi:Stack$aws:rds/instance:Instance::db$pulumi-nodejs:dynamic:Resource::ocel-binding-orders",
-    );
+    expect(one.props.owner).toBe("urn:pulumi:production::shop");
+  });
+
+  it("refuses a second call publishing one name to one coordinate", () => {
+    Object.assign(globalThis.$util as object, { runtime: { getStackResource: () => stack } });
+    declare();
+
+    expect(() => declare()).toThrow(/binding orders is published twice for production/);
   });
 
   it("resolves a grant's resource from an output before it publishes", async () => {
@@ -157,6 +165,30 @@ describe("declaring a postgres binding", () => {
     expect(JSON.parse(String(argv().options?.input))).toMatchObject({
       grants: [{ actions: ["rds-db:connect"], resources: [resourceArn] }],
     });
+  });
+
+  it("names the resource for its coordinate, the same on every run", () => {
+    expect(declare({ tier: "preview", environment: "pr-1" }).name).toBe(
+      "ocel-binding-preview-pr-1-orders-805f3dff",
+    );
+    expect(declare({ tier: "preview", environment: "pr-2" }).name).toBe(
+      "ocel-binding-preview-pr-2-orders-8262e6fb",
+    );
+  });
+
+  it("names the resource for its ocel project, so two projects can each take one name", () => {
+    Object.assign(globalThis.$util as object, { runtime: { getStackResource: () => ({}) } });
+
+    expect(declare({ project: "apps/a" }).name).not.toBe(declare({ project: "apps/b" }).name);
+  });
+
+  it("names apart two coordinates whose parts join to the same words", () => {
+    const link = { getSSTLink: () => ({ properties }) };
+    postgres("orders", link, { tier: "preview", environment: "pr-1" });
+    postgres("1-orders", link, { tier: "preview", environment: "pr" });
+
+    const [a, b] = built;
+    expect(a?.name).not.toBe(b?.name);
   });
 
   it("refuses an environment outside the preview tier", () => {
@@ -189,18 +221,12 @@ describe("declaring a postgres binding", () => {
 });
 
 describe("publishing a postgres binding", () => {
-  it("runs ocel bindings set in the project, owned by this resource", async () => {
+  it("runs ocel bindings set in the project, owned by the program", async () => {
     const created = await postgresProvider.create(declare().props as never);
 
     const { command, args, options } = argv();
     expect(command).toBe(ocelCLI);
-    expect(args).toEqual([
-      "bindings",
-      "set",
-      "--owner",
-      "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders",
-      "--json",
-    ]);
+    expect(args).toEqual(["bindings", "set", "--owner", "urn:pulumi:production::shop", "--json"]);
     expect(options).toMatchObject({ cwd: root });
     expect(JSON.parse(String(options?.input))).toEqual({
       binding: { name: "orders", postgres: properties, source: "sst" },
@@ -287,6 +313,22 @@ describe("binding an sst component", () => {
   });
 });
 
+describe("recording what a binding publish wrote", () => {
+  it("keeps the version the CLI reports writing", async () => {
+    run.mockReturnValue({ status: 0, stdout: bindingSet("4"), stderr: "" } as never);
+
+    expect((await postgresProvider.create(declare().props as never)).outs).toMatchObject({
+      version: "4",
+    });
+  });
+
+  it("refuses a publish whose result names no version", async () => {
+    run.mockReturnValue({ status: 0, stdout: "", stderr: "" } as never);
+
+    await expect(postgresProvider.create(declare().props as never)).rejects.toThrow(/no version/);
+  });
+});
+
 describe("changing a published postgres binding", () => {
   it("updates in place when only the record changed", async () => {
     const olds = (await postgresProvider.create(declare().props as never)).outs;
@@ -359,13 +401,13 @@ describe("changing a published postgres binding", () => {
 });
 
 describe("removing a postgres binding", () => {
-  it("runs ocel bindings rm for the name it published", async () => {
+  it("runs ocel bindings rm for the name it published, at the version it wrote", async () => {
     const created = await postgresProvider.create(declare().props as never);
     run.mockClear();
 
     await postgresProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual(["bindings", "rm", "orders", "--json"]);
+    expect(argv().args).toEqual(["bindings", "rm", "orders", "--at-version", "1", "--json"]);
     expect(argv().options).toMatchObject({ cwd: root });
   });
 
@@ -397,16 +439,15 @@ describe("declaring a custom binding", () => {
     return latest();
   }
 
-  it("builds one resource per call, owned by that resource alone", () => {
+  it("builds one resource per call, owned by the program it runs in", () => {
     const one = declareCustom();
 
-    expect(one.name).toBe("ocel-binding-network");
+    expect(one.name).toBe("ocel-binding-production-network-e7217cb6");
     expect(one.props).toMatchObject({
       name: "network",
       tier: "production",
       directory: root,
-      owner:
-        "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-network",
+      owner: "urn:pulumi:production::shop",
       properties: network,
     });
   });
@@ -415,13 +456,7 @@ describe("declaring a custom binding", () => {
     const created = await customProvider.create(declareCustom().props as never);
 
     const { args, options } = argv();
-    expect(args).toEqual([
-      "bindings",
-      "set",
-      "--owner",
-      "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-network",
-      "--json",
-    ]);
+    expect(args).toEqual(["bindings", "set", "--owner", "urn:pulumi:production::shop", "--json"]);
     expect(JSON.parse(String(options?.input))).toEqual({
       binding: { name: "network", custom: network, source: "sst" },
     });
@@ -447,13 +482,13 @@ describe("declaring a custom binding", () => {
     });
   });
 
-  it("runs ocel bindings rm for the name it published", async () => {
+  it("runs ocel bindings rm for the name it published, at the version it wrote", async () => {
     const created = await customProvider.create(declareCustom().props as never);
     run.mockClear();
 
     await customProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual(["bindings", "rm", "network", "--json"]);
+    expect(argv().args).toEqual(["bindings", "rm", "network", "--at-version", "1", "--json"]);
   });
 });
 
@@ -491,7 +526,7 @@ describe("publishing variables", () => {
   it("builds one resource per coordinate, publishing as the program it runs in", async () => {
     const one = declareVariables();
 
-    expect(one.name).toBe("ocel-variables-production");
+    expect(one.name).toBe("ocel-variables-production-76bf3358");
     expect(await inputs(one)).toMatchObject({
       tier: "production",
       directory: root,
@@ -516,9 +551,17 @@ describe("publishing variables", () => {
     expect(() => declareVariables()).toThrow(/bind.variables is called twice for production/);
   });
 
-  it("names the resource for a preview environment after it", () => {
+  it("names the resource for its coordinate, the same on every run", () => {
     expect(declareVariables(undefined, { tier: "preview", environment: "pr-12" }).name).toBe(
-      "ocel-variables-preview-pr-12",
+      "ocel-variables-preview-pr-12-25e297bc",
+    );
+  });
+
+  it("names the resource for its ocel project, so two projects can each take values", () => {
+    Object.assign(globalThis.$util as object, { runtime: { getStackResource: () => ({}) } });
+
+    expect(declareVariables(undefined, { project: "apps/a" }).name).not.toBe(
+      declareVariables(undefined, { project: "apps/b" }).name,
     );
   });
 

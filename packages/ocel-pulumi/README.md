@@ -102,10 +102,12 @@ the apps bound to `orders`, and an app is handed the postgres fields alone.
 | `project`     | the program's directory     | The directory containing `ocel.config.ts` or `ocel.json`.                                                      |
 | `parent`      | none                        | The Pulumi resource this binding hangs under.                                                   |
 
-One call is one resource. Remove the call and the published binding goes with it. A name
-belongs to whoever published it — the URN of the resource the call creates — so two
-stacks publishing `orders` into one project is refused rather than silently handing
-every app bound to that name another database.
+One call is one resource. Remove the call and the published binding goes with it, unless
+another call has published that name since. A name belongs to the program that published
+it, `urn:pulumi:<stack>::<project>`, wherever the call hangs: moving the call under a
+component keeps the name, and two stacks publishing `orders` into one project is refused
+rather than silently handing every app bound to that name another database. A second call
+publishing one name to the same project and tier or environment is refused.
 
 ## `bind.custom(name, properties, opts?)`
 
@@ -191,8 +193,8 @@ under a component, or out of one, keeps the values. Values go to the project roo
 a folder.
 
 `opts` is the same as for `bind.postgres`, without a name: one call publishes everything for
-one tier, or one preview environment, so make one call per coordinate; a second call for
-one is refused.
+one project and one tier, or one preview environment, so make one call for each; a second
+call for the same project and tier or environment is refused.
 
 ## Types
 

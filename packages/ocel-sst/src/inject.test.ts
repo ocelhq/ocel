@@ -69,7 +69,7 @@ describe("reaching what SST injects into the config bundle", () => {
     });
 
     expect(built).toHaveLength(1);
-    expect(built[0]?.name).toBe("ocel-binding-orders");
+    expect(built[0]?.name).toBe("ocel-binding-production-orders-dc162db0");
     expect(built[0]?.props).toMatchObject({ directory: root, tier: "production" });
   });
 

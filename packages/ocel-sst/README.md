@@ -94,10 +94,13 @@ the apps bound to `orders`, and an app is handed the postgres fields alone.
 | `project`     | the SST config root  | The directory containing `ocel.config.ts` or `ocel.json`.                      |
 | `parent`      | none                 | The resource in the SST app this binding hangs under.        |
 
-One call is one resource. Remove the call and the published binding goes with it.
-A name belongs to whoever published it, so two stacks publishing `orders` into
-one project is refused rather than silently handing every app bound to that name
-another database.
+One call is one resource. Remove the call and the published binding goes with it,
+unless another call has published that name since. A name belongs to the app and
+stage that published it, `urn:pulumi:<stage>::<app>`, wherever the call hangs:
+moving the call under another parent keeps the name, and two stages publishing
+`orders` into one project is refused rather than silently handing every app bound
+to that name another database. A second call publishing one name to the same project
+and tier or environment is refused.
 
 ## `bind.custom(name, properties, opts?)`
 
@@ -179,8 +182,8 @@ wrote, unless another call has written that value since, so moving the call unde
 parent keeps the values. Values go to the project root, never to a folder.
 
 `opts` is the same as for `bind.postgres`, without a name: one call publishes everything for
-one tier, or one preview environment, so make one call per coordinate; a second call for
-one is refused.
+one project and one tier, or one preview environment, so make one call for each; a second
+call for the same project and tier or environment is refused.
 
 ## Types
 

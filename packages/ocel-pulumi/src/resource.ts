@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import path from "node:path";
 import {
-  createUrn,
   dynamic,
   getProject,
   getStack,
@@ -70,6 +69,7 @@ interface CustomInputs extends BindingInputs {
 interface BindingState extends Target {
   name: string;
   owner: string;
+  version: string;
   digest: string;
 }
 
@@ -83,27 +83,32 @@ function bindingProvider<I extends BindingInputs>(
       .update(JSON.stringify(recordFor(inputs)))
       .digest("hex");
 
-  const stateOf = (inputs: I): BindingState => ({
-    name: inputs.name,
-    owner: inputs.owner,
-    project: inputs.project,
-    tier: inputs.tier,
-    environment: inputs.environment,
-    digest: digestOf(inputs),
-  });
-
-  const set = (inputs: I) =>
-    runOcel(
+  const set = (inputs: I): BindingState => {
+    const result = runOcel(
       ["bindings", "set", "--owner", inputs.owner],
       inputs,
       inputs.directory,
       `${JSON.stringify(recordFor(inputs))}\n`,
-    );
+    ) as { version?: string } | undefined;
+    if (!result?.version) {
+      throw new Error(
+        `ocel bindings set reported no version for ${inputs.name}, and removing this call removes only the version it wrote; run an ocel CLI that reports it`,
+      );
+    }
+    return {
+      name: inputs.name,
+      owner: inputs.owner,
+      project: inputs.project,
+      tier: inputs.tier,
+      environment: inputs.environment,
+      version: result.version,
+      digest: digestOf(inputs),
+    };
+  };
 
   return {
     async create(inputs: I) {
-      set(inputs);
-      return { id: idFor(inputs), outs: stateOf(inputs) };
+      return { id: idFor(inputs), outs: set(inputs) };
     },
 
     async diff(_id: string, olds: BindingState, news: I) {
@@ -116,12 +121,15 @@ function bindingProvider<I extends BindingInputs>(
     },
 
     async update(_id: string, _olds: BindingState, news: I) {
-      set(news);
-      return { outs: stateOf(news) };
+      return { outs: set(news) };
     },
 
     async delete(_id: string, props: BindingState) {
-      runOcel(["bindings", "rm", props.name], props, path.resolve(process.cwd(), props.project));
+      runOcel(
+        ["bindings", "rm", props.name, "--at-version", props.version],
+        props,
+        path.resolve(process.cwd(), props.project),
+      );
     },
   };
 }
@@ -277,10 +285,9 @@ export const variablesProvider = {
 export function variables(values: VariableValues, opts?: BindOptions): void {
   const { target, directory } = targetFor(opts);
   refuseSecondCall(`bind.variables is called twice for ${describeTarget(target)}`, target);
-  const logical = ["ocel-variables", target.tier, target.environment].filter(Boolean).join("-");
   new VariablesResource(
     variablesProvider,
-    logical,
+    logicalName("ocel-variables", target),
     {
       ...target,
       directory,
@@ -316,7 +323,7 @@ function refuseSecondCall(refusal: string, target: Target, name = ""): void {
   }
   const made = calls.get(stack) ?? new Set<string>();
   calls.set(stack, made);
-  const call = JSON.stringify([target.project, target.tier, target.environment ?? "", name]);
+  const call = coordinate(target, name);
   if (made.has(call)) {
     throw new Error(
       `${refusal}: every call publishes as this program, so the second would replace what the first published. Make one call for it`,
@@ -325,12 +332,24 @@ function refuseSecondCall(refusal: string, target: Target, name = ""): void {
   made.add(call);
 }
 
+function coordinate(target: Target, name = ""): string {
+  return JSON.stringify([target.project, target.tier, target.environment ?? "", name]);
+}
+
+function logicalName(kind: string, target: Target, name = ""): string {
+  const readable = [kind, target.tier, target.environment, name].filter(Boolean).join("-");
+  const digest = crypto
+    .createHash("sha256")
+    .update(coordinate(target, name))
+    .digest("hex")
+    .slice(0, 8);
+  return `${readable}-${digest}`;
+}
+
 function describeTarget(target: Target): string {
   const at = target.environment ? `${target.tier} environment ${target.environment}` : target.tier;
   return `${at} of ocel project ${target.project}`;
 }
-
-const dynamicType = "pulumi-nodejs:dynamic:Resource";
 
 function targetFor(opts: BindOptions | undefined): { target: Target; directory: string } {
   const directory = path.resolve(opts?.project ?? process.cwd());
@@ -350,18 +369,16 @@ function declare(
   described: object,
 ): void {
   const { target, directory } = targetFor(opts);
+  refuseSecondCall(
+    `binding ${name} is published twice for ${describeTarget(target)}`,
+    target,
+    name,
+  );
 
-  const logical = `ocel-binding-${name}`;
   new BindingResource(
     provider,
-    logical,
-    {
-      ...target,
-      directory,
-      name,
-      owner: createUrn(logical, dynamicType, opts?.parent),
-      ...described,
-    },
+    logicalName("ocel-binding", target, name),
+    { ...target, directory, name, owner: programID(), ...described },
     { parent: opts?.parent },
   );
 }

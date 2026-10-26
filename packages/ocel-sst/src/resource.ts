@@ -62,6 +62,7 @@ interface CustomInputs extends BindingInputs {
 interface BindingState extends Target {
   name: string;
   owner: string;
+  version: string;
   digest: string;
 }
 
@@ -75,27 +76,32 @@ function bindingProvider<I extends BindingInputs>(
       .update(JSON.stringify(recordFor(inputs)))
       .digest("hex");
 
-  const stateOf = (inputs: I): BindingState => ({
-    name: inputs.name,
-    owner: inputs.owner,
-    project: inputs.project,
-    tier: inputs.tier,
-    environment: inputs.environment,
-    digest: digestOf(inputs),
-  });
-
-  const set = (inputs: I) =>
-    runOcel(
+  const set = (inputs: I): BindingState => {
+    const result = runOcel(
       ["bindings", "set", "--owner", inputs.owner],
       inputs,
       inputs.directory,
       `${JSON.stringify(recordFor(inputs))}\n`,
-    );
+    ) as { version?: string } | undefined;
+    if (!result?.version) {
+      throw new Error(
+        `ocel bindings set reported no version for ${inputs.name}, and removing this call removes only the version it wrote; run an ocel CLI that reports it`,
+      );
+    }
+    return {
+      name: inputs.name,
+      owner: inputs.owner,
+      project: inputs.project,
+      tier: inputs.tier,
+      environment: inputs.environment,
+      version: result.version,
+      digest: digestOf(inputs),
+    };
+  };
 
   return {
     async create(inputs: I) {
-      set(inputs);
-      return { id: idFor(inputs), outs: stateOf(inputs) };
+      return { id: idFor(inputs), outs: set(inputs) };
     },
 
     async diff(_id: string, olds: BindingState, news: I) {
@@ -108,12 +114,15 @@ function bindingProvider<I extends BindingInputs>(
     },
 
     async update(_id: string, _olds: BindingState, news: I) {
-      set(news);
-      return { outs: stateOf(news) };
+      return { outs: set(news) };
     },
 
     async delete(_id: string, props: BindingState) {
-      runOcel(["bindings", "rm", props.name], props, path.resolve(configRoot(), props.project));
+      runOcel(
+        ["bindings", "rm", props.name, "--at-version", props.version],
+        props,
+        path.resolve(configRoot(), props.project),
+      );
     },
   };
 }
@@ -289,7 +298,7 @@ export function variables(values: VariableValues, opts?: BindOptions): void {
   declareAs(
     util,
     variablesProvider,
-    ["ocel-variables", target.tier, target.environment].filter(Boolean).join("-"),
+    logicalName("ocel-variables", target),
     located,
     opts,
     {
@@ -318,10 +327,17 @@ function declare(
   described: object,
 ): void {
   const util = host();
-  const logical = `ocel-binding-${name}`;
-  declareAs(util, provider, logical, targetFor(opts), opts, {
+  const located = targetFor(opts);
+  refuseSecondCall(
+    util,
+    `binding ${name} is published twice for ${describeTarget(located.target)}`,
+    located.target,
     name,
-    owner: ownerFor(util, logical, opts?.parent),
+  );
+  const logical = logicalName("ocel-binding", located.target, name);
+  declareAs(util, provider, logical, located, opts, {
+    name,
+    owner: programID(util),
     ...described,
   });
 }
@@ -356,13 +372,27 @@ function refuseSecondCall(util: DynamicHost, refusal: string, target: Target, na
   }
   const made = calls.get(stack) ?? new Set<string>();
   calls.set(stack, made);
-  const call = JSON.stringify([target.project, target.tier, target.environment ?? "", name]);
+  const call = coordinate(target, name);
   if (made.has(call)) {
     throw new Error(
       `${refusal}: every call publishes as this app's stage, so the second would replace what the first published. Make one call for it`,
     );
   }
   made.add(call);
+}
+
+function coordinate(target: Target, name = ""): string {
+  return JSON.stringify([target.project, target.tier, target.environment ?? "", name]);
+}
+
+function logicalName(kind: string, target: Target, name = ""): string {
+  const readable = [kind, target.tier, target.environment, name].filter(Boolean).join("-");
+  const digest = crypto
+    .createHash("sha256")
+    .update(coordinate(target, name))
+    .digest("hex")
+    .slice(0, 8);
+  return `${readable}-${digest}`;
 }
 
 function describeTarget(target: Target): string {
@@ -420,7 +450,6 @@ function pick(properties: Record<string, unknown>): Record<string, unknown> {
 interface DynamicHost {
   getStack(): string;
   getProject(): string;
-  createUrn(name: string, type: string, parent?: ParentResource): unknown;
   isSecret?(value: unknown): Promise<boolean>;
   runtime?: { getStackResource?(): object | undefined };
   output?(value: unknown): unknown;
@@ -432,22 +461,6 @@ interface DynamicHost {
       opts?: Record<string, unknown>,
     ) => unknown;
   };
-}
-
-const dynamicType = "pulumi-nodejs:dynamic:Resource";
-
-const stackType = "pulumi:pulumi:Stack";
-
-function ownerFor(util: DynamicHost, logical: string, parent?: ParentResource): unknown {
-  if (parent) {
-    return util.createUrn(logical, dynamicType, parent);
-  }
-  return [
-    `urn:pulumi:${util.getStack()}`,
-    util.getProject(),
-    `${stackType}$${dynamicType}`,
-    logical,
-  ].join("::");
 }
 
 declare const $util: DynamicHost | undefined;

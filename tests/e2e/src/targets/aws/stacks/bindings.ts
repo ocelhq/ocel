@@ -221,8 +221,8 @@ export abstract class AwsStack implements ExternalStack {
             assert.ok(record, `no record named ${name} is published`);
             assert.match(
               record!.owner,
-              /^urn:/,
-              `${name}'s record is owned by ${record!.owner}, not a publisher URN`,
+              /^urn:pulumi:[^:]+::[^:]+$/,
+              `${name}'s record is owned by ${record!.owner}, not the program that published it`,
             );
             assert.deepEqual(
               record!.redactedProperties,

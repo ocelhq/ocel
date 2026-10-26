@@ -147,8 +147,7 @@ function recordItem(
 }
 
 describe("awsBindingStore", () => {
-  const owner =
-    "urn:pulumi:j-1::with-sst::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders";
+  const owner = "urn:pulumi:j-1::with-sst";
 
   it("asks for the variables table the provider writes binding values into", async () => {
     const { cli, calls } = cliOver((args) =>
