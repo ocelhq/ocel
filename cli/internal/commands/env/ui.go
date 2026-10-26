@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -48,7 +49,9 @@ func runEnvUI(ctx context.Context, dependencies Dependencies, cwd string, opts e
 			return err
 		}
 		defer editor.Close()
+		resume := run.Hold(&streamv1.WaitingEvent{})
 		err = editor.Wait(ctx)
+		resume("the editor closed")
 		if errors.Is(err, variableeditor.ErrAbandoned) {
 			fmt.Fprintln(stdout, "The editor closed.")
 			return nil
