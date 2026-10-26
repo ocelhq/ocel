@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -110,6 +111,54 @@ func (h *heard) String() string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.said.String()
+}
+
+type opened struct {
+	mu     sync.Mutex
+	titles []string
+}
+
+func (o *opened) Receive(ev *streamv1.RunEvent) {
+	if ev.GetOperation().GetStarted() == nil || ev.GetOperation().GetMessage() == "" {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.titles = append(o.titles, "["+ev.GetOperation().GetPhase().String()+"] "+ev.GetOperation().GetMessage())
+}
+
+func (o *opened) Close() error { return nil }
+
+func (o *opened) list() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return slices.Clone(o.titles)
+}
+
+func spansOpened(t *testing.T) (*run.Span, *opened) {
+	t.Helper()
+	o := &opened{}
+	bus := run.NewBus(time.Now)
+	bus.Attach(o)
+	_, run, err := bus.Begin(context.Background(), "ocel deploy", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return run.Phase(progressv1.Phase_PHASE_CHECK), o
+}
+
+func TestTheDeployNamesItsCheckOfTheContainerBuilderUnderCheck(t *testing.T) {
+	awayFromAnyDaemon(t)
+	cfg := containerProject(t, "")
+	check, spans := spansOpened(t)
+
+	if err := RefuseUnbuildableImages(context.Background(), check, cfg, nil); err == nil {
+		t.Fatal("RefuseUnbuildableImages() with no daemon reachable succeeded")
+	}
+
+	if want := "[PHASE_CHECK] Checking the container builder on this machine"; !slices.Contains(spans.list(), want) {
+		t.Errorf("the deploy opened %q, want %q while it waits on the daemon", spans.list(), want)
+	}
 }
 
 func said(t *testing.T) (*run.Span, *heard) {
