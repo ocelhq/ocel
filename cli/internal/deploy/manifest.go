@@ -12,8 +12,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/cli/internal/workdir"
-
 	"github.com/ocelhq/ocel/cli/internal/english"
 
 	"github.com/ocelhq/ocel/cli/internal/appurl"
@@ -351,10 +349,4 @@ func checkAppPaths(cfg *project.Project, configName string) error {
 		}
 	}
 	return nil
-}
-
-func holdBuildOutput(ctx context.Context, cfg *project.Project, span *run.Span) (func(), error) {
-	return workdir.LockBuildOutput(ctx, cfg.Dir, func() {
-		span.Say("Waiting for another ocel run in " + cfg.Dir + " to finish with " + buildoutput.Dir)
-	})
 }

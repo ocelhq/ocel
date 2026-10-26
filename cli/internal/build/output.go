@@ -1,6 +1,7 @@
 package build
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,11 +11,26 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/workdir"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 var ErrNoBuildOutput = errors.New("no build output")
+
+func LockOutput(ctx context.Context, span *run.Span, cfg *project.Project) (release func(), err error) {
+	var waiting *run.Span
+	release, err = workdir.LockBuildOutput(ctx, cfg.Dir, func() {
+		waiting = span.Child(cfg.Slug, progress.Waiting.Title("for another ocel run in "+cfg.Dir+" to finish with "+buildoutput.Dir))
+	})
+	if waiting != nil {
+		waiting.End(err)
+	}
+	return release, err
+}
 
 type Function struct {
 	App          string

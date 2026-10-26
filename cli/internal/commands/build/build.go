@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/ocelhq/ocel/cli/internal/workdir"
-
 	"github.com/ocelhq/ocel/cli/internal/english"
 
 	"github.com/spf13/cobra"
@@ -146,9 +144,7 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string, opts o
 		return err
 	}
 	clients := variables.ClientAppsOf(cfg, declarations.Definitions(), values)
-	releaseOutput, err := workdir.LockBuildOutput(ctx, cfg.Dir, func() {
-		phase.Say("Waiting for another ocel run in " + cfg.Dir + " to finish with " + buildoutput.Dir)
-	})
+	releaseOutput, err := build.LockOutput(ctx, phase, cfg)
 	if err != nil {
 		return err
 	}
