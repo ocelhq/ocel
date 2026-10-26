@@ -39,9 +39,6 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if b, err = p.withDeployNetworkPatches(ctx, b, pre.Deploy, parts); err != nil {
-		return provider.Plan{}, err
-	}
 	var plan provider.Plan
 	if reads {
 		switching, err := b.ServicesToSwitchOn(ctx, pre.Deploy.Tier, parts, apis)
@@ -49,6 +46,9 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 			return provider.Plan{}, err
 		}
 		plan.Groups = b.PlanSwitchOn(switching)
+	}
+	if b, err = p.withDeployNetworkPatches(ctx, b, pre.Deploy, parts); err != nil {
+		return provider.Plan{}, err
 	}
 	if keeps {
 		groups, err := variables.PlanProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.options.OwnDatabase)

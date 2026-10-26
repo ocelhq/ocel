@@ -136,6 +136,14 @@ func (b Engine) touchedAPIs(tier environment.Tier) []string {
 	return apis
 }
 
+func (b Engine) ReadServices(ctx context.Context, tier environment.Tier) error {
+	if b.SkipChecks {
+		return nil
+	}
+	_, err := b.ListServicesOff(ctx, b.touchedAPIs(tier))
+	return err
+}
+
 func uniqueAPIs(apis []string) []string {
 	var unique []string
 	for _, api := range apis {

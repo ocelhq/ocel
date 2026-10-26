@@ -54,6 +54,9 @@ func (g bootstrapGate) openTierBootstrap(ctx context.Context, tier environment.T
 	if err != nil {
 		return bootstrap.Engine{}, err
 	}
+	if err := b.ReadServices(ctx, tier); err != nil {
+		return bootstrap.Engine{}, err
+	}
 	return withNetworkPatches(ctx, b, tier, "", transform.Result{})
 }
 

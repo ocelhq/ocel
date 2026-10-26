@@ -53,10 +53,8 @@ type Engine struct {
 }
 
 func (b Engine) Describe(ctx context.Context, tier environment.Tier) (provider.BootstrapDescription, error) {
-	if !b.SkipChecks {
-		if _, err := b.ListServicesOff(ctx, b.touchedAPIs(tier)); err != nil {
-			return provider.BootstrapDescription{}, err
-		}
+	if err := b.ReadServices(ctx, tier); err != nil {
+		return provider.BootstrapDescription{}, err
 	}
 	read, err := b.surveyReading(ctx, tier, !b.SkipChecks)
 	if err != nil {
