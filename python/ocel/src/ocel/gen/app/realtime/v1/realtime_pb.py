@@ -10,11 +10,13 @@ from typing import Literal, NoReturn, TYPE_CHECKING, TypeAlias
 
 from protobuf import Message
 from protobuf._codegen import file_desc
+from protobuf.wkt import duration_pb, timestamp_pb
 
 from ....buf.validate import validate_pb
 
 if TYPE_CHECKING:
     from protobuf import DescFile
+    from protobuf.wkt import Duration, Timestamp
 
 
 _PublishRequestFields: TypeAlias = Literal["realtime", "channel", "event"]
@@ -75,15 +77,146 @@ class PublishResponse(Message[_PublishResponseFields]):
         ) -> None:
             pass
 
+_MintRequestFields: TypeAlias = Literal["realtime", "subject", "ttl", "connect", "subscribe_channels"]
+
+class MintRequest(Message[_MintRequestFields]):
+    """
+    ```proto
+    message app.realtime.v1.MintRequest
+    ```
+
+    Attributes:
+        realtime:
+            ```proto
+            string realtime = 1;
+            ```
+        subject:
+            ```proto
+            string subject = 2;
+            ```
+        ttl:
+            ```proto
+            optional google.protobuf.Duration ttl = 3;
+            ```
+        connect:
+            ```proto
+            bool connect = 4;
+            ```
+        subscribe_channels:
+            ```proto
+            repeated string subscribe_channels = 5;
+            ```
+    """
+
+    __slots__ = ("realtime", "subject", "ttl", "connect", "subscribe_channels")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            realtime: str = "",
+            subject: str = "",
+            ttl: Duration | None = None,
+            connect: bool = False,
+            subscribe_channels: list[str] | None = None,
+        ) -> None:
+            pass
+
+        realtime: str
+        subject: str
+        ttl: Duration | None
+        connect: bool
+        subscribe_channels: list[str]
+
+_SubscribeTokenFields: TypeAlias = Literal["token", "channel"]
+
+class SubscribeToken(Message[_SubscribeTokenFields]):
+    """
+    ```proto
+    message app.realtime.v1.SubscribeToken
+    ```
+
+    Attributes:
+        token:
+            ```proto
+            string token = 1;
+            ```
+        channel:
+            ```proto
+            string channel = 2;
+            ```
+    """
+
+    __slots__ = ("token", "channel")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            token: str = "",
+            channel: str = "",
+        ) -> None:
+            pass
+
+        token: str
+        channel: str
+
+_MintResponseFields: TypeAlias = Literal["connect_token", "subscribe_tokens", "expires_at"]
+
+class MintResponse(Message[_MintResponseFields]):
+    """
+    ```proto
+    message app.realtime.v1.MintResponse
+    ```
+
+    Attributes:
+        connect_token:
+            ```proto
+            string connect_token = 1;
+            ```
+        subscribe_tokens:
+            ```proto
+            repeated app.realtime.v1.SubscribeToken subscribe_tokens = 2;
+            ```
+        expires_at:
+            ```proto
+            optional google.protobuf.Timestamp expires_at = 3;
+            ```
+    """
+
+    __slots__ = ("connect_token", "subscribe_tokens", "expires_at")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            connect_token: str = "",
+            subscribe_tokens: list[SubscribeToken] | None = None,
+            expires_at: Timestamp | None = None,
+        ) -> None:
+            pass
+
+        connect_token: str
+        subscribe_tokens: list[SubscribeToken]
+        expires_at: Timestamp | None
+
 
 _DESC = file_desc(
-    b'\n\x1eapp/realtime/v1/realtime.proto\x12\x0fapp.realtime.v1\x1a\x1bbuf/validate/validate.proto"\xbd\x02\n\x0ePublishRequest\x12R\n\x08realtime\x18\x01 \x01(\tR\x08realtimeB6\xbaH3r12/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$\x12!\n\x07channel\x18\x02 \x01(\tR\x07channelB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x05event\x18\x03 \x01(\tR\x05eventB\x0b\xbaH\x08r\x06\x10\x01(\x80\x80\x0f:\x90\x01\xbaH\x8c\x01\x1a\x89\x01\n\x18realtime.publish.channel\x129a resource publishes only on a channel under its own name\x1a2this.channel.startsWith(\'/\' + this.realtime + \'/\')"\x11\n\x0fPublishResponse2_\n\x0fRealtimeService\x12L\n\x07Publish\x12\x1f.app.realtime.v1.PublishRequest\x1a .app.realtime.v1.PublishResponseB=Z;github.com/ocelhq/ocel/pkg/proto/app/realtime/v1;realtimev1b\x06proto3',
+    b'\n\x1eapp/realtime/v1/realtime.proto\x12\x0fapp.realtime.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto"\xbd\x02\n\x0ePublishRequest\x12R\n\x08realtime\x18\x01 \x01(\tR\x08realtimeB6\xbaH3r12/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$\x12!\n\x07channel\x18\x02 \x01(\tR\x07channelB\x07\xbaH\x04r\x02\x10\x01\x12!\n\x05event\x18\x03 \x01(\tR\x05eventB\x0b\xbaH\x08r\x06\x10\x01(\x80\x80\x0f:\x90\x01\xbaH\x8c\x01\x1a\x89\x01\n\x18realtime.publish.channel\x129a resource publishes only on a channel under its own name\x1a2this.channel.startsWith(\'/\' + this.realtime + \'/\')"\x11\n\x0fPublishResponse"\xf7\x04\n\x0bMintRequest\x12R\n\x08realtime\x18\x01 \x01(\tR\x08realtimeB6\xbaH3r12/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$\x12$\n\x07subject\x18\x02 \x01(\tR\x07subjectB\n\xbaH\x07r\x05\x10\x01(\x80\x08\x12?\n\x03ttl\x18\x03 \x01(\x0b2\x19.google.protobuf.DurationR\x03ttlB\x12\xbaH\x0f\xc8\x01\x01\xaa\x01\t"\x03\x08\xac\x022\x02\x08\n\x12\x18\n\x07connect\x18\x04 \x01(\x08R\x07connect\x12@\n\x12subscribe_channels\x18\x05 \x03(\tR\x11subscribeChannelsB\x11\xbaH\x0e\x92\x01\x0b\x102"\x07r\x05\x10\x01(\x80\x04:\xd0\x02\xbaH\xcc\x02\x1a\xc1\x01\n realtime.mint.subscribe_channels\x12Ha resource mints a subscribe token only for a channel under its own name\x1aSthis.subscribe_channels.all(channel, channel.startsWith(\'/\' + this.realtime + \'/\'))\x1a\x85\x01\n\x14realtime.mint.tokens\x12:a mint asks for a connect token, a subscribe token or both\x1a1this.connect || size(this.subscribe_channels) > 0"@\n\x0eSubscribeToken\x12\x14\n\x05token\x18\x01 \x01(\tR\x05token\x12\x18\n\x07channel\x18\x02 \x01(\tR\x07channel"\xba\x01\n\x0cMintResponse\x12#\n\rconnect_token\x18\x01 \x01(\tR\x0cconnectToken\x12J\n\x10subscribe_tokens\x18\x02 \x03(\x0b2\x1f.app.realtime.v1.SubscribeTokenR\x0fsubscribeTokens\x129\n\nexpires_at\x18\x03 \x01(\x0b2\x1a.google.protobuf.TimestampR\texpiresAt2\xa4\x01\n\x0fRealtimeService\x12L\n\x07Publish\x12\x1f.app.realtime.v1.PublishRequest\x1a .app.realtime.v1.PublishResponse\x12C\n\x04Mint\x12\x1c.app.realtime.v1.MintRequest\x1a\x1d.app.realtime.v1.MintResponseB=Z;github.com/ocelhq/ocel/pkg/proto/app/realtime/v1;realtimev1b\x06proto3',
     [
         validate_pb.desc(),
+        duration_pb.desc(),
+        timestamp_pb.desc(),
     ],
     {
         "PublishRequest": PublishRequest,
         "PublishResponse": PublishResponse,
+        "MintRequest": MintRequest,
+        "SubscribeToken": SubscribeToken,
+        "MintResponse": MintResponse,
     },
 )
 

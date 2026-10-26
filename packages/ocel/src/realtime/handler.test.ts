@@ -1,3 +1,4 @@
+import { Code, ConnectError } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
@@ -6,8 +7,10 @@ import {
   appsyncHost,
   appsyncURL,
   type FakeGateway,
+  type FakeRuntime,
   readClaims,
   serveFakeGateway,
+  serveFakeRuntime,
 } from "../testing/realtime-gateway.js";
 
 vi.mock("../runtime/rpc", () => ({
@@ -72,8 +75,25 @@ async function answer(response: Response): Promise<Answer> {
   return (await response.json()) as Answer;
 }
 
+function expectMinted(
+  runtime: FakeRuntime,
+  subject: string,
+  minted: { connect: boolean; subscribeChannels: string[] },
+) {
+  expect(runtime.mints).toHaveLength(1);
+  expect(runtime.mints[0]).toMatchObject({
+    realtime: "app",
+    subject,
+    ttl: { seconds: 30n, nanos: 0 },
+    ...minted,
+  });
+}
+
 describe("the realtime handler on AppSync Events", () => {
-  beforeEach(() => {
+  let runtime: FakeRuntime;
+
+  beforeEach(async () => {
+    runtime = await serveFakeRuntime();
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv(bindingKey("app", "realtime"), appsyncBinding);
     subscribeRule.mockClear();
@@ -84,19 +104,30 @@ describe("the realtime handler on AppSync Events", () => {
     vi.unstubAllEnvs();
   });
 
-  it("names the socket url and host, and mints a connect token when asked", async () => {
+  it("names the socket url and host, and hands on the connect token the runtime mints when asked", async () => {
     const res = await answer(await POST(post({ connect: true, ops: [] })));
 
     expect(res).toMatchObject({ url: appsyncURL, host: appsyncHost });
+    expectMinted(runtime, "anonymous", { connect: true, subscribeChannels: [] });
     const claims = readClaims(res.connect?.token ?? "");
-    expect(claims).toMatchObject({
-      iss: "ocel:rt:app",
-      aud: appsyncHost,
-      sub: "anonymous",
-      ocel: { op: "connect", ch: "/app", ns: "app" },
-    });
+    expect(claims).toMatchObject({ aud: appsyncHost, ocel: { op: "connect", ch: "/app" } });
     expect(claims.exp).toBe(res.connect?.expiresAt);
-    expect(Number(claims.exp) - Number(claims.iat)).toBe(30);
+  });
+
+  it("mints for the anonymous subject when the id is empty or over 1024 bytes", async () => {
+    const byID = realtime("app", {
+      authorize: async (request) => ({ id: request.headers.get("x-id") ?? "" }),
+      tokenTtl: "30s",
+      channels: { status: { schema: OrderEvent, subscribe: "public" } },
+    });
+    const handler = createRealtimeHandler(byID);
+
+    for (const id of ["", "u".repeat(1025)]) {
+      runtime.mints.length = 0;
+      await answer(await handler.POST(post({ connect: true, ops: [] }, { "x-id": id })));
+
+      expectMinted(runtime, "anonymous", { connect: true, subscribeChannels: [] });
+    }
   });
 
   it("grants a public subscribe to anyone, with a token for its wire channel", async () => {
@@ -107,10 +138,48 @@ describe("the realtime handler on AppSync Events", () => {
     expect(res.connect).toBeUndefined();
     expect(res.denied).toEqual([]);
     expect(res.grants).toEqual([{ i: 0, wire: "/app/status", token: expect.any(String) }]);
+    expectMinted(runtime, "anonymous", { connect: false, subscribeChannels: ["/app/status"] });
     expect(readClaims(res.grants[0]?.token ?? "")).toMatchObject({
-      sub: "anonymous",
-      ocel: { op: "subscribe", ch: "/app/status", ns: "app" },
+      ocel: { op: "subscribe", ch: "/app/status" },
     });
+  });
+
+  it("hands the browser the channel the runtime minted each subscribe for", async () => {
+    runtime.mapChannel = (channel) => `/ns/t-1${channel.slice("/app".length)}`;
+
+    const res = await answer(
+      await POST(
+        post(
+          {
+            connect: true,
+            ops: [
+              { op: "subscribe", pattern: "status", params: {} },
+              { op: "subscribe", pattern: "rooms/:roomId", params: { roomId: "room-1" } },
+            ],
+          },
+          { "x-user": "u1" },
+        ),
+      ),
+    );
+
+    expect(res.grants).toEqual([
+      { i: 0, wire: "/ns/t-1/status", token: expect.any(String) },
+      { i: 1, wire: "/ns/t-1/rooms/room-1", token: expect.any(String) },
+    ]);
+    expect(readClaims(res.grants[0]?.token ?? "").ocel.ch).toBe("/app/status");
+  });
+
+  it("asks the runtime for no token when the batch needs none", async () => {
+    await answer(
+      await POST(
+        post(
+          { ops: [{ op: "subscribe", pattern: "orders/:orderId", params: { orderId: "o-2" } }] },
+          { "x-user": "u1" },
+        ),
+      ),
+    );
+
+    expect(runtime.mints).toEqual([]);
   });
 
   it("runs the subscribe rule with the auth, params and request, granting or denying each op", async () => {
@@ -131,8 +200,7 @@ describe("the realtime handler on AppSync Events", () => {
 
     expect(res.grants).toEqual([{ i: 0, wire: "/app/orders/o-1", token: expect.any(String) }]);
     expect(res.denied).toEqual([{ i: 1, code: "forbidden" }]);
-    expect(readClaims(res.connect?.token ?? "").sub).toBe("u1");
-    expect(readClaims(res.grants[0]?.token ?? "").sub).toBe("u1");
+    expectMinted(runtime, "u1", { connect: true, subscribeChannels: ["/app/orders/o-1"] });
     const [context] = subscribeRule.mock.calls[0] ?? [];
     expect(context).toMatchObject({ auth: { id: "u1" }, params: { orderId: "o-1" } });
     expect((context as unknown as { request: Request }).request.headers.get("x-user")).toBe("u1");
@@ -267,7 +335,10 @@ describe("the realtime handler on AppSync Events", () => {
 });
 
 describe("the realtime handler's defaults", () => {
-  beforeEach(() => {
+  let runtime: FakeRuntime;
+
+  beforeEach(async () => {
+    runtime = await serveFakeRuntime();
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv(bindingKey("app", "realtime"), appsyncBinding);
   });
@@ -476,19 +547,30 @@ describe("the realtime handler's defaults", () => {
   it.each([
     ["a connect token", { connect: true, ops: [] }],
     ["a subscribe token", { ops: [{ op: "subscribe", pattern: "status" }] }],
-  ])("answers 500 no-store when %s cannot be minted", async (_, batch) => {
-    vi.stubEnv(
-      bindingKey("app", "realtime"),
-      JSON.stringify({
-        name: "realtime--app",
-        realtime: { ...JSON.parse(appsyncBinding).realtime, signingKey: "AAAA" },
-      }),
-    );
+  ])("answers 500 no-store when the runtime mints no %s", async (_, batch) => {
+    runtime.mintRefusal = new ConnectError("no signing key", Code.FailedPrecondition);
 
     const res = await POST(post(batch));
 
     expect(res.status).toBe(500);
     expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it.each<[string, unknown, NonNullable<FakeRuntime["alterMinted"]>]>([
+    [
+      "fewer subscribe tokens than channels",
+      { ops: [{ op: "subscribe", pattern: "status" }] },
+      (minted) => ({ ...minted, subscribeTokens: [] }),
+    ],
+    ["no connect token", { connect: true, ops: [] }, (minted) => ({ ...minted, connectToken: "" })],
+    ["no expiry", { connect: true, ops: [] }, (minted) => ({ ...minted, expiresAt: undefined })],
+  ])("answers 500 when the runtime mints %s", async (_, batch, alterMinted) => {
+    runtime.alterMinted = alterMinted;
+
+    const res = await POST(post(batch));
+
+    expect(res.status).toBe(500);
+    expect(runtime.mints).toHaveLength(1);
   });
 
   it("answers 500 without the cause when authorize throws", async () => {
@@ -656,6 +738,31 @@ describe("a publish relayed through the realtime handler", () => {
       { i: 5, code: "unauthenticated" },
     ]);
     expect(publishRule).not.toHaveBeenCalled();
+    expect(gateway.published).toEqual([]);
+  });
+
+  it("publishes nothing when the runtime refuses to mint the batch's tokens", async () => {
+    gateway.runtime.mintRefusal = new ConnectError("no signing key", Code.FailedPrecondition);
+
+    const res = await POST(
+      post(
+        {
+          connect: true,
+          ops: [
+            { op: "subscribe", pattern: "status", params: {} },
+            {
+              op: "publish",
+              pattern: "rooms/:roomId",
+              params: { roomId: "r1" },
+              body: { text: "hi" },
+            },
+          ],
+        },
+        { "x-user": "u1" },
+      ),
+    );
+
+    expect(res.status).toBe(500);
     expect(gateway.published).toEqual([]);
   });
 

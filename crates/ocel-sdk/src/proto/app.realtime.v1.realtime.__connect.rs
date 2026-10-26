@@ -6,6 +6,14 @@ pub type OwnedPublishRequestView = ::buffa::view::OwnedView<
 pub type OwnedPublishResponseView = ::buffa::view::OwnedView<
     crate::proto::app::realtime::v1::__buffa::view::PublishResponseView<'static>,
 >;
+///Shorthand for `OwnedView<MintRequestView<'static>>`.
+pub type OwnedMintRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::realtime::v1::__buffa::view::MintRequestView<'static>,
+>;
+///Shorthand for `OwnedView<MintResponseView<'static>>`.
+pub type OwnedMintResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::realtime::v1::__buffa::view::MintResponseView<'static>,
+>;
 impl ::connectrpc::Encodable<crate::proto::app::realtime::v1::PublishResponse>
 for crate::proto::app::realtime::v1::__buffa::view::PublishResponseView<'_> {
     fn encode(
@@ -40,11 +48,51 @@ for ::buffa::view::OwnedView<
         )
     }
 }
+impl ::connectrpc::Encodable<crate::proto::app::realtime::v1::MintResponse>
+for crate::proto::app::realtime::v1::__buffa::view::MintResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::realtime::v1::MintResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::realtime::v1::__buffa::view::MintResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
 /// Full service name for this service.
 pub const REALTIME_SERVICE_SERVICE_NAME: &str = "app.realtime.v1.RealtimeService";
 /// Static [`Spec`](::connectrpc::Spec) for the `Publish` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const REALTIME_SERVICE_PUBLISH_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
         "/app.realtime.v1.RealtimeService/Publish",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `Mint` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const REALTIME_SERVICE_MINT_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.realtime.v1.RealtimeService/Mint",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
@@ -122,6 +170,29 @@ pub trait RealtimeService: Send + Sync + 'static {
             > + Send + use<'a, Self>,
         >,
     > + Send;
+    /// Handle the Mint RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn mint<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::realtime::v1::MintRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::realtime::v1::MintResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
 }
 /// Extension trait for registering a service implementation with a Router.
 ///
@@ -183,6 +254,35 @@ impl<S: RealtimeService> RealtimeServiceExt for S {
                 },
             )
             .with_spec(REALTIME_SERVICE_PUBLISH_SPEC)
+            .route_view(
+                REALTIME_SERVICE_SERVICE_NAME,
+                "Mint",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::realtime::v1::__buffa::view::MintRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::realtime::v1::MintRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.mint(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::realtime::v1::MintResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(REALTIME_SERVICE_MINT_SPEC)
     }
 }
 /// Type-inference marker used by [`Router::add_service`](::connectrpc::Router::add_service).
@@ -243,6 +343,12 @@ impl<T: RealtimeService> ::connectrpc::Dispatcher for RealtimeServiceServer<T> {
                         .with_spec(REALTIME_SERVICE_PUBLISH_SPEC),
                 )
             }
+            "Mint" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(REALTIME_SERVICE_MINT_SPEC),
+                )
+            }
             _ => None,
         }
     }
@@ -278,6 +384,26 @@ impl<T: RealtimeService> ::connectrpc::Dispatcher for RealtimeServiceServer<T> {
                         .encode::<
                             crate::proto::app::realtime::v1::PublishResponse,
                         >(format)
+                })
+            }
+            "Mint" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::realtime::v1::MintRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::realtime::v1::__buffa::view::MintRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::realtime::v1::MintRequest,
+                    >::from_parts(&req, &body);
+                    svc.mint(ctx, req)
+                        .await?
+                        .encode::<crate::proto::app::realtime::v1::MintResponse>(format)
                 })
             }
             _ => ::connectrpc::dispatcher::codegen::unimplemented_unary(path),
@@ -445,6 +571,43 @@ where
                 &self.config,
                 REALTIME_SERVICE_PUBLISH_SPEC
                     .with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the Mint RPC. Sends a request to /app.realtime.v1.RealtimeService/Mint.
+    pub async fn mint(
+        &self,
+        request: crate::proto::app::realtime::v1::MintRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::realtime::v1::__buffa::view::MintResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.mint_with_options(request, ::connectrpc::client::CallOptions::default())
+            .await
+    }
+    /// Call the Mint RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn mint_with_options(
+        &self,
+        request: crate::proto::app::realtime::v1::MintRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::realtime::v1::__buffa::view::MintResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                REALTIME_SERVICE_MINT_SPEC.with_origin(::connectrpc::SpecOrigin::Client),
                 request,
                 options,
             )

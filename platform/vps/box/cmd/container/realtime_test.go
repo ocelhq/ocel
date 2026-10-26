@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -21,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
+	"github.com/ocelhq/ocel/platform/realtime/token"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 )
 
@@ -89,5 +92,24 @@ func TestTheRuntimePublishesARealtimeEventToTheBoxsGatewayAtItsInternalAddress(t
 	event := `{"v":1,"id":"0123456789abcdef0123456789abcdef","ch":"/app/status","ts":1,"kind":"live","data":{}}`
 	if _, err := client.Publish(context.Background(), &realtimev1.PublishRequest{Realtime: "app", Channel: "/app/status", Event: event}); err != nil {
 		t.Errorf("Publish() = %v, want the gateway serving shop.example to take a publish sent to its internal address", err)
+	}
+}
+
+func TestTheRuntimeMintsASubscribeTokenWithTheBindingsKeyForTheChannelAsAsked(t *testing.T) {
+	_, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serveRealtimeProxy(t, key, "http://127.0.0.1:1"+gatewayenv.PublishPath)
+	minted, err := client.Mint(context.Background(), &realtimev1.MintRequest{Realtime: "app", Subject: "user-1", Ttl: durationpb.New(time.Minute), SubscribeChannels: []string{"/app/status"}})
+	if err != nil {
+		t.Fatalf("Mint() = %v", err)
+	}
+	got := minted.GetSubscribeTokens()[0]
+	keys := func(namespace string) (ed25519.PublicKey, bool) {
+		return key.Public().(ed25519.PublicKey), namespace == "app"
+	}
+	if _, err := token.Verify(got.GetToken(), keys, time.Now(), token.Expected{Audience: "shop.example", Namespace: "app", Operation: token.Subscribe, Channel: "/app/status"}); err != nil || got.GetChannel() != "/app/status" {
+		t.Errorf("Mint() answered %q for %q (%v), want a subscribe token for /app/status signed with the binding's key", got.GetToken(), got.GetChannel(), err)
 	}
 }

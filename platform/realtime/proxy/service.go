@@ -45,7 +45,7 @@ func (s *Service) readProperties(name string) (*bindingsv1.RealtimeProperties, e
 	key := bindings.ResourceEnvName(bindingsv1.BindingType_BINDING_TYPE_REALTIME, name)
 	raw := s.records.Value(key)
 	if raw == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this runtime holds no realtime binding for %q, so it has nowhere to publish", name))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this runtime holds no realtime binding for %q", name))
 	}
 	record := &bindingsv1.Binding{}
 	if err := protojson.Unmarshal([]byte(raw), record); err != nil || record.GetRealtime() == nil {

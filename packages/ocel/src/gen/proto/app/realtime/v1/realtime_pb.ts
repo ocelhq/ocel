@@ -5,13 +5,15 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb.js";
+import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_duration, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file app/realtime/v1/realtime.proto.
  */
 export const file_app_realtime_v1_realtime: GenFile = /*@__PURE__*/
-  fileDesc("Ch5hcHAvcmVhbHRpbWUvdjEvcmVhbHRpbWUucHJvdG8SD2FwcC5yZWFsdGltZS52MSKjAgoOUHVibGlzaFJlcXVlc3QSSAoIcmVhbHRpbWUYASABKAlCNrpIM3IxMi9eW0EtWmEtejAtOV0oPzpbQS1aYS16MC05LV17MCw0OH1bQS1aYS16MC05XSk/JBIYCgdjaGFubmVsGAIgASgJQge6SARyAhABEhoKBWV2ZW50GAMgASgJQgu6SAhyBhABKICADzqQAbpIjAEaiQEKGHJlYWx0aW1lLnB1Ymxpc2guY2hhbm5lbBI5YSByZXNvdXJjZSBwdWJsaXNoZXMgb25seSBvbiBhIGNoYW5uZWwgdW5kZXIgaXRzIG93biBuYW1lGjJ0aGlzLmNoYW5uZWwuc3RhcnRzV2l0aCgnLycgKyB0aGlzLnJlYWx0aW1lICsgJy8nKSIRCg9QdWJsaXNoUmVzcG9uc2UyXwoPUmVhbHRpbWVTZXJ2aWNlEkwKB1B1Ymxpc2gSHy5hcHAucmVhbHRpbWUudjEuUHVibGlzaFJlcXVlc3QaIC5hcHAucmVhbHRpbWUudjEuUHVibGlzaFJlc3BvbnNlQj1aO2dpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2FwcC9yZWFsdGltZS92MTtyZWFsdGltZXYxYgZwcm90bzM", [file_buf_validate_validate]);
+  fileDesc("Ch5hcHAvcmVhbHRpbWUvdjEvcmVhbHRpbWUucHJvdG8SD2FwcC5yZWFsdGltZS52MSKjAgoOUHVibGlzaFJlcXVlc3QSSAoIcmVhbHRpbWUYASABKAlCNrpIM3IxMi9eW0EtWmEtejAtOV0oPzpbQS1aYS16MC05LV17MCw0OH1bQS1aYS16MC05XSk/JBIYCgdjaGFubmVsGAIgASgJQge6SARyAhABEhoKBWV2ZW50GAMgASgJQgu6SAhyBhABKICADzqQAbpIjAEaiQEKGHJlYWx0aW1lLnB1Ymxpc2guY2hhbm5lbBI5YSByZXNvdXJjZSBwdWJsaXNoZXMgb25seSBvbiBhIGNoYW5uZWwgdW5kZXIgaXRzIG93biBuYW1lGjJ0aGlzLmNoYW5uZWwuc3RhcnRzV2l0aCgnLycgKyB0aGlzLnJlYWx0aW1lICsgJy8nKSIRCg9QdWJsaXNoUmVzcG9uc2UiwwQKC01pbnRSZXF1ZXN0EkgKCHJlYWx0aW1lGAEgASgJQja6SDNyMTIvXltBLVphLXowLTldKD86W0EtWmEtejAtOS1dezAsNDh9W0EtWmEtejAtOV0pPyQSGwoHc3ViamVjdBgCIAEoCUIKukgHcgUQASiACBI6CgN0dGwYAyABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb25CErpID8gBAaoBCSIDCKwCMgIIChIPCgdjb25uZWN0GAQgASgIEi0KEnN1YnNjcmliZV9jaGFubmVscxgFIAMoCUIRukgOkgELEDIiB3IFEAEogAQ60AK6SMwCGsEBCiByZWFsdGltZS5taW50LnN1YnNjcmliZV9jaGFubmVscxJIYSByZXNvdXJjZSBtaW50cyBhIHN1YnNjcmliZSB0b2tlbiBvbmx5IGZvciBhIGNoYW5uZWwgdW5kZXIgaXRzIG93biBuYW1lGlN0aGlzLnN1YnNjcmliZV9jaGFubmVscy5hbGwoY2hhbm5lbCwgY2hhbm5lbC5zdGFydHNXaXRoKCcvJyArIHRoaXMucmVhbHRpbWUgKyAnLycpKRqFAQoUcmVhbHRpbWUubWludC50b2tlbnMSOmEgbWludCBhc2tzIGZvciBhIGNvbm5lY3QgdG9rZW4sIGEgc3Vic2NyaWJlIHRva2VuIG9yIGJvdGgaMXRoaXMuY29ubmVjdCB8fCBzaXplKHRoaXMuc3Vic2NyaWJlX2NoYW5uZWxzKSA+IDAiMAoOU3Vic2NyaWJlVG9rZW4SDQoFdG9rZW4YASABKAkSDwoHY2hhbm5lbBgCIAEoCSKQAQoMTWludFJlc3BvbnNlEhUKDWNvbm5lY3RfdG9rZW4YASABKAkSOQoQc3Vic2NyaWJlX3Rva2VucxgCIAMoCzIfLmFwcC5yZWFsdGltZS52MS5TdWJzY3JpYmVUb2tlbhIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcDKkAQoPUmVhbHRpbWVTZXJ2aWNlEkwKB1B1Ymxpc2gSHy5hcHAucmVhbHRpbWUudjEuUHVibGlzaFJlcXVlc3QaIC5hcHAucmVhbHRpbWUudjEuUHVibGlzaFJlc3BvbnNlEkMKBE1pbnQSHC5hcHAucmVhbHRpbWUudjEuTWludFJlcXVlc3QaHS5hcHAucmVhbHRpbWUudjEuTWludFJlc3BvbnNlQj1aO2dpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2FwcC9yZWFsdGltZS92MTtyZWFsdGltZXYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message app.realtime.v1.PublishRequest
@@ -54,6 +56,92 @@ export const PublishResponseSchema: GenMessage<PublishResponse> = /*@__PURE__*/
   messageDesc(file_app_realtime_v1_realtime, 1);
 
 /**
+ * @generated from message app.realtime.v1.MintRequest
+ */
+export type MintRequest = Message<"app.realtime.v1.MintRequest"> & {
+  /**
+   * @generated from field: string realtime = 1;
+   */
+  realtime: string;
+
+  /**
+   * @generated from field: string subject = 2;
+   */
+  subject: string;
+
+  /**
+   * @generated from field: google.protobuf.Duration ttl = 3;
+   */
+  ttl?: Duration | undefined;
+
+  /**
+   * @generated from field: bool connect = 4;
+   */
+  connect: boolean;
+
+  /**
+   * @generated from field: repeated string subscribe_channels = 5;
+   */
+  subscribeChannels: string[];
+};
+
+/**
+ * Describes the message app.realtime.v1.MintRequest.
+ * Use `create(MintRequestSchema)` to create a new message.
+ */
+export const MintRequestSchema: GenMessage<MintRequest> = /*@__PURE__*/
+  messageDesc(file_app_realtime_v1_realtime, 2);
+
+/**
+ * @generated from message app.realtime.v1.SubscribeToken
+ */
+export type SubscribeToken = Message<"app.realtime.v1.SubscribeToken"> & {
+  /**
+   * @generated from field: string token = 1;
+   */
+  token: string;
+
+  /**
+   * @generated from field: string channel = 2;
+   */
+  channel: string;
+};
+
+/**
+ * Describes the message app.realtime.v1.SubscribeToken.
+ * Use `create(SubscribeTokenSchema)` to create a new message.
+ */
+export const SubscribeTokenSchema: GenMessage<SubscribeToken> = /*@__PURE__*/
+  messageDesc(file_app_realtime_v1_realtime, 3);
+
+/**
+ * @generated from message app.realtime.v1.MintResponse
+ */
+export type MintResponse = Message<"app.realtime.v1.MintResponse"> & {
+  /**
+   * @generated from field: string connect_token = 1;
+   */
+  connectToken: string;
+
+  /**
+   * @generated from field: repeated app.realtime.v1.SubscribeToken subscribe_tokens = 2;
+   */
+  subscribeTokens: SubscribeToken[];
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 3;
+   */
+  expiresAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message app.realtime.v1.MintResponse.
+ * Use `create(MintResponseSchema)` to create a new message.
+ */
+export const MintResponseSchema: GenMessage<MintResponse> = /*@__PURE__*/
+  messageDesc(file_app_realtime_v1_realtime, 4);
+
+/**
  * @generated from service app.realtime.v1.RealtimeService
  */
 export const RealtimeService: GenService<{
@@ -64,6 +152,14 @@ export const RealtimeService: GenService<{
     methodKind: "unary";
     input: typeof PublishRequestSchema;
     output: typeof PublishResponseSchema;
+  },
+  /**
+   * @generated from rpc app.realtime.v1.RealtimeService.Mint
+   */
+  mint: {
+    methodKind: "unary";
+    input: typeof MintRequestSchema;
+    output: typeof MintResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_app_realtime_v1_realtime, 0);

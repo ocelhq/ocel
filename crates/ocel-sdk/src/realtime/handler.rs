@@ -1,9 +1,8 @@
-use super::token::{mint_token, MintedToken, Operation};
+use super::token::{mint_tokens, MintedToken, Operation};
 use super::wire::encode_wire_channel;
 use super::{generate_envelope_id, DenialCode, ErasedAuth, Realtime, Request, ServedChannel};
-use crate::proto::common::bindings::v1::RealtimeProperties;
 use bytes::Bytes;
-use futures_util::future::{join, join_all};
+use futures_util::future::join_all;
 use futures_util::FutureExt;
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -52,29 +51,28 @@ impl From<DenialCode> for OperationFailure {
     }
 }
 
+struct SubscribeOperation<'a> {
+    channel: &'a ServedChannel,
+    params: BTreeMap<String, String>,
+    wire: String,
+}
+
+struct PublishOperation<'a> {
+    channel: &'a ServedChannel,
+    params: BTreeMap<String, String>,
+    wire: String,
+    body: Box<dyn Any + Send>,
+    envelope: Bytes,
+}
+
 enum ReadOperation<'a> {
-    Subscribe {
-        channel: &'a ServedChannel,
-        params: BTreeMap<String, String>,
-        wire: String,
-    },
-    Publish {
-        channel: &'a ServedChannel,
-        params: BTreeMap<String, String>,
-        wire: String,
-        body: Box<dyn Any + Send>,
-        envelope: Bytes,
-    },
+    Subscribe(SubscribeOperation<'a>),
+    Publish(PublishOperation<'a>),
 }
 
 struct Caller {
     auth: Option<ErasedAuth>,
     subject: String,
-}
-
-struct ServedOperation {
-    wire: String,
-    token: Option<String>,
 }
 
 fn respond(status: u16, body: Option<Value>, headers: &[(&str, String)]) -> http::Response<Bytes> {
@@ -234,23 +232,23 @@ fn read_operation<'a>(rt: &'a Realtime, op: &Value) -> Result<ReadOperation<'a>,
     let wildcard = operation == Operation::Subscribe && channel.wildcard;
     let wire = encode_wire_channel(&rt.inner.name, &channel.pattern, &params, wildcard)?;
     let Some((_, decode)) = publish else {
-        return Ok(ReadOperation::Subscribe {
+        return Ok(ReadOperation::Subscribe(SubscribeOperation {
             channel,
             params,
             wire,
-        });
+        }));
     };
     let raw = members.get("body").ok_or(DenialCode::InvalidBody)?;
     let (body, data) = decode(raw).map_err(|_| DenialCode::InvalidBody)?;
     let id = generate_envelope_id().map_err(|_| OperationFailure::Failed("an event id failed"))?;
     let envelope = channel.encode_envelope(&wire, data, id)?;
-    Ok(ReadOperation::Publish {
+    Ok(ReadOperation::Publish(PublishOperation {
         channel,
         params,
         wire,
         body,
         envelope,
-    })
+    }))
 }
 
 async fn decide(
@@ -259,56 +257,42 @@ async fn decide(
     params: BTreeMap<String, String>,
     body: Option<Box<dyn Any + Send>>,
     request: &Arc<Request>,
-) -> Result<(), OperationFailure> {
+) -> Result<(), DenialCode> {
     let auth = caller.auth.clone().ok_or(DenialCode::Unauthenticated)?;
     match rule(auth, params, body, request.clone()).await {
         Ok(true) => Ok(()),
-        Ok(false) => Err(DenialCode::Forbidden.into()),
-        Err(_) => Err(DenialCode::RuleError.into()),
+        Ok(false) => Err(DenialCode::Forbidden),
+        Err(_) => Err(DenialCode::RuleError),
     }
 }
 
-async fn serve_operation(
-    rt: &Realtime,
-    properties: &RealtimeProperties,
+async fn authorize_subscribe(
     request: &Arc<Request>,
     caller: &Caller,
-    operation: ReadOperation<'_>,
-) -> Result<ServedOperation, OperationFailure> {
-    match operation {
-        ReadOperation::Subscribe {
-            channel,
-            params,
-            wire,
-        } => {
-            if let Some(rule) = &channel.subscribe {
-                decide(rule, caller, params, None, request).await?;
-            }
-            let token = mint_token(rt, properties, &caller.subject, Operation::Subscribe, &wire)
-                .map_err(|_| OperationFailure::Failed("minting a token failed"))?;
-            Ok(ServedOperation {
-                wire,
-                token: Some(token.token),
-            })
-        }
-        ReadOperation::Publish {
-            channel,
-            params,
-            wire,
-            body,
-            envelope,
-        } => {
-            let (rule, _) = channel
-                .publish
-                .as_ref()
-                .expect("a publish op was read only for a channel with a publish rule");
-            decide(rule, caller, params, Some(body), request).await?;
-            rt.publish_event(&wire, envelope)
-                .await
-                .map_err(|_| DenialCode::PublishFailed)?;
-            Ok(ServedOperation { wire, token: None })
-        }
+    subscribe: SubscribeOperation<'_>,
+) -> Result<String, DenialCode> {
+    if let Some(rule) = &subscribe.channel.subscribe {
+        decide(rule, caller, subscribe.params, None, request).await?;
     }
+    Ok(subscribe.wire)
+}
+
+async fn serve_publish(
+    rt: &Realtime,
+    request: &Arc<Request>,
+    caller: &Caller,
+    publish: PublishOperation<'_>,
+) -> Result<String, DenialCode> {
+    let (rule, _) = publish
+        .channel
+        .publish
+        .as_ref()
+        .expect("a publish op was read only for a channel with a publish rule");
+    decide(rule, caller, publish.params, Some(publish.body), request).await?;
+    rt.publish_event(&publish.wire, publish.envelope)
+        .await
+        .map_err(|_| DenialCode::PublishFailed)?;
+    Ok(publish.wire)
 }
 
 async fn serve_batch(
@@ -337,71 +321,77 @@ async fn serve_batch(
             subject: "anonymous".to_string(),
         },
     };
-    let connect = match connect {
-        true => Some(
-            mint_token(
-                rt,
-                &properties,
-                &caller.subject,
-                Operation::Connect,
-                &format!("/{}", rt.inner.name),
-            )
-            .map_err(|_| "minting a token failed")?,
-        ),
-        false => None,
-    };
-
-    let mut outcomes: Vec<Option<Result<ServedOperation, OperationFailure>>> =
-        Vec::with_capacity(ops.len());
+    let (mut grants, mut denied) = (Vec::new(), Vec::new());
     let (mut subscribes, mut publishes) = (Vec::new(), Vec::new());
     for (i, op) in ops.iter().enumerate() {
         match read_operation(rt, op) {
-            Err(failure) => outcomes.push(Some(Err(failure))),
-            Ok(operation) => {
-                outcomes.push(None);
-                match operation {
-                    ReadOperation::Subscribe { .. } => subscribes.push((i, operation)),
-                    ReadOperation::Publish { .. } => publishes.push((i, operation)),
-                }
-            }
-        }
-    }
-    let serve = |(i, operation)| {
-        let (request, caller, properties) = (&request, &caller, &properties);
-        async move {
-            (
-                i,
-                serve_operation(rt, properties, request, caller, operation).await,
-            )
-        }
-    };
-    let in_order = async {
-        let mut served = Vec::with_capacity(publishes.len());
-        for publish in publishes {
-            served.push(serve(publish).await);
-        }
-        served
-    };
-    let (subscribed, published) = join(join_all(subscribes.into_iter().map(serve)), in_order).await;
-    for (i, outcome) in subscribed.into_iter().chain(published) {
-        outcomes[i] = Some(outcome);
-    }
-
-    let mut answer = Answer {
-        url: resolve_socket_url(&properties.url, &request),
-        host: properties.host.clone(),
-        connect,
-        grants: Vec::new(),
-        denied: Vec::new(),
-    };
-    for (i, outcome) in outcomes.into_iter().enumerate() {
-        match outcome.expect("every op was read or served") {
-            Ok(ServedOperation { wire, token }) => answer.grants.push(Grant { i, wire, token }),
-            Err(OperationFailure::Denied(code)) => answer.denied.push(DeniedOperation { i, code }),
+            Ok(ReadOperation::Subscribe(subscribe)) => subscribes.push((i, subscribe)),
+            Ok(ReadOperation::Publish(publish)) => publishes.push((i, publish)),
+            Err(OperationFailure::Denied(code)) => denied.push(DeniedOperation { i, code }),
             Err(OperationFailure::Failed(message)) => return Err(message),
         }
     }
-    Ok(answer)
+    let subscribed = join_all(subscribes.into_iter().map(|(i, subscribe)| {
+        let (request, caller) = (&request, &caller);
+        async move { (i, authorize_subscribe(request, caller, subscribe).await) }
+    }))
+    .await;
+    for (i, outcome) in subscribed {
+        match outcome {
+            Ok(wire) => grants.push(Grant {
+                i,
+                wire,
+                token: None,
+            }),
+            Err(code) => denied.push(DeniedOperation { i, code }),
+        }
+    }
+    let connect = mint_answer_tokens(rt, &caller.subject, connect, &mut grants).await?;
+    for (i, publish) in publishes {
+        match serve_publish(rt, &request, &caller, publish).await {
+            Ok(wire) => grants.push(Grant {
+                i,
+                wire,
+                token: None,
+            }),
+            Err(code) => denied.push(DeniedOperation { i, code }),
+        }
+    }
+    grants.sort_by_key(|grant| grant.i);
+    denied.sort_by_key(|denial| denial.i);
+    Ok(Answer {
+        url: resolve_socket_url(&properties.url, &request),
+        host: properties.host.clone(),
+        connect,
+        grants,
+        denied,
+    })
+}
+
+async fn mint_answer_tokens(
+    rt: &Realtime,
+    subject: &str,
+    connect: bool,
+    subscribe_grants: &mut [Grant],
+) -> Result<Option<MintedToken>, &'static str> {
+    if !connect && subscribe_grants.is_empty() {
+        return Ok(None);
+    }
+    let channels = subscribe_grants
+        .iter()
+        .map(|grant| grant.wire.clone())
+        .collect();
+    let minted = mint_tokens(rt, subject, connect, channels)
+        .await
+        .map_err(|_| "minting a token failed")?;
+    for (grant, token) in subscribe_grants.iter_mut().zip(minted.subscribe_tokens) {
+        grant.wire = token.channel;
+        grant.token = Some(token.token);
+    }
+    Ok(minted.connect_token.map(|token| MintedToken {
+        token,
+        expires_at: minted.expires_at,
+    }))
 }
 
 pub(crate) async fn handle(

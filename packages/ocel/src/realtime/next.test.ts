@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
-import { appsyncBinding } from "../testing/realtime-gateway.js";
+import { appsyncBinding, serveFakeRuntime } from "../testing/realtime-gateway.js";
 
 vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
@@ -14,7 +14,8 @@ const rt = realtime("app", {
 });
 
 describe("the realtime handler on next", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await serveFakeRuntime();
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv(bindingKey("app", "realtime"), appsyncBinding);
   });

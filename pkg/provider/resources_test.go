@@ -206,14 +206,28 @@ func realtimeProperties(without string) map[string]string {
 	return properties
 }
 
-func TestARealtimeBindingMissingWhatAnAppMintsOrConnectsWithIsRefused(t *testing.T) {
+func TestARealtimeBindingMissingWhatABrowserConnectsWithIsRefused(t *testing.T) {
 	t.Parallel()
 
-	for _, missing := range []string{provider.PropertyURL, provider.PropertyHost, provider.PropertySigningKey, provider.PropertyVerifyKey} {
+	for _, missing := range []string{provider.PropertyURL, provider.PropertyHost} {
 		_, err := provider.BindingMessage(provider.Binding{Type: provider.BindingRealtime, Name: "realtime--app", Properties: realtimeProperties(missing)})
 		if err == nil || !strings.Contains(err.Error(), missing) {
 			t.Errorf("BindingMessage() without %s = %v, want it refused naming %s", missing, err, missing)
 		}
+	}
+}
+
+func TestARealtimeBindingWithoutKeysIsRecordedForARuntimeThatMintsTokensItself(t *testing.T) {
+	t.Parallel()
+
+	properties := realtimeProperties(provider.PropertySigningKey)
+	delete(properties, provider.PropertyVerifyKey)
+	message, err := provider.BindingMessage(provider.Binding{Type: provider.BindingRealtime, Name: "realtime--app", Properties: properties})
+	if err != nil {
+		t.Fatalf("BindingMessage() = %v, want a realtime binding of only a url and a host recorded", err)
+	}
+	if got := message.GetRealtime(); got.GetUrl() != "wss://realtime.shop.example/ws" || len(got.GetSigningKey()) != 0 || len(got.GetVerifyKey()) != 0 {
+		t.Errorf("BindingMessage() = url %q, %d-byte signing key, %d-byte verify key, want the url and host alone", got.GetUrl(), len(got.GetSigningKey()), len(got.GetVerifyKey()))
 	}
 }
 

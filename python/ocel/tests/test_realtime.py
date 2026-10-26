@@ -5,7 +5,13 @@ import os
 import re
 
 import pytest
-from fakerealtime import FIXTURE, FakeRealtimeRuntime, read_claims
+from fakerealtime import (
+    MINTED_EXPIRES_AT,
+    FakeRealtimeRuntime,
+    fake_connect_token,
+    fake_subscribe_token,
+)
+from protobuf.wkt import Timestamp
 from pydantic import BaseModel
 
 from ocel import (
@@ -15,6 +21,7 @@ from ocel import (
     UnprovisionedResourceError,
     realtime,
 )
+from ocel.gen.app.realtime.v1.realtime_pb import MintResponse, SubscribeToken
 from ocel.gen.app.resources.v1.resources_pb import (
     RealtimePublish,
     RealtimeSubscribe,
@@ -117,11 +124,6 @@ def answer(app, batch, headers=None):
 
 
 @pytest.fixture
-def appsync(monkeypatch):
-    monkeypatch.setenv("OCEL_RESOURCE_REALTIME_app", json.dumps(FIXTURE))
-
-
-@pytest.fixture
 def runtime(monkeypatch):
     fake = FakeRealtimeRuntime()
     monkeypatch.setenv("OCEL_RESOURCE_REALTIME_app", fake.binding())
@@ -129,6 +131,16 @@ def runtime(monkeypatch):
     monkeypatch.setenv("OCEL_SESSION_TOKEN", "letmein")
     yield fake
     fake.close()
+
+
+def assert_minted(runtime, subject, connect, *subscribe_channels):
+    assert len(runtime.mints) == 1, "the runtime mints a whole batch's tokens in one call"
+    mint = runtime.mints[0]
+    assert mint.realtime == "app"
+    assert mint.subject == subject
+    assert mint.ttl is not None and mint.ttl.to_seconds() == 30
+    assert mint.connect is connect
+    assert list(mint.subscribe_channels) == list(subscribe_channels)
 
 
 def test_a_realtime_declares_each_channels_pattern_wildcard_schema_and_access(collector):
@@ -176,28 +188,31 @@ def test_a_realtime_declaration_outside_the_contract_is_refused_saying_why(decla
         declare()
 
 
-def test_the_handler_names_the_socket_and_mints_a_connect_token_when_asked(appsync):
+def test_the_handler_names_the_socket_and_hands_on_a_connect_token_the_runtime_mints(runtime):
     res = answer(declare_app(Rules()).asgi(), {"connect": True, "ops": []})
 
-    assert res["url"] == FIXTURE["realtime"]["url"]
-    assert res["host"] == FIXTURE["realtime"]["host"]
-    claims = read_claims(res["connect"]["token"])
-    assert claims["iss"] == "ocel:rt:app"
-    assert claims["aud"] == FIXTURE["realtime"]["host"]
-    assert claims["sub"] == "anonymous"
-    assert claims["ocel"] == {"op": "connect", "ch": "/app", "ns": "app"}
-    assert claims["exp"] == res["connect"]["expiresAt"]
-    assert claims["exp"] - claims["iat"] == 30
+    assert res["url"] == "wss://realtime.shop.example/event/realtime"
+    assert res["host"] == "realtime.shop.example"
+    assert res["connect"] == {
+        "token": fake_connect_token("app"),
+        "expiresAt": MINTED_EXPIRES_AT,
+    }
+    assert_minted(runtime, "anonymous", True)
+
+
+@pytest.mark.parametrize("identity", ["", "u" * 1025])
+def test_an_id_that_is_empty_or_over_1024_bytes_mints_for_the_anonymous_subject(runtime, identity):
+    resource = realtime("app", authorize=lambda _request: {"id": identity}, token_ttl=30)
+
+    answer(resource.asgi(), {"connect": True, "ops": []})
+
+    assert_minted(runtime, "anonymous", True)
 
 
 def test_the_handler_answers_a_socket_path_on_the_origin_the_request_reached_it_at(
     monkeypatch,
 ):
-    realtime_properties = {
-        **FIXTURE["realtime"],
-        "url": "/.well-known/ocel-realtime",
-        "host": "gateway:8080",
-    }
+    realtime_properties = {"url": "/.well-known/ocel-realtime", "host": "gateway:8080"}
     monkeypatch.setenv(
         "OCEL_RESOURCE_REALTIME_app",
         json.dumps({"name": "realtime--app", "realtime": realtime_properties}),
@@ -213,7 +228,7 @@ def test_the_handler_answers_a_socket_path_on_the_origin_the_request_reached_it_
     assert forwarded["url"] == "ws://web.localhost/.well-known/ocel-realtime"
 
 
-def test_the_handler_grants_a_public_subscribe_to_anyone(appsync):
+def test_the_handler_grants_a_public_subscribe_to_anyone(runtime):
     res = answer(
         declare_app(Rules()).asgi(),
         {"ops": [{"op": "subscribe", "pattern": "status", "params": {}}]},
@@ -222,12 +237,51 @@ def test_the_handler_grants_a_public_subscribe_to_anyone(appsync):
     assert "connect" not in res
     assert res["denied"] == []
     assert [(g["i"], g["wire"]) for g in res["grants"]] == [(0, "/app/status")]
-    claims = read_claims(res["grants"][0]["token"])
-    assert claims["sub"] == "anonymous"
-    assert claims["ocel"] == {"op": "subscribe", "ch": "/app/status", "ns": "app"}
+    assert res["grants"][0]["token"] == fake_subscribe_token("/app/status")
+    assert_minted(runtime, "anonymous", False, "/app/status")
 
 
-def test_the_handler_runs_the_subscribe_rule_with_the_auth_params_and_request(appsync):
+def test_the_handler_hands_the_browser_the_channel_the_runtime_minted_each_subscribe_for(
+    runtime,
+):
+    runtime.map_channel = lambda channel: "/ns/t-1" + channel.removeprefix("/app")
+    res = answer(
+        declare_app(Rules()).asgi(),
+        {
+            "connect": True,
+            "ops": [
+                {"op": "subscribe", "pattern": "status", "params": {}},
+                {"op": "subscribe", "pattern": "rooms/:room_id", "params": {"room_id": "room-1"}},
+            ],
+        },
+        {"x-user": "u1"},
+    )
+
+    assert [g["wire"] for g in res["grants"]] == ["/ns/t-1/status", "/ns/t-1/rooms/room-1"]
+    assert res["grants"][0]["token"] == fake_subscribe_token("/app/status")
+
+
+def test_the_handler_asks_the_runtime_for_no_token_when_the_batch_needs_none(runtime):
+    answer(
+        declare_app(Rules()).asgi(),
+        {
+            "ops": [
+                {"op": "subscribe", "pattern": "orders/:order_id", "params": {"order_id": "o-2"}},
+                {
+                    "op": "publish",
+                    "pattern": "rooms/:room_id",
+                    "params": {"room_id": "r1"},
+                    "body": {"text": "hi"},
+                },
+            ]
+        },
+        {"x-user": "u1"},
+    )
+
+    assert runtime.mints == []
+
+
+def test_the_handler_runs_the_subscribe_rule_with_the_auth_params_and_request(runtime):
     rules = Rules()
     res = answer(
         declare_app(rules).asgi(),
@@ -243,15 +297,14 @@ def test_the_handler_runs_the_subscribe_rule_with_the_auth_params_and_request(ap
 
     assert [(g["i"], g["wire"]) for g in res["grants"]] == [(0, "/app/orders/o-1")]
     assert res["denied"] == [{"i": 1, "code": "forbidden"}]
-    assert read_claims(res["connect"]["token"])["sub"] == "u1"
-    assert read_claims(res["grants"][0]["token"])["sub"] == "u1"
+    assert_minted(runtime, "u1", True, "/app/orders/o-1")
     ctx = next(ctx for ctx in rules.subscribes if ctx.params == {"order_id": "o-1"})
     assert ctx.auth == {"id": "u1"}
     assert ctx.request.headers["x-user"] == "u1"
     assert ctx.request.url == "https://shop.example/api/realtime"
 
 
-def test_the_handler_denies_a_ruled_op_to_nobody_without_running_the_rule(appsync):
+def test_the_handler_denies_a_ruled_op_to_nobody_without_running_the_rule(runtime):
     rules = Rules()
     res = answer(
         declare_app(rules).asgi(),
@@ -266,7 +319,7 @@ def test_the_handler_denies_a_ruled_op_to_nobody_without_running_the_rule(appsyn
     assert rules.subscribes == []
 
 
-def test_the_handler_grants_a_wildcard_subscribe_as_the_prefix_and_star(appsync):
+def test_the_handler_grants_a_wildcard_subscribe_as_the_prefix_and_star(runtime):
     res = answer(
         declare_app(Rules()).asgi(),
         {
@@ -284,7 +337,7 @@ def test_the_handler_grants_a_wildcard_subscribe_as_the_prefix_and_star(appsync)
     assert [g["wire"] for g in res["grants"]] == ["/app/projects/0zobptc/deploys/*"]
 
 
-def test_the_handler_denies_each_op_it_cannot_serve_with_its_code(appsync):
+def test_the_handler_denies_each_op_it_cannot_serve_with_its_code(runtime):
     res = answer(
         declare_app(Rules()).asgi(),
         {
@@ -315,7 +368,7 @@ def test_the_handler_denies_each_op_it_cannot_serve_with_its_code(appsync):
     ]
 
 
-def test_the_handler_denies_an_op_whose_rule_raises_and_serves_the_rest(appsync):
+def test_the_handler_denies_an_op_whose_rule_raises_and_serves_the_rest(runtime):
     rules = Rules()
     rules.fail_next_subscribe = True
     res = answer(
@@ -333,14 +386,14 @@ def test_the_handler_denies_an_op_whose_rule_raises_and_serves_the_rest(appsync)
     assert [g["i"] for g in res["grants"]] == [1]
 
 
-def test_the_handler_answers_uncacheable_and_sets_no_cookie(appsync):
+def test_the_handler_answers_uncacheable_and_sets_no_cookie(runtime):
     _, headers, _ = post(declare_app(Rules()).asgi(), {"connect": True, "ops": []})
 
     assert headers["cache-control"] == "no-store"
     assert "set-cookie" not in headers
 
 
-def test_the_handler_refuses_what_is_no_batch_of_json(appsync):
+def test_the_handler_refuses_what_is_no_batch_of_json(runtime):
     app = declare_app(Rules()).asgi()
 
     status, headers, _ = call_asgi(app, method="GET")
@@ -352,7 +405,7 @@ def test_the_handler_refuses_what_is_no_batch_of_json(appsync):
     assert post(app, {"ops": ops})[0] == 400
 
 
-def test_the_handler_serves_its_own_origin_and_refuses_another_without_cors(appsync):
+def test_the_handler_serves_its_own_origin_and_refuses_another_without_cors(runtime):
     app = declare_app(Rules()).asgi()
 
     same = post(app, {"ops": []}, {"origin": "https://shop.example"})
@@ -369,7 +422,7 @@ def test_the_handler_serves_its_own_origin_and_refuses_another_without_cors(apps
     assert proxied[0] == 200
 
 
-def test_the_handler_serves_an_allowed_origin_with_cors_and_answers_its_preflight(appsync):
+def test_the_handler_serves_an_allowed_origin_with_cors_and_answers_its_preflight(runtime):
     resource = declare_app(Rules())
     cors = resource.asgi(allowed_origins=["https://app.example"])
 
@@ -388,7 +441,7 @@ def test_the_handler_serves_an_allowed_origin_with_cors_and_answers_its_prefligh
     assert plain[0] == 405 and "access-control-allow-origin" not in plain[1]
 
 
-def test_the_handler_answers_500_without_the_cause_when_authorize_raises(appsync):
+def test_the_handler_answers_500_without_the_cause_when_authorize_raises(runtime):
     def failing(request):
         raise RuntimeError("secret detail")
 
@@ -398,7 +451,7 @@ def test_the_handler_answers_500_without_the_cause_when_authorize_raises(appsync
     assert b"secret detail" not in content
 
 
-def test_the_wsgi_handler_serves_the_same_batch(appsync):
+def test_the_wsgi_handler_serves_the_same_batch(runtime):
     app = declare_app(Rules()).wsgi()
     body = json.dumps(
         {"ops": [{"op": "subscribe", "pattern": "orders/:order_id", "params": {"order_id": "o-1"}}]}
@@ -422,7 +475,8 @@ def test_the_wsgi_handler_serves_the_same_batch(appsync):
     assert started[0][0] == "200 OK"
     assert ("Cache-Control", "no-store") in started[0][1]
     res = json.loads(content)
-    assert read_claims(res["grants"][0]["token"])["sub"] == "u1"
+    assert res["grants"][0]["token"] == fake_subscribe_token("/app/orders/o-1")
+    assert runtime.mints[0].subject == "u1"
 
 
 def test_a_relayed_publish_runs_the_publish_rule_then_publishes_from_the_server(runtime):
@@ -563,11 +617,6 @@ def test_a_channel_with_a_rule_on_a_realtime_without_authorize_is_refused_when_d
         declare()
 
 
-def with_binding(monkeypatch, **realtime_fields):
-    binding = {**FIXTURE, "realtime": {**FIXTURE["realtime"], **realtime_fields}}
-    monkeypatch.setenv("OCEL_RESOURCE_REALTIME_app", json.dumps(binding))
-
-
 def assert_server_failure(response):
     status, headers, content = response
     assert status == 500
@@ -575,12 +624,61 @@ def assert_server_failure(response):
     assert "error" in json.loads(content)
 
 
-def test_the_handler_answers_500_when_a_token_cannot_be_minted(monkeypatch):
-    with_binding(monkeypatch, signingKey="AAAAAAA=")
+def test_the_handler_answers_500_when_the_runtime_mints_no_token(runtime):
+    runtime.mint_refusal = "no key"
     app = declare_app(Rules()).asgi()
 
     assert_server_failure(post(app, {"connect": True, "ops": []}))
     assert_server_failure(post(app, {"ops": [{"op": "subscribe", "pattern": "status"}]}))
+
+
+def test_a_mint_failure_answers_500_before_any_relayed_publish_reaches_the_runtime(runtime):
+    runtime.mint_refusal = "no key"
+
+    response = post(
+        declare_app(Rules()).asgi(),
+        {
+            "connect": True,
+            "ops": [
+                {"op": "subscribe", "pattern": "status", "params": {}},
+                {
+                    "op": "publish",
+                    "pattern": "rooms/:room_id",
+                    "params": {"room_id": "r1"},
+                    "body": {"text": "hi"},
+                },
+            ],
+        },
+        {"x-user": "u1"},
+    )
+
+    assert_server_failure(response)
+    assert runtime.published == []
+
+
+@pytest.mark.parametrize(
+    "minted",
+    [
+        MintResponse(connect_token="c", expires_at=Timestamp(seconds=MINTED_EXPIRES_AT)),
+        MintResponse(
+            subscribe_tokens=[SubscribeToken(token="s", channel="/app/status")],
+            expires_at=Timestamp(seconds=MINTED_EXPIRES_AT),
+        ),
+        MintResponse(
+            connect_token="c", subscribe_tokens=[SubscribeToken(token="s", channel="/app/status")]
+        ),
+    ],
+    ids=["no subscribe token", "no connect token", "no expiry"],
+)
+def test_the_handler_answers_500_when_the_runtime_mints_short_of_what_it_asked(runtime, minted):
+    runtime.mint_answer = minted
+
+    response = post(
+        declare_app(Rules()).asgi(),
+        {"connect": True, "ops": [{"op": "subscribe", "pattern": "status", "params": {}}]},
+    )
+
+    assert_server_failure(response)
 
 
 def test_the_handler_answers_500_when_the_resource_has_no_binding():
@@ -606,13 +704,13 @@ def test_the_handler_answers_500_with_cors_to_an_allowed_origin():
         [],
     ],
 )
-def test_the_handler_refuses_a_batch_outside_its_exact_shape(appsync, body):
+def test_the_handler_refuses_a_batch_outside_its_exact_shape(runtime, body):
     status, headers, _ = post(declare_app(Rules()).asgi(), body)
 
     assert (status, headers["cache-control"]) == (400, "no-store")
 
 
-def test_the_handler_denies_each_malformed_op_with_the_first_code_that_applies(appsync):
+def test_the_handler_denies_each_malformed_op_with_the_first_code_that_applies(runtime):
     status = {"op": "subscribe", "pattern": "status"}
     room = {"op": "publish", "pattern": "rooms/:room_id"}
     res = answer(
@@ -664,7 +762,7 @@ def test_the_handler_denies_each_malformed_op_with_the_first_code_that_applies(a
     ],
 )
 def test_the_handler_serves_an_origin_only_when_its_scheme_and_host_are_its_own(
-    appsync, origin, headers, status
+    runtime, origin, headers, status
 ):
     response = post(declare_app(Rules()).asgi(), {"ops": []}, {"origin": origin, **headers})
 
@@ -690,7 +788,7 @@ def call_wsgi(app, body, headers=None, scheme="https"):
     return started[0][0], dict(started[0][1]), content
 
 
-def test_the_wsgi_handler_compares_the_origin_with_its_own_scheme(appsync):
+def test_the_wsgi_handler_compares_the_origin_with_its_own_scheme(runtime):
     app = declare_app(Rules()).wsgi()
     body = json.dumps({"ops": []}).encode()
 
@@ -757,7 +855,7 @@ def is_loop_running():
     return True
 
 
-def test_a_sync_authorize_and_rule_run_where_no_event_loop_is_running(appsync):
+def test_a_sync_authorize_and_rule_run_where_no_event_loop_is_running(runtime):
     seen = []
 
     def authorize(request):
@@ -780,7 +878,7 @@ def test_a_sync_authorize_and_rule_run_where_no_event_loop_is_running(appsync):
     assert seen == [("authorize", False), ("rule", False)]
 
 
-def test_an_authorize_that_raises_is_logged_with_its_cause(appsync, caplog):
+def test_an_authorize_that_raises_is_logged_with_its_cause(runtime, caplog):
     def failing(request):
         raise RuntimeError("secret detail")
 
@@ -791,7 +889,7 @@ def test_an_authorize_that_raises_is_logged_with_its_cause(appsync, caplog):
     assert "secret detail" in caplog.text
 
 
-def test_a_rule_that_raises_is_logged_with_its_cause(appsync, caplog):
+def test_a_rule_that_raises_is_logged_with_its_cause(runtime, caplog):
     rules = Rules()
     rules.fail_next_subscribe = True
     answer(

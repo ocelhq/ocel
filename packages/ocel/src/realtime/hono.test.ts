@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { bindingKey } from "../binding/binding.js";
-import { appsyncBinding, readClaims } from "../testing/realtime-gateway.js";
+import { appsyncBinding, readClaims, serveFakeRuntime } from "../testing/realtime-gateway.js";
 
 vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
@@ -27,7 +27,8 @@ const batch = {
 };
 
 describe("the realtime handler on hono", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await serveFakeRuntime();
     seen.length = 0;
     vi.stubEnv("OCEL_PHASE", "");
     vi.stubEnv(bindingKey("app", "realtime"), appsyncBinding);
