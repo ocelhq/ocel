@@ -377,6 +377,50 @@ func TestTheAppHearsTheVisitorsHostOnlyFromAFrontThatPresentedTheOriginSecret(t 
 	}
 }
 
+func TestTheAppHearsTheEntryTheEdgeChoseOnlyFromAFrontThatPresentedTheOriginSecret(t *testing.T) {
+	const (
+		secret = "s3cr3t"
+		entry  = "/routing/target/[phase]"
+	)
+	for _, heard := range []struct {
+		name       string
+		guard      *Guard
+		secret     string
+		wantEntry  string
+		wantBridge bool
+	}{
+		{name: "admitted by the origin secret", guard: NewGuard(secret), secret: secret, wantEntry: entry, wantBridge: true},
+		{name: "with no guard", guard: nil},
+	} {
+		up := serveUpstream(t)
+		front := serveFront(t, up, heard.guard, nil)
+		req, err := http.NewRequest(http.MethodGet, front.URL+"/routing/precedence/other", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("X-Ocel-Entry", entry)
+		req.Header.Set("X-Ocel-Request-Id", "forged")
+		if heard.secret != "" {
+			req.Header.Set(edge.OriginSecretHeader, heard.secret)
+		}
+		resp, err := front.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if got := up.heard.Get("X-Ocel-Entry"); got != heard.wantEntry {
+			t.Errorf("%s: the app heard the entry %q, want %q", heard.name, got, heard.wantEntry)
+		}
+		bridged := up.heard.Get("X-Ocel-Request-Id")
+		if heard.wantBridge && (bridged == "" || bridged == "forged") {
+			t.Errorf("%s: the app heard the request id %q, want one the front minted", heard.name, bridged)
+		}
+		if !heard.wantBridge && bridged != "" {
+			t.Errorf("%s: the app heard the request id %q a client sent", heard.name, bridged)
+		}
+	}
+}
+
 func TestAStreamTheAppFlushesReachesTheClientEventByEvent(t *testing.T) {
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
