@@ -10,16 +10,9 @@ vi.mock("node:child_process", () => {
   return { spawnSync, default: { spawnSync } };
 });
 
-const manifest = "/repo/app/node_modules/ocel/package.json";
-
-vi.mock("node:module", () => {
-  const createRequire = () => ({ resolve: () => manifest });
-  return { createRequire, default: { createRequire } };
-});
-
 const run = vi.mocked(spawnSync);
 
-const entry = join("/repo/app/node_modules/ocel", "bin", "run.js");
+const ocelCLI = "/usr/local/bin/ocel";
 
 const root = "/repo/app";
 
@@ -47,6 +40,7 @@ class FakeResource {
 beforeEach(() => {
   built.length = 0;
   run.mockReturnValue({ status: 0, stderr: "" } as never);
+  vi.stubEnv("OCEL_CLI", ocelCLI);
   Object.assign(globalThis, {
     $util: {
       getStack: () => "production",
@@ -60,6 +54,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   Reflect.deleteProperty(globalThis, "$util");
   Reflect.deleteProperty(globalThis, "$cli");
 });
@@ -138,9 +133,8 @@ describe("publishing a postgres binding", () => {
     const created = await postgresProvider.create(declare().props as never);
 
     const { command, args, options } = argv();
-    expect(command).toBe(process.execPath);
+    expect(command).toBe(ocelCLI);
     expect(args).toEqual([
-      entry,
       "bindings",
       "set",
       "--owner",
@@ -310,7 +304,7 @@ describe("removing a postgres binding", () => {
 
     await postgresProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual([entry, "bindings", "rm", "orders"]);
+    expect(argv().args).toEqual(["bindings", "rm", "orders"]);
     expect(argv().options).toMatchObject({ cwd: root });
   });
 
@@ -361,7 +355,6 @@ describe("declaring a custom binding", () => {
 
     const { args, options } = argv();
     expect(args).toEqual([
-      entry,
       "bindings",
       "set",
       "--owner",
@@ -398,6 +391,6 @@ describe("declaring a custom binding", () => {
 
     await customProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual([entry, "bindings", "rm", "network"]);
+    expect(argv().args).toEqual(["bindings", "rm", "network"]);
   });
 });

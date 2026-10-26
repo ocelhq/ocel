@@ -23,13 +23,18 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@pulumi/pulumi": "^3",
-    "ocel": "workspace:^"
+    "@ocel/cli": "workspace:^",
+    "@pulumi/pulumi": "^3"
+  },
+  "peerDependenciesMeta": {
+    "@ocel/cli": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@ocel/cli": "workspace:^",
     "@pulumi/pulumi": "~3.252.0",
     "@types/node": "^20",
-    "ocel": "workspace:^",
     "typescript": "^5.9.3",
     "vite": "^8.1.3",
     "vitest": "^4.1.9"
