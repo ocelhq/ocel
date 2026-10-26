@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -73,7 +74,9 @@ func runPreflight(ctx context.Context, dependencies Dependencies, policy consent
 	if err != nil {
 		return preflightFacts{}, err
 	}
+	reading := check.Child(resolved.Slug, progress.Reading.Title("the preview URLs of "+place(env)))
 	ensured, err := ensurePreviewAlias(ctx, process, resolved, env, token, policy.DryRun)
+	reading.End(err)
 	if err != nil {
 		return preflightFacts{}, err
 	}
