@@ -121,8 +121,15 @@ Each route runs in an AWS Lambda function. Routes are packed together until a fu
 200 MiB, then the next starts, so a large app is split across several functions on its own.
 Node.js middleware runs in the first function.
 
-To serve every route from one image instead, set `compute: "container"` on the app
-([container](/docs/configuration#container)).
+To serve every route from one container instead, set `compute: "container"` on the app
+([container](/docs/configuration#container)). With no Dockerfile on AWS or Google Cloud, ocel's
+Next adapter builds the app as it builds a serverless one, into a single function the container
+runs, so it is routed, seeded and cached as a serverless app is. On a box, where one container
+serves the app, Railpack builds it and it runs `next start`. With a Dockerfile, the one
+`image.dockerfile` names or the one beside the app, the container runs the image it builds, under
+`next start` or a standalone server. See the
+[AWS](/docs/providers/aws#nextjs-on-container-compute), [Google Cloud](/docs/providers/gcp) and
+[VPS](/docs/providers/vps#logs-and-caching) pages for what each does with it.
 
 ## Caching
 
@@ -130,8 +137,8 @@ To serve every route from one image instead, set `compute: "container"` on the a
   go through [Origin Shield](/docs/providers/aws#cloudfront-origin-shield).
 - `revalidatePath` and `revalidateTag` purge the edge by cache tag.
 - `revalidate` does nothing on an edge-rendered route. The build warns which.
-- Ocel installs its own cache handler. A build that sets `cacheHandler` or `cacheHandlers` is
-  refused, as is one that sets `adapterPath`.
+- Ocel installs its own cache handler in a build its adapter makes. Such a build that sets
+  `cacheHandler` or `cacheHandlers` is refused, as is one that sets `adapterPath`.
 - For the production build, Ocel sets `cacheMaxMemorySize: 0`, so every function reads the shared
   cache rather than a copy of its own.
 - `next/image` with a `loader` other than the default, or `unoptimized: true`, deploys no optimizer, and the build
