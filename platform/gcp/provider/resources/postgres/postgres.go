@@ -31,6 +31,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 )
 
@@ -90,34 +91,6 @@ func (s cloudSQLSize) backups() *sqladmin.BackupConfiguration {
 	}
 }
 
-func (s cloudSQLSize) listDifferences(instance *sqladmin.DatabaseInstance) []string {
-	settings := instance.Settings
-	if settings == nil {
-		settings = &sqladmin.Settings{}
-	}
-	backups := settings.BackupConfiguration
-	if backups == nil {
-		backups = &sqladmin.BackupConfiguration{}
-	}
-	var differences []string
-	if settings.Tier != s.machineType {
-		differences = append(differences, fmt.Sprintf("machine type changes from %s to %s", settings.Tier, s.machineType))
-	}
-	if settings.AvailabilityType != s.availability {
-		differences = append(differences, fmt.Sprintf("availability changes from %s to %s", settings.AvailabilityType, s.availability))
-	}
-	if settings.DeletionProtectionEnabled != s.deletionProtection {
-		differences = append(differences, fmt.Sprintf("deletion protection changes from %t to %t", settings.DeletionProtectionEnabled, s.deletionProtection))
-	}
-	if !backups.Enabled {
-		differences = append(differences, "daily backups turn on")
-	}
-	if backups.PointInTimeRecoveryEnabled != s.pointInTimeRecovery {
-		differences = append(differences, fmt.Sprintf("point-in-time recovery changes from %t to %t", backups.PointInTimeRecoveryEnabled, s.pointInTimeRecovery))
-	}
-	return differences
-}
-
 func cloudSQLSizeOf(tier environment.Tier) cloudSQLSize {
 	if tier == environment.TierProduction {
 		return productionCloudSQL
@@ -147,27 +120,144 @@ func readPostgres(resource provider.Resource) (postgresSpec, error) {
 	return postgresSpec{version: version}, nil
 }
 
-func (s postgresSpec) shapeProperties(region string, tier environment.Tier) map[string]any {
-	size := cloudSQLSizeOf(tier)
+func shapeProperties(region string, instance *sqladmin.DatabaseInstance) map[string]any {
+	settings := settingsOf(instance)
 	return map[string]any{
 		"region":           region,
-		"database_version": s.version,
+		"database_version": instance.DatabaseVersion,
 		"settings": map[string]any{
-			"tier":              size.machineType,
-			"edition":           cloudSQLEdition,
-			"availability_type": size.availability,
-			"disk_type":         cloudSQLDiskType,
-			"disk_size":         cloudSQLDiskGB,
+			"tier":              settings.Tier,
+			"edition":           settings.Edition,
+			"availability_type": settings.AvailabilityType,
+			"disk_type":         settings.DataDiskType,
+			"disk_size":         settings.DataDiskSizeGb,
 		},
 	}
 }
 
 type postgresInstances struct {
-	clients *gcloud.Clients
-	sql     *sqladmin.Service
-	records records.Store
-	cipher  seal.Cipher
-	ref     provider.StackRef
+	clients    *gcloud.Clients
+	sql        *sqladmin.Service
+	records    records.Store
+	cipher     seal.Cipher
+	ref        provider.StackRef
+	skipChecks bool
+}
+
+type declaredInstance struct {
+	database string
+	patched  surface.RecordedPatch[sqladmin.DatabaseInstance, sqladmin.DatabaseInstance]
+}
+
+func (i postgresInstances) declare(ctx context.Context, database string, spec postgresSpec) (declaredInstance, error) {
+	labels, err := i.labels(database)
+	if err != nil {
+		return declaredInstance{}, err
+	}
+	evaluated, _ := surface.ReadEvaluated(ctx, i.ref)
+	result := evaluated.For(transformKind, database)
+	record := surface.Record{Store: i.records, Key: surface.KeyFor(i.ref, transformKind, database)}
+	own := newInstance(spec, i.ref.Tier, i.clients.Region, i.clients.Project(), i.clients.NetworkPath(i.ref.Tier), labels)
+	own.Tags = i.clients.InlineTierTags(i.ref.Tier)
+	patched, err := instanceSurface.PatchRecorded(ctx, record, "postgres "+database, *own, result)
+	if err != nil {
+		return declaredInstance{}, err
+	}
+	return declaredInstance{database: database, patched: patched}, refuseFewerConnections(database, i.ref.Tier, &patched.Desired)
+}
+
+func newInstance(spec postgresSpec, tier environment.Tier, region, project, network string, labels map[string]string) *sqladmin.DatabaseInstance {
+	grows, size := true, cloudSQLSizeOf(tier)
+	return &sqladmin.DatabaseInstance{
+		Region:          region,
+		DatabaseVersion: spec.version,
+		InstanceType:    cloudSQLInstanceType,
+		Settings: &sqladmin.Settings{
+			Edition:             cloudSQLEdition,
+			Tier:                size.machineType,
+			AvailabilityType:    size.availability,
+			DataDiskType:        cloudSQLDiskType,
+			DataDiskSizeGb:      cloudSQLDiskGB,
+			StorageAutoResize:   &grows,
+			UserLabels:          labels,
+			BackupConfiguration: size.backups(),
+			IpConfiguration: &sqladmin.IpConfiguration{
+				Ipv4Enabled: false,
+				SslMode:     cloudSQLEncryptedOnly,
+				PscConfig: &sqladmin.PscConfig{
+					PscEnabled:              true,
+					AllowedConsumerProjects: []string{project},
+					PscAutoConnections: []*sqladmin.PscAutoConnectionConfig{
+						{ConsumerNetwork: network, ConsumerProject: project},
+					},
+				},
+				ForceSendFields: []string{"Ipv4Enabled"},
+			},
+			DeletionProtectionEnabled: size.deletionProtection,
+			ForceSendFields:           []string{"DeletionProtectionEnabled"},
+		},
+	}
+}
+
+func (d declaredInstance) network() string { return placedNetworkOf(&d.patched.Desired) }
+
+func (d declaredInstance) drift(current *sqladmin.DatabaseInstance) (*sqladmin.DatabaseInstance, []string, error) {
+	if err := d.refuseDiskTypeChange(current); err != nil {
+		return nil, nil, err
+	}
+	held, wanted := settingsOf(current), d.patched.Desired.Settings
+	update := &sqladmin.DatabaseInstance{Settings: &sqladmin.Settings{}}
+	var differences []string
+	if held.Tier != wanted.Tier {
+		update.Settings.Tier = wanted.Tier
+		differences = append(differences, fmt.Sprintf("machine type changes from %s to %s", held.Tier, wanted.Tier))
+	}
+	if held.AvailabilityType != wanted.AvailabilityType {
+		update.Settings.AvailabilityType = wanted.AvailabilityType
+		differences = append(differences, fmt.Sprintf("availability changes from %s to %s", held.AvailabilityType, wanted.AvailabilityType))
+	}
+	if held.DeletionProtectionEnabled != wanted.DeletionProtectionEnabled {
+		update.Settings.DeletionProtectionEnabled = wanted.DeletionProtectionEnabled
+		update.Settings.ForceSendFields = append(update.Settings.ForceSendFields, "DeletionProtectionEnabled")
+		differences = append(differences, fmt.Sprintf("deletion protection changes from %t to %t", held.DeletionProtectionEnabled, wanted.DeletionProtectionEnabled))
+	}
+	heldBackups, wantedBackups := backupsOf(current), wanted.BackupConfiguration
+	if heldBackups.Enabled != wantedBackups.Enabled {
+		differences = append(differences, "daily backups turn "+surface.ShowOnOff(wantedBackups.Enabled))
+	}
+	if heldBackups.PointInTimeRecoveryEnabled != wantedBackups.PointInTimeRecoveryEnabled {
+		differences = append(differences, fmt.Sprintf("point-in-time recovery changes from %t to %t", heldBackups.PointInTimeRecoveryEnabled, wantedBackups.PointInTimeRecoveryEnabled))
+	}
+	if heldBackups.Enabled != wantedBackups.Enabled || heldBackups.PointInTimeRecoveryEnabled != wantedBackups.PointInTimeRecoveryEnabled {
+		backupsUpdate(update, &d.patched.Desired).PointInTimeRecoveryEnabled = wantedBackups.PointInTimeRecoveryEnabled
+		update.Settings.BackupConfiguration.ForceSendFields = append(update.Settings.BackupConfiguration.ForceSendFields, "PointInTimeRecoveryEnabled")
+	}
+	patched, err := d.patched.Drift(current, update)
+	if err != nil {
+		return nil, nil, err
+	}
+	return update, append(differences, patched...), nil
+}
+
+func (d declaredInstance) refuseDiskTypeChange(current *sqladmin.DatabaseInstance) error {
+	held, wanted := settingsOf(current).DataDiskType, d.patched.Desired.Settings.DataDiskType
+	if held == "" || held == wanted {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"a transform sets postgres %s's %s.%s to %s, and its Cloud SQL instance %s keeps the %s disk it was made with: patch it back to %s",
+		d.database, transformSurface, diskTypePath, wanted, current.Name, held, held)
+}
+
+func (d declaredInstance) refuseEndpointMove(current *sqladmin.DatabaseInstance) error {
+	return gcloud.RefuseEndpointMove("postgres "+d.database, "Cloud SQL instance "+current.Name, gcloud.DatabaseNetworks(current), d.network())
+}
+
+func (i postgresInstances) refusePlacedNetworkAbsent(ctx context.Context, declared declaredInstance) error {
+	if i.skipChecks || !declared.patched.Sets(surface.DatabasePlacement) {
+		return nil
+	}
+	return gcloud.RefuseNetworkAbsent(ctx, i.clients, "postgres "+declared.database, declared.network())
 }
 
 func (p *Postgres) openPostgres(ctx context.Context, ref provider.StackRef) (postgresInstances, error) {
@@ -179,7 +269,7 @@ func (p *Postgres) openPostgres(ctx context.Context, ref provider.StackRef) (pos
 	if err != nil {
 		return postgresInstances{}, err
 	}
-	return postgresInstances{clients: clients, sql: sql, records: p.records, cipher: p.cipher, ref: ref}, nil
+	return postgresInstances{clients: clients, sql: sql, records: p.records, cipher: p.cipher, ref: ref, skipChecks: p.skipChecks}, nil
 }
 
 func (p *Postgres) Provision(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
@@ -207,12 +297,16 @@ func (p *Postgres) Plan(ctx context.Context, in resources.ProvisionRequest, _ *p
 }
 
 func (i postgresInstances) plan(ctx context.Context, database string, spec postgresSpec) (provider.ChangeAction, string, error) {
+	declared, err := i.declare(ctx, database, spec)
+	if err != nil {
+		return "", "", err
+	}
 	current, err := i.findInstance(ctx, database)
 	if err != nil {
 		return "", "", err
 	}
 	if current == nil {
-		return provider.ActionCreate, "", nil
+		return provider.ActionCreate, "", i.refusePlacedNetworkAbsent(ctx, declared)
 	}
 	if !slices.Contains(settlingStates, current.State) {
 		if err := refuseUnrunnable(database, current); err != nil {
@@ -222,7 +316,13 @@ func (i postgresInstances) plan(ctx context.Context, database string, spec postg
 	if err := refuseVersionChange(database, spec, current); err != nil {
 		return "", "", err
 	}
-	differences := cloudSQLSizeOf(i.ref.Tier).listDifferences(current)
+	if err := declared.refuseEndpointMove(current); err != nil {
+		return "", "", err
+	}
+	_, differences, err := declared.drift(current)
+	if err != nil {
+		return "", "", err
+	}
 	held, err := i.hasDatabase(ctx, current.Name)
 	if err != nil {
 		return "", "", err
@@ -306,14 +406,22 @@ func (i postgresInstances) findInstance(ctx context.Context, database string) (*
 }
 
 func (i postgresInstances) provision(ctx context.Context, resource provider.Resource, spec postgresSpec, progress progress.Log) (provider.Binding, error) {
-	current, err := i.ensureInstance(ctx, resource.Name, spec, progress)
+	declared, err := i.declare(ctx, resource.Name, spec)
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	if current, err = i.resize(ctx, resource.Name, current, progress); err != nil {
+	var current *sqladmin.DatabaseInstance
+	err = declared.patched.Apply(ctx, func() error {
+		if current, err = i.ensureInstance(ctx, declared, spec, progress); err != nil {
+			return err
+		}
+		current, err = i.update(ctx, declared, current, progress)
+		return err
+	})
+	if err != nil {
 		return provider.Binding{}, err
 	}
-	if current, err = i.awaitAddress(ctx, resource.Name, current); err != nil {
+	if current, err = i.awaitAddress(ctx, declared, current); err != nil {
 		return provider.Binding{}, err
 	}
 	if err := i.ensureDatabase(ctx, current.Name); err != nil {
@@ -336,7 +444,7 @@ func (i postgresInstances) provision(ctx context.Context, resource provider.Reso
 		Name:     resource.Name,
 		Resource: resource.Declared,
 		Properties: map[string]string{
-			provider.PropertyHost:     i.addressOf(current),
+			provider.PropertyHost:     i.addressOf(current, declared.network()),
 			provider.PropertyPort:     strconv.Itoa(Port),
 			provider.PropertyDatabase: postgresDatabaseName,
 			provider.PropertyUsername: postgresAccount,
@@ -346,104 +454,61 @@ func (i postgresInstances) provision(ctx context.Context, resource provider.Reso
 	}, nil
 }
 
-func (i postgresInstances) ensureInstance(ctx context.Context, database string, spec postgresSpec, progress progress.Log) (*sqladmin.DatabaseInstance, error) {
-	current, err := i.findInstance(ctx, database)
+func (i postgresInstances) ensureInstance(ctx context.Context, declared declaredInstance, spec postgresSpec, progress progress.Log) (*sqladmin.DatabaseInstance, error) {
+	current, err := i.findInstance(ctx, declared.database)
 	if err != nil {
 		return nil, err
 	}
 	if current == nil {
-		return i.create(ctx, database, spec, progress)
+		if err := i.refusePlacedNetworkAbsent(ctx, declared); err != nil {
+			return nil, err
+		}
+		return i.create(ctx, declared, progress)
 	}
-	if current, err = i.awaitSettled(ctx, database, current); err != nil {
+	if current, err = i.awaitSettled(ctx, declared.database, current); err != nil {
 		return nil, err
 	}
-	if err := refuseVersionChange(database, spec, current); err != nil {
+	if err := refuseVersionChange(declared.database, spec, current); err != nil {
+		return nil, err
+	}
+	if err := declared.refuseEndpointMove(current); err != nil {
 		return nil, err
 	}
 	return current, i.clients.EnsureTierTag(ctx, i.ref.Tier, i.clients.SQLInstanceTagged(current.Name))
 }
 
-func (i postgresInstances) desiredInstance(name string, spec postgresSpec, database string) (*sqladmin.DatabaseInstance, error) {
-	labels, err := i.labels(database)
+func (i postgresInstances) create(ctx context.Context, declared declaredInstance, progress progress.Log) (*sqladmin.DatabaseInstance, error) {
+	name, err := i.clients.PostgresInstance(i.ref.Project, i.ref.Name.Env, declared.database, naming.NewRandomTag())
 	if err != nil {
 		return nil, err
 	}
-	project, grows, size := i.clients.Project(), true, cloudSQLSizeOf(i.ref.Tier)
-	return &sqladmin.DatabaseInstance{
-		Name:            name,
-		Region:          i.clients.Region,
-		Tags:            i.clients.InlineTierTags(i.ref.Tier),
-		DatabaseVersion: spec.version,
-		InstanceType:    cloudSQLInstanceType,
-		Settings: &sqladmin.Settings{
-			Edition:             cloudSQLEdition,
-			Tier:                size.machineType,
-			AvailabilityType:    size.availability,
-			DataDiskType:        cloudSQLDiskType,
-			DataDiskSizeGb:      cloudSQLDiskGB,
-			StorageAutoResize:   &grows,
-			UserLabels:          labels,
-			BackupConfiguration: size.backups(),
-			IpConfiguration: &sqladmin.IpConfiguration{
-				Ipv4Enabled: false,
-				SslMode:     cloudSQLEncryptedOnly,
-				PscConfig: &sqladmin.PscConfig{
-					PscEnabled:              true,
-					AllowedConsumerProjects: []string{project},
-					PscAutoConnections: []*sqladmin.PscAutoConnectionConfig{
-						{ConsumerNetwork: i.clients.NetworkPath(i.ref.Tier), ConsumerProject: project},
-					},
-				},
-				ForceSendFields: []string{"Ipv4Enabled"},
-			},
-			DeletionProtectionEnabled: size.deletionProtection,
-			ForceSendFields:           []string{"DeletionProtectionEnabled"},
-		},
-	}, nil
-}
-
-func (i postgresInstances) create(ctx context.Context, database string, spec postgresSpec, progress progress.Log) (*sqladmin.DatabaseInstance, error) {
-	name, err := i.clients.PostgresInstance(i.ref.Project, i.ref.Name.Env, database, naming.NewRandomTag())
-	if err != nil {
-		return nil, err
-	}
-	gcloud.EnsureProgress(progress).Say("Creating postgres " + database + " as Cloud SQL instance " + name + " in " + i.clients.Region +
+	gcloud.EnsureProgress(progress).Say("Creating postgres " + declared.database + " as Cloud SQL instance " + name + " in " + i.clients.Region +
 		": a new instance takes several minutes")
-	desired, err := i.desiredInstance(name, spec, database)
+	desired := declared.patched.Desired
+	desired.Name = name
+	started, err := googleretry.Attempted(ctx, i.sql.Instances.Insert(i.clients.Project(), &desired).Context(ctx).Do)
 	if err != nil {
+		return nil, fmt.Errorf("create the Cloud SQL instance postgres %s runs on: %w", declared.database, err)
+	}
+	if err := i.awaited(ctx, "creating postgres "+declared.database, started); err != nil {
 		return nil, err
 	}
-	started, err := googleretry.Attempted(ctx, i.sql.Instances.Insert(i.clients.Project(), desired).Context(ctx).Do)
-	if err != nil {
-		return nil, fmt.Errorf("create the Cloud SQL instance postgres %s runs on: %w", database, err)
-	}
-	if err := i.awaited(ctx, "creating postgres "+database, started); err != nil {
-		return nil, err
-	}
-	return i.readInstance(ctx, database, name)
+	return i.readInstance(ctx, declared.database, name)
 }
 
-func (i postgresInstances) resize(ctx context.Context, database string, current *sqladmin.DatabaseInstance, progress progress.Log) (*sqladmin.DatabaseInstance, error) {
-	size := cloudSQLSizeOf(i.ref.Tier)
-	differences := size.listDifferences(current)
-	if len(differences) == 0 {
-		return current, nil
+func (i postgresInstances) update(ctx context.Context, declared declaredInstance, current *sqladmin.DatabaseInstance, progress progress.Log) (*sqladmin.DatabaseInstance, error) {
+	update, differences, err := declared.drift(current)
+	if err != nil || len(differences) == 0 {
+		return current, err
 	}
-	gcloud.EnsureProgress(progress).Say("Resizing postgres " + database + "'s Cloud SQL instance " + current.Name + " as the " + string(i.ref.Tier) + " tier runs it (" +
+	database := declared.database
+	gcloud.EnsureProgress(progress).Say("Updating postgres " + database + "'s Cloud SQL instance " + current.Name + " (" +
 		strings.Join(differences, "; ") + "): Cloud SQL restarts an instance whose machine type or availability changes")
-	started, err := googleretry.Attempted(ctx, i.sql.Instances.Patch(i.clients.Project(), current.Name, &sqladmin.DatabaseInstance{
-		Settings: &sqladmin.Settings{
-			Tier:                      size.machineType,
-			AvailabilityType:          size.availability,
-			BackupConfiguration:       size.backups(),
-			DeletionProtectionEnabled: size.deletionProtection,
-			ForceSendFields:           []string{"DeletionProtectionEnabled"},
-		},
-	}).Context(ctx).Do)
+	started, err := googleretry.Attempted(ctx, i.sql.Instances.Patch(i.clients.Project(), current.Name, update).Context(ctx).Do)
 	if err != nil {
-		return nil, fmt.Errorf("resize the Cloud SQL instance postgres %s runs on: %w", database, err)
+		return nil, fmt.Errorf("update the Cloud SQL instance postgres %s runs on: %w", database, err)
 	}
-	if err := i.awaited(ctx, "resizing postgres "+database, started); err != nil {
+	if err := i.awaited(ctx, "updating postgres "+database, started); err != nil {
 		return nil, err
 	}
 	return i.readInstance(ctx, database, current.Name)
@@ -503,22 +568,23 @@ func addressOf(instance *sqladmin.DatabaseInstance, network string, emulated boo
 	return ""
 }
 
-func (i postgresInstances) addressOf(instance *sqladmin.DatabaseInstance) string {
-	return addressOf(instance, i.clients.NetworkPath(i.ref.Tier), i.clients.Emulated())
+func (i postgresInstances) addressOf(instance *sqladmin.DatabaseInstance, network string) string {
+	return addressOf(instance, network, i.clients.Emulated())
 }
 
-func (i postgresInstances) awaitAddress(ctx context.Context, database string, current *sqladmin.DatabaseInstance) (*sqladmin.DatabaseInstance, error) {
-	if i.addressOf(current) != "" {
+func (i postgresInstances) awaitAddress(ctx context.Context, declared declaredInstance, current *sqladmin.DatabaseInstance) (*sqladmin.DatabaseInstance, error) {
+	network, database := declared.network(), declared.database
+	if i.addressOf(current, network) != "" {
 		return current, nil
 	}
-	reached, err := gcloud.Until(ctx, "postgres "+database+" to be given an address on "+i.clients.Network(i.ref.Tier),
+	reached, err := gcloud.Until(ctx, "postgres "+database+" to be given an address on "+networkName(network),
 		func() (*sqladmin.DatabaseInstance, error) { return i.readInstance(ctx, database, current.Name) },
-		func(instance *sqladmin.DatabaseInstance) bool { return i.addressOf(instance) != "" })
+		func(instance *sqladmin.DatabaseInstance) bool { return i.addressOf(instance, network) != "" })
 	if err != nil {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"the Cloud SQL instance postgres %s runs on, %s, has no address on the %s network yet, so nothing names where an app reaches it: %v\n"+
-				"Check that the tier's private network has its Cloud SQL connection policy, then deploy again",
-			database, current.Name, i.clients.Network(i.ref.Tier), err)
+				"Check that the %s network has a Cloud SQL service connection policy in %s, then deploy again",
+			database, current.Name, networkName(network), err, networkName(network), i.clients.Region)
 	}
 	return reached, nil
 }
@@ -685,6 +751,10 @@ func (i postgresInstances) remove(ctx context.Context, binding provider.Binding,
 			}
 		}
 	}
+	patches := surface.Record{Store: i.records, Key: surface.KeyFor(i.ref, transformKind, binding.Name)}
+	if err := patches.Forget(ctx); err != nil {
+		return err
+	}
 	return records.Forget(ctx, i.records, i.passwordKey(binding.Name))
 }
 
@@ -705,10 +775,11 @@ type Postgres struct {
 	openClients func(ctx context.Context) (*gcloud.Clients, error)
 	records     records.Store
 	cipher      seal.Cipher
+	skipChecks  bool
 }
 
-func New(openClients func(ctx context.Context) (*gcloud.Clients, error), store records.Store, cipher seal.Cipher) *Postgres {
-	return &Postgres{openClients: openClients, records: store, cipher: cipher}
+func New(openClients func(ctx context.Context) (*gcloud.Clients, error), store records.Store, cipher seal.Cipher, skipChecks bool) *Postgres {
+	return &Postgres{openClients: openClients, records: store, cipher: cipher, skipChecks: skipChecks}
 }
 
 func (p *Postgres) Component() component.Component {
@@ -722,11 +793,13 @@ func (p *Postgres) Component() component.Component {
 			_, err := readPostgres(resource)
 			return err
 		},
-		Shape: shapePostgres,
+		Shape:      shapePostgres,
+		Transforms: map[provider.BindingType]*component.Transform{provider.BindingPostgres: transformTarget()},
 	}
 }
 
 func shapePostgres(shape component.Shape, declared []provider.Resource) error {
+	tier := shape.Request.Deploy.Tier
 	for _, resource := range declared {
 		spec, err := readPostgres(resource)
 		if err != nil {
@@ -736,7 +809,22 @@ func shapePostgres(shape component.Shape, declared []provider.Resource) error {
 		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.SQLInstanceType, instance, shape.Region, spec.shapeProperties(shape.Region, shape.Request.Deploy.Tier))
+		result := shape.Transforms.For(transformKind, resource.Name)
+		known, unknown := instanceSurface.SplitOutputs(result.Patches[transformSurface])
+		own := newInstance(spec, tier, shape.Region, shape.Names.Project(), shape.Names.NetworkPath(tier), nil)
+		patched, err := instanceSurface.Patch("postgres "+resource.Name, *own, known, nil, surface.Recorded{})
+		if err != nil {
+			return err
+		}
+		shape.Tree.Add(shape.Environment, shape.Vendor, cost.SQLInstanceType, instance, shape.Region, shapeProperties(shape.Region, &patched.Desired), surface.ListPriced(unknown, pricedSettings)...)
 	}
 	return nil
+}
+
+var pricedSettings = map[string]string{
+	"settings.tier":             "settings.tier",
+	"settings.edition":          "settings.edition",
+	"settings.availabilityType": "settings.availability_type",
+	"settings.diskType":         "settings.disk_type",
+	"settings.diskSize":         "settings.disk_size",
 }

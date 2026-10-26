@@ -151,23 +151,39 @@ func (s *CloudSQL) patch(w http.ResponseWriter, r *http.Request, instance *sqlad
 	}
 	s.Patched = append(s.Patched, sent)
 	s.writes = append(s.writes, "patch instance "+instance.Name)
-	settings, _ := sent["settings"].(map[string]any)
-	if instance.Settings == nil {
-		instance.Settings = &sqladmin.Settings{}
+	held, err := json.Marshal(instance)
+	stored := map[string]any{}
+	if err != nil || json.Unmarshal(held, &stored) != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	if _, named := settings["tier"]; named {
-		instance.Settings.Tier = asked.Settings.Tier
+	merged, err := json.Marshal(mergePatch(stored, sent))
+	patched := &sqladmin.DatabaseInstance{}
+	if err != nil || json.Unmarshal(merged, patched) != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
-	if _, named := settings["availabilityType"]; named {
-		instance.Settings.AvailabilityType = asked.Settings.AvailabilityType
-	}
-	if _, named := settings["backupConfiguration"]; named {
-		instance.Settings.BackupConfiguration = asked.Settings.BackupConfiguration
-	}
-	if _, named := settings["deletionProtectionEnabled"]; named {
-		instance.Settings.DeletionProtectionEnabled = asked.Settings.DeletionProtectionEnabled
-	}
+	*instance = *patched
 	s.operation(w)
+}
+
+func mergePatch(held, sent map[string]any) map[string]any {
+	for key, value := range sent {
+		object, nested := value.(map[string]any)
+		switch {
+		case value == nil:
+			delete(held, key)
+		case nested:
+			inner, _ := held[key].(map[string]any)
+			if inner == nil {
+				inner = map[string]any{}
+			}
+			held[key] = mergePatch(inner, object)
+		default:
+			held[key] = value
+		}
+	}
+	return held
 }
 
 func (s *CloudSQL) database(w http.ResponseWriter, r *http.Request, parts []string) {

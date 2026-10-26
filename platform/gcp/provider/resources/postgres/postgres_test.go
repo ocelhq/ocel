@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"slices"
 	"strings"
 	"testing"
@@ -27,6 +28,19 @@ type postgresHarness struct {
 	server    *googletest.CloudSQL
 	instances postgresInstances
 	records   *fake.KeyValues
+	networks  map[string]bool
+}
+
+func (h *postgresHarness) serve(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.URL.Path, "/global/networks/") {
+		h.server.Serve(w, r)
+		return
+	}
+	if !h.networks[path.Base(r.URL.Path)] {
+		googletest.WriteNotFound(w)
+		return
+	}
+	googletest.WriteBody(w, map[string]any{"name": path.Base(r.URL.Path)})
 }
 
 func servingPostgres(t *testing.T) *postgresHarness {
@@ -40,26 +54,22 @@ func previewRef() provider.StackRef {
 
 func servingPostgresIn(t *testing.T, ref provider.StackRef) *postgresHarness {
 	t.Helper()
-	server := googletest.NewCloudSQL()
-	served := httptest.NewServer(http.HandlerFunc(server.Serve))
+	h := &postgresHarness{server: googletest.NewCloudSQL(), records: fake.NewKeyValues(), networks: map[string]bool{}}
+	served := httptest.NewServer(http.HandlerFunc(h.serve))
 	t.Cleanup(served.Close)
 	clients := &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Region: "europe-west1", Endpoint: served.URL}
-	records := fake.NewKeyValues()
 	sql, err := clients.SQL()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &postgresHarness{
-		server:  server,
-		records: records,
-		instances: postgresInstances{
-			clients: clients,
-			sql:     sql,
-			records: records,
-			cipher:  fake.NewCipher(),
-			ref:     ref,
-		},
+	h.instances = postgresInstances{
+		clients: clients,
+		sql:     sql,
+		records: h.records,
+		cipher:  fake.NewCipher(),
+		ref:     ref,
 	}
+	return h
 }
 
 func aDatabase(version string) resources.ProvisionRequest {

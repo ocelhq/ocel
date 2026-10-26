@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	sqladmin "google.golang.org/api/sqladmin/v1"
+
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -13,7 +16,10 @@ import (
 const (
 	pooledConnections   = 10
 	reservedConnections = 3
+	maxConnectionsFlag  = "max_connections"
 )
+
+var sharedCoreConnections = map[string]int{"db-f1-micro": 25, "db-g1-small": 50}
 
 type ConnectionBudget struct {
 	app       string
@@ -74,4 +80,21 @@ func (b ConnectionBudget) WarnOversubscribed(progress progress.Log) {
 
 func (b ConnectionBudget) named() string {
 	return strings.Join(b.databases, ", ")
+}
+
+func refuseFewerConnections(database string, tier environment.Tier, desired *sqladmin.DatabaseInstance) error {
+	for _, flag := range desired.Settings.DatabaseFlags {
+		if flag.Name == maxConnectionsFlag {
+			return refusal.Refuse(refusal.CodeInvalid,
+				"a transform sets postgres %s's %s flag, and ocel sizes an app's connection pools to its machine type's default: drop the flag", database, maxConnectionsFlag)
+		}
+	}
+	size := cloudSQLSizeOf(tier)
+	held, shared := sharedCoreConnections[desired.Settings.Tier]
+	if !shared || held >= size.maxConnections {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"a transform runs postgres %s on %s, which takes %d connections, and the %s tier sizes an app's connection pools to the %d of %s: patch a dedicated-core machine type",
+		database, desired.Settings.Tier, held, tier, size.maxConnections, size.machineType)
 }

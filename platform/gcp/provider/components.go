@@ -12,9 +12,9 @@ import (
 
 func (p *Provider) components() component.Registry {
 	return component.Registry{
-		postgres.New(p.openClients, p.KeyValues(), p.Cipher()).Component(),
+		postgres.New(p.openClients, p.KeyValues(), p.Cipher(), p.skipChecks).Component(),
 		bucket.New(p.openClients, p.KeyValues()).Component(),
-		kv.New(p.openClients).Component(),
+		kv.New(p.openClients, p.KeyValues(), p.skipChecks).Component(),
 		p.topicHooks().Component(),
 		p.realtimeHooks().Component(),
 	}

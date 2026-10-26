@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -30,7 +31,7 @@ func aKVStore(t *testing.T, spec provider.KVSpec) resources.ProvisionRequest {
 func servingMemorystore(t *testing.T) (*KV, *googletest.Memorystore) {
 	t.Helper()
 	server, url := googletest.StartMemorystore(t)
-	return New(googletest.Opener(googletest.Clients(url))), server
+	return New(googletest.Opener(googletest.Clients(url)), fake.NewKeyValues(), false), server
 }
 
 func storeInstance(t *testing.T) string {
@@ -240,7 +241,7 @@ func TestTheStoreShapeMatchesTheInstanceProvisionSends(t *testing.T) {
 				t.Fatal(err)
 			}
 			sent := store.instance("acme-prod", "network", nil)
-			shaped := store.shapeProperties("us-central1")
+			shaped := store.shapeProperties("us-central1", sent)
 			if strings.ReplaceAll(strings.ToUpper(shaped["node_type"].(string)), "-", "_") != sent.NodeType {
 				t.Errorf("shaped node %v, provision sends %s", shaped["node_type"], sent.NodeType)
 			}

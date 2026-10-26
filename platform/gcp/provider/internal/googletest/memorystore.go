@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -42,6 +43,7 @@ type Memorystore struct {
 	writeIDs        []string
 	settling        map[string]int
 	states          map[string]string
+	networks        map[string]bool
 }
 
 func StartMemorystore(t *testing.T) (*Memorystore, string) {
@@ -75,6 +77,12 @@ func (s *Memorystore) serve(t *testing.T) http.HandlerFunc {
 			}
 		}
 		switch {
+		case r.Method == http.MethodGet && strings.Contains(name, "/global/networks/"):
+			if !s.networks[path.Base(name)] {
+				WriteNotFound(w)
+				return
+			}
+			WriteBody(w, map[string]any{"name": path.Base(name)})
 		case r.Method == http.MethodGet && strings.Contains(name, "/operations/"):
 			s.polls++
 			WriteBody(w, s.operation(true))
@@ -118,7 +126,7 @@ func (s *Memorystore) serve(t *testing.T) http.HandlerFunc {
 			stored.Name = name + "/" + r.URL.Query().Get("instanceId")
 			stored.State = gcloud.InstanceActive
 			stored.Endpoints = []gcloud.InstanceEndpoint{{Connections: []gcloud.EndpointConnection{
-				{PSCAutoConnection: &gcloud.PSCAutoConnection{IPAddress: StoreAddress, Port: 6379, ConnectionType: gcloud.PrimaryEndpoint}},
+				{PSCAutoConnection: &gcloud.PSCAutoConnection{IPAddress: StoreAddress, Port: 6379, ConnectionType: gcloud.PrimaryEndpoint, Network: connectedNetwork(created)}},
 			}}}
 			s.instances[stored.Name] = &stored
 			WriteBody(w, s.operation(false))
@@ -140,6 +148,14 @@ func (s *Memorystore) serve(t *testing.T) http.HandlerFunc {
 						stored.EngineConfigs = changed.EngineConfigs
 					case "replica_count":
 						stored.ReplicaCount = changed.ReplicaCount
+					case "maintenance_policy":
+						stored.MaintenancePolicy = changed.MaintenancePolicy
+					case "automated_backup_config":
+						stored.AutomatedBackupConfig = changed.AutomatedBackupConfig
+					case "deletion_protection_enabled":
+						stored.DeletionProtectionEnabled = changed.DeletionProtectionEnabled
+					case "labels":
+						stored.Labels = changed.Labels
 					default:
 						t.Errorf("Memorystore was asked to update %q, which nothing here updates", field)
 					}
@@ -147,9 +163,15 @@ func (s *Memorystore) serve(t *testing.T) http.HandlerFunc {
 			}
 			WriteBody(w, s.operation(false))
 		case r.Method == http.MethodDelete:
-			if _, found := s.instances[name]; !found {
+			held, found := s.instances[name]
+			if !found {
 				w.WriteHeader(http.StatusNotFound)
 				_, _ = w.Write([]byte(`{"error":{"code":404,"message":"not found"}}`))
+				return
+			}
+			if held.DeletionProtectionEnabled != nil && *held.DeletionProtectionEnabled {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"code":400,"message":"the instance is protected from deletion"}}`))
 				return
 			}
 			delete(s.instances, name)
@@ -160,6 +182,26 @@ func (s *Memorystore) serve(t *testing.T) http.HandlerFunc {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}
+}
+
+func connectedNetwork(created *gcloud.MemorystoreInstance) string {
+	for _, endpoint := range created.Endpoints {
+		for _, connection := range endpoint.Connections {
+			if connection.PSCAutoConnection != nil {
+				return connection.PSCAutoConnection.Network
+			}
+		}
+	}
+	return ""
+}
+
+func (s *Memorystore) HoldNetwork(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.networks == nil {
+		s.networks = map[string]bool{}
+	}
+	s.networks[name] = true
 }
 
 func (s *Memorystore) StillCreating(name string, reads int) {
