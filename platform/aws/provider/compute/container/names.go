@@ -2,6 +2,7 @@ package container
 
 import (
 	"github.com/ocelhq/ocel/pkg/naming"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
@@ -42,8 +43,8 @@ func namesAt(namespace string, service, roleAt naming.Coordinate) (Names, error)
 	}, nil
 }
 
-func (n Names) Surfaces() map[string][]component.ResourceRef {
-	return map[string][]component.ResourceRef{
+func (n Names) Surfaces() map[string][]ocelpulumi.ResourceRef {
+	return map[string][]ocelpulumi.ResourceRef{
 		"task":        {{Token: component.TokenECSTaskDefinition, Name: n.Service}},
 		"service":     {{Token: component.TokenECSService, Name: n.Service}},
 		"targetGroup": {{Token: component.TokenLBTargetGroup, Name: n.TargetGroup}},

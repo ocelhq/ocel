@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
@@ -71,12 +72,12 @@ type Transforms interface {
 
 type Transformable struct {
 	Kind  string
-	Names map[string][]ResourceRef
+	Names map[string][]ocelpulumi.ResourceRef
 	Check func(name string, patches map[string]map[string]any) error
 }
 
 type CostTree interface {
-	Add(scope, typ, name string, properties map[string]any, ref ResourceRef)
+	Add(scope, typ, name string, properties map[string]any, ref ocelpulumi.ResourceRef)
 	AddPlain(scope, typ, name string, properties map[string]any)
 }
 

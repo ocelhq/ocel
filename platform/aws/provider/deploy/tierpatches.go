@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
@@ -61,18 +62,19 @@ func evaluateTierPatches(ctx context.Context, pass transform.Pass, namespace str
 		return tierPatches{}, nil
 	}
 	key := resourceKey{Type: transformTypeNetwork, Name: string(tier)}
-	results, err := pass.Evaluate(ctx, transform.Request{
+	req := transform.Request{
 		Provider:  transformProvider,
 		EnvTier:   string(tier),
 		Resources: []transform.Resource{{Type: key.Type, Name: key.Name}},
-	})
+	}
+	results, err := pass.Evaluate(ctx, req)
 	if err != nil || results == nil {
 		return tierPatches{}, err
 	}
 	if len(results) != 1 {
 		return tierPatches{}, fmt.Errorf("transforms returned %d results for the %s tier's network", len(results), tier)
 	}
-	if err := walkOutputs([]transformCandidate{{key: key}}, results, func(ref outputRef, at outputSite, _ any) (any, error) {
+	if err := transform.WalkOutputs(req, results, func(ref transform.OutputRef, at transform.OutputSite, _ any) (any, error) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"a transform fills the %s tier's network's %s.%s from %s, and the network belongs to every project of the tier, so it reads no project's records",
 			tier, at.Surface, at.Field, ref)
@@ -83,7 +85,7 @@ func evaluateTierPatches(ctx context.Context, pass transform.Pass, namespace str
 	if err != nil {
 		return tierPatches{}, err
 	}
-	parts := map[string]map[string][]component.ResourceRef{
+	parts := map[string]map[string][]ocelpulumi.ResourceRef{
 		"network":          network.ResourceNames(namespace, tier),
 		"function network": functionnetwork.ResourceNames(namespace, tier),
 	}
@@ -107,7 +109,7 @@ func evaluateTierPatches(ctx context.Context, pass transform.Pass, namespace str
 	return evaluated, nil
 }
 
-func patchesOver(key resourceKey, names map[string][]component.ResourceRef, result transform.Result) (component.Patches, error) {
+func patchesOver(key resourceKey, names map[string][]ocelpulumi.ResourceRef, result transform.Result) (component.Patches, error) {
 	subset := transform.Result{Patches: transform.Patches{}, Tags: result.Tags}
 	for patched, patch := range result.Patches {
 		if _, constructed := names[patched]; constructed && len(patch) > 0 {

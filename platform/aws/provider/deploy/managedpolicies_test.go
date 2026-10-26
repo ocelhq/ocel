@@ -49,7 +49,7 @@ func TestATransformAttachesManagedPoliciesToAFunctionRoleBesideOcelsOwn(t *testi
 		}
 	}
 	role := mustFunctionNames(t, spec.Ref.Name, spec.App.Functions[0].Name)["role"][0]
-	if _, exclusive := transformed.patches[role]["managedPolicyArns"]; exclusive {
+	if patch, _ := transformed.patched.For(role); patch["managedPolicyArns"] != nil {
 		t.Errorf("the role's patch sets managedPolicyArns, which would detach every policy ocel attaches beside them")
 	}
 }

@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -240,15 +241,18 @@ func TestATransformDropsAStoreToOneNodeWithNoFailover(t *testing.T) {
 			rendered[field] = sdk.Bool(scalar)
 		}
 	}
-	transformed.claimed = map[component.ResourceRef]bool{}
-	var group component.ResourceRef
-	for ref := range transformed.patches {
-		group = ref
+	store, _ := awsresources.Registry(awsresources.Clients{}).For(provider.BindingKV)
+	target, err := store.Transform(component.Stack{
+		Ref: conformanceInfra, Namespace: testNamespace, Project: naming.Sanitize(conformanceInfra.Project), Env: conformanceInfra.Name.Env,
+	}, provider.Resource{Name: "c-kv", Type: provider.BindingKV})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if group.Token != component.TokenElastiCacheReplicationGroup {
-		t.Fatalf("the transform patched %+v, want the store's replication group", group)
+	group := target.Names["replicationGroup"][0]
+	if transformed.patched.Len() != 1 {
+		t.Fatalf("the transform patched %d resources, want only the store's replication group", transformed.patched.Len())
 	}
-	merged, claimed := transformed.claim(group, rendered)
+	merged, claimed := transformed.patched.Claim(group, rendered)
 	if !claimed {
 		t.Fatal("the patch reached no replication group ocel constructs")
 	}
@@ -259,7 +263,7 @@ func TestATransformDropsAStoreToOneNodeWithNoFailover(t *testing.T) {
 		"nodeType":                 "cache.t4g.micro",
 		"transitEncryptionEnabled": true,
 	} {
-		if got := mergedValue(t, merged[field]); !sameValue(got, want) {
+		if got := mergedValue(t, merged[field]); !reflect.DeepEqual(got, want) {
 			t.Errorf("the patched replication group's %s = %#v, want %v", field, got, want)
 		}
 	}

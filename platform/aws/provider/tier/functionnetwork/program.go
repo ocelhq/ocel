@@ -10,6 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
@@ -32,11 +33,11 @@ const (
 	tokenNATGateway = "aws:ec2/natGateway:NatGateway"
 )
 
-func ResourceNames(namespace string, tier environment.Tier) map[string][]component.ResourceRef {
-	names := map[string][]component.ResourceRef{}
+func ResourceNames(namespace string, tier environment.Tier) map[string][]ocelpulumi.ResourceRef {
+	names := map[string][]ocelpulumi.ResourceRef{}
 	for n := range natGateways(tier) {
-		names["natAddress"] = append(names["natAddress"], component.ResourceRef{Token: tokenElasticIP, Name: component.NameOf(natName(namespace, tier, n)).Part(eipPart)})
-		names["natGateway"] = append(names["natGateway"], component.ResourceRef{Token: tokenNATGateway, Name: natName(namespace, tier, n)})
+		names["natAddress"] = append(names["natAddress"], ocelpulumi.ResourceRef{Token: tokenElasticIP, Name: component.NameOf(natName(namespace, tier, n)).Part(eipPart)})
+		names["natGateway"] = append(names["natGateway"], ocelpulumi.ResourceRef{Token: tokenNATGateway, Name: natName(namespace, tier, n)})
 	}
 	return names
 }

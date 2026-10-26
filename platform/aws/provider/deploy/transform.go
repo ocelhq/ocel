@@ -1,17 +1,15 @@
 package deploy
 
 import (
-	"context"
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 const (
@@ -27,20 +25,16 @@ type resourceKey struct {
 
 type transformCandidate struct {
 	key   resourceKey
-	names map[string][]component.ResourceRef
+	names map[string][]pulumi.ResourceRef
 	check func(name string, patches map[string]map[string]any) error
 }
 
 type transformPatches struct {
-	patches  map[component.ResourceRef]map[string]any
-	sites    map[component.ResourceRef]string
+	patched  *pulumi.Patches
 	tags     map[resourceKey]map[string]string
 	vpcBound map[string]bool
 	surfaces map[resourceKey]map[string]bool
 	managed  map[resourceKey][]string
-
-	mu      sync.Mutex
-	claimed map[component.ResourceRef]bool
 }
 
 func (t *transformPatches) TagsFor(kind, name string) map[string]string {
@@ -59,80 +53,22 @@ func (t *transformPatches) Patches(kind, name, surface string) bool {
 }
 
 func (t *transformPatches) install(pctx *sdk.Context) error {
-	if t == nil || len(t.patches) == 0 {
+	if t == nil {
 		return nil
 	}
-	t.mu.Lock()
-	t.claimed = make(map[component.ResourceRef]bool, len(t.patches))
-	t.mu.Unlock()
-	return pctx.RegisterResourceTransform(func(_ context.Context, args *sdk.ResourceTransformArgs) *sdk.ResourceTransformResult {
-		merged, claimed := t.claim(component.ResourceRef{Token: args.Type, Name: args.Name}, args.Props)
-		if !claimed {
-			return nil
-		}
-		return &sdk.ResourceTransformResult{Props: merged, Opts: args.Opts}
-	})
-}
-
-func (t *transformPatches) claim(ref component.ResourceRef, props sdk.Map) (sdk.Map, bool) {
-	t.mu.Lock()
-	patch, patched := t.patches[ref]
-	if patched {
-		t.claimed[ref] = true
-	}
-	t.mu.Unlock()
-	if !patched {
-		return nil, false
-	}
-	return mergeProps(props, patch), true
+	return t.patched.Install(pctx)
 }
 
 func (t *transformPatches) refuseUnclaimed() error {
-	if t == nil || len(t.patches) == 0 {
+	if t == nil {
 		return nil
 	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	var missed []string
-	for ref := range t.patches {
-		if !t.claimed[ref] {
-			missed = append(missed, t.sites[ref])
-		}
-	}
-	if len(missed) == 0 {
-		return nil
-	}
-	slices.Sort(missed)
-	return refusal.Refuse(refusal.CodeInvalid,
-		"a transform patches %s, and this deploy provisioned nothing to apply it to; a patch that reaches no resource is a patch this deploy never honoured",
-		strings.Join(missed, ", "))
-}
-
-func mergeProps(props sdk.Map, patch map[string]any) sdk.Map {
-	merged := sdk.Map{}
-	maps.Copy(merged, props)
-	for _, field := range slices.Sorted(maps.Keys(patch)) {
-		merged[field] = mergeInput(merged[field], patch[field])
-	}
-	return merged
-}
-
-func mergeInput(current sdk.Input, over any) sdk.Input {
-	nested, isMap := over.(map[string]any)
-	if !isMap {
-		return sdk.Any(over)
-	}
-	under, layered := current.(sdk.Map)
-	if !layered {
-		return sdk.Any(over)
-	}
-	return mergeProps(under, nested)
+	return t.patched.RefuseUnclaimed()
 }
 
 func indexPatches(candidates []transformCandidate, results []transform.Result) (*transformPatches, error) {
 	indexed := &transformPatches{
-		patches:  map[component.ResourceRef]map[string]any{},
-		sites:    map[component.ResourceRef]string{},
+		patched:  pulumi.NewPatches(),
 		tags:     map[resourceKey]map[string]string{},
 		vpcBound: map[string]bool{},
 		surfaces: map[resourceKey]map[string]bool{},
@@ -159,16 +95,9 @@ func indexPatches(candidates []transformCandidate, results []transform.Result) (
 			indexed.surfaces[candidate.key][key] = true
 			site := candidate.key.Type + " " + candidate.key.Name + "'s " + key
 			for _, ref := range refs {
-				claimed := patch
-				if earlier, taken := indexed.patches[ref]; taken {
-					merged, err := mergeClaims(earlier, patch, indexed.sites[ref], site)
-					if err != nil {
-						return nil, err
-					}
-					claimed = merged
+				if err := indexed.patched.Add(ref, site, patch); err != nil {
+					return nil, err
 				}
-				indexed.patches[ref] = claimed
-				indexed.sites[ref] = site
 			}
 		}
 		if candidate.check != nil {
@@ -183,33 +112,6 @@ func indexPatches(candidates []transformCandidate, results []transform.Result) (
 		}
 	}
 	return indexed, nil
-}
-
-func mergeClaims(earlier, over map[string]any, at, also string) (map[string]any, error) {
-	merged := map[string]any{}
-	maps.Copy(merged, earlier)
-	for _, field := range slices.Sorted(maps.Keys(over)) {
-		value := over[field]
-		if seen, taken := merged[field]; taken && !sameValue(seen, value) {
-			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"%s and %s are the same underlying resource, and the transforms give its %s two different values; ocel shares it between them, so patch it once",
-				at, also, field)
-		}
-		merged[field] = value
-	}
-	return merged, nil
-}
-
-func sameValue(a, b any) bool {
-	switch left := a.(type) {
-	case map[string]any:
-		right, ok := b.(map[string]any)
-		return ok && maps.EqualFunc(left, right, sameValue)
-	case []any:
-		right, ok := b.([]any)
-		return ok && slices.EqualFunc(left, right, sameValue)
-	}
-	return a == b
 }
 
 func checkVPCConfig(logicalName string, patch map[string]any) error {

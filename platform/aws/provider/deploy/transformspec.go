@@ -3,10 +3,6 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -88,7 +84,7 @@ func transformStackSpec(ctx context.Context, namespace, account string, pass tra
 	if len(results) != len(candidates) {
 		return nil, fmt.Errorf("transforms returned %d results for %d resources", len(results), len(candidates))
 	}
-	if err := resolveSpecOutputs(ctx, spec, candidates, results); err != nil {
+	if err := transform.ResolveOutputs(ctx, spec, req, results); err != nil {
 		return nil, err
 	}
 	managed := map[resourceKey][]string{}
@@ -122,138 +118,6 @@ func functionCandidate(namespace, project string, stack naming.StackName, name s
 			return checkVPCConfig(name, patches["lambda"])
 		},
 	}, nil
-}
-
-func resolveSpecOutputs(ctx context.Context, spec provider.StackSpec, candidates []transformCandidate, results []transform.Result) error {
-	var placed []placedOutput
-	if err := walkOutputs(candidates, results, func(ref outputRef, at outputSite, authored any) (any, error) {
-		placed = append(placed, placedOutput{Ref: ref, At: at})
-		return authored, nil
-	}); err != nil {
-		return err
-	}
-	if len(placed) == 0 {
-		return nil
-	}
-	values, err := readSpecOutputs(ctx, spec, placed)
-	if err != nil {
-		return err
-	}
-	return walkOutputs(candidates, results, func(ref outputRef, at outputSite, _ any) (any, error) {
-		value, resolved := values[ref]
-		if !resolved || emptyOutput(value) {
-			return nil, &EmptyOutputError{Ref: ref, At: at}
-		}
-		return value, nil
-	})
-}
-
-func publishedAs(spec provider.StackSpec, ref outputRef, at outputSite) (string, error) {
-	if ref.Type == customBindingType {
-		return ref.Name, nil
-	}
-	for _, resource := range spec.Resources {
-		if string(resource.Type) != ref.Type || resource.Name != ref.Name {
-			continue
-		}
-		if resource.Binding == "" {
-			return "", &ProvisionedOutputError{Ref: ref, At: at}
-		}
-		return resource.Binding, nil
-	}
-	return "", &UnboundOutputError{Ref: ref, At: at, Declared: declaredBindings(spec)}
-}
-
-func declaredBindings(spec provider.StackSpec) []string {
-	var out []string
-	for _, resource := range spec.Resources {
-		if resource.Binding == "" {
-			continue
-		}
-		out = append(out, string(resource.Type)+"."+resource.Name)
-	}
-	slices.Sort(out)
-	return out
-}
-
-func readSpecOutputs(ctx context.Context, spec provider.StackSpec, placed []placedOutput) (map[outputRef]any, error) {
-	published := make(map[outputRef]string, len(placed))
-	for _, p := range placed {
-		name, err := publishedAs(spec, p.Ref, p.At)
-		if err != nil {
-			return nil, err
-		}
-		published[p.Ref] = name
-	}
-
-	if spec.Bindings == nil {
-		return nil, fmt.Errorf(
-			"a transform fills %s from %s, and this deploy reached no variable store to read published records from",
-			placed[0].At, placed[0].Ref)
-	}
-	names, err := spec.Bindings.Names(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("a transform fills %s from %s: %w", placed[0].At, placed[0].Ref, err)
-	}
-	slices.Sort(names)
-
-	wanted := make([]string, 0, len(placed))
-	for _, p := range placed {
-		name := published[p.Ref]
-		if !slices.Contains(names, name) {
-			return nil, &UnpublishedOutputError{
-				Ref: p.Ref, At: p.At, Published: name,
-				Tier: string(spec.Ref.Tier), Environment: spec.Ref.Name.Env, Properties: names,
-			}
-		}
-		if !slices.Contains(wanted, name) {
-			wanted = append(wanted, name)
-		}
-	}
-	records, err := resolveSpecBindings(ctx, spec.Bindings, wanted)
-	if err != nil {
-		return nil, fmt.Errorf("a transform fills %s from %s: %w", placed[0].At, placed[0].Ref, err)
-	}
-
-	values := make(map[outputRef]any, len(placed))
-	for _, p := range placed {
-		if _, done := values[p.Ref]; done {
-			continue
-		}
-		record := records[published[p.Ref]]
-		value, present := record.Properties[p.Ref.Property]
-		if !present {
-			return nil, &OutputPropertyError{Ref: p.Ref, At: p.At, Properties: slices.Sorted(maps.Keys(record.Properties))}
-		}
-		if emptyOutput(value) {
-			return nil, &EmptyOutputError{Ref: p.Ref, At: p.At}
-		}
-		values[p.Ref] = value
-	}
-	return values, nil
-}
-
-func resolveSpecBindings(ctx context.Context, bindings provider.Bindings, names []string) (map[string]provider.Binding, error) {
-	resolved := make([]provider.Binding, len(names))
-	group, gctx := errgroup.WithContext(ctx)
-	for i, name := range names {
-		group.Go(func() error {
-			record, err := bindings.Named(gctx, name)
-			if err != nil {
-				return err
-			}
-			resolved[i] = record
-			return nil
-		})
-	}
-	if err := group.Wait(); err != nil {
-		return nil, err
-	}
-	records := make(map[string]provider.Binding, len(names))
-	for i, name := range names {
-		records[name] = resolved[i]
-	}
-	return records, nil
 }
 
 func newInfraTransformCandidate(registry component.Registry, at component.Stack, resource provider.Resource) (transform.Resource, transformCandidate, bool, error) {
