@@ -93,15 +93,17 @@ func (x *Coordinate) GetEnvironment() string {
 }
 
 type ValueMetadata struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Coordinate    *Coordinate            `protobuf:"bytes,1,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
-	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	UpdatedAt     int64                  `protobuf:"varint,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Size          int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
-	Target        *Coordinate            `protobuf:"bytes,5,opt,name=target,proto3,oneof" json:"target,omitempty"`
-	EnvSource     string                 `protobuf:"bytes,6,opt,name=env_source,json=envSource,proto3" json:"env_source,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Coordinate      *Coordinate            `protobuf:"bytes,1,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	Version         int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	UpdatedAt       int64                  `protobuf:"varint,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Size            int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	Target          *Coordinate            `protobuf:"bytes,5,opt,name=target,proto3,oneof" json:"target,omitempty"`
+	EnvSource       string                 `protobuf:"bytes,6,opt,name=env_source,json=envSource,proto3" json:"env_source,omitempty"`
+	Publisher       string                 `protobuf:"bytes,7,opt,name=publisher,proto3" json:"publisher,omitempty"`
+	PublishedSecret bool                   `protobuf:"varint,8,opt,name=published_secret,json=publishedSecret,proto3" json:"published_secret,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ValueMetadata) Reset() {
@@ -174,6 +176,20 @@ func (x *ValueMetadata) GetEnvSource() string {
 		return x.EnvSource
 	}
 	return ""
+}
+
+func (x *ValueMetadata) GetPublisher() string {
+	if x != nil {
+		return x.Publisher
+	}
+	return ""
+}
+
+func (x *ValueMetadata) GetPublishedSecret() bool {
+	if x != nil {
+		return x.PublishedSecret
+	}
+	return false
 }
 
 type VersionEntry struct {
@@ -1120,6 +1136,454 @@ func (x *ListVersionsResponse) GetVersions() []*VersionEntry {
 	return nil
 }
 
+type PublishValuesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
+	Tier          v1.Tier                `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Environment   string                 `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
+	Publisher     string                 `protobuf:"bytes,4,opt,name=publisher,proto3" json:"publisher,omitempty"`
+	Published     *PublishedValues       `protobuf:"bytes,5,opt,name=published,proto3" json:"published,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishValuesRequest) Reset() {
+	*x = PublishValuesRequest{}
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishValuesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishValuesRequest) ProtoMessage() {}
+
+func (x *PublishValuesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishValuesRequest.ProtoReflect.Descriptor instead.
+func (*PublishValuesRequest) Descriptor() ([]byte, []int) {
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *PublishValuesRequest) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *PublishValuesRequest) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *PublishValuesRequest) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *PublishValuesRequest) GetPublisher() string {
+	if x != nil {
+		return x.Publisher
+	}
+	return ""
+}
+
+func (x *PublishValuesRequest) GetPublished() *PublishedValues {
+	if x != nil {
+		return x.Published
+	}
+	return nil
+}
+
+type PublishedValues struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Values        []*PublishedValue      `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishedValues) Reset() {
+	*x = PublishedValues{}
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishedValues) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishedValues) ProtoMessage() {}
+
+func (x *PublishedValues) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishedValues.ProtoReflect.Descriptor instead.
+func (*PublishedValues) Descriptor() ([]byte, []int) {
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *PublishedValues) GetValues() []*PublishedValue {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+type PublishedValue struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Secret        bool                   `protobuf:"varint,3,opt,name=secret,proto3" json:"secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishedValue) Reset() {
+	*x = PublishedValue{}
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishedValue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishedValue) ProtoMessage() {}
+
+func (x *PublishedValue) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishedValue.ProtoReflect.Descriptor instead.
+func (*PublishedValue) Descriptor() ([]byte, []int) {
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *PublishedValue) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *PublishedValue) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *PublishedValue) GetSecret() bool {
+	if x != nil {
+		return x.Secret
+	}
+	return false
+}
+
+type PublishValuesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Written       []*ValueMetadata       `protobuf:"bytes,1,rep,name=written,proto3" json:"written,omitempty"`
+	Removed       []*Coordinate          `protobuf:"bytes,2,rep,name=removed,proto3" json:"removed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishValuesResponse) Reset() {
+	*x = PublishValuesResponse{}
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishValuesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishValuesResponse) ProtoMessage() {}
+
+func (x *PublishValuesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishValuesResponse.ProtoReflect.Descriptor instead.
+func (*PublishValuesResponse) Descriptor() ([]byte, []int) {
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *PublishValuesResponse) GetWritten() []*ValueMetadata {
+	if x != nil {
+		return x.Written
+	}
+	return nil
+}
+
+func (x *PublishValuesResponse) GetRemoved() []*Coordinate {
+	if x != nil {
+		return x.Removed
+	}
+	return nil
+}
+
+type UnpublishValuesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
+	Tier          v1.Tier                `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Environment   string                 `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
+	Publisher     string                 `protobuf:"bytes,4,opt,name=publisher,proto3" json:"publisher,omitempty"`
+	Published     *PublishedVersions     `protobuf:"bytes,5,opt,name=published,proto3" json:"published,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnpublishValuesRequest) Reset() {
+	*x = UnpublishValuesRequest{}
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnpublishValuesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnpublishValuesRequest) ProtoMessage() {}
+
+func (x *UnpublishValuesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnpublishValuesRequest.ProtoReflect.Descriptor instead.
+func (*UnpublishValuesRequest) Descriptor() ([]byte, []int) {
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *UnpublishValuesRequest) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *UnpublishValuesRequest) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *UnpublishValuesRequest) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+func (x *UnpublishValuesRequest) GetPublisher() string {
+	if x != nil {
+		return x.Publisher
+	}
+	return ""
+}
+
+func (x *UnpublishValuesRequest) GetPublished() *PublishedVersions {
+	if x != nil {
+		return x.Published
+	}
+	return nil
+}
+
+type PublishedVersions struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Values        []*PublishedVersion    `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishedVersions) Reset() {
+	*x = PublishedVersions{}
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishedVersions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishedVersions) ProtoMessage() {}
+
+func (x *PublishedVersions) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishedVersions.ProtoReflect.Descriptor instead.
+func (*PublishedVersions) Descriptor() ([]byte, []int) {
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *PublishedVersions) GetValues() []*PublishedVersion {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+type PublishedVersion struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishedVersion) Reset() {
+	*x = PublishedVersion{}
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishedVersion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishedVersion) ProtoMessage() {}
+
+func (x *PublishedVersion) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishedVersion.ProtoReflect.Descriptor instead.
+func (*PublishedVersion) Descriptor() ([]byte, []int) {
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *PublishedVersion) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *PublishedVersion) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+type UnpublishValuesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Removed       []*Coordinate          `protobuf:"bytes,1,rep,name=removed,proto3" json:"removed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnpublishValuesResponse) Reset() {
+	*x = UnpublishValuesResponse{}
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnpublishValuesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnpublishValuesResponse) ProtoMessage() {}
+
+func (x *UnpublishValuesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnpublishValuesResponse.ProtoReflect.Descriptor instead.
+func (*UnpublishValuesResponse) Descriptor() ([]byte, []int) {
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *UnpublishValuesResponse) GetRemoved() []*Coordinate {
+	if x != nil {
+		return x.Removed
+	}
+	return nil
+}
+
 type SetBindingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
@@ -1133,7 +1597,7 @@ type SetBindingRequest struct {
 
 func (x *SetBindingRequest) Reset() {
 	*x = SetBindingRequest{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[20]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1145,7 +1609,7 @@ func (x *SetBindingRequest) String() string {
 func (*SetBindingRequest) ProtoMessage() {}
 
 func (x *SetBindingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[20]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1158,7 +1622,7 @@ func (x *SetBindingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetBindingRequest.ProtoReflect.Descriptor instead.
 func (*SetBindingRequest) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{20}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *SetBindingRequest) GetSlug() string {
@@ -1206,7 +1670,7 @@ type PublishedBinding struct {
 
 func (x *PublishedBinding) Reset() {
 	*x = PublishedBinding{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[21]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1218,7 +1682,7 @@ func (x *PublishedBinding) String() string {
 func (*PublishedBinding) ProtoMessage() {}
 
 func (x *PublishedBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[21]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1231,7 +1695,7 @@ func (x *PublishedBinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishedBinding.ProtoReflect.Descriptor instead.
 func (*PublishedBinding) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{21}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *PublishedBinding) GetBinding() *v11.Binding {
@@ -1260,7 +1724,7 @@ type Grant struct {
 
 func (x *Grant) Reset() {
 	*x = Grant{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[22]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1272,7 +1736,7 @@ func (x *Grant) String() string {
 func (*Grant) ProtoMessage() {}
 
 func (x *Grant) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[22]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1285,7 +1749,7 @@ func (x *Grant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Grant.ProtoReflect.Descriptor instead.
 func (*Grant) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{22}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *Grant) GetActions() []string {
@@ -1327,7 +1791,7 @@ type GrantCondition struct {
 
 func (x *GrantCondition) Reset() {
 	*x = GrantCondition{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[23]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1339,7 +1803,7 @@ func (x *GrantCondition) String() string {
 func (*GrantCondition) ProtoMessage() {}
 
 func (x *GrantCondition) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[23]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1352,7 +1816,7 @@ func (x *GrantCondition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantCondition.ProtoReflect.Descriptor instead.
 func (*GrantCondition) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{23}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GrantCondition) GetOperator() string {
@@ -1385,7 +1849,7 @@ type SetBindingResponse struct {
 
 func (x *SetBindingResponse) Reset() {
 	*x = SetBindingResponse{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[24]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1397,7 +1861,7 @@ func (x *SetBindingResponse) String() string {
 func (*SetBindingResponse) ProtoMessage() {}
 
 func (x *SetBindingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[24]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1410,7 +1874,7 @@ func (x *SetBindingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetBindingResponse.ProtoReflect.Descriptor instead.
 func (*SetBindingResponse) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{24}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *SetBindingResponse) GetVersion() uint64 {
@@ -1432,7 +1896,7 @@ type RemoveBindingRequest struct {
 
 func (x *RemoveBindingRequest) Reset() {
 	*x = RemoveBindingRequest{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[25]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1444,7 +1908,7 @@ func (x *RemoveBindingRequest) String() string {
 func (*RemoveBindingRequest) ProtoMessage() {}
 
 func (x *RemoveBindingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[25]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1457,7 +1921,7 @@ func (x *RemoveBindingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveBindingRequest.ProtoReflect.Descriptor instead.
 func (*RemoveBindingRequest) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{25}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *RemoveBindingRequest) GetSlug() string {
@@ -1497,7 +1961,7 @@ type RemoveBindingResponse struct {
 
 func (x *RemoveBindingResponse) Reset() {
 	*x = RemoveBindingResponse{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[26]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1509,7 +1973,7 @@ func (x *RemoveBindingResponse) String() string {
 func (*RemoveBindingResponse) ProtoMessage() {}
 
 func (x *RemoveBindingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[26]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1522,7 +1986,7 @@ func (x *RemoveBindingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveBindingResponse.ProtoReflect.Descriptor instead.
 func (*RemoveBindingResponse) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{26}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *RemoveBindingResponse) GetRemoved() bool {
@@ -1543,7 +2007,7 @@ type ListBindingsRequest struct {
 
 func (x *ListBindingsRequest) Reset() {
 	*x = ListBindingsRequest{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[27]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1555,7 +2019,7 @@ func (x *ListBindingsRequest) String() string {
 func (*ListBindingsRequest) ProtoMessage() {}
 
 func (x *ListBindingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[27]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1568,7 +2032,7 @@ func (x *ListBindingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBindingsRequest.ProtoReflect.Descriptor instead.
 func (*ListBindingsRequest) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{27}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListBindingsRequest) GetSlug() string {
@@ -1601,7 +2065,7 @@ type ListBindingsResponse struct {
 
 func (x *ListBindingsResponse) Reset() {
 	*x = ListBindingsResponse{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[28]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1613,7 +2077,7 @@ func (x *ListBindingsResponse) String() string {
 func (*ListBindingsResponse) ProtoMessage() {}
 
 func (x *ListBindingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[28]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1626,7 +2090,7 @@ func (x *ListBindingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBindingsResponse.ProtoReflect.Descriptor instead.
 func (*ListBindingsResponse) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{28}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListBindingsResponse) GetBindings() []*BindingSummary {
@@ -1650,7 +2114,7 @@ type BindingSummary struct {
 
 func (x *BindingSummary) Reset() {
 	*x = BindingSummary{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[29]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1662,7 +2126,7 @@ func (x *BindingSummary) String() string {
 func (*BindingSummary) ProtoMessage() {}
 
 func (x *BindingSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[29]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1675,7 +2139,7 @@ func (x *BindingSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BindingSummary.ProtoReflect.Descriptor instead.
 func (*BindingSummary) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{29}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *BindingSummary) GetName() string {
@@ -1731,7 +2195,7 @@ type PropertyShape struct {
 
 func (x *PropertyShape) Reset() {
 	*x = PropertyShape{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[30]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1743,7 +2207,7 @@ func (x *PropertyShape) String() string {
 func (*PropertyShape) ProtoMessage() {}
 
 func (x *PropertyShape) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[30]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1756,7 +2220,7 @@ func (x *PropertyShape) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PropertyShape.ProtoReflect.Descriptor instead.
 func (*PropertyShape) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{30}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *PropertyShape) GetName() string {
@@ -1791,7 +2255,7 @@ type EnvSource struct {
 
 func (x *EnvSource) Reset() {
 	*x = EnvSource{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[31]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1803,7 +2267,7 @@ func (x *EnvSource) String() string {
 func (*EnvSource) ProtoMessage() {}
 
 func (x *EnvSource) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[31]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1816,7 +2280,7 @@ func (x *EnvSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvSource.ProtoReflect.Descriptor instead.
 func (*EnvSource) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{31}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *EnvSource) GetKind() string {
@@ -1850,7 +2314,7 @@ type EnvSourceValue struct {
 
 func (x *EnvSourceValue) Reset() {
 	*x = EnvSourceValue{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[32]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1862,7 +2326,7 @@ func (x *EnvSourceValue) String() string {
 func (*EnvSourceValue) ProtoMessage() {}
 
 func (x *EnvSourceValue) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[32]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1875,7 +2339,7 @@ func (x *EnvSourceValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvSourceValue.ProtoReflect.Descriptor instead.
 func (*EnvSourceValue) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{32}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *EnvSourceValue) GetCell() *Cell {
@@ -1902,7 +2366,7 @@ type Cell struct {
 
 func (x *Cell) Reset() {
 	*x = Cell{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[33]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1914,7 +2378,7 @@ func (x *Cell) String() string {
 func (*Cell) ProtoMessage() {}
 
 func (x *Cell) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[33]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1927,7 +2391,7 @@ func (x *Cell) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Cell.ProtoReflect.Descriptor instead.
 func (*Cell) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{33}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *Cell) GetFolder() string {
@@ -1961,7 +2425,7 @@ type EnvSourceStatus struct {
 
 func (x *EnvSourceStatus) Reset() {
 	*x = EnvSourceStatus{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[34]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1973,7 +2437,7 @@ func (x *EnvSourceStatus) String() string {
 func (*EnvSourceStatus) ProtoMessage() {}
 
 func (x *EnvSourceStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[34]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1986,7 +2450,7 @@ func (x *EnvSourceStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvSourceStatus.ProtoReflect.Descriptor instead.
 func (*EnvSourceStatus) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{34}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *EnvSourceStatus) GetEnvSource() string {
@@ -2062,7 +2526,7 @@ type FolderLink struct {
 
 func (x *FolderLink) Reset() {
 	*x = FolderLink{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[35]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2074,7 +2538,7 @@ func (x *FolderLink) String() string {
 func (*FolderLink) ProtoMessage() {}
 
 func (x *FolderLink) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[35]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2087,7 +2551,7 @@ func (x *FolderLink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FolderLink.ProtoReflect.Descriptor instead.
 func (*FolderLink) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{35}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *FolderLink) GetFolder() string {
@@ -2114,7 +2578,7 @@ type RefusedCell struct {
 
 func (x *RefusedCell) Reset() {
 	*x = RefusedCell{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[36]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2126,7 +2590,7 @@ func (x *RefusedCell) String() string {
 func (*RefusedCell) ProtoMessage() {}
 
 func (x *RefusedCell) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[36]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2139,7 +2603,7 @@ func (x *RefusedCell) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefusedCell.ProtoReflect.Descriptor instead.
 func (*RefusedCell) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{36}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *RefusedCell) GetCell() *Cell {
@@ -2167,7 +2631,7 @@ type CredentialRefusal struct {
 
 func (x *CredentialRefusal) Reset() {
 	*x = CredentialRefusal{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[37]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2179,7 +2643,7 @@ func (x *CredentialRefusal) String() string {
 func (*CredentialRefusal) ProtoMessage() {}
 
 func (x *CredentialRefusal) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[37]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2192,7 +2656,7 @@ func (x *CredentialRefusal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialRefusal.ProtoReflect.Descriptor instead.
 func (*CredentialRefusal) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{37}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *CredentialRefusal) GetVariable() string {
@@ -2232,7 +2696,7 @@ type SyncEnvSourceRequest struct {
 
 func (x *SyncEnvSourceRequest) Reset() {
 	*x = SyncEnvSourceRequest{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[38]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2244,7 +2708,7 @@ func (x *SyncEnvSourceRequest) String() string {
 func (*SyncEnvSourceRequest) ProtoMessage() {}
 
 func (x *SyncEnvSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[38]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2257,7 +2721,7 @@ func (x *SyncEnvSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncEnvSourceRequest.ProtoReflect.Descriptor instead.
 func (*SyncEnvSourceRequest) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{38}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *SyncEnvSourceRequest) GetTier() v1.Tier {
@@ -2330,7 +2794,7 @@ type RegisteredEnvSource struct {
 
 func (x *RegisteredEnvSource) Reset() {
 	*x = RegisteredEnvSource{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[39]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2342,7 +2806,7 @@ func (x *RegisteredEnvSource) String() string {
 func (*RegisteredEnvSource) ProtoMessage() {}
 
 func (x *RegisteredEnvSource) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[39]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2355,7 +2819,7 @@ func (x *RegisteredEnvSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisteredEnvSource.ProtoReflect.Descriptor instead.
 func (*RegisteredEnvSource) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{39}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{47}
 }
 
 type SyncEnvSourceResponse struct {
@@ -2371,7 +2835,7 @@ type SyncEnvSourceResponse struct {
 
 func (x *SyncEnvSourceResponse) Reset() {
 	*x = SyncEnvSourceResponse{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[40]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2383,7 +2847,7 @@ func (x *SyncEnvSourceResponse) String() string {
 func (*SyncEnvSourceResponse) ProtoMessage() {}
 
 func (x *SyncEnvSourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[40]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2396,7 +2860,7 @@ func (x *SyncEnvSourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncEnvSourceResponse.ProtoReflect.Descriptor instead.
 func (*SyncEnvSourceResponse) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{40}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *SyncEnvSourceResponse) GetStatus() *EnvSourceStatus {
@@ -2444,7 +2908,7 @@ type DescribeEnvSourceRequest struct {
 
 func (x *DescribeEnvSourceRequest) Reset() {
 	*x = DescribeEnvSourceRequest{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[41]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2456,7 +2920,7 @@ func (x *DescribeEnvSourceRequest) String() string {
 func (*DescribeEnvSourceRequest) ProtoMessage() {}
 
 func (x *DescribeEnvSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[41]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2469,7 +2933,7 @@ func (x *DescribeEnvSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeEnvSourceRequest.ProtoReflect.Descriptor instead.
 func (*DescribeEnvSourceRequest) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{41}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *DescribeEnvSourceRequest) GetTier() v1.Tier {
@@ -2495,7 +2959,7 @@ type DescribeEnvSourceResponse struct {
 
 func (x *DescribeEnvSourceResponse) Reset() {
 	*x = DescribeEnvSourceResponse{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[42]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2507,7 +2971,7 @@ func (x *DescribeEnvSourceResponse) String() string {
 func (*DescribeEnvSourceResponse) ProtoMessage() {}
 
 func (x *DescribeEnvSourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[42]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2520,7 +2984,7 @@ func (x *DescribeEnvSourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeEnvSourceResponse.ProtoReflect.Descriptor instead.
 func (*DescribeEnvSourceResponse) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{42}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *DescribeEnvSourceResponse) GetStatus() *EnvSourceStatus {
@@ -2542,7 +3006,7 @@ type SetEnvSourceValueRequest struct {
 
 func (x *SetEnvSourceValueRequest) Reset() {
 	*x = SetEnvSourceValueRequest{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[43]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2554,7 +3018,7 @@ func (x *SetEnvSourceValueRequest) String() string {
 func (*SetEnvSourceValueRequest) ProtoMessage() {}
 
 func (x *SetEnvSourceValueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[43]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2567,7 +3031,7 @@ func (x *SetEnvSourceValueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetEnvSourceValueRequest.ProtoReflect.Descriptor instead.
 func (*SetEnvSourceValueRequest) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{43}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *SetEnvSourceValueRequest) GetTier() v1.Tier {
@@ -2609,7 +3073,7 @@ type SetEnvSourceValueResponse struct {
 
 func (x *SetEnvSourceValueResponse) Reset() {
 	*x = SetEnvSourceValueResponse{}
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[44]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2621,7 +3085,7 @@ func (x *SetEnvSourceValueResponse) String() string {
 func (*SetEnvSourceValueResponse) ProtoMessage() {}
 
 func (x *SetEnvSourceValueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[44]
+	mi := &file_provider_variablestore_v1_variablestore_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2634,7 +3098,7 @@ func (x *SetEnvSourceValueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetEnvSourceValueResponse.ProtoReflect.Descriptor instead.
 func (*SetEnvSourceValueResponse) Descriptor() ([]byte, []int) {
-	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{44}
+	return file_provider_variablestore_v1_variablestore_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *SetEnvSourceValueResponse) GetAwaitingApproval() bool {
@@ -2670,7 +3134,7 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"$variablestore.coordinate.folder.root\x12a\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead\x1a\vthis != '/'rq2o^(/([^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.[^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.\\.[^/#\\x00-\\x1f\\x7f]+))*$R\x06folder\x12/\n" +
 	"\x03key\x18\x03 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12\xb6\x01\n" +
 	"\venvironment\x18\x04 \x01(\tB\x93\x01\xbaH\x8f\x01\xba\x01t\n" +
-	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\venvironment\"\x91\x02\n" +
+	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\venvironment\"\xda\x02\n" +
 	"\rValueMetadata\x12E\n" +
 	"\n" +
 	"coordinate\x18\x01 \x01(\v2%.provider.variablestore.v1.CoordinateR\n" +
@@ -2681,7 +3145,9 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\x04size\x18\x04 \x01(\x03R\x04size\x12B\n" +
 	"\x06target\x18\x05 \x01(\v2%.provider.variablestore.v1.CoordinateH\x00R\x06target\x88\x01\x01\x12\x1d\n" +
 	"\n" +
-	"env_source\x18\x06 \x01(\tR\tenvSourceB\t\n" +
+	"env_source\x18\x06 \x01(\tR\tenvSource\x12\x1c\n" +
+	"\tpublisher\x18\a \x01(\tR\tpublisher\x12)\n" +
+	"\x10published_secret\x18\b \x01(\bR\x0fpublishedSecretB\t\n" +
 	"\a_target\"[\n" +
 	"\fVersionEntry\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x12\x1d\n" +
@@ -2754,7 +3220,41 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"coordinate\x18\x02 \x01(\v2%.provider.variablestore.v1.CoordinateB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"coordinate\"[\n" +
 	"\x14ListVersionsResponse\x12C\n" +
-	"\bversions\x18\x01 \x03(\v2'.provider.variablestore.v1.VersionEntryR\bversions\"\xce\x04\n" +
+	"\bversions\x18\x01 \x03(\v2'.provider.variablestore.v1.VersionEntryR\bversions\"\xf6\x04\n" +
+	"\x14PublishValuesRequest\x125\n" +
+	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xdf\x01\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xad\x01\xbaH\xa9\x01\xba\x01\xa5\x01\n" +
+	"\x1cvariablestore.published.tier\x12ua value is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xb6\x01\n" +
+	"\venvironment\x18\x03 \x01(\tB\x93\x01\xbaH\x8f\x01\xba\x01t\n" +
+	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\venvironment\x12:\n" +
+	"\tpublisher\x18\x04 \x01(\tB\x1c\xbaH\x19r\x17\x10\x012\x13^[^\\x00-\\x1f\\x7f]*$R\tpublisher\x12P\n" +
+	"\tpublished\x18\x05 \x01(\v2*.provider.variablestore.v1.PublishedValuesB\x06\xbaH\x03\xc8\x01\x01R\tpublished\"\xe7\x01\n" +
+	"\x0fPublishedValues\x12\xd3\x01\n" +
+	"\x06values\x18\x01 \x03(\v2).provider.variablestore.v1.PublishedValueB\x8f\x01\xbaH\x8b\x01\xba\x01\x87\x01\n" +
+	"#variablestore.published.unique_keys\x12'a key is published once, with one value\x1a7this.all(v, this.filter(w, w.key == v.key).size() == 1)R\x06values\"t\n" +
+	"\x0ePublishedValue\x12/\n" +
+	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12\x19\n" +
+	"\x05value\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05value\x12\x16\n" +
+	"\x06secret\x18\x03 \x01(\bR\x06secret\"\x9c\x01\n" +
+	"\x15PublishValuesResponse\x12B\n" +
+	"\awritten\x18\x01 \x03(\v2(.provider.variablestore.v1.ValueMetadataR\awritten\x12?\n" +
+	"\aremoved\x18\x02 \x03(\v2%.provider.variablestore.v1.CoordinateR\aremoved\"\xfa\x04\n" +
+	"\x16UnpublishValuesRequest\x125\n" +
+	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xdf\x01\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xad\x01\xbaH\xa9\x01\xba\x01\xa5\x01\n" +
+	"\x1cvariablestore.published.tier\x12ua value is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xb6\x01\n" +
+	"\venvironment\x18\x03 \x01(\tB\x93\x01\xbaH\x8f\x01\xba\x01t\n" +
+	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\venvironment\x12:\n" +
+	"\tpublisher\x18\x04 \x01(\tB\x1c\xbaH\x19r\x17\x10\x012\x13^[^\\x00-\\x1f\\x7f]*$R\tpublisher\x12R\n" +
+	"\tpublished\x18\x05 \x01(\v2,.provider.variablestore.v1.PublishedVersionsB\x06\xbaH\x03\xc8\x01\x01R\tpublished\"\x80\x02\n" +
+	"\x11PublishedVersions\x12\xea\x01\n" +
+	"\x06values\x18\x01 \x03(\v2+.provider.variablestore.v1.PublishedVersionB\xa4\x01\xbaH\xa0\x01\xba\x01\x9c\x01\n" +
+	"%variablestore.unpublished.unique_keys\x12:a key is named once, with the one version that was written\x1a7this.all(v, this.filter(w, w.key == v.key).size() == 1)R\x06values\"f\n" +
+	"\x10PublishedVersion\x12/\n" +
+	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12!\n" +
+	"\aversion\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\aversion\"Z\n" +
+	"\x17UnpublishValuesResponse\x12?\n" +
+	"\aremoved\x18\x01 \x03(\v2%.provider.variablestore.v1.CoordinateR\aremoved\"\xce\x04\n" +
 	"\x11SetBindingRequest\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xdf\x01\n" +
 	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xad\x01\xbaH\xa9\x01\xba\x01\xa5\x01\n" +
@@ -2880,7 +3380,7 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\x11awaiting_approval\x18\x01 \x01(\bR\x10awaitingApproval\x12I\n" +
 	"\bmetadata\x18\x02 \x01(\v2(.provider.variablestore.v1.ValueMetadataH\x00R\bmetadata\x88\x01\x01\x12\x18\n" +
 	"\acreated\x18\x03 \x01(\bR\acreatedB\v\n" +
-	"\t_metadata2\xc7\f\n" +
+	"\t_metadata2\xb5\x0e\n" +
 	"\x14VariableStoreService\x12c\n" +
 	"\bSetValue\x12*.provider.variablestore.v1.SetValueRequest\x1a+.provider.variablestore.v1.SetValueResponse\x12i\n" +
 	"\n" +
@@ -2897,7 +3397,9 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\fListBindings\x12..provider.variablestore.v1.ListBindingsRequest\x1a/.provider.variablestore.v1.ListBindingsResponse\x12r\n" +
 	"\rSyncEnvSource\x12/.provider.variablestore.v1.SyncEnvSourceRequest\x1a0.provider.variablestore.v1.SyncEnvSourceResponse\x12~\n" +
 	"\x11DescribeEnvSource\x123.provider.variablestore.v1.DescribeEnvSourceRequest\x1a4.provider.variablestore.v1.DescribeEnvSourceResponse\x12~\n" +
-	"\x11SetEnvSourceValue\x123.provider.variablestore.v1.SetEnvSourceValueRequest\x1a4.provider.variablestore.v1.SetEnvSourceValueResponseBLZJgithub.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1;variablestorev1b\x06proto3"
+	"\x11SetEnvSourceValue\x123.provider.variablestore.v1.SetEnvSourceValueRequest\x1a4.provider.variablestore.v1.SetEnvSourceValueResponse\x12r\n" +
+	"\rPublishValues\x12/.provider.variablestore.v1.PublishValuesRequest\x1a0.provider.variablestore.v1.PublishValuesResponse\x12x\n" +
+	"\x0fUnpublishValues\x121.provider.variablestore.v1.UnpublishValuesRequest\x1a2.provider.variablestore.v1.UnpublishValuesResponseBLZJgithub.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1;variablestorev1b\x06proto3"
 
 var (
 	file_provider_variablestore_v1_variablestore_proto_rawDescOnce sync.Once
@@ -2911,7 +3413,7 @@ func file_provider_variablestore_v1_variablestore_proto_rawDescGZIP() []byte {
 	return file_provider_variablestore_v1_variablestore_proto_rawDescData
 }
 
-var file_provider_variablestore_v1_variablestore_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_provider_variablestore_v1_variablestore_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
 var file_provider_variablestore_v1_variablestore_proto_goTypes = []any{
 	(*Coordinate)(nil),                // 0: provider.variablestore.v1.Coordinate
 	(*ValueMetadata)(nil),             // 1: provider.variablestore.v1.ValueMetadata
@@ -2933,120 +3435,141 @@ var file_provider_variablestore_v1_variablestore_proto_goTypes = []any{
 	(*ListReferencesResponse)(nil),    // 17: provider.variablestore.v1.ListReferencesResponse
 	(*ListVersionsRequest)(nil),       // 18: provider.variablestore.v1.ListVersionsRequest
 	(*ListVersionsResponse)(nil),      // 19: provider.variablestore.v1.ListVersionsResponse
-	(*SetBindingRequest)(nil),         // 20: provider.variablestore.v1.SetBindingRequest
-	(*PublishedBinding)(nil),          // 21: provider.variablestore.v1.PublishedBinding
-	(*Grant)(nil),                     // 22: provider.variablestore.v1.Grant
-	(*GrantCondition)(nil),            // 23: provider.variablestore.v1.GrantCondition
-	(*SetBindingResponse)(nil),        // 24: provider.variablestore.v1.SetBindingResponse
-	(*RemoveBindingRequest)(nil),      // 25: provider.variablestore.v1.RemoveBindingRequest
-	(*RemoveBindingResponse)(nil),     // 26: provider.variablestore.v1.RemoveBindingResponse
-	(*ListBindingsRequest)(nil),       // 27: provider.variablestore.v1.ListBindingsRequest
-	(*ListBindingsResponse)(nil),      // 28: provider.variablestore.v1.ListBindingsResponse
-	(*BindingSummary)(nil),            // 29: provider.variablestore.v1.BindingSummary
-	(*PropertyShape)(nil),             // 30: provider.variablestore.v1.PropertyShape
-	(*EnvSource)(nil),                 // 31: provider.variablestore.v1.EnvSource
-	(*EnvSourceValue)(nil),            // 32: provider.variablestore.v1.EnvSourceValue
-	(*Cell)(nil),                      // 33: provider.variablestore.v1.Cell
-	(*EnvSourceStatus)(nil),           // 34: provider.variablestore.v1.EnvSourceStatus
-	(*FolderLink)(nil),                // 35: provider.variablestore.v1.FolderLink
-	(*RefusedCell)(nil),               // 36: provider.variablestore.v1.RefusedCell
-	(*CredentialRefusal)(nil),         // 37: provider.variablestore.v1.CredentialRefusal
-	(*SyncEnvSourceRequest)(nil),      // 38: provider.variablestore.v1.SyncEnvSourceRequest
-	(*RegisteredEnvSource)(nil),       // 39: provider.variablestore.v1.RegisteredEnvSource
-	(*SyncEnvSourceResponse)(nil),     // 40: provider.variablestore.v1.SyncEnvSourceResponse
-	(*DescribeEnvSourceRequest)(nil),  // 41: provider.variablestore.v1.DescribeEnvSourceRequest
-	(*DescribeEnvSourceResponse)(nil), // 42: provider.variablestore.v1.DescribeEnvSourceResponse
-	(*SetEnvSourceValueRequest)(nil),  // 43: provider.variablestore.v1.SetEnvSourceValueRequest
-	(*SetEnvSourceValueResponse)(nil), // 44: provider.variablestore.v1.SetEnvSourceValueResponse
-	(v1.Tier)(0),                      // 45: common.environment.v1.Tier
-	(*v11.Binding)(nil),               // 46: common.bindings.v1.Binding
-	(v11.BindingType)(0),              // 47: common.bindings.v1.BindingType
+	(*PublishValuesRequest)(nil),      // 20: provider.variablestore.v1.PublishValuesRequest
+	(*PublishedValues)(nil),           // 21: provider.variablestore.v1.PublishedValues
+	(*PublishedValue)(nil),            // 22: provider.variablestore.v1.PublishedValue
+	(*PublishValuesResponse)(nil),     // 23: provider.variablestore.v1.PublishValuesResponse
+	(*UnpublishValuesRequest)(nil),    // 24: provider.variablestore.v1.UnpublishValuesRequest
+	(*PublishedVersions)(nil),         // 25: provider.variablestore.v1.PublishedVersions
+	(*PublishedVersion)(nil),          // 26: provider.variablestore.v1.PublishedVersion
+	(*UnpublishValuesResponse)(nil),   // 27: provider.variablestore.v1.UnpublishValuesResponse
+	(*SetBindingRequest)(nil),         // 28: provider.variablestore.v1.SetBindingRequest
+	(*PublishedBinding)(nil),          // 29: provider.variablestore.v1.PublishedBinding
+	(*Grant)(nil),                     // 30: provider.variablestore.v1.Grant
+	(*GrantCondition)(nil),            // 31: provider.variablestore.v1.GrantCondition
+	(*SetBindingResponse)(nil),        // 32: provider.variablestore.v1.SetBindingResponse
+	(*RemoveBindingRequest)(nil),      // 33: provider.variablestore.v1.RemoveBindingRequest
+	(*RemoveBindingResponse)(nil),     // 34: provider.variablestore.v1.RemoveBindingResponse
+	(*ListBindingsRequest)(nil),       // 35: provider.variablestore.v1.ListBindingsRequest
+	(*ListBindingsResponse)(nil),      // 36: provider.variablestore.v1.ListBindingsResponse
+	(*BindingSummary)(nil),            // 37: provider.variablestore.v1.BindingSummary
+	(*PropertyShape)(nil),             // 38: provider.variablestore.v1.PropertyShape
+	(*EnvSource)(nil),                 // 39: provider.variablestore.v1.EnvSource
+	(*EnvSourceValue)(nil),            // 40: provider.variablestore.v1.EnvSourceValue
+	(*Cell)(nil),                      // 41: provider.variablestore.v1.Cell
+	(*EnvSourceStatus)(nil),           // 42: provider.variablestore.v1.EnvSourceStatus
+	(*FolderLink)(nil),                // 43: provider.variablestore.v1.FolderLink
+	(*RefusedCell)(nil),               // 44: provider.variablestore.v1.RefusedCell
+	(*CredentialRefusal)(nil),         // 45: provider.variablestore.v1.CredentialRefusal
+	(*SyncEnvSourceRequest)(nil),      // 46: provider.variablestore.v1.SyncEnvSourceRequest
+	(*RegisteredEnvSource)(nil),       // 47: provider.variablestore.v1.RegisteredEnvSource
+	(*SyncEnvSourceResponse)(nil),     // 48: provider.variablestore.v1.SyncEnvSourceResponse
+	(*DescribeEnvSourceRequest)(nil),  // 49: provider.variablestore.v1.DescribeEnvSourceRequest
+	(*DescribeEnvSourceResponse)(nil), // 50: provider.variablestore.v1.DescribeEnvSourceResponse
+	(*SetEnvSourceValueRequest)(nil),  // 51: provider.variablestore.v1.SetEnvSourceValueRequest
+	(*SetEnvSourceValueResponse)(nil), // 52: provider.variablestore.v1.SetEnvSourceValueResponse
+	(v1.Tier)(0),                      // 53: common.environment.v1.Tier
+	(*v11.Binding)(nil),               // 54: common.bindings.v1.Binding
+	(v11.BindingType)(0),              // 55: common.bindings.v1.BindingType
 }
 var file_provider_variablestore_v1_variablestore_proto_depIdxs = []int32{
 	0,  // 0: provider.variablestore.v1.ValueMetadata.coordinate:type_name -> provider.variablestore.v1.Coordinate
 	0,  // 1: provider.variablestore.v1.ValueMetadata.target:type_name -> provider.variablestore.v1.Coordinate
-	45, // 2: provider.variablestore.v1.SetValueRequest.tier:type_name -> common.environment.v1.Tier
+	53, // 2: provider.variablestore.v1.SetValueRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 3: provider.variablestore.v1.SetValueRequest.coordinate:type_name -> provider.variablestore.v1.Coordinate
 	1,  // 4: provider.variablestore.v1.SetValueResponse.metadata:type_name -> provider.variablestore.v1.ValueMetadata
-	45, // 5: provider.variablestore.v1.ListValuesRequest.tier:type_name -> common.environment.v1.Tier
+	53, // 5: provider.variablestore.v1.ListValuesRequest.tier:type_name -> common.environment.v1.Tier
 	1,  // 6: provider.variablestore.v1.ListValuesResponse.values:type_name -> provider.variablestore.v1.ValueMetadata
-	45, // 7: provider.variablestore.v1.GetValueRequest.tier:type_name -> common.environment.v1.Tier
+	53, // 7: provider.variablestore.v1.GetValueRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 8: provider.variablestore.v1.GetValueRequest.coordinate:type_name -> provider.variablestore.v1.Coordinate
 	1,  // 9: provider.variablestore.v1.GetValueResponse.metadata:type_name -> provider.variablestore.v1.ValueMetadata
-	45, // 10: provider.variablestore.v1.RevealValuesRequest.tier:type_name -> common.environment.v1.Tier
+	53, // 10: provider.variablestore.v1.RevealValuesRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 11: provider.variablestore.v1.RevealValuesRequest.cells:type_name -> provider.variablestore.v1.Coordinate
 	11, // 12: provider.variablestore.v1.RevealValuesResponse.values:type_name -> provider.variablestore.v1.RevealedValue
 	1,  // 13: provider.variablestore.v1.RevealedValue.metadata:type_name -> provider.variablestore.v1.ValueMetadata
-	45, // 14: provider.variablestore.v1.DeleteValueRequest.tier:type_name -> common.environment.v1.Tier
+	53, // 14: provider.variablestore.v1.DeleteValueRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 15: provider.variablestore.v1.DeleteValueRequest.coordinate:type_name -> provider.variablestore.v1.Coordinate
-	45, // 16: provider.variablestore.v1.SetReferenceRequest.tier:type_name -> common.environment.v1.Tier
+	53, // 16: provider.variablestore.v1.SetReferenceRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 17: provider.variablestore.v1.SetReferenceRequest.coordinate:type_name -> provider.variablestore.v1.Coordinate
 	0,  // 18: provider.variablestore.v1.SetReferenceRequest.target:type_name -> provider.variablestore.v1.Coordinate
 	1,  // 19: provider.variablestore.v1.SetReferenceResponse.metadata:type_name -> provider.variablestore.v1.ValueMetadata
-	45, // 20: provider.variablestore.v1.ListReferencesRequest.tier:type_name -> common.environment.v1.Tier
+	53, // 20: provider.variablestore.v1.ListReferencesRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 21: provider.variablestore.v1.ListReferencesRequest.coordinate:type_name -> provider.variablestore.v1.Coordinate
 	0,  // 22: provider.variablestore.v1.ListReferencesResponse.references:type_name -> provider.variablestore.v1.Coordinate
-	45, // 23: provider.variablestore.v1.ListVersionsRequest.tier:type_name -> common.environment.v1.Tier
+	53, // 23: provider.variablestore.v1.ListVersionsRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 24: provider.variablestore.v1.ListVersionsRequest.coordinate:type_name -> provider.variablestore.v1.Coordinate
 	2,  // 25: provider.variablestore.v1.ListVersionsResponse.versions:type_name -> provider.variablestore.v1.VersionEntry
-	45, // 26: provider.variablestore.v1.SetBindingRequest.tier:type_name -> common.environment.v1.Tier
-	21, // 27: provider.variablestore.v1.SetBindingRequest.published:type_name -> provider.variablestore.v1.PublishedBinding
-	46, // 28: provider.variablestore.v1.PublishedBinding.binding:type_name -> common.bindings.v1.Binding
-	22, // 29: provider.variablestore.v1.PublishedBinding.grants:type_name -> provider.variablestore.v1.Grant
-	23, // 30: provider.variablestore.v1.Grant.conditions:type_name -> provider.variablestore.v1.GrantCondition
-	45, // 31: provider.variablestore.v1.RemoveBindingRequest.tier:type_name -> common.environment.v1.Tier
-	45, // 32: provider.variablestore.v1.ListBindingsRequest.tier:type_name -> common.environment.v1.Tier
-	29, // 33: provider.variablestore.v1.ListBindingsResponse.bindings:type_name -> provider.variablestore.v1.BindingSummary
-	47, // 34: provider.variablestore.v1.BindingSummary.type:type_name -> common.bindings.v1.BindingType
-	30, // 35: provider.variablestore.v1.BindingSummary.properties:type_name -> provider.variablestore.v1.PropertyShape
-	32, // 36: provider.variablestore.v1.EnvSource.values:type_name -> provider.variablestore.v1.EnvSourceValue
-	33, // 37: provider.variablestore.v1.EnvSourceValue.cell:type_name -> provider.variablestore.v1.Cell
-	35, // 38: provider.variablestore.v1.EnvSourceStatus.links:type_name -> provider.variablestore.v1.FolderLink
-	33, // 39: provider.variablestore.v1.RefusedCell.cell:type_name -> provider.variablestore.v1.Cell
-	45, // 40: provider.variablestore.v1.SyncEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
-	31, // 41: provider.variablestore.v1.SyncEnvSourceRequest.env_source:type_name -> provider.variablestore.v1.EnvSource
-	39, // 42: provider.variablestore.v1.SyncEnvSourceRequest.registered:type_name -> provider.variablestore.v1.RegisteredEnvSource
-	34, // 43: provider.variablestore.v1.SyncEnvSourceResponse.status:type_name -> provider.variablestore.v1.EnvSourceStatus
-	33, // 44: provider.variablestore.v1.SyncEnvSourceResponse.present:type_name -> provider.variablestore.v1.Cell
-	36, // 45: provider.variablestore.v1.SyncEnvSourceResponse.refused:type_name -> provider.variablestore.v1.RefusedCell
-	45, // 46: provider.variablestore.v1.DescribeEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
-	34, // 47: provider.variablestore.v1.DescribeEnvSourceResponse.status:type_name -> provider.variablestore.v1.EnvSourceStatus
-	45, // 48: provider.variablestore.v1.SetEnvSourceValueRequest.tier:type_name -> common.environment.v1.Tier
-	0,  // 49: provider.variablestore.v1.SetEnvSourceValueRequest.coordinate:type_name -> provider.variablestore.v1.Coordinate
-	1,  // 50: provider.variablestore.v1.SetEnvSourceValueResponse.metadata:type_name -> provider.variablestore.v1.ValueMetadata
-	3,  // 51: provider.variablestore.v1.VariableStoreService.SetValue:input_type -> provider.variablestore.v1.SetValueRequest
-	5,  // 52: provider.variablestore.v1.VariableStoreService.ListValues:input_type -> provider.variablestore.v1.ListValuesRequest
-	7,  // 53: provider.variablestore.v1.VariableStoreService.GetValue:input_type -> provider.variablestore.v1.GetValueRequest
-	9,  // 54: provider.variablestore.v1.VariableStoreService.RevealValues:input_type -> provider.variablestore.v1.RevealValuesRequest
-	12, // 55: provider.variablestore.v1.VariableStoreService.DeleteValue:input_type -> provider.variablestore.v1.DeleteValueRequest
-	14, // 56: provider.variablestore.v1.VariableStoreService.SetReference:input_type -> provider.variablestore.v1.SetReferenceRequest
-	16, // 57: provider.variablestore.v1.VariableStoreService.ListReferences:input_type -> provider.variablestore.v1.ListReferencesRequest
-	18, // 58: provider.variablestore.v1.VariableStoreService.ListVersions:input_type -> provider.variablestore.v1.ListVersionsRequest
-	20, // 59: provider.variablestore.v1.VariableStoreService.SetBinding:input_type -> provider.variablestore.v1.SetBindingRequest
-	25, // 60: provider.variablestore.v1.VariableStoreService.RemoveBinding:input_type -> provider.variablestore.v1.RemoveBindingRequest
-	27, // 61: provider.variablestore.v1.VariableStoreService.ListBindings:input_type -> provider.variablestore.v1.ListBindingsRequest
-	38, // 62: provider.variablestore.v1.VariableStoreService.SyncEnvSource:input_type -> provider.variablestore.v1.SyncEnvSourceRequest
-	41, // 63: provider.variablestore.v1.VariableStoreService.DescribeEnvSource:input_type -> provider.variablestore.v1.DescribeEnvSourceRequest
-	43, // 64: provider.variablestore.v1.VariableStoreService.SetEnvSourceValue:input_type -> provider.variablestore.v1.SetEnvSourceValueRequest
-	4,  // 65: provider.variablestore.v1.VariableStoreService.SetValue:output_type -> provider.variablestore.v1.SetValueResponse
-	6,  // 66: provider.variablestore.v1.VariableStoreService.ListValues:output_type -> provider.variablestore.v1.ListValuesResponse
-	8,  // 67: provider.variablestore.v1.VariableStoreService.GetValue:output_type -> provider.variablestore.v1.GetValueResponse
-	10, // 68: provider.variablestore.v1.VariableStoreService.RevealValues:output_type -> provider.variablestore.v1.RevealValuesResponse
-	13, // 69: provider.variablestore.v1.VariableStoreService.DeleteValue:output_type -> provider.variablestore.v1.DeleteValueResponse
-	15, // 70: provider.variablestore.v1.VariableStoreService.SetReference:output_type -> provider.variablestore.v1.SetReferenceResponse
-	17, // 71: provider.variablestore.v1.VariableStoreService.ListReferences:output_type -> provider.variablestore.v1.ListReferencesResponse
-	19, // 72: provider.variablestore.v1.VariableStoreService.ListVersions:output_type -> provider.variablestore.v1.ListVersionsResponse
-	24, // 73: provider.variablestore.v1.VariableStoreService.SetBinding:output_type -> provider.variablestore.v1.SetBindingResponse
-	26, // 74: provider.variablestore.v1.VariableStoreService.RemoveBinding:output_type -> provider.variablestore.v1.RemoveBindingResponse
-	28, // 75: provider.variablestore.v1.VariableStoreService.ListBindings:output_type -> provider.variablestore.v1.ListBindingsResponse
-	40, // 76: provider.variablestore.v1.VariableStoreService.SyncEnvSource:output_type -> provider.variablestore.v1.SyncEnvSourceResponse
-	42, // 77: provider.variablestore.v1.VariableStoreService.DescribeEnvSource:output_type -> provider.variablestore.v1.DescribeEnvSourceResponse
-	44, // 78: provider.variablestore.v1.VariableStoreService.SetEnvSourceValue:output_type -> provider.variablestore.v1.SetEnvSourceValueResponse
-	65, // [65:79] is the sub-list for method output_type
-	51, // [51:65] is the sub-list for method input_type
-	51, // [51:51] is the sub-list for extension type_name
-	51, // [51:51] is the sub-list for extension extendee
-	0,  // [0:51] is the sub-list for field type_name
+	53, // 26: provider.variablestore.v1.PublishValuesRequest.tier:type_name -> common.environment.v1.Tier
+	21, // 27: provider.variablestore.v1.PublishValuesRequest.published:type_name -> provider.variablestore.v1.PublishedValues
+	22, // 28: provider.variablestore.v1.PublishedValues.values:type_name -> provider.variablestore.v1.PublishedValue
+	1,  // 29: provider.variablestore.v1.PublishValuesResponse.written:type_name -> provider.variablestore.v1.ValueMetadata
+	0,  // 30: provider.variablestore.v1.PublishValuesResponse.removed:type_name -> provider.variablestore.v1.Coordinate
+	53, // 31: provider.variablestore.v1.UnpublishValuesRequest.tier:type_name -> common.environment.v1.Tier
+	25, // 32: provider.variablestore.v1.UnpublishValuesRequest.published:type_name -> provider.variablestore.v1.PublishedVersions
+	26, // 33: provider.variablestore.v1.PublishedVersions.values:type_name -> provider.variablestore.v1.PublishedVersion
+	0,  // 34: provider.variablestore.v1.UnpublishValuesResponse.removed:type_name -> provider.variablestore.v1.Coordinate
+	53, // 35: provider.variablestore.v1.SetBindingRequest.tier:type_name -> common.environment.v1.Tier
+	29, // 36: provider.variablestore.v1.SetBindingRequest.published:type_name -> provider.variablestore.v1.PublishedBinding
+	54, // 37: provider.variablestore.v1.PublishedBinding.binding:type_name -> common.bindings.v1.Binding
+	30, // 38: provider.variablestore.v1.PublishedBinding.grants:type_name -> provider.variablestore.v1.Grant
+	31, // 39: provider.variablestore.v1.Grant.conditions:type_name -> provider.variablestore.v1.GrantCondition
+	53, // 40: provider.variablestore.v1.RemoveBindingRequest.tier:type_name -> common.environment.v1.Tier
+	53, // 41: provider.variablestore.v1.ListBindingsRequest.tier:type_name -> common.environment.v1.Tier
+	37, // 42: provider.variablestore.v1.ListBindingsResponse.bindings:type_name -> provider.variablestore.v1.BindingSummary
+	55, // 43: provider.variablestore.v1.BindingSummary.type:type_name -> common.bindings.v1.BindingType
+	38, // 44: provider.variablestore.v1.BindingSummary.properties:type_name -> provider.variablestore.v1.PropertyShape
+	40, // 45: provider.variablestore.v1.EnvSource.values:type_name -> provider.variablestore.v1.EnvSourceValue
+	41, // 46: provider.variablestore.v1.EnvSourceValue.cell:type_name -> provider.variablestore.v1.Cell
+	43, // 47: provider.variablestore.v1.EnvSourceStatus.links:type_name -> provider.variablestore.v1.FolderLink
+	41, // 48: provider.variablestore.v1.RefusedCell.cell:type_name -> provider.variablestore.v1.Cell
+	53, // 49: provider.variablestore.v1.SyncEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
+	39, // 50: provider.variablestore.v1.SyncEnvSourceRequest.env_source:type_name -> provider.variablestore.v1.EnvSource
+	47, // 51: provider.variablestore.v1.SyncEnvSourceRequest.registered:type_name -> provider.variablestore.v1.RegisteredEnvSource
+	42, // 52: provider.variablestore.v1.SyncEnvSourceResponse.status:type_name -> provider.variablestore.v1.EnvSourceStatus
+	41, // 53: provider.variablestore.v1.SyncEnvSourceResponse.present:type_name -> provider.variablestore.v1.Cell
+	44, // 54: provider.variablestore.v1.SyncEnvSourceResponse.refused:type_name -> provider.variablestore.v1.RefusedCell
+	53, // 55: provider.variablestore.v1.DescribeEnvSourceRequest.tier:type_name -> common.environment.v1.Tier
+	42, // 56: provider.variablestore.v1.DescribeEnvSourceResponse.status:type_name -> provider.variablestore.v1.EnvSourceStatus
+	53, // 57: provider.variablestore.v1.SetEnvSourceValueRequest.tier:type_name -> common.environment.v1.Tier
+	0,  // 58: provider.variablestore.v1.SetEnvSourceValueRequest.coordinate:type_name -> provider.variablestore.v1.Coordinate
+	1,  // 59: provider.variablestore.v1.SetEnvSourceValueResponse.metadata:type_name -> provider.variablestore.v1.ValueMetadata
+	3,  // 60: provider.variablestore.v1.VariableStoreService.SetValue:input_type -> provider.variablestore.v1.SetValueRequest
+	5,  // 61: provider.variablestore.v1.VariableStoreService.ListValues:input_type -> provider.variablestore.v1.ListValuesRequest
+	7,  // 62: provider.variablestore.v1.VariableStoreService.GetValue:input_type -> provider.variablestore.v1.GetValueRequest
+	9,  // 63: provider.variablestore.v1.VariableStoreService.RevealValues:input_type -> provider.variablestore.v1.RevealValuesRequest
+	12, // 64: provider.variablestore.v1.VariableStoreService.DeleteValue:input_type -> provider.variablestore.v1.DeleteValueRequest
+	14, // 65: provider.variablestore.v1.VariableStoreService.SetReference:input_type -> provider.variablestore.v1.SetReferenceRequest
+	16, // 66: provider.variablestore.v1.VariableStoreService.ListReferences:input_type -> provider.variablestore.v1.ListReferencesRequest
+	18, // 67: provider.variablestore.v1.VariableStoreService.ListVersions:input_type -> provider.variablestore.v1.ListVersionsRequest
+	28, // 68: provider.variablestore.v1.VariableStoreService.SetBinding:input_type -> provider.variablestore.v1.SetBindingRequest
+	33, // 69: provider.variablestore.v1.VariableStoreService.RemoveBinding:input_type -> provider.variablestore.v1.RemoveBindingRequest
+	35, // 70: provider.variablestore.v1.VariableStoreService.ListBindings:input_type -> provider.variablestore.v1.ListBindingsRequest
+	46, // 71: provider.variablestore.v1.VariableStoreService.SyncEnvSource:input_type -> provider.variablestore.v1.SyncEnvSourceRequest
+	49, // 72: provider.variablestore.v1.VariableStoreService.DescribeEnvSource:input_type -> provider.variablestore.v1.DescribeEnvSourceRequest
+	51, // 73: provider.variablestore.v1.VariableStoreService.SetEnvSourceValue:input_type -> provider.variablestore.v1.SetEnvSourceValueRequest
+	20, // 74: provider.variablestore.v1.VariableStoreService.PublishValues:input_type -> provider.variablestore.v1.PublishValuesRequest
+	24, // 75: provider.variablestore.v1.VariableStoreService.UnpublishValues:input_type -> provider.variablestore.v1.UnpublishValuesRequest
+	4,  // 76: provider.variablestore.v1.VariableStoreService.SetValue:output_type -> provider.variablestore.v1.SetValueResponse
+	6,  // 77: provider.variablestore.v1.VariableStoreService.ListValues:output_type -> provider.variablestore.v1.ListValuesResponse
+	8,  // 78: provider.variablestore.v1.VariableStoreService.GetValue:output_type -> provider.variablestore.v1.GetValueResponse
+	10, // 79: provider.variablestore.v1.VariableStoreService.RevealValues:output_type -> provider.variablestore.v1.RevealValuesResponse
+	13, // 80: provider.variablestore.v1.VariableStoreService.DeleteValue:output_type -> provider.variablestore.v1.DeleteValueResponse
+	15, // 81: provider.variablestore.v1.VariableStoreService.SetReference:output_type -> provider.variablestore.v1.SetReferenceResponse
+	17, // 82: provider.variablestore.v1.VariableStoreService.ListReferences:output_type -> provider.variablestore.v1.ListReferencesResponse
+	19, // 83: provider.variablestore.v1.VariableStoreService.ListVersions:output_type -> provider.variablestore.v1.ListVersionsResponse
+	32, // 84: provider.variablestore.v1.VariableStoreService.SetBinding:output_type -> provider.variablestore.v1.SetBindingResponse
+	34, // 85: provider.variablestore.v1.VariableStoreService.RemoveBinding:output_type -> provider.variablestore.v1.RemoveBindingResponse
+	36, // 86: provider.variablestore.v1.VariableStoreService.ListBindings:output_type -> provider.variablestore.v1.ListBindingsResponse
+	48, // 87: provider.variablestore.v1.VariableStoreService.SyncEnvSource:output_type -> provider.variablestore.v1.SyncEnvSourceResponse
+	50, // 88: provider.variablestore.v1.VariableStoreService.DescribeEnvSource:output_type -> provider.variablestore.v1.DescribeEnvSourceResponse
+	52, // 89: provider.variablestore.v1.VariableStoreService.SetEnvSourceValue:output_type -> provider.variablestore.v1.SetEnvSourceValueResponse
+	23, // 90: provider.variablestore.v1.VariableStoreService.PublishValues:output_type -> provider.variablestore.v1.PublishValuesResponse
+	27, // 91: provider.variablestore.v1.VariableStoreService.UnpublishValues:output_type -> provider.variablestore.v1.UnpublishValuesResponse
+	76, // [76:92] is the sub-list for method output_type
+	60, // [60:76] is the sub-list for method input_type
+	60, // [60:60] is the sub-list for extension type_name
+	60, // [60:60] is the sub-list for extension extendee
+	0,  // [0:60] is the sub-list for field type_name
 }
 
 func init() { file_provider_variablestore_v1_variablestore_proto_init() }
@@ -3057,18 +3580,18 @@ func file_provider_variablestore_v1_variablestore_proto_init() {
 	file_provider_variablestore_v1_variablestore_proto_msgTypes[1].OneofWrappers = []any{}
 	file_provider_variablestore_v1_variablestore_proto_msgTypes[3].OneofWrappers = []any{}
 	file_provider_variablestore_v1_variablestore_proto_msgTypes[12].OneofWrappers = []any{}
-	file_provider_variablestore_v1_variablestore_proto_msgTypes[38].OneofWrappers = []any{
+	file_provider_variablestore_v1_variablestore_proto_msgTypes[46].OneofWrappers = []any{
 		(*SyncEnvSourceRequest_EnvSource)(nil),
 		(*SyncEnvSourceRequest_Registered)(nil),
 	}
-	file_provider_variablestore_v1_variablestore_proto_msgTypes[44].OneofWrappers = []any{}
+	file_provider_variablestore_v1_variablestore_proto_msgTypes[52].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_provider_variablestore_v1_variablestore_proto_rawDesc), len(file_provider_variablestore_v1_variablestore_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   45,
+			NumMessages:   53,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

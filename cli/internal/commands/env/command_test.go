@@ -33,6 +33,19 @@ func TestEnvHelpListsEverySubcommandWithExamples(t *testing.T) {
 	}
 }
 
+func TestEnvPublishExamplesNameThePublisherAsAPulumiProgramDoes(t *testing.T) {
+	cmd := NewCommand(newTestDependencies())
+	for _, name := range []string{"publish", "unpublish"} {
+		sub, _, err := cmd.Find([]string{name})
+		if err != nil {
+			t.Fatalf("find %s: %v", name, err)
+		}
+		if !strings.Contains(sub.Example, "--publisher urn:pulumi:prod::infra ") {
+			t.Errorf("%s Example = %q, want the publisher as urn:pulumi:<stack>::<project>", name, sub.Example)
+		}
+	}
+}
+
 func TestEnvNeedsASubcommand(t *testing.T) {
 	cmd := NewCommand(newTestDependencies())
 	var out bytes.Buffer

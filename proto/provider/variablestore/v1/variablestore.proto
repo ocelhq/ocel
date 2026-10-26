@@ -35,6 +35,10 @@ service VariableStoreService {
     rpc DescribeEnvSource(DescribeEnvSourceRequest) returns (DescribeEnvSourceResponse);
 
     rpc SetEnvSourceValue(SetEnvSourceValueRequest) returns (SetEnvSourceValueResponse);
+
+    rpc PublishValues(PublishValuesRequest) returns (PublishValuesResponse);
+
+    rpc UnpublishValues(UnpublishValuesRequest) returns (UnpublishValuesResponse);
 }
 
 message Coordinate {
@@ -73,6 +77,10 @@ message ValueMetadata {
   optional Coordinate target = 5;
 
   string env_source = 6;
+
+  string publisher = 7;
+
+  bool published_secret = 8;
 }
 
 message VersionEntry {
@@ -173,6 +181,92 @@ message ListVersionsRequest {
 
 message ListVersionsResponse {
   repeated VersionEntry versions = 1;
+}
+
+message PublishValuesRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
+    id: "variablestore.published.tier"
+    message: "a value is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string environment = 3 [
+    (buf.validate.field).string.pattern = "^[^#\\x00-\\x1f\\x7f]*$",
+    (buf.validate.field).cel = {
+      id: "variablestore.environment.tier_wide"
+      message: "\"*\" is reserved: it names the value that binds tier-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
+
+  string publisher = 4 [(buf.validate.field).string = {min_len: 1, pattern: "^[^\\x00-\\x1f\\x7f]*$"}];
+
+  PublishedValues published = 5 [(buf.validate.field).required = true];
+}
+
+message PublishedValues {
+  repeated PublishedValue values = 1 [(buf.validate.field).cel = {
+    id: "variablestore.published.unique_keys"
+    message: "a key is published once, with one value"
+    expression: "this.all(v, this.filter(w, w.key == v.key).size() == 1)"
+  }];
+}
+
+message PublishedValue {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  string value = 2 [debug_redact = true];
+
+  bool secret = 3;
+}
+
+message PublishValuesResponse {
+  repeated ValueMetadata written = 1;
+
+  repeated Coordinate removed = 2;
+}
+
+message UnpublishValuesRequest {
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
+    id: "variablestore.published.tier"
+    message: "a value is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string environment = 3 [
+    (buf.validate.field).string.pattern = "^[^#\\x00-\\x1f\\x7f]*$",
+    (buf.validate.field).cel = {
+      id: "variablestore.environment.tier_wide"
+      message: "\"*\" is reserved: it names the value that binds tier-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
+
+  string publisher = 4 [(buf.validate.field).string = {min_len: 1, pattern: "^[^\\x00-\\x1f\\x7f]*$"}];
+
+  PublishedVersions published = 5 [(buf.validate.field).required = true];
+}
+
+message PublishedVersions {
+  repeated PublishedVersion values = 1 [(buf.validate.field).cel = {
+    id: "variablestore.unpublished.unique_keys"
+    message: "a key is named once, with the one version that was written"
+    expression: "this.all(v, this.filter(w, w.key == v.key).size() == 1)"
+  }];
+}
+
+message PublishedVersion {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  int64 version = 2 [(buf.validate.field).int64.gt = 0];
+}
+
+message UnpublishValuesResponse {
+  repeated Coordinate removed = 1;
 }
 
 message SetBindingRequest {

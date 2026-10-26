@@ -22,6 +22,9 @@ type ValueMetadata struct {
 	Version   int64
 	Reference *Reference
 	EnvSource string
+
+	Publisher       string
+	PublishedSecret bool
 }
 
 type Reference struct {

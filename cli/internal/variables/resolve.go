@@ -54,6 +54,9 @@ func (d *Declarations) Resolve(ctx context.Context, app string) (map[string]Reso
 
 func (d *Declarations) ResolveVariables(ctx context.Context, apps []App) (map[string][]Variable, error) {
 	definitions := d.Definitions()
+	if err := d.refusePublishedClasses(apps, definitions); err != nil {
+		return nil, err
+	}
 	values := make(map[string][]Variable, len(apps))
 	for _, app := range apps {
 		resolved, err := d.Resolve(ctx, app.Name)

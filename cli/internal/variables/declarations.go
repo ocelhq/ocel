@@ -20,6 +20,7 @@ type Declarations struct {
 	cells       []ValueMetadata
 	overrides   map[Cell][]Override
 	references  map[Cell]*Reference
+	published   []ValueMetadata
 	definitions []*resourcesv1.VariableDefinition
 	groups      []*resourcesv1.GroupDefinition
 	problems    []*resourcesv1.VariableProblem
@@ -45,7 +46,11 @@ func (d *Declarations) Prefetch(ctx context.Context) error {
 	var cells []ValueMetadata
 	overrides := map[Cell][]Override{}
 	references := map[Cell]*Reference{}
+	var published []ValueMetadata
 	for _, row := range stored {
+		if row.Publisher != "" {
+			published = append(published, row)
+		}
 		if row.Environment == "" {
 			cells = append(cells, row)
 			if row.Reference != nil {
@@ -64,6 +69,7 @@ func (d *Declarations) Prefetch(ctx context.Context) error {
 	d.cells = cells
 	d.overrides = overrides
 	d.references = references
+	d.published = published
 	d.plaintext = nil
 	return nil
 }

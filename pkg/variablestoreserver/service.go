@@ -139,11 +139,13 @@ func coordinateProto(slug string, c variablestore.Coordinate) *variablestorev1.C
 
 func metadataProto(scope variablestore.Scope, m variablestore.Metadata) *variablestorev1.ValueMetadata {
 	out := &variablestorev1.ValueMetadata{
-		Coordinate: coordinateProto(scope.Project, m.Coordinate),
-		Version:    m.Version,
-		UpdatedAt:  m.UpdatedAt,
-		Size:       m.Size,
-		EnvSource:  m.Provenance.EnvSource,
+		Coordinate:      coordinateProto(scope.Project, m.Coordinate),
+		Version:         m.Version,
+		UpdatedAt:       m.UpdatedAt,
+		Size:            m.Size,
+		EnvSource:       m.Provenance.EnvSource,
+		Publisher:       m.Provenance.Publisher,
+		PublishedSecret: m.Provenance.PublishedSecret,
 	}
 	if m.Target != nil {
 		out.Target = &variablestorev1.Coordinate{
@@ -156,7 +158,10 @@ func metadataProto(scope variablestore.Scope, m variablestore.Metadata) *variabl
 }
 
 func valuesError(err error) error {
+	var published *variablestore.PublishedError
 	switch {
+	case errors.As(err, &published):
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%w: change it in that program, which writes it here each time it runs", published))
 	case errors.Is(err, variablestore.ErrStaleVersion):
 		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, variablestore.ErrDangling):

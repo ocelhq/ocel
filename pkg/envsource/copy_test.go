@@ -302,6 +302,35 @@ func TestCopyValuesRefusesAValueTooLargeToStoreAndWritesTheRest(t *testing.T) {
 	}
 }
 
+func TestCopyValuesLeavesAPublishedValueToItsPublisher(t *testing.T) {
+	t.Parallel()
+	store, scope := storeFixture()
+	ctx := context.Background()
+	publisher := variablestore.Provenance{Publisher: "urn:pulumi:prod::infra::pulumi-nodejs:dynamic:Resource::ocel-variables-production"}
+	for key, plaintext := range map[string]string{"API_KEY": "published", "DATABASE_URL": "postgres://published"} {
+		if _, err := store.SetPublished(ctx, scope, tierWide("", key), plaintext, publisher, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	read := map[variablestore.Cell]envsource.Value{cell("", "API_KEY"): value("from-the-source", "s1@1")}
+	result, err := envsource.CopyValues(ctx, store, scope, listed(t, store, scope), digestKeyOf(t, store, scope), fromInfisical, readAt(100), read, []string{""}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reason, refused := result.Refused[cell("", "API_KEY")]; !refused || !strings.Contains(reason, publisher.Publisher) {
+		t.Errorf("refused = %v, want API_KEY refused naming its publisher", result.Refused)
+	}
+	if len(result.Written) != 0 || len(result.Removed) != 0 {
+		t.Errorf("result = %+v, want neither published value written over nor removed", result)
+	}
+	for key, plaintext := range map[string]string{"API_KEY": "published", "DATABASE_URL": "postgres://published"} {
+		if kept := reveal(t, store, scope, tierWide("", key)); kept.Plaintext != plaintext {
+			t.Errorf("%s = %q, want the published %q", key, kept.Plaintext, plaintext)
+		}
+	}
+}
+
 func TestAFixedEnvSourceReadsOnlyTheFoldersAskedFor(t *testing.T) {
 	t.Parallel()
 	source := envsource.NewFixed("exec", map[variablestore.Cell]envsource.Value{cell("", "ROOT"): value("r", "v1"), cell("/web", "WEB"): value("w", "v2")})

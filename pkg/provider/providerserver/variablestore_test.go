@@ -109,6 +109,24 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 			_, err := variables.ListVersions(ctx, &variablestorev1.ListVersionsRequest{Coordinate: cell("KEY")})
 			return err
 		},
+		"PublishValues": func() error {
+			_, err := variables.PublishValues(ctx, &variablestorev1.PublishValuesRequest{
+				Slug:      slug,
+				Tier:      environmentv1.Tier_TIER_PRODUCTION,
+				Publisher: "acme",
+				Published: &variablestorev1.PublishedValues{Values: []*variablestorev1.PublishedValue{{Key: "KEY", Value: "value"}}},
+			})
+			return err
+		},
+		"UnpublishValues": func() error {
+			_, err := variables.UnpublishValues(ctx, &variablestorev1.UnpublishValuesRequest{
+				Slug:      slug,
+				Tier:      environmentv1.Tier_TIER_PRODUCTION,
+				Publisher: "acme",
+				Published: &variablestorev1.PublishedVersions{Values: []*variablestorev1.PublishedVersion{{Key: "KEY", Version: 1}}},
+			})
+			return err
+		},
 		"SetBinding": func() error {
 			_, err := variables.SetBinding(ctx, &variablestorev1.SetBindingRequest{
 				Slug:  slug,

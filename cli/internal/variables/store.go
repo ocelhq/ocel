@@ -40,6 +40,9 @@ func (s Store) List(ctx context.Context) ([]ValueMetadata, error) {
 			Version:    value.GetVersion(),
 			Reference:  referenceOf(value.GetTarget()),
 			EnvSource:  value.GetEnvSource(),
+
+			Publisher:       value.GetPublisher(),
+			PublishedSecret: value.GetPublishedSecret(),
 		})
 	}
 	return stored, nil

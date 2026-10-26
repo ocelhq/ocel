@@ -201,7 +201,9 @@ func scopeOf(procedure string, message any) (string, bool) {
 		variablestorev1connect.VariableStoreServiceSetBindingProcedure,
 		variablestorev1connect.VariableStoreServiceRemoveBindingProcedure,
 		variablestorev1connect.VariableStoreServiceSyncEnvSourceProcedure,
-		variablestorev1connect.VariableStoreServiceSetEnvSourceValueProcedure:
+		variablestorev1connect.VariableStoreServiceSetEnvSourceValueProcedure,
+		variablestorev1connect.VariableStoreServicePublishValuesProcedure,
+		variablestorev1connect.VariableStoreServiceUnpublishValuesProcedure:
 		return CapabilityVariablesWrite, true
 	case variablestorev1connect.VariableStoreServiceRevealValuesProcedure:
 		return CapabilityVariablesReveal, true

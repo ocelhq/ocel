@@ -75,6 +75,12 @@ const (
 	// VariableStoreServiceSetEnvSourceValueProcedure is the fully-qualified name of the
 	// VariableStoreService's SetEnvSourceValue RPC.
 	VariableStoreServiceSetEnvSourceValueProcedure = "/provider.variablestore.v1.VariableStoreService/SetEnvSourceValue"
+	// VariableStoreServicePublishValuesProcedure is the fully-qualified name of the
+	// VariableStoreService's PublishValues RPC.
+	VariableStoreServicePublishValuesProcedure = "/provider.variablestore.v1.VariableStoreService/PublishValues"
+	// VariableStoreServiceUnpublishValuesProcedure is the fully-qualified name of the
+	// VariableStoreService's UnpublishValues RPC.
+	VariableStoreServiceUnpublishValuesProcedure = "/provider.variablestore.v1.VariableStoreService/UnpublishValues"
 )
 
 // VariableStoreServiceClient is a client for the provider.variablestore.v1.VariableStoreService
@@ -94,6 +100,8 @@ type VariableStoreServiceClient interface {
 	SyncEnvSource(context.Context, *v1.SyncEnvSourceRequest) (*v1.SyncEnvSourceResponse, error)
 	DescribeEnvSource(context.Context, *v1.DescribeEnvSourceRequest) (*v1.DescribeEnvSourceResponse, error)
 	SetEnvSourceValue(context.Context, *v1.SetEnvSourceValueRequest) (*v1.SetEnvSourceValueResponse, error)
+	PublishValues(context.Context, *v1.PublishValuesRequest) (*v1.PublishValuesResponse, error)
+	UnpublishValues(context.Context, *v1.UnpublishValuesRequest) (*v1.UnpublishValuesResponse, error)
 }
 
 // NewVariableStoreServiceClient constructs a client for the
@@ -192,6 +200,18 @@ func NewVariableStoreServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(variableStoreServiceMethods.ByName("SetEnvSourceValue")),
 			connect.WithClientOptions(opts...),
 		),
+		publishValues: connect.NewClient[v1.PublishValuesRequest, v1.PublishValuesResponse](
+			httpClient,
+			baseURL+VariableStoreServicePublishValuesProcedure,
+			connect.WithSchema(variableStoreServiceMethods.ByName("PublishValues")),
+			connect.WithClientOptions(opts...),
+		),
+		unpublishValues: connect.NewClient[v1.UnpublishValuesRequest, v1.UnpublishValuesResponse](
+			httpClient,
+			baseURL+VariableStoreServiceUnpublishValuesProcedure,
+			connect.WithSchema(variableStoreServiceMethods.ByName("UnpublishValues")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -211,6 +231,8 @@ type variableStoreServiceClient struct {
 	syncEnvSource     *connect.Client[v1.SyncEnvSourceRequest, v1.SyncEnvSourceResponse]
 	describeEnvSource *connect.Client[v1.DescribeEnvSourceRequest, v1.DescribeEnvSourceResponse]
 	setEnvSourceValue *connect.Client[v1.SetEnvSourceValueRequest, v1.SetEnvSourceValueResponse]
+	publishValues     *connect.Client[v1.PublishValuesRequest, v1.PublishValuesResponse]
+	unpublishValues   *connect.Client[v1.UnpublishValuesRequest, v1.UnpublishValuesResponse]
 }
 
 // SetValue calls provider.variablestore.v1.VariableStoreService.SetValue.
@@ -339,6 +361,24 @@ func (c *variableStoreServiceClient) SetEnvSourceValue(ctx context.Context, req 
 	return nil, err
 }
 
+// PublishValues calls provider.variablestore.v1.VariableStoreService.PublishValues.
+func (c *variableStoreServiceClient) PublishValues(ctx context.Context, req *v1.PublishValuesRequest) (*v1.PublishValuesResponse, error) {
+	response, err := c.publishValues.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// UnpublishValues calls provider.variablestore.v1.VariableStoreService.UnpublishValues.
+func (c *variableStoreServiceClient) UnpublishValues(ctx context.Context, req *v1.UnpublishValuesRequest) (*v1.UnpublishValuesResponse, error) {
+	response, err := c.unpublishValues.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // VariableStoreServiceHandler is an implementation of the
 // provider.variablestore.v1.VariableStoreService service.
 type VariableStoreServiceHandler interface {
@@ -356,6 +396,8 @@ type VariableStoreServiceHandler interface {
 	SyncEnvSource(context.Context, *v1.SyncEnvSourceRequest) (*v1.SyncEnvSourceResponse, error)
 	DescribeEnvSource(context.Context, *v1.DescribeEnvSourceRequest) (*v1.DescribeEnvSourceResponse, error)
 	SetEnvSourceValue(context.Context, *v1.SetEnvSourceValueRequest) (*v1.SetEnvSourceValueResponse, error)
+	PublishValues(context.Context, *v1.PublishValuesRequest) (*v1.PublishValuesResponse, error)
+	UnpublishValues(context.Context, *v1.UnpublishValuesRequest) (*v1.UnpublishValuesResponse, error)
 }
 
 // NewVariableStoreServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -449,6 +491,18 @@ func NewVariableStoreServiceHandler(svc VariableStoreServiceHandler, opts ...con
 		connect.WithSchema(variableStoreServiceMethods.ByName("SetEnvSourceValue")),
 		connect.WithHandlerOptions(opts...),
 	)
+	variableStoreServicePublishValuesHandler := connect.NewUnaryHandlerSimple(
+		VariableStoreServicePublishValuesProcedure,
+		svc.PublishValues,
+		connect.WithSchema(variableStoreServiceMethods.ByName("PublishValues")),
+		connect.WithHandlerOptions(opts...),
+	)
+	variableStoreServiceUnpublishValuesHandler := connect.NewUnaryHandlerSimple(
+		VariableStoreServiceUnpublishValuesProcedure,
+		svc.UnpublishValues,
+		connect.WithSchema(variableStoreServiceMethods.ByName("UnpublishValues")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/provider.variablestore.v1.VariableStoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case VariableStoreServiceSetValueProcedure:
@@ -479,6 +533,10 @@ func NewVariableStoreServiceHandler(svc VariableStoreServiceHandler, opts ...con
 			variableStoreServiceDescribeEnvSourceHandler.ServeHTTP(w, r)
 		case VariableStoreServiceSetEnvSourceValueProcedure:
 			variableStoreServiceSetEnvSourceValueHandler.ServeHTTP(w, r)
+		case VariableStoreServicePublishValuesProcedure:
+			variableStoreServicePublishValuesHandler.ServeHTTP(w, r)
+		case VariableStoreServiceUnpublishValuesProcedure:
+			variableStoreServiceUnpublishValuesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -542,4 +600,12 @@ func (UnimplementedVariableStoreServiceHandler) DescribeEnvSource(context.Contex
 
 func (UnimplementedVariableStoreServiceHandler) SetEnvSourceValue(context.Context, *v1.SetEnvSourceValueRequest) (*v1.SetEnvSourceValueResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.variablestore.v1.VariableStoreService.SetEnvSourceValue is not implemented"))
+}
+
+func (UnimplementedVariableStoreServiceHandler) PublishValues(context.Context, *v1.PublishValuesRequest) (*v1.PublishValuesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.variablestore.v1.VariableStoreService.PublishValues is not implemented"))
+}
+
+func (UnimplementedVariableStoreServiceHandler) UnpublishValues(context.Context, *v1.UnpublishValuesRequest) (*v1.UnpublishValuesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.variablestore.v1.VariableStoreService.UnpublishValues is not implemented"))
 }
