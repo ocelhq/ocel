@@ -615,3 +615,26 @@ func TestBuildRefusesAnEnvThatNamesNoTier(t *testing.T) {
 		t.Fatalf("runBuild = %v, want --env staging refused naming the tiers it takes", err)
 	}
 }
+
+func builtSaying(t *testing.T, dependencies Dependencies, root string) string {
+	t.Helper()
+	dependencies.Events = run.NewBus(time.Now)
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runBuild(context.Background(), dependencies, root, options{}, nil); err != nil {
+		t.Fatalf("runBuild: %v; stdout=%s", err, stdout.String())
+	}
+	return stdout.String()
+}
+
+func TestBuildNamesTheCollectingOfWhatTheProjectDeclaresUnderBuild(t *testing.T) {
+	t.Parallel()
+
+	root := writeServerlessProject(t)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+
+	said := builtSaying(t, dependencies, root)
+
+	assertReportedUnder(t, said, "Collected the resources test-app declares in ", "build")
+}
