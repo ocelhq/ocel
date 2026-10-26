@@ -28,7 +28,8 @@ const (
 )
 
 type KeyValues struct {
-	Clients *Clients
+	Clients      *Clients
+	FirestoreOff bool
 }
 
 func (s KeyValues) open(ctx context.Context, in records.Partition) (*firestore.Client, *firestore.CollectionRef, error) {
@@ -59,7 +60,7 @@ func (s KeyValues) refuseAbsentDocument(ctx context.Context, collection *firesto
 	_, err := documents.Next()
 	switch {
 	case status.Code(err) == codes.NotFound:
-		return s.RefuseUnbootstrapped(key.Partition.Tier)
+		return s.refuseUnbootstrapped(key.Partition.Tier)
 	case googleretry.IsRetried(err):
 		return fmt.Errorf("read %s: %w", key, err)
 	}
@@ -69,6 +70,12 @@ func (s KeyValues) refuseAbsentDocument(ctx context.Context, collection *firesto
 func (s KeyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	if err := records.RefuseMalformedKey(key); err != nil {
 		return records.Entry{}, err
+	}
+	if s.FirestoreOff {
+		if _, owned := ProjectOfRecords(key.Partition); owned {
+			return records.Entry{}, records.ErrNotFound
+		}
+		return records.Entry{}, s.refuseUnbootstrapped(key.Partition.Tier)
 	}
 	_, collection, err := s.open(ctx, key.Partition)
 	if err != nil {
@@ -184,6 +191,15 @@ func (s KeyValues) Remove(ctx context.Context, key records.Key, expected records
 }
 
 func (s KeyValues) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
+	if err := records.RefuseMalformedPartition(in); err != nil {
+		return nil, err
+	}
+	if s.FirestoreOff {
+		if _, owned := ProjectOfRecords(in); owned {
+			return nil, nil
+		}
+		return nil, s.refuseUnbootstrapped(in.Tier)
+	}
 	_, collection, err := s.open(ctx, in)
 	if err != nil {
 		return nil, err
@@ -208,7 +224,7 @@ func (s KeyValues) List(ctx context.Context, in records.Partition, under ...stri
 		return nil, nil
 	}
 	if status.Code(err) == codes.NotFound {
-		return nil, s.RefuseUnbootstrapped(in.Tier)
+		return nil, s.refuseUnbootstrapped(in.Tier)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read everything in %s: %w", in, err)
@@ -289,7 +305,7 @@ func (s KeyValues) refuseFailedWrite(key records.Key, err error) error {
 		return refuseNoProjectRecords(key.Partition.Tier, project, err)
 	}
 	if status.Code(err) == codes.NotFound {
-		return s.RefuseUnbootstrapped(key.Partition.Tier)
+		return s.refuseUnbootstrapped(key.Partition.Tier)
 	}
 	return fmt.Errorf("write %s: %w", key, err)
 }
@@ -302,7 +318,7 @@ func (e noRecordsDatabase) Error() string { return e.refused.Error() }
 
 func (e noRecordsDatabase) Unwrap() []error { return []error{e.refused, ErrNoRecordsDatabase} }
 
-func (s KeyValues) RefuseUnbootstrapped(tier environment.Tier) error {
+func (s KeyValues) refuseUnbootstrapped(tier environment.Tier) error {
 	return noRecordsDatabase{refused: refusal.Refuse(refusal.CodeNotReady,
 		"this project keeps no %q Firestore database, so there is nowhere to store an entry.\nRun `%s` to create it, then try again",
 		s.Clients.RecordsDatabase(tier), provider.BootstrapCommand(tier))}

@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"errors"
 
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
@@ -20,7 +19,7 @@ func (s keyValues) open(ctx context.Context) (records.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ports.KeyValues{Clients: resolved.Workload()}, nil
+	return ports.KeyValues{Clients: resolved.Workload(), FirestoreOff: s.p.serviceStates.IsOff(bootstrap.FirestoreAPI)}, nil
 }
 
 func (s keyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
@@ -28,21 +27,7 @@ func (s keyValues) Read(ctx context.Context, key records.Key) (records.Entry, er
 	if err != nil {
 		return records.Entry{}, err
 	}
-	if err := s.answerWhileFirestoreOff(store, key.Partition); err != nil {
-		return records.Entry{}, err
-	}
 	return store.Read(ctx, key)
-}
-
-func (s keyValues) answerWhileFirestoreOff(store records.Store, in records.Partition) error {
-	firestore, ok := store.(ports.KeyValues)
-	if !ok || !s.p.serviceStates.IsOff(bootstrap.FirestoreAPI) {
-		return nil
-	}
-	if _, owned := ports.ProjectOfRecords(in); owned {
-		return records.ErrNotFound
-	}
-	return firestore.RefuseUnbootstrapped(in.Tier)
 }
 
 func (s keyValues) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
@@ -100,11 +85,6 @@ func (s keyValues) Remove(ctx context.Context, key records.Key, expected records
 func (s keyValues) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	store, err := s.open(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.answerWhileFirestoreOff(store, in); errors.Is(err, records.ErrNotFound) {
-		return nil, nil
-	} else if err != nil {
 		return nil, err
 	}
 	return store.List(ctx, in, under...)
