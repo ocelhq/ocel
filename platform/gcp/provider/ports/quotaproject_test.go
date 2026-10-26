@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"cloud.google.com/go/storage"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 	pubsub "google.golang.org/api/pubsub/v1"
@@ -47,6 +48,11 @@ func userCredentials(t *testing.T) {
 
 func serviceAccountCredentials(t *testing.T) {
 	t.Helper()
+	serviceAccountCredentialsFrom(t, "https://oauth2.googleapis.com/token")
+}
+
+func serviceAccountCredentialsFrom(t *testing.T, tokenURL string) {
+	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
@@ -57,6 +63,7 @@ func serviceAccountCredentials(t *testing.T) {
 		"client_email":   "deploy@acme-prod.iam.gserviceaccount.com",
 		"private_key_id": "k1",
 		"private_key":    string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})),
+		"token_uri":      tokenURL,
 	})
 }
 
@@ -88,6 +95,39 @@ func TestAUserCredentialBillsItsCallsToTheProjectItDeploysTo(t *testing.T) {
 
 	if billed := billedProjectOf(t, findQuotaProject("acme-prod")); billed != "acme-prod" {
 		t.Errorf("the call was billed to %q, want acme-prod: a user's credential names its own quota project, and a deploy's calls are the target project's", billed)
+	}
+}
+
+func TestACloudStorageClientBillsItsCallsToTheQuotaProject(t *testing.T) {
+	var billed string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/token" {
+			_, _ = w.Write([]byte(`{"access_token":"ya29.stub","token_type":"Bearer","expires_in":3600}`))
+			return
+		}
+		billed = r.Header.Get(quotaProjectHeader)
+		_, _ = w.Write([]byte(`{"name":"acme-prod-state"}`))
+	}))
+	defer server.Close()
+	serviceAccountCredentialsFrom(t, server.URL+"/token")
+	ctx := context.Background()
+
+	options, err := NewStorageOptions(ctx, "", "acme-prod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := storage.NewClient(ctx, append(options, option.WithEndpoint(server.URL+"/storage/v1/"))...)
+	if err != nil {
+		t.Fatalf("storage.NewClient() error = %v, want a client that names its quota project", err)
+	}
+	defer client.Close()
+	if _, err := client.Bucket("acme-prod-state").Attrs(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if billed != "acme-prod" {
+		t.Errorf("the call was billed to %q, want acme-prod", billed)
 	}
 }
 

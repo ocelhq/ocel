@@ -212,14 +212,21 @@ func IsLoopback(endpoint string) bool {
 	return address != nil && address.IsLoopback()
 }
 
-func NewStorageOptions(endpoint, quotaProject string) []option.ClientOption {
-	if endpoint == "" {
-		return newQuotaProjectOptions(quotaProject)
+func NewStorageOptions(ctx context.Context, endpoint, quotaProject string) ([]option.ClientOption, error) {
+	if endpoint != "" {
+		return []option.ClientOption{
+			option.WithEndpoint(endpoint + "/storage/v1/"),
+			option.WithoutAuthentication(),
+		}, nil
 	}
-	return []option.ClientOption{
-		option.WithEndpoint(endpoint + "/storage/v1/"),
-		option.WithoutAuthentication(),
+	if quotaProject == "" {
+		return nil, nil
 	}
+	client, err := NewHTTPClient(ctx, quotaProject)
+	if err != nil {
+		return nil, err
+	}
+	return []option.ClientOption{option.WithHTTPClient(client)}, nil
 }
 
 func newQuotaProjectOptions(quotaProject string) []option.ClientOption {

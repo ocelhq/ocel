@@ -363,11 +363,7 @@ func interrupt(t *testing.T, p *gcp.Provider, tier environment.Tier) {
 	t.Helper()
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, ports.NewStorageOptions(endpoint(), "")...)
-	if err != nil {
-		t.Fatalf("reach the emulator's object store: %v", err)
-	}
-	t.Cleanup(func() { client.Close() })
+	client := emulatorStorage(t)
 
 	writer := client.Bucket(liveTierBucket(t, tier, naming.StorageState)).Object(bootstrap.StampObject).NewWriter(ctx)
 	if _, err := writer.Write([]byte(`{"state":"applying","writer":"live-suite","digest":"halfway"}`)); err != nil {
@@ -384,11 +380,7 @@ func TestLiveAStateBucketStoringAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 	bootstrap := bootstrapped(t, p, tier)
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, ports.NewStorageOptions(endpoint(), "")...)
-	if err != nil {
-		t.Fatalf("reach the emulator's object store: %v", err)
-	}
-	defer client.Close()
+	client := emulatorStorage(t)
 
 	object := client.Bucket(liveTierBucket(t, tier, naming.StorageState)).Object("ocel-alb-project-shop/.pulumi/stacks/ocel-alb-project-shop/alb-preview-shop--infra.json")
 	writer := object.NewWriter(ctx)
@@ -400,7 +392,7 @@ func TestLiveAStateBucketStoringAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 	}
 
 	var refused refusal.Refusal
-	err = bootstrap.Remove(ctx, tier, nil)
+	err := bootstrap.Remove(ctx, tier, nil)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Remove() with a stack still in the state bucket = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
@@ -594,11 +586,6 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 	bootstrap := bootstrapped(t, p, tier)
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, ports.NewStorageOptions(endpoint(), "")...)
-	if err != nil {
-		t.Fatalf("reach the emulator's object store: %v", err)
-	}
-	defer client.Close()
 	secrets, err := secretmanager.NewService(ctx, ports.NewRESTOptions(endpoint(), "")...)
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
@@ -695,11 +682,7 @@ func stamped(t *testing.T, tier environment.Tier, body string) {
 	t.Helper()
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, ports.NewStorageOptions(endpoint(), "")...)
-	if err != nil {
-		t.Fatalf("reach the emulator's object store: %v", err)
-	}
-	defer client.Close()
+	client := emulatorStorage(t)
 
 	writer := client.Bucket(liveTierBucket(t, tier, naming.StorageState)).Object(bootstrap.StampObject).NewWriter(ctx)
 	if _, err := writer.Write([]byte(body)); err != nil {
@@ -941,4 +924,19 @@ func TestLiveRemovingATierBesideItsSiblingForgetsEveryRecordItKeptAndNoneOfTheSi
 	if _, err := p.KeyValues().Read(ctx, kept[environment.TierProduction]); err != nil {
 		t.Errorf("Read(%s) after the other tier was removed = %v, want it kept", kept[environment.TierProduction], err)
 	}
+}
+
+func emulatorStorage(t *testing.T) *storage.Client {
+	t.Helper()
+	ctx := context.Background()
+	options, err := ports.NewStorageOptions(ctx, endpoint(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := storage.NewClient(ctx, options...)
+	if err != nil {
+		t.Fatalf("reach the emulator's object store: %v", err)
+	}
+	t.Cleanup(func() { client.Close() })
+	return client
 }

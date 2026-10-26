@@ -109,7 +109,11 @@ func opened[T any](c *Clients, cache *Memo[T], doing string, open func() (T, err
 
 func (c *Clients) Storage() (*storage.Client, error) {
 	return opened(c, &c.storage, "Cloud Storage", func() (*storage.Client, error) {
-		return storage.NewClient(context.Background(), ports.NewStorageOptions(c.Endpoint, c.QuotaProject())...)
+		options, err := ports.NewStorageOptions(context.Background(), c.Endpoint, c.QuotaProject())
+		if err != nil {
+			return nil, err
+		}
+		return storage.NewClient(context.Background(), options...)
 	})
 }
 
