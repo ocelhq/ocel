@@ -17,6 +17,7 @@ import (
 const ReasonQueuePurged = "its waiting messages are deleted, since Cloud Tasks reserves a deleted queue's name for 7 days"
 
 var queueKind = KindOps{
+	api:       queueAPI,
 	noun:      "Cloud Tasks queue",
 	terraform: cost.CloudTasksQueueType,
 	properties: func(region string, _ Resource) map[string]any {

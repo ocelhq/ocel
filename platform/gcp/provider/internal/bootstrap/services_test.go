@@ -173,14 +173,14 @@ func TestEveryResourceABootstrapOrItsPartsReadsIsHostedByAServiceItChecks(t *tes
 
 	tier := environment.TierProduction
 	for _, item := range Resources(googletest.Names, tier, false) {
-		if !slices.Contains(BootstrapAPIs, item.api()) {
-			t.Errorf("the base reads %s through %q, which a bootstrap never checks is on", item.ID(), item.api())
+		if !slices.Contains(BootstrapAPIs, item.KindOps().api) {
+			t.Errorf("the base reads %s through %q, which a bootstrap never checks is on", item.ID(), item.KindOps().api)
 		}
 	}
 	for _, part := range DeployedParts() {
 		for _, item := range part.Items(googletest.Names, tier) {
-			if !slices.Contains(BootstrapAPIs, item.api()) && !slices.Contains(part.APIs, item.api()) {
-				t.Errorf("the %s part reads %s through %q, which neither it nor the base checks is on", part.Name, item.ID(), item.api())
+			if !slices.Contains(BootstrapAPIs, item.KindOps().api) && !slices.Contains(part.APIs, item.KindOps().api) {
+				t.Errorf("the %s part reads %s through %q, which neither it nor the base checks is on", part.Name, item.ID(), item.KindOps().api)
 			}
 		}
 	}

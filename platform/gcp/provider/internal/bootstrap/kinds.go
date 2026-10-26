@@ -39,6 +39,7 @@ const (
 const LocationGlobal = "global"
 
 type KindOps struct {
+	api           string
 	noun          string
 	terraform     string
 	properties    func(region string, target Resource) map[string]any
@@ -74,28 +75,10 @@ func init() {
 		KindQueue:          queueKind,
 		KindTierTag:        tierTagKind,
 		KindLogView:        logViewKind,
-		KindService:        {noun: "Cloud Run service", terraform: cost.CloudRunServiceType},
-		KindSchedule:       {noun: "Cloud Scheduler job", terraform: cost.SchedulerJobType},
+		KindService:        {api: RunAPI, noun: "Cloud Run service", terraform: cost.CloudRunServiceType},
+		KindSchedule:       {api: schedulerAPI, noun: "Cloud Scheduler job", terraform: cost.SchedulerJobType},
 	}
 }
-
-var kindAPIs = map[Kind]string{
-	KindDatabase:       FirestoreAPI,
-	KindBucket:         storageAPI,
-	KindKeyRing:        kmsAPI,
-	KindKey:            kmsAPI,
-	KindSecret:         SecretManagerAPI,
-	KindRepository:     repositoryAPI,
-	KindServiceAccount: IAMAPI,
-	KindRole:           IAMAPI,
-	KindQueue:          "cloudtasks.googleapis.com",
-	KindTierTag:        resourceManagerAPI,
-	KindLogView:        loggingAPI,
-	KindService:        "run.googleapis.com",
-	KindSchedule:       "cloudscheduler.googleapis.com",
-}
-
-func (i Resource) api() string { return kindAPIs[i.Kind] }
 
 func (k KindOps) mendOrMake(ctx context.Context, b Engine, read Survey, target Resource) error {
 	if k.mend != nil {

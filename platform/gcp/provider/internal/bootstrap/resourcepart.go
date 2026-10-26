@@ -63,7 +63,7 @@ var Keys = ResourcePart{
 var Realtime = ResourcePart{
 	Name:    RealtimePart,
 	Summary: "the identity this tier's realtime gateways run as",
-	APIs:    []string{"pubsub.googleapis.com"},
+	APIs:    []string{pubsubAPI},
 	Retires: true,
 	items: func(names names.Names, tier environment.Tier) []Resource {
 		return []Resource{{Kind: KindServiceAccount, Name: names.RealtimeAccount(tier)}}
@@ -73,7 +73,7 @@ var Realtime = ResourcePart{
 var Topics = ResourcePart{
 	Name:    TopicsPart,
 	Summary: "the identity Pub/Sub signs each push to a worker of this tier as, and the queue a delayed message of this tier waits in",
-	APIs:    []string{"pubsub.googleapis.com", "cloudtasks.googleapis.com"},
+	APIs:    []string{pubsubAPI, queueAPI},
 	Retires: true,
 	items: func(names names.Names, tier environment.Tier) []Resource {
 		return []Resource{

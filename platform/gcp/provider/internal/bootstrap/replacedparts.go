@@ -35,13 +35,6 @@ func (b Engine) SurveyReplacedParts(ctx context.Context, base Survey, removing [
 		if len(items) == 0 {
 			continue
 		}
-		off, err := b.ListServicesOff(ctx, each.APIs)
-		if err != nil {
-			return nil, err
-		}
-		if len(off) > 0 {
-			continue
-		}
 		read := b.newSurvey(tier)
 		read.Buckets = base.Buckets
 		if err := b.surveyPresence(ctx, read, items); err != nil {

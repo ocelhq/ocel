@@ -25,6 +25,7 @@ const (
 )
 
 var tierTagKind = KindOps{
+	api:       resourceManagerAPI,
 	noun:      "tag key",
 	terraform: cost.TagKeyType,
 	survey: func(ctx context.Context, b Engine, _ Survey, _ Resource) (Presence, error) {
@@ -181,7 +182,7 @@ func (b Engine) tierTagged(ctx context.Context, read Survey, target Resource) (g
 }
 
 func (b Engine) untaggedPresence(ctx context.Context, read Survey, target Resource, found Presence) (Presence, error) {
-	if !found.Present || found.Mends != "" || found.Replaces != "" || b.IsOff(resourceManagerAPI) {
+	if !found.Present || found.Mends != "" || found.Replaces != "" {
 		return found, nil
 	}
 	tagged, named, err := b.tierTagged(ctx, read, target)

@@ -15,6 +15,7 @@ import (
 const ReasonRingKept = "Google never deletes a key ring"
 
 var keyRingKind = KindOps{
+	api:       kmsAPI,
 	noun:      "KMS key ring",
 	terraform: cost.KMSKeyRingType,
 	survey: func(ctx context.Context, b Engine, _ Survey, _ Resource) (Presence, error) {

@@ -25,6 +25,7 @@ const (
 )
 
 var bucketKind = KindOps{
+	api:       storageAPI,
 	tagged:    bucketTagged,
 	noun:      "bucket",
 	terraform: cost.StorageBucketType,

@@ -17,6 +17,7 @@ import (
 )
 
 var roleKind = KindOps{
+	api:           IAMAPI,
 	noun:          "custom role",
 	terraform:     cost.ProjectCustomRoleType,
 	emulatorSkips: true,

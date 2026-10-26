@@ -108,9 +108,6 @@ func (b Engine) surveyPresence(ctx context.Context, read Survey, items []Resourc
 	reads := make([]func(context.Context) error, len(items))
 	for i, item := range items {
 		reads[i] = func(ctx context.Context) (err error) {
-			if b.IsOff(item.api()) {
-				return nil
-			}
 			found[i], err = b.PresenceOf(ctx, read, item)
 			return err
 		}
@@ -222,13 +219,16 @@ type Presence struct {
 }
 
 func (b Engine) PresenceOf(ctx context.Context, read Survey, target Resource) (Presence, error) {
-	surveyed := target.KindOps().survey
-	if surveyed == nil {
+	ops := target.KindOps()
+	if ops.survey == nil {
 		return Presence{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", target.Kind)
 	}
-	found, err := surveyed(ctx, b, read, target)
-	if err != nil {
-		return Presence{}, err
+	if b.IsOff(ops.api) {
+		return Presence{}, nil
+	}
+	found, err := ops.survey(ctx, b, read, target)
+	if err != nil || b.IsOff(resourceManagerAPI) {
+		return found, err
 	}
 	return b.untaggedPresence(ctx, read, target, found)
 }

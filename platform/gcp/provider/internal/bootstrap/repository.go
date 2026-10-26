@@ -26,6 +26,7 @@ const (
 )
 
 var repositoryKind = KindOps{
+	api:           repositoryAPI,
 	tagged:        repositoryTagged,
 	noun:          "Artifact Registry repository",
 	terraform:     cost.ArtifactRepositoryType,

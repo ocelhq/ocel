@@ -22,6 +22,10 @@ const (
 	resourceManagerAPI = "cloudresourcemanager.googleapis.com"
 	repositoryAPI      = "artifactregistry.googleapis.com"
 	loggingAPI         = "logging.googleapis.com"
+	RunAPI             = "run.googleapis.com"
+	schedulerAPI       = "cloudscheduler.googleapis.com"
+	queueAPI           = "cloudtasks.googleapis.com"
+	pubsubAPI          = "pubsub.googleapis.com"
 )
 
 var BootstrapAPIs = []string{
