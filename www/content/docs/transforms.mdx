@@ -229,6 +229,316 @@ export default defineTransform({
 - `tags` become labels on the container and volume. Every value is literal; a box has no
   binding outputs to fill one from.
 
+## On Google Cloud
+
+The `gcp` branch names each field as `@pulumi/gcp` does in the args of the same resource:
+`postgres.instance` is typed from `sql.DatabaseInstanceArgs`, and `function.service` from
+`cloudrunv2.ServiceArgs`. The Google Cloud provider makes most of its resources by calling
+Google's APIs itself, not through Pulumi, so a patch reaches only the paths ocel translates into
+the request it sends. Each of those surfaces takes a list of paths, and its type is the Pulumi
+args cut down to them. A path off the list is refused where the rule is written, and again by
+the deploy, and everything off the list stays ocel's. An empty list, an empty object or `null`
+counts as a path of its own. Where nothing under it is on the list it is refused, so
+`bucket.cors: []` fails rather than doing nothing. Over paths that are on it, it is taken:
+`subnetwork.logConfig: {}` turns flow logs on with every setting at its default. The `alb` edge's
+load balancer is a Pulumi program, so `edge` and `loadBalancer` take the args whole, less the fields ocel owns, as on AWS.
+
+```ts title="transforms/defaults.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform({
+  gcp: {
+    postgres: { instance: { settings: { tier: "db-custom-2-7680", diskSize: 50 } } },
+    function: {
+      service: {
+        template: { containers: [{ resources: { limits: { cpu: "2", memory: "4Gi" } } }] },
+      },
+    },
+  },
+});
+```
+
+| ocel resource | Resources |
+| --- | --- |
+| `bucket` | `bucket` |
+| `postgres` | `instance` |
+| `kv` | `instance` |
+| `topic` | `topic`, `subscription` |
+| `task` | `topic`, `subscription`, `job` |
+| `function` | `service`, one per function of a serverless app |
+| `container` | `service`, the one a container app runs as |
+| `worker` | `service`, one per worker |
+| `edge` | `backendService`, `neg`, `certificateMapEntry`, one of each per hostname of an app behind the `alb` edge |
+| `loadBalancer` | `address`, `notFoundBackend`, `assetsBackend`, `certificateMap`, `urlMap`, `httpsProxy`, `forwardingRule` |
+| `network` | `network`, `subnetwork`, `connectionPolicy` |
+
+A rule's `if` sees the app of a `function`, `container`, `worker` or `edge`, and no app for the
+rest. A bucket, database, store, topic or task belongs to no one app.
+
+### What a deploy does with a patch
+
+Every deploy compares each field a patch sets with what Google Cloud holds, and updates the ones
+that differ in place, so a patched field changed by hand goes back. Where ocel's own logic
+depends on a patched value, it reads the patched one: the network an endpoint is made in, the
+account an app runs as, and how a service is billed. `ocel cost` prices what the patches set: a
+database's machine type, edition, availability and disk, a store's replicas, a bucket's storage
+class and versioning, a topic's or subscription's retention, and a service's CPU, memory,
+scaling and billing. It cannot price a value filled from a
+[binding](#reading-what-your-own-infrastructure-published), nor what ocel reads together with it:
+a binding in one container limit leaves the container's CPU, memory and billing unpriced, and one
+in either scaling bound leaves both bounds unpriced.
+
+Removing a patch puts its field back to ocel's value, or to Google's default where ocel sets
+none. Each resource records the paths its patches reached, so a later deploy knows what to put
+back. The exceptions:
+
+- A field fixed once its resource exists, a database's `settings.diskType` or a store's
+  `zoneDistributionConfig`, takes no other value afterwards. A deploy that changes it, or drops
+  the patch while the resource holds something other than ocel's value, is refused until the patch
+  names what the resource was made with.
+- The network's `mtu` and the subnetwork's `ipCidrRange` are fixed too. Asking for another value
+  is refused; dropping the patch keeps the value they have.
+- A disk only grows. While `settings.diskAutoresize` is on, a `settings.diskSize` below what the
+  disk holds is no change; while it is off, it is refused.
+- Dropping `settings.backupConfiguration.startTime` keeps the start time the database has.
+- Dropping `settings.maintenanceWindow` puts the database back to any window, and keeps its
+  `updateTrack`.
+- The tier's network and load balancer record which project's deploy patched them last. When
+  that project drops its patches, its next deploy puts the patched fields back. A deploy of
+  another project whose transforms patch nothing in them, or an `ocel bootstrap`, leaves them as
+  recorded.
+
+### Buckets
+
+`bucket.bucket` takes the `storageClass`, `versioning.enabled`,
+`softDeletePolicy.retentionDurationSeconds`, `retentionPolicy.retentionPeriod`,
+`encryption.defaultKmsKeyName`, `logging` and `lifecycleRules`. Lifecycle rules come after the
+ones ocel keeps to clean up abandoned uploads, which stay.
+
+ocel grants nothing on a KMS key it does not own. A key a patch names, as a bucket's
+`encryption.defaultKmsKeyName`, a topic's `kmsKeyName` or a service's `template.encryptionKey`,
+must already let the service agent that uses it encrypt and decrypt with it: Cloud Storage's,
+Pub/Sub's (`service-<project number>@gcp-sa-pubsub.iam.gserviceaccount.com`) or Cloud Run's.
+
+### Postgres
+
+`postgres.instance` takes the machine type (`settings.tier`), `settings.edition`,
+`settings.availabilityType`, the disk (`diskSize`, `diskType`, `diskAutoresize`,
+`diskAutoresizeLimit`), `databaseFlags`, `maintenanceWindow`, `insightsConfig`,
+`dataCacheConfig`, the backups under `backupConfiguration`, `deletionProtectionEnabled`, and the
+[network its endpoint is made in](#placing-on-a-network-of-your-own). The name, region, Postgres
+version, private endpoint, encrypted connections, user and database stay ocel's. Deletion
+protection guards against deletes made outside ocel: removing the database turns it off first.
+
+The apps bound to a database share its connections, and ocel sizes each app's pools from the
+default `max_connections` of the tier's machine type, 100 in production and 25 in a preview. So:
+
+- A `max_connections` flag is refused.
+- A shared-core machine type that takes fewer connections than the tier's default is refused. In
+  production that is `db-f1-micro` and `db-g1-small`.
+- A [service](#cloud-run-services) scaled past its share of those connections is refused, naming
+  the most instances it may run.
+
+### KV stores
+
+`kv.instance` takes `replicaCount` (0 to 5), `zoneDistributionConfig`, the
+`maintenancePolicy.weeklyMaintenanceWindows`, `automatedBackupConfig`, which turns automated
+backups on, `deletionProtectionEnabled`, and the [network its endpoint is made
+in](#placing-on-a-network-of-your-own). The node type, picked by `memory`, the version, eviction,
+token auth, TLS and append-only persistence stay ocel's. A replica count set here replaces the
+tier's one or none, and removing a store turns a patched deletion protection off before it
+deletes the instance.
+
+### Topics and tasks
+
+`topic` and `task` take the Pub/Sub `topic` (`messageRetentionDuration`, `kmsKeyName` and
+`messageStoragePolicy`) and the `subscription` (`messageRetentionDuration` and
+`retainAckedMessages`). A retention is a number of seconds such as `"86400s"`, from 10 minutes to
+31 days. A `subscription` patch reaches every consumer's subscription of the topic alike.
+
+A subscription takes no `deadLetterPolicy`. ocel redelivers a message until the run it started
+settles, so Pub/Sub dead-lettering it would lose a run ocel still retries, and Pub/Sub's service
+agent would need to publish on a topic ocel does not own.
+
+`task.job` is the Cloud Scheduler job of a task with a `cron`, and takes its `description` and
+`retryConfig`. A patch to the job of a task with no cron is refused. `attemptDeadline` is not
+patchable: Cloud Scheduler ignores it for a Pub/Sub target, the only kind ocel makes.
+
+### Cloud Run services
+
+`function.service`, `container.service` and `worker.service` patch the Cloud Run service behind
+each function, container app and worker. Each takes:
+
+- `template.containers`, with exactly one entry for the one container ocel runs: its
+  `resources.limits` (`cpu`, `memory`, `nvidia.com/gpu`), `resources.cpuIdle` and
+  `resources.startupCpuBoost`.
+- `template.scaling` (`minInstanceCount`, `maxInstanceCount`),
+  `template.maxInstanceRequestConcurrency` (1 to 1000), `template.executionEnvironment`,
+  `template.sessionAffinity`, `template.nodeSelector.accelerator`, `template.encryptionKey` and
+  `binaryAuthorization`.
+- `template.vpcAccess`, which [places the service on a network](#placing-on-a-network-of-your-own).
+- `template.serviceAccount`, which [runs the app as an account of your
+  own](#running-an-app-as-your-own-service-account).
+- `template.timeout`, on a function or container alone, as seconds such as `"300s"`, up to
+  `"3600s"`. A worker's timeout stays the push deadline ocel keeps.
+
+`resources.cpuIdle` is how Cloud Run bills the service: `true` per request, `false` per instance.
+See [billing](/docs/providers/gcp#billing) for ocel's default and what each costs. A service's
+image, command, environment, ports, probes and ingress stay ocel's.
+
+### The alb edge
+
+`edge` patches what serves one app's hostnames behind the [`alb`
+edge](/docs/providers/gcp#edge): each hostname's backend service, serverless network endpoint
+group and certificate map entry. A rule sees the app and no `env`, since one backend serves the
+hostname in every environment of the tier, and the patch applies the next time the app is
+deployed. `backendService.securityPolicy` puts a Cloud Armor policy your own infrastructure makes
+in front of the app; the policy's charges are its own. `customResponseHeaders` come after the
+`X-Robots-Tag: noindex` a preview's backends send, never in its place.
+
+A `securityPolicy` or `edgeSecurityPolicy`, here or on the load balancer's `notFoundBackend` and
+`assetsBackend`, needs the deploy credential to hold `compute.securityPolicies.use` in the
+policy's project. ocel never grants it, since the policy is yours: a plan or deploy asks the
+project and is refused, naming the permission and the project, unless `OCEL_SKIP_CHECKS` is set.
+
+```ts title="transforms/edge.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform(({ bindings }) => ({
+  if: ({ app }) => app === "web",
+  gcp: {
+    edge: {
+      backendService: {
+        securityPolicy: bindings.custom.armor.policy,
+        customResponseHeaders: ["Strict-Transport-Security: max-age=31536000"],
+      },
+    },
+  },
+}));
+```
+
+`loadBalancer` patches the tier's load balancer, which every project behind the `alb` edge
+shares. Its `assetsBackend.customResponseHeaders` come after ocel's too. The names, what each
+resource routes to, the protocol, scheme and port a request arrives on, host rules and path
+matchers, the cache mode and cache key the edge's invalidation relies on, and the labels ocel
+writes from a rule's tags stay ocel's. A field holding some of those, such as a backend's
+`cdnPolicy`, takes an object of its other fields. Setting it to `null`, a binding output or a list
+is refused, since that would replace ocel's fields under it.
+
+The load balancer belongs to the tier, as the network does:
+
+- A rule's `if` sees the tier and no `env` or `app` for it.
+- Every project behind it should list the same patches: a deploy whose patches differ from the
+  ones it carries provisions it again with its own. A deploy whose transforms patch nothing in it
+  puts the patched fields back if its project patched it last, and otherwise leaves it as it is.
+- A patch cannot be filled from `bindings`.
+
+### The tier's network
+
+`network` patches the tier's [private network](/docs/providers/gcp#private-network):
+
+| Resource | Takes |
+| --- | --- |
+| `network` | `mtu`, 1300 to 8896, set when the network is made and fixed after |
+| `subnetwork` | `ipCidrRange`, a `/16` to a `/26` inside `10.0.0.0/8`, `172.16.0.0/12` or `192.168.0.0/16`, `10.240.0.0/20` when left off, and fixed once the subnetwork exists; `privateIpGoogleAccess`; `logConfig`, which turns flow logs on, and as `{}` samples half the flows every 5 seconds with all metadata; `secondaryIpRanges` |
+| `connectionPolicy` | `pscConfig.limit`, for both service connection policies, Memorystore's and Cloud SQL's |
+
+The names, routing, the region, the service classes and what each resource is attached to stay
+ocel's. The network belongs to the tier, as [the load balancer](#the-alb-edge) does: a rule sees
+no `env` or `app`, every project of the tier should list the same patches, a deploy whose
+transforms patch nothing in it puts the fields back only if its project patched it last, and no
+patch is filled from `bindings`. Removing the network forgets its patches, so a network made
+again takes only those of the deploy that makes it.
+
+### Placing on a network of your own
+
+A database's and a store's endpoint are made on the tier's network, and every app bound to one
+reaches it from the tier's subnetwork. A patch can put each on a VPC network your own
+infrastructure makes instead:
+
+| Resource | Path | Names |
+| --- | --- | --- |
+| `postgres.instance` | `settings.ipConfiguration.pscConfigs[].pscAutoConnections[].consumerNetwork` | the network the database's endpoint is made in |
+| `kv.instance` | `desiredAutoCreatedEndpoints[].network` | the network the store's endpoint is made in |
+| `function.service`, `container.service`, `worker.service` | `template.vpcAccess.networkInterfaces[]`, with `network`, `subnetwork` and `tags` | the network and subnetwork the service's traffic leaves through |
+
+- Name a network by its name or as `projects/<project>/global/networks/<name>`, and a subnetwork
+  by its name or as `projects/<project>/regions/<region>/subnetworks/<name>`, in the deploy's own
+  project and region. Another project's is refused.
+- A database or store takes one entry, and so one endpoint on one network. The endpoint never
+  moves: once it exists, a deploy that places it on another network is refused. Place it on its
+  network again, or remove the database or store and deploy, which deletes its data, before
+  declaring it again.
+- A service takes exactly one network interface, and `template.vpcAccess.egress` is
+  `PRIVATE_RANGES_ONLY` or `ALL_TRAFFIC`. It replaces the egress ocel would give the service, so
+  the service no longer reaches the tier's subnetwork: put the databases and stores it binds on a
+  network it reaches.
+- ocel changes nothing on a network it does not own, so the network's owner makes what the
+  endpoints and the egress need: a service connection policy in the deploy's region for Cloud SQL
+  (service class `google-cloud-sql`) and for Memorystore (`gcp-memorystore`), and
+  `roles/compute.networkUser` on the subnetwork for Cloud Run's service agent
+  (`service-<project number>@serverless-robot-prod.iam.gserviceaccount.com`). A database or store
+  on a network without its policy gets no endpoint, and the deploy names the policy it lacks.
+- Before it makes a database or store, a deploy checks that the network it is placed on exists,
+  and is refused if it does not, unless `OCEL_SKIP_CHECKS` is set.
+- When every database and store a deploy declares, and every service of every app bound to one,
+  is placed off the tier's network, the deploy adds no `private-network` part. A placement filled
+  from a binding counts as off it.
+- `ocel bootstrap status` and `ocel bootstrap destroy` count only a database or store whose
+  endpoint is on the tier's network as using it, and a port forward to one placed elsewhere is
+  refused: reach it from a machine on its network.
+
+### Running an app as your own service account
+
+`template.serviceAccount` runs an app as a service account your own infrastructure owns, in
+place of the one ocel makes for the app in each environment. Every service of the app, its
+functions or container and its workers, must name the same account, and services naming
+different ones are refused.
+
+ocel grants the account what the app needs on what ocel provisions, as it would its own: the
+database the project keeps its records in, the tier's key, its buckets, topics and delay queue,
+the tier's cache and static files, and the gate secret. It grants nothing on the account itself,
+so your infrastructure grants what the app needs there:
+
+| When the app | Permission on the account | To |
+| --- | --- | --- |
+| runs as it at all | `iam.serviceAccounts.actAs` | the deploy credential, which runs the app's services as the account |
+| binds a bucket | `iam.serviceAccounts.signBlob` | the account itself, which signs the bucket's urls |
+| binds a topic or task, or runs a worker | `iam.serviceAccounts.actAs` | the account itself and the project's Cloud Tasks service agent (`service-<project number>@gcp-sa-cloudtasks.iam.gserviceaccount.com`), which sends the app's delayed messages as the account |
+
+Any role holding the permission will do: `roles/iam.serviceAccountUser` holds `actAs`, and
+`roles/iam.serviceAccountTokenCreator` holds `signBlob`. For the last two rows, ocel looks for a
+binding with no condition on the account's own policy or on the policy of the project the account
+belongs to, the one its email names (`<project>.iam.gserviceaccount.com`). It reads no folder's
+or organization's. An account whose email names no project, such as a default compute account or
+a service agent, is checked on its own policy alone. A custom role counts only if the deploy
+credential may read it. When the app needs either, the deploy credential also needs
+`iam.serviceAccounts.getIamPolicy` on the account, to read whether they are there, and
+`resourcemanager.projects.getIamPolicy` on the account's project when ocel deploys to another. A
+plan checks all of it as the deploy does, and is refused naming the grant that is missing, unless
+`OCEL_SKIP_CHECKS` is set.
+
+- One account is held by one app of one project in each tier: a second app naming it is
+  refused, since taking one app's grants back would take the other's. The environments of one app
+  may share it.
+- After an app moves to an account of yours, ocel deletes the account it made for the app in that
+  environment once no release there still runs as it.
+- Dropping the patch, or naming another account, grants what the app needs to the account it runs
+  as next. The account it ran as keeps its grants, and stays held by the app, until no release of
+  the app in that environment runs as it.
+
+### Tags become labels
+
+On Google Cloud a rule's `tags` become labels on the resources that take them: a bucket, a
+database, as user labels, a store, a topic and its subscriptions, a Cloud Run service, the network's
+connection policies, and the `alb` edge's resources. Google's rules for labels apply, and a tag
+that breaks one is refused before the deploy reaches anything:
+
+- A key starts with a lowercase letter, and a key or value holds at most 63 lowercase letters,
+  digits, `-` and `_`. So `cost-center` is a label key, and `acme:cost-center` is not.
+- A resource holds at most 64 labels.
+- A key starting `ocel-` is ocel's own.
+
 ## Gates and tags
 
 A rule can take an `if` gate, decided from the environment being deployed and the resource's
@@ -290,3 +600,79 @@ export default defineTransform(({ bindings }) => ({
 The deploy resolves the record, not the module. A resource ocel provisions itself cannot be
 read this way: ocel publishes it after the transforms run. `ocel bindings generate` writes the
 names and types down, so the module is checked as you write it.
+
+On Google Cloud the same records fill a placement. A Pulumi program makes a VPC network, a
+subnetwork, the two service connection policies and Cloud Run's grant on the subnetwork, and
+publishes their names:
+
+```ts title="pulumi/index.ts"
+import * as gcp from "@pulumi/gcp";
+import { interpolate } from "@pulumi/pulumi";
+import { bind } from "@ocel/pulumi";
+
+const region = "europe-west1";
+const project = gcp.organizations.getProjectOutput();
+
+const network = new gcp.compute.Network("apps", { autoCreateSubnetworks: false });
+const subnetwork = new gcp.compute.Subnetwork("apps", {
+  network: network.id,
+  region,
+  ipCidrRange: "10.20.0.0/20",
+});
+
+for (const [name, serviceClass] of [
+  ["apps-sql", "google-cloud-sql"],
+  ["apps-memorystore", "gcp-memorystore"],
+]) {
+  new gcp.networkconnectivity.ServiceConnectionPolicy(name, {
+    location: region,
+    network: network.id,
+    serviceClass,
+    pscConfig: { subnetworks: [subnetwork.id] },
+  });
+}
+
+new gcp.compute.SubnetworkIAMMember("apps-cloud-run", {
+  region,
+  subnetwork: subnetwork.name,
+  role: "roles/compute.networkUser",
+  member: interpolate`serviceAccount:service-${project.number}@serverless-robot-prod.iam.gserviceaccount.com`,
+});
+
+bind.custom("network", { network: network.name, subnetwork: subnetwork.name });
+```
+
+The transform puts every database and every app service on it:
+
+```ts title="transforms/network.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform(({ bindings }) => {
+  const vpcAccess = {
+    egress: "PRIVATE_RANGES_ONLY",
+    networkInterfaces: [
+      { network: bindings.custom.network.network, subnetwork: bindings.custom.network.subnetwork },
+    ],
+  };
+  return {
+    gcp: {
+      postgres: {
+        instance: {
+          settings: {
+            ipConfiguration: {
+              pscConfigs: [
+                { pscAutoConnections: [{ consumerNetwork: bindings.custom.network.network }] },
+              ],
+            },
+          },
+        },
+      },
+      function: { service: { template: { vpcAccess } } },
+      worker: { service: { template: { vpcAccess } } },
+    },
+  };
+});
+```
+
+With every database, store and bound service placed there, a deploy adds no `private-network`
+part to the tier.

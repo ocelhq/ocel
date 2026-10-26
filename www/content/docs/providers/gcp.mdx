@@ -66,7 +66,7 @@ credential, and shows in its plan as added on first use:
 | `app-database` | the Firestore database the tier's projects [share](#project-records) | keeps a project's records: seals a value, declares a topic or task, ships a Next app or a build that revalidates, or sets a value with the ocel CLI |
 | `edge-bucket` | the tier's [edge bucket](#buckets-of-a-tier) | ships a Next app, or deploys behind the `alb` or Cloudflare edge |
 | `cache-bucket` | the tier's [cache bucket](#buckets-of-a-tier) | ships a Next app, or a build that revalidates |
-| `private-network` | the tier's [network](#private-network) | declares a database or kv store |
+| `private-network` | the tier's [network](#private-network) | declares a database or kv store, unless its transforms [place](/docs/transforms#placing-on-a-network-of-your-own) every one, and every app bound to one, on a network of your own |
 | `alb` | the [load balancer](#edge) of the `alb` edge | deploys behind it |
 | `realtime` | the account the tier's [realtime gateways](#realtime) run as | declares a realtime |
 | `topics` | the push account and delay queue of [topics and tasks](#topics-tasks-and-workers) | declares a topic or task |
@@ -155,54 +155,31 @@ per instance, a service keeps its CPU, so that work finishes, and is charged for
 whole life: up to 15 minutes idle after its last request, and an idle `instances.min` instance in full.
 
 A serverless Next app and every container are billed per instance, and every other serverless app
-per request. Set `billing` to `request` or `instance` under an app's name in `apps` to choose:
+and every worker per request. A [transform](/docs/transforms#cloud-run-services) chooses otherwise
+with `template.containers[].resources.cpuIdle`: `true` bills the service per request, `false` per
+instance.
 
-```ts tab="TypeScript" tab-group="config" title="ocel.config.ts"
-import { defineConfig } from "ocel/config";
-import gcpProvider from "ocel/providers/gcp";
+```ts title="transforms/billing.transform.ts"
+import { defineTransform } from "@ocel/transforms";
 
-export default defineConfig({
-  slug: "my-app",
-  provider: gcpProvider({
-    project: "my-project",
-    region: "europe-west1",
-    apps: { web: { billing: "request" }, jobs: { billing: "instance" } },
-  }),
-  apps: [
-    { name: "web", path: "web" },
-    { name: "jobs", path: "jobs" },
-  ],
+export default defineTransform({
+  if: ({ app }) => app === "web",
+  gcp: {
+    function: { service: { template: { containers: [{ resources: { cpuIdle: true } }] } } },
+  },
 });
 ```
 
-```json tab="JSON" title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
-  "slug": "my-app",
-  "provider": {
-    "gcp": {
-      "project": "my-project",
-      "region": "europe-west1",
-      "apps": { "web": { "billing": "request" }, "jobs": { "billing": "instance" } }
-    }
-  },
-  "apps": [
-    { "name": "web", "path": "web" },
-    { "name": "jobs", "path": "jobs" }
-  ]
-}
-```
-
-The choice holds whatever the app is built with: a Next app set to `request` gets no exception for
-the work it runs after a response. It covers the services that serve the app; its
-[workers](#topics-tasks-and-workers) stay billed per request. A deploy whose `apps` names an app
-the project does not have is refused. `ocel cost` prices each service by the billing it runs with.
+The choice holds whatever the app is built with: a Next app billed per request gets no exception
+for the work it runs after a response. A patch to `function` or `container` reaches the services
+that serve the app, and its [workers](#topics-tasks-and-workers) take theirs under `worker`.
+`ocel cost` prices each service by the billing it runs with.
 
 ## Next.js
 
-A serverless Next app runs as Cloud Run services billed per instance unless its app sets
-[`billing`](#billing), each with 1 vCPU and 2 GiB of memory. An instance keeps its CPU after it
-answers, so the work Next runs after the response (`after()`, refreshing a stale page, writing the
+A serverless Next app runs as Cloud Run services billed per instance unless a transform
+[bills them otherwise](#billing), each with 1 vCPU and 2 GiB of memory. An instance keeps its CPU
+after it answers, so the work Next runs after the response (`after()`, refreshing a stale page, writing the
 cache) finishes rather than stalling until the next request.
 
 The catch is the bill. Cloud Run charges an instance for its whole life, idle time included, and
@@ -214,8 +191,8 @@ most of its life, roughly three quarters or more, answering requests. `ocel cost
 this way.
 
 A Next app on `compute: "container"` runs `next start` in its image with 2 GiB of memory and its
-CPU always allocated, so it is billed per instance unless its app sets `billing`, and it keeps at least one instance running
-unless `instances.min` is 0. It keeps its cache and tag records where a serverless Next app does,
+CPU always allocated, so it is billed per instance unless a transform [bills it
+otherwise](#billing), and it keeps at least one instance running unless `instances.min` is 0. It keeps its cache and tag records where a serverless Next app does,
 in the tier's buckets and Firestore, so a revalidated tag reaches every instance, and it refreshes stale
 pages in the background. Cloud CDN does not store its pages: ocel marks every response that
 names `s-maxage` private, so a revalidated page is never served stale; its hashed static files are
@@ -498,15 +475,18 @@ month), daily backups with point-in-time recovery, and deletion protection, whic
 when it removes the database. A preview runs the shared-core `db-f1-micro` (about $7.70 a month) in
 one zone, with 10 GB of SSD (about $0.17 per GB a month) and daily backups; Google's SLA does not
 cover shared-core instances. An instance bills by the hour whether it serves anything or not, and a
-deploy patches an instance that has drifted from its tier's size back to it, which restarts the
-instance. Each app's Cloud Run services together open at most what the instance's connections
-allow: 100 in production and 25 in a preview, less 3 Cloud SQL reserves, at up to 10 per instance.
+deploy patches an instance that has drifted from its tier's size, or from the size a
+[transform](/docs/transforms#postgres) sets, back to it, which restarts the instance. Each app's
+Cloud Run services together open at most what the instance's connections allow: 100 in production
+and 25 in a preview, less 3 Cloud SQL reserves, at up to 10 per instance.
 `version` `"14"` to `"17"` picks the major version, `"17"` when you leave it out; a major version is
 not changed in place, so a deploy asking for another one is refused.
 
 The instance has no public address. It is reached at a private address on the tier's
-[private network](#private-network), made for it by a Private Service Connect endpoint that
-bills about $7.30 a month of its own, and refuses any connection that is not encrypted. Apps connect as the `ocel` user to the `ocel` database with a
+[private network](#private-network), or on a network of your own a
+[transform](/docs/transforms#placing-on-a-network-of-your-own) places it on, made for it by a
+Private Service Connect endpoint that bills about $7.30 a month of its own, and refuses any
+connection that is not encrypted. Apps connect as the `ocel` user to the `ocel` database with a
 password ocel generates, keeps sealed under the tier's key, and hands each app in its binding.
 
 Creating an instance takes several minutes. `ocel projects destroy`, or dropping the database from the
@@ -533,8 +513,9 @@ Apps authenticate with the token Memorystore generates for the default user, whi
 reads back on every deploy, and reach the store over TLS under the instance's own certificate
 authority, which every SDK's client trusts from the binding.
 
-A store is reached over the tier's [private network](#private-network). `ocel projects destroy` deletes
-the instance and its data.
+A store is reached over the tier's [private network](#private-network), or a network of your own a
+[transform](/docs/transforms#placing-on-a-network-of-your-own) places it on. `ocel projects destroy`
+deletes the instance and its data.
 
 ## Private network
 
@@ -554,9 +535,22 @@ it on. The part grants the Cloud Run service agent `roles/compute.networkUser` o
 so Cloud Run services and functions bound to a store or database reach private addresses over
 that subnetwork through direct VPC egress; the rest of their traffic leaves as before.
 
+A [transform](/docs/transforms#the-tiers-network) can give the subnetwork another range before it
+exists, and patch its flow logs, private Google access and secondary ranges, the network's MTU
+and the policies' connection limit. Another can
+[place](/docs/transforms#placing-on-a-network-of-your-own) a database or store, and the services of the apps bound to it, on a network of your own instead.
+When a deploy places every database and store it declares, and every service bound to one, there,
+it adds no `private-network` part, and nothing it deploys counts as the part's user.
+
+A port forward, which `ocel run --env` and a deploy's `lifecycle.preBuild` open, goes through a
+relay on the tier's subnetwork that reaches the subnetwork's range, whatever a transform made it.
+A forward to a database or store placed on another network is refused: reach it from a machine on
+that network.
+
 **Removing it.** `ocel bootstrap destroy` takes the network down, and is refused while any store
-or database is still on it, naming them. The bootstrap credential needs
-`roles/compute.networkAdmin` and `roles/cloudsql.viewer` for that.
+or database still has its endpoint on it, naming them. It forgets the transforms' patches with
+it, so a network made again takes only the patches of the deploy that makes it. The bootstrap
+credential needs `roles/compute.networkAdmin` and `roles/cloudsql.viewer` for that.
 
 ## Topics, tasks and workers
 
@@ -623,6 +617,12 @@ revision's labels onto each entry it writes: requests, stdout, stderr and system
 `ocel logs` reads and tails through it. Audit logs and entries of anything but Cloud Run are
 outside the view. A service deployed before its revisions carried the label is released again on
 the next deploy.
+
+## Transforms
+
+A [transform](/docs/transforms#on-google-cloud) patches what this provider makes for a bucket,
+database, kv store, topic, task, app service and worker, the `alb` edge and the tier's network,
+with each field named as `@pulumi/gcp` names it.
 
 ## What to grant
 
@@ -693,8 +693,9 @@ each tier's credential for your project and namespace. For the preview tier they
   `roles/datastore.viewer`, `roles/datastore.user`, `roles/pubsub.editor` and the custom role that
   clears Cloud CDN and no others.
 - The `<namespace with _ for ->_parts` role `ocel bootstrap` makes, unconditioned: it creates the
-  tier's network, subnetwork and service connection policies, which carry no tag, and grants
-  Cloud Run's agent on the subnetwork.
+  tier's network, subnetwork and service connection policies, which carry no tag, updates the
+  subnetwork and policies in place when a transform patches them, and grants Cloud Run's agent on
+  the subnetwork.
 - A custom role you make, holding `cloudkms.keyRings.create`, `cloudkms.keyRings.get` and
   `cloudkms.cryptoKeys.create`, on a condition admitting Ocel's key ring by name or a location:
   Cloud KMS checks reading the ring, and making the tier's key on it, against the ring, which both
@@ -702,6 +703,10 @@ each tier's credential for your project and namespace. For the preview tier they
   reach. It checks making a ring against the location, whose name holds no ring.
   `roles/cloudkms.admin` on the ring would hand over the ring's policy, which every key in it
   inherits.
+
+A transform that attaches a Cloud Armor policy to the `alb` edge also needs the credential to hold
+`compute.securityPolicies.use` in the policy's project. `ocel permissions deploy` does not print
+it and ocel never grants it: a plan or deploy checks it and is refused, naming the project.
 
 A condition holds a comma inside `matchTag`, so pass it from a file:
 
@@ -716,8 +721,10 @@ gcloud projects add-iam-policy-binding my-project \
 ```
 
 Each app runs as a service account of its own in each environment, which a deploy creates the first
-time the app ships to that environment and grants only what the app's runtime reads. Its key and
-storage grants are on the resource: decrypt on the tier's key when it opens a value,
+time the app ships to that environment and grants only what the app's runtime reads. A
+[transform](/docs/transforms#running-an-app-as-your-own-service-account) can run it as an account
+your own infrastructure owns instead, which the deploy credential must be able to act as. Its key
+and storage grants are on the resource: decrypt on the tier's key when it opens a value,
 its cache and static files on the tier's buckets, publishing on its topics, enqueuing on the delay
 queue. Firestore databases take no IAM policy of their own, so access to the database its project
 keeps its records in, and read access to the database of any project its values reference, are
@@ -730,8 +737,9 @@ it runs in: a deploy that reaches the limit is refused, naming the quota. Destro
 or removing the last release of an app in it, takes back everything the app's account was granted
 there and deletes the account. A deleted account no longer counts against the quota, and a later
 deploy to the same environment creates a new one. `ocel bootstrap <tier>` also deletes the account
-of each app an environment of that tier no longer runs, which catches any account a removal that
-was cut short left behind.
+of each app an environment of that tier no longer runs, and takes back what such an app was
+granted while it ran as an account of yours, which catches anything a removal that was cut short
+left behind.
 
 A prune or a destroy untags the images no Cloud Run revision runs any more, and the repository
 deletes an untagged image a week later. A deploy that finds its image already pushed tags it again
