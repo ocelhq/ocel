@@ -16,20 +16,26 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/pulumi/pulumi/pkg/v3/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -746,5 +752,199 @@ func TestAContainerTaskJoinsTheNetworksClientsGroupSoItsDatabasesAdmitIt(t *test
 	d := &Definition{Infra: containers.Infrastructure{TaskSecurity: "sg-tasks", Clients: "sg-clients"}}
 	if joined := d.TaskSecurityGroups(); len(joined) != 2 || joined[0] != pulumi.String("sg-tasks") || joined[1] != pulumi.String("sg-clients") {
 		t.Errorf("a task joins %v, want the tier's task group and its network's clients group", joined)
+	}
+}
+
+func revalidatingNextContainer(t *testing.T) (testTarget, provider.StackSpec) {
+	t.Helper()
+	cfg, spec := containerStackSpec(t)
+	cfg.StateTable.Name = "ocel-state"
+	cfg.StateTable.ARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"
+	spec.App.Framework = buildoutput.FrameworkNext
+	spec.App.StorageCoordinate = naming.Coordinate{Project: "shop", Env: "prod", App: "web", Release: fixedRelease(t)}
+	spec.App.ISR = &provider.ISRSpec{TagNamespace: "PROJECT#shop#STACK#prod--web--r3f8a1c90#TAG#"}
+	spec.App.Functions = []provider.FunctionSpec{{Name: "fn-web-index"}}
+	cfg.ISR = &site.ISR{
+		Coord:     spec.App.StorageCoordinate,
+		Namespace: spec.App.ISR.TagNamespace,
+		Buckets:   naming.Buckets{naming.StorageEdge: "ocel-edge", naming.StorageCache: "ocel-cache", naming.StorageArtifacts: "ocel-artifacts"},
+		Table:     cfg.StateTable.Name,
+		TableARN:  cfg.StateTable.ARN,
+	}
+	return cfg, spec
+}
+
+func rolePolicies(rec *inputRecorder) []string {
+	var policies []string
+	for key, inputs := range rec.recorded {
+		if strings.HasPrefix(key, "aws:iam/rolePolicy:RolePolicy::") {
+			policies = append(policies, inputs["policy"].StringValue())
+		}
+	}
+	return policies
+}
+
+func TestANextContainerBuiltFromItsFunctionHandsItsTasksTheCacheEveryTaskSharesAndARoleThatReachesIt(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := revalidatingNextContainer(t)
+	rec := runContainerProgram(t, cfg, spec)
+
+	env := definitionEnvOf(t, rec)
+	for name, want := range map[string]string{
+		"OCEL_EDGE_BUCKET":        "ocel-edge",
+		"OCEL_CACHE_BUCKET":       "ocel-cache",
+		"OCEL_STORAGE_COORDINATE": "shop/prod/web/r3f8a1c90",
+		"OCEL_STATE_TABLE":        "ocel-state",
+		"OCEL_ISR_TAG_NAMESPACE":  spec.App.ISR.TagNamespace,
+		processenv.ISREnvVar:      "1",
+	} {
+		if env[name] != want {
+			t.Errorf("%s = %q, want %q: the Next runtime's host reads the shared cache and tag index from it", name, env[name], want)
+		}
+	}
+	if recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")["taskRoleArn"].StringValue() == "" {
+		t.Fatal("the task runs without a role, so it reaches neither the cache buckets nor the tag index")
+	}
+	policies := rolePolicies(rec)
+	if len(policies) != 1 {
+		t.Fatalf("the task role has %d policies, want the one isr cache policy a Next function's role gets", len(policies))
+	}
+	for _, want := range []string{
+		"s3:GetObject", "s3:PutObject",
+		"arn:aws:s3:::ocel-edge/pages/shop/prod/web/r3f8a1c90/*",
+		"arn:aws:s3:::ocel-cache/tag-clock/shop/prod/web/r3f8a1c90/*",
+		"dynamodb:UpdateItem", cfg.StateTable.ARN, spec.App.ISR.TagNamespace + "*",
+	} {
+		if !strings.Contains(policies[0], want) {
+			t.Errorf("policy = %s, want it to contain %q: each task writes the release's cache objects and its tag items alone", policies[0], want)
+		}
+	}
+}
+
+func edgeOf(t *testing.T, kind edge.Kind) edge.Edge {
+	t.Helper()
+	front, err := edges.EdgeFor(kind, edges.Deps{})
+	if err != nil {
+		t.Fatalf("EdgeFor(%s) = %v", kind, err)
+	}
+	return front
+}
+
+func TestANextContainerBuiltFromItsFunctionBehindCloudFrontIsToldTheEdgeCachesItsResponsesUnderTheReleaseItsTagsAreClearedBy(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := revalidatingNextContainer(t)
+	spec.Edge = edgeOf(t, cloudfront.Kind)
+	env := definitionEnvOf(t, runContainerProgram(t, cfg, spec))
+
+	for name, want := range map[string]string{
+		edge.EdgeCacheVar:     string(edge.EdgeCacheAll),
+		edge.CacheTagPurgeVar: "1",
+		edge.ReleaseTokenVar:  spec.Ref.Name.Release.String(),
+	} {
+		if env[name] != want {
+			t.Errorf("%s = %q, want %q: the Next runtime tags what CloudFront stores so the tag invalidator's paths reach it", name, env[name], want)
+		}
+	}
+}
+
+func TestANextContainerBuiltFromItsFunctionCloudflareForwardsToThePublicLoadBalancerIsToldNoEdgeCachesItsResponses(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := revalidatingNextContainer(t)
+	spec.Edge = edgeOf(t, cloudflare.Kind)
+	spec.App.Router = alb.Kind
+	env := definitionEnvOf(t, runContainerProgram(t, cfg, spec))
+
+	if got, told := env[edge.EdgeCacheVar]; told {
+		t.Errorf("%s = %q, want none: the worker forwards the container's responses past its cache", edge.EdgeCacheVar, got)
+	}
+}
+
+func TestANextContainerBuiltFromItsOwnImageIsHandedNoCacheAndNoRoleForIt(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := revalidatingNextContainer(t)
+	spec.App.Functions = nil
+	spec.Edge = edgeOf(t, cloudfront.Kind)
+	rec := runContainerProgram(t, cfg, spec)
+
+	env := definitionEnvOf(t, rec)
+	for _, name := range []string{"OCEL_STATE_TABLE", "OCEL_CACHE_BUCKET", edge.EdgeCacheVar, edge.CacheTagPurgeVar} {
+		if _, set := env[name]; set {
+			t.Errorf("a Next container built from its own image is handed %s, and next start in it keeps its own cache", name)
+		}
+	}
+	if policies := rolePolicies(rec); len(policies) != 0 {
+		t.Errorf("its task role holds %v, want none: a grant it never uses only widens what it reaches", policies)
+	}
+}
+
+func nextContainerBuiltFromItsFunction(t *testing.T) (testTarget, provider.StackSpec) {
+	t.Helper()
+	cfg, spec := revalidatingNextContainer(t)
+	cfg.Buckets = cfg.ISR.Buckets
+	cfg.ImageOptimizerURL = "https://optimizer.lambda-url.us-east-1.on.aws/"
+	spec.App.BuildID = "b1"
+	spec.App.Router = "cloudfront"
+	spec.App.Functions = []provider.FunctionSpec{{Name: "server", Route: "server", Framework: buildoutput.Framework{Name: buildoutput.FrameworkNext}}}
+	spec.App.Routing = &provider.RoutingSpec{RootFunction: "server", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(`{"rootFunction":"server"}`)}}
+	spec.App.Static = &edge.Static{ImmutablePrefixes: []string{"/_next/static/"}}
+	return cfg, spec
+}
+
+func TestANextContainerBuiltFromItsFunctionDispatchesItsOwnPathsAsTheNextFunctionWould(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := nextContainerBuiltFromItsFunction(t)
+	env := definitionEnvOf(t, runContainerProgram(t, cfg, spec))
+
+	for name, want := range map[string]string{
+		edge.OriginDispatchVar:      "1",
+		edge.OriginSignedVar:        "1",
+		processenv.RouteTableEnvVar: "/ocel/app/" + edge.NextRouteTableFile,
+		processenv.BuildIDEnvVar:    "b1",
+		processenv.RouterKindEnvVar: "cloudfront",
+		edge.ImageOptimizerURLVar:   cfg.ImageOptimizerURL,
+		edge.StaticRulesVar:         `{"immutablePrefixes":["/_next/static/"]}`,
+		"OCEL_EDGE_BUCKET":          "ocel-edge",
+		"OCEL_STORAGE_COORDINATE":   "shop/prod/web/r3f8a1c90",
+	} {
+		if env[name] != want {
+			t.Errorf("%s = %q, want %q: the Next runtime in the function's image dispatches the paths its route table names", name, env[name], want)
+		}
+	}
+}
+
+func TestANextContainerBuiltFromItsFunctionsTaskReadsItsStaticFilesAndInvokesTheImageOptimizer(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := nextContainerBuiltFromItsFunction(t)
+	policies := strings.Join(rolePolicies(runContainerProgram(t, cfg, spec)), "\n")
+
+	for _, want := range []string{
+		"arn:aws:s3:::ocel-edge/assets/shop/prod/web/r3f8a1c90/*",
+		"lambda:InvokeFunctionUrl",
+		"arn:aws:lambda:*:123456789012:function:*",
+	} {
+		if !strings.Contains(policies, want) {
+			t.Errorf("the task role holds %s, want %q: the task reads its static files and has its images optimized as the Next function would", policies, want)
+		}
+	}
+}
+
+func TestANextContainerThatNamesItsImageDispatchesNothingItself(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := revalidatingNextContainer(t)
+	spec.App.Functions = nil
+	spec.App.Routing = &provider.RoutingSpec{RootFunction: "server"}
+	env := definitionEnvOf(t, runContainerProgram(t, cfg, spec))
+
+	for _, name := range []string{edge.OriginDispatchVar, processenv.RouteTableEnvVar} {
+		if got, set := env[name]; set {
+			t.Errorf("%s = %q, want none: next start in the user's image serves every path itself", name, got)
+		}
 	}
 }

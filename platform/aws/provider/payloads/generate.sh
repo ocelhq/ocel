@@ -36,13 +36,15 @@ build_lambda() {
 }
 
 rm -rf "$dist"
-mkdir -p "$dist"
+mkdir -p "$dist/next-container"
+cp "$runtime_dir/dist/container/next/entrypoint.mjs" "$dist/next-container/entrypoint.mjs"
 
 for goarch in amd64 arm64; do
   layer="$stage/runtime-$goarch"
   mkdir -p "$layer/ocel"
   build_lambda ./cmd/runtime "$layer/bootstrap" "$goarch"
-  cp -R "$root/platform/aws/runtime/dist/." "$layer/ocel/"
+  cp -R "$runtime_dir/dist/." "$layer/ocel/"
+  rm -rf "$layer/ocel/container"
   pack "$layer" "$dist/runtime-layer-$goarch.zip"
   build_lambda ./cmd/container "$dist/container-runtime-$goarch" "$goarch"
 done

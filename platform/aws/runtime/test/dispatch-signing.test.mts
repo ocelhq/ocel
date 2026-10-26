@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { gzipSync } from "node:zlib";
 import { CLIENT_AUTHORIZATION_HEADER } from "@platform/edge-contract/client-authorization";
 import { expect, test } from "vitest";
-import { siblingOriginFetch } from "../src/next/dispatch-signing.mjs";
+import { envCredentials, signedOriginFetch } from "../src/next/dispatch-signing.mjs";
 
 const SIBLING_URL = "https://abc123.lambda-url.us-east-1.on.aws/sibling";
 
@@ -18,8 +18,8 @@ async function forwarded(headers: Record<string, string>): Promise<Request> {
     sent.push(new Request(input));
     return new Response("sibling");
   }) as unknown as typeof fetch;
-  await siblingOriginFetch(
-    credentials,
+  await signedOriginFetch(
+    envCredentials(credentials),
     "us-east-1",
     doFetch,
   )(new Request(SIBLING_URL, { headers }));
@@ -28,7 +28,7 @@ async function forwarded(headers: Record<string, string>): Promise<Request> {
 
 function answering(response: Response): Promise<Response> {
   const doFetch = (async () => response) as unknown as typeof fetch;
-  return siblingOriginFetch(credentials, "us-east-1", doFetch)(SIBLING_URL);
+  return signedOriginFetch(envCredentials(credentials), "us-east-1", doFetch)(SIBLING_URL);
 }
 
 test("a sibling call hands the client's authorization in the carrier, since SigV4 takes authorization", async () => {
@@ -79,8 +79,8 @@ test("a loopback render the app gzipped itself comes back with its own bytes and
   await new Promise<void>((resolve) => local.listen({ host: "127.0.0.1", port: 0 }, resolve));
   try {
     const { port } = local.address() as AddressInfo;
-    const response = await siblingOriginFetch(
-      credentials,
+    const response = await signedOriginFetch(
+      envCredentials(credentials),
       "us-east-1",
     )(new Request(`http://127.0.0.1:${port}/page`, { headers: { "accept-encoding": "gzip" } }));
 

@@ -121,7 +121,7 @@ func (c Config) functionClients() *function.Clients {
 	return &function.Clients{Invoker: c.Invoker, Getter: c.Getter, CodeUpdater: c.CodeUpdater, Buckets: c.buckets(), BytecodeEmbed: c.BytecodeEmbed}
 }
 
-func (c Config) containerTarget() container.Target {
+func (c Config) containerTarget(cache *site.ISR) container.Target {
 	return container.Target{
 		Namespace:            c.Namespace,
 		Tier:                 c.Tier,
@@ -134,6 +134,9 @@ func (c Config) containerTarget() container.Target {
 		AppRolePath:          c.AppRolePath,
 		OriginSecret:         c.OriginSecret,
 		PreviousOriginSecret: c.PreviousOriginSecret,
+		ISR:                  cache,
+		Buckets:              c.Buckets,
+		ImageOptimizerURL:    c.ImageOptimizerURL,
 	}
 }
 

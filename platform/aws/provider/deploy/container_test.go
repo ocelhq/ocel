@@ -19,6 +19,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -26,6 +28,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
@@ -211,9 +214,12 @@ func (r *retaining) hooks() *resources.ImageRetentionHooks {
 	}
 }
 
-func retainingContainers(t *testing.T) (*Stacks, *mockedEngine, *retaining, provider.StackSpec) {
+func retainingContainers(t *testing.T, shapes ...func(Config, provider.StackSpec) (Config, provider.StackSpec)) (*Stacks, *mockedEngine, *retaining, provider.StackSpec) {
 	t.Helper()
 	cfg, spec := containerStackSpec(t)
+	for _, shape := range shapes {
+		cfg, spec = shape(cfg, spec)
+	}
 	cfg.KeyValues = fake.NewKeyValues()
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
@@ -364,12 +370,62 @@ func TestAContainerReleaseWhoseImageCannotBePushedProvisionsNothing(t *testing.T
 }
 
 func containerDefinitionOf(cfg Config, spec provider.StackSpec) (*container.Definition, error) {
-	work, err := container.NewDefinition(spec, cfg.containerTarget())
+	work, err := container.NewDefinition(spec, cfg.containerTarget((&release{cfg: cfg}).isrCache(spec)))
 	if err != nil {
 		return nil, err
 	}
 	work.Infra = fixtureContainerInfra()
 	return work, nil
+}
+
+func revalidatingNextContainer(t *testing.T, cfg Config, spec provider.StackSpec) (Config, provider.StackSpec) {
+	t.Helper()
+	cfg.Buckets = naming.Buckets{naming.StorageEdge: "ocel-edge", naming.StorageCache: "ocel-cache"}
+	cfg.StateTable = "ocel-state"
+	cfg.StateTableARN = "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-state"
+	spec.App.Framework = buildoutput.FrameworkNext
+	spec.App.StorageCoordinate = naming.Coordinate{Project: "shop", Env: "prod", App: "web", Release: fixedRelease(t)}
+	spec.App.ISR = &provider.ISRSpec{TagNamespace: "PROJECT#shop#STACK#prod--web--r3f8a1c90#TAG#"}
+	spec.App.Functions = []provider.FunctionSpec{{Name: "fn-web-index"}}
+	return cfg, spec
+}
+
+func TestANextContainerBuiltFromItsFunctionHandsItsTasksTheTiersCacheBucketsAndStateTable(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerStackSpec(t)
+	cfg, spec = revalidatingNextContainer(t, cfg, spec)
+
+	work, err := containerDefinitionOf(cfg, spec)
+	if err != nil {
+		t.Fatalf("containerDefinitionOf() = %v", err)
+	}
+	if work.Env["OCEL_EDGE_BUCKET"] != "ocel-edge" || work.Env["OCEL_CACHE_BUCKET"] != "ocel-cache" || work.Env["OCEL_STATE_TABLE"] != "ocel-state" {
+		t.Errorf("env = %v, want the tier's edge and cache buckets and its state table, which every task of the release shares", work.Env)
+	}
+	if work.Cache == nil || work.Cache.TableARN != cfg.StateTableARN {
+		t.Errorf("cache = %+v, want the state table's ARN its task role is granted the tag items of", work.Cache)
+	}
+}
+
+func TestANextContainerBuiltFromItsFunctionBehindAnEdgeHoldingAKeyToTheEdgeBucketRecordsThePurgeSecretItsEdgeVerifiesPurgesWith(t *testing.T) {
+	t.Parallel()
+
+	stacks, _, _, spec := retainingContainers(t, func(cfg Config, spec provider.StackSpec) (Config, provider.StackSpec) {
+		cfg, spec = revalidatingNextContainer(t, cfg, spec)
+		cfg.Objects = &fakeArtifactStore{}
+		cfg.EdgeAccessKeyID, cfg.EdgeSecretKey = "AKIAEDGE", "edge-secret"
+		cfg.PurgeSeed = "a-seed"
+		return cfg, spec
+	})
+
+	result, err := stacks.Provision(context.Background(), spec, progress.Discard())
+	if err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+	if want := edge.DerivePurgeSecret("a-seed", "shop/prod/web/r3f8a1c90"); result.PurgeSecret != want {
+		t.Errorf("PurgeSecret = %q, want %q: the edge refuses every purge of this release it cannot verify", result.PurgeSecret, want)
+	}
 }
 
 func hashedPriority(t *testing.T) int {
@@ -382,4 +438,50 @@ func hashedPriority(t *testing.T) int {
 		t.Fatalf("PlaceRule() = %v", err)
 	}
 	return work.Priority()
+}
+
+func nextContainerBuiltFromItsFunction(t *testing.T, objects *fakeArtifactStore) func(Config, provider.StackSpec) (Config, provider.StackSpec) {
+	t.Helper()
+	return func(cfg Config, spec provider.StackSpec) (Config, provider.StackSpec) {
+		cfg, spec = revalidatingNextContainer(t, cfg, spec)
+		cfg.ArtifactRoot = siblingAppRoot(t, "web")
+		cfg.Objects = objects
+		spec.App.Functions = []provider.FunctionSpec{{Name: "server", Route: "/", Framework: buildoutput.Framework{Name: buildoutput.FrameworkNext}}}
+		spec.App.Routing = &provider.RoutingSpec{RootFunction: "/", RouteTable: router.RouteTable{Format: edge.RouteTableNext, Table: []byte(routedManifest)}}
+		spec.App.Static = nextStatic
+		return cfg, spec
+	}
+}
+
+func TestANextContainerBuiltFromItsFunctionUploadsTheStaticFilesItsBuildLeftOutOfItsImage(t *testing.T) {
+	t.Parallel()
+
+	objects := &fakeArtifactStore{exists: map[string]bool{}}
+	stacks, _, _, spec := retainingContainers(t, nextContainerBuiltFromItsFunction(t, objects))
+
+	if _, err := stacks.Provision(context.Background(), spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+
+	if !slices.ContainsFunc(objects.puts, func(key string) bool { return strings.HasSuffix(key, "/web.txt") }) {
+		t.Errorf("the release wrote %v, want the static file its tasks serve out of the edge bucket", objects.puts)
+	}
+}
+
+func TestANextContainerThatNamesItsImageUploadsNoStaticFiles(t *testing.T) {
+	t.Parallel()
+
+	objects := &fakeArtifactStore{exists: map[string]bool{}}
+	stacks, _, _, spec := retainingContainers(t, nextContainerBuiltFromItsFunction(t, objects), func(cfg Config, spec provider.StackSpec) (Config, provider.StackSpec) {
+		spec.App.Functions = nil
+		return cfg, spec
+	})
+
+	if _, err := stacks.Provision(context.Background(), spec, progress.Discard()); err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+
+	if slices.ContainsFunc(objects.puts, func(key string) bool { return strings.HasSuffix(key, "/web.txt") }) {
+		t.Errorf("the release wrote %v, want no static file: next start serves the image's own", objects.puts)
+	}
 }

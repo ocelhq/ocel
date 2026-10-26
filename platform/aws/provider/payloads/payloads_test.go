@@ -6,9 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 func TestPayloads(t *testing.T) {
@@ -89,5 +91,31 @@ func TestPayloadsDiffer(t *testing.T) {
 			t.Errorf("%s and %s have the same bytes", name, other)
 		}
 		seen[p.SHA256] = name
+	}
+}
+
+func TestTheRuntimeLayerShipsNoNextContainerRuntime(t *testing.T) {
+	for _, architecture := range []string{arch.X8664, arch.ARM64} {
+		p := runtimeLayerFor(architecture)()
+		r, err := zip.NewReader(bytes.NewReader(p.Bytes), int64(len(p.Bytes)))
+		if err != nil {
+			t.Fatalf("read the %s layer as a zip: %v", architecture, err)
+		}
+		for _, f := range r.File {
+			if strings.HasPrefix(f.Name, "ocel/container/") {
+				t.Errorf("the %s layer ships %s, which only a Next container built from its function boots", architecture, f.Name)
+			}
+		}
+	}
+}
+
+func TestTheNextContainerRuntimeBootsTheNextRuntimeOverHTTP(t *testing.T) {
+	files := NextContainerRuntime()
+	entry := files[images.RuntimeEntrypointFile]
+	if len(entry) == 0 || len(files) != 1 {
+		t.Fatalf("NextContainerRuntime() = %d files with %d bytes of %s, want that entrypoint alone: a container built from a Next function boots node over it", len(files), len(entry), images.RuntimeEntrypointFile)
+	}
+	if !bytes.Contains(entry, []byte("PORT")) {
+		t.Error("the Next container runtime reads no PORT, so it serves nothing the container runtime forwards to")
 	}
 }

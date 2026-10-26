@@ -9,6 +9,7 @@ import (
 	"path"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 //go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/aws-payloads
@@ -36,7 +37,12 @@ var (
 	realtimeAuthorizer = load("realtime-authorizer.zip")
 	imageOptimizer     = load("image-optimizer.zip")
 	tagInvalidator     = load("tag-invalidator.zip")
+	nextContainer      = load(path.Join("next-container", images.RuntimeEntrypointFile))
 )
+
+func NextContainerRuntime() map[string][]byte {
+	return map[string][]byte{images.RuntimeEntrypointFile: nextContainer.Bytes}
+}
 
 func RuntimeLayer(architecture string) (Payload, error) {
 	goarch, builds := arch.GoArch(architecture)

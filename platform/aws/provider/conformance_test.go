@@ -28,6 +28,13 @@ func TestAWSProvider(t *testing.T) {
 	})
 }
 
+func TestAContainerBuiltFromAFunctionPassesTheConformanceSuite(t *testing.T) {
+	t.Parallel()
+
+	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	conformance.RunFunctionContainers(t, p.Facts(), p.Runtime())
+}
+
 func TestTheRouterRegistryOpensTheRouterEveryEdgePairsWith(t *testing.T) {
 	t.Parallel()
 

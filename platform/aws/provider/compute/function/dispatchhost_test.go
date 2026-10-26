@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/dispatchpolicy"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -160,9 +161,9 @@ func TestTheRootFunctionReadsOnlyItsOwnReleasesAssetsOutOfTheEdgeBucket(t *testi
 	t.Parallel()
 
 	host := newDispatchHostFor(t, routedConfig(t, cloudfront.Kind))
-	raw, err := assetReadPolicy(host)
+	raw, err := dispatchpolicy.RenderAssetRead(host.EdgeBucket, host.StorageCoordinate)
 	if err != nil {
-		t.Fatalf("assetReadPolicy: %v", err)
+		t.Fatalf("RenderAssetRead: %v", err)
 	}
 	var doc policyDoc
 	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
@@ -503,7 +504,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 		if string(statement.Resource) == `["`+sibling+`"]` {
 			reachesSibling = true
 		}
-		if statement.Condition["StringEquals"]["aws:ResourceTag/"+component.TagComponent] == tagImageOptimizer {
+		if statement.Condition["StringEquals"]["aws:ResourceTag/"+component.TagComponent] == dispatchpolicy.TagImageOptimizer {
 			if want := `"arn:aws:lambda:*:` + mockAccount + `:function:*"`; string(statement.Resource) != want {
 				t.Errorf("optimizer statement reaches %s, want %s", statement.Resource, want)
 			}

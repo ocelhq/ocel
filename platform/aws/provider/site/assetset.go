@@ -12,6 +12,7 @@ import (
 	"github.com/pulumi/pulumi-go-provider/infer"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -136,19 +137,31 @@ func (r *assetSetResource) Create(ctx context.Context, req infer.CreateRequest[a
 	}, nil
 }
 
-func ReadAssetSets(b Buckets, root string, coord naming.Coordinate, app *provider.AppSpec, bundle variables.Bundle, cache *ISR) ([]AssetSet, EdgeDelivery, error) {
+func ReadBuildAssetSets(b Buckets, root string, app *provider.AppSpec, cache *ISR) ([]AssetSet, error) {
+	return readBuildAssetSets(b, root, app.App, app.Static, app.StorageCoordinate, cache)
+}
+
+func readBuildAssetSets(b Buckets, root, app string, static *edge.Static, coord naming.Coordinate, cache *ISR) ([]AssetSet, error) {
 	var sets []AssetSet
 	for _, planned := range []func() (*AssetSet, error){
-		func() (*AssetSet, error) { return staticAssetSet(b, root, app.App, app.Static, coord) },
-		func() (*AssetSet, error) { return prerenderAssetSet(b, root, app.App, cache) },
+		func() (*AssetSet, error) { return staticAssetSet(b, root, app, static, coord) },
+		func() (*AssetSet, error) { return prerenderAssetSet(b, root, app, cache) },
 	} {
 		set, err := planned()
 		if err != nil {
-			return nil, EdgeDelivery{}, err
+			return nil, err
 		}
 		if set != nil {
 			sets = append(sets, *set)
 		}
+	}
+	return sets, nil
+}
+
+func ReadAssetSets(b Buckets, root string, coord naming.Coordinate, app *provider.AppSpec, bundle variables.Bundle, cache *ISR) ([]AssetSet, EdgeDelivery, error) {
+	sets, err := readBuildAssetSets(b, root, app.App, app.Static, coord, cache)
+	if err != nil {
+		return nil, EdgeDelivery{}, err
 	}
 	edgeSet, delivery, err := edgeBundleSet(b, root, app.App, coord, bundle)
 	if err != nil {
