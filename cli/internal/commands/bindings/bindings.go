@@ -25,9 +25,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/bindings"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 )
 
@@ -167,7 +169,12 @@ func withBindingCommand(cmd *cobra.Command, run func(context.Context, string) er
 	return run(cmd.Context(), cwd)
 }
 
-func withBindingProvider(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, command string, drive func(context.Context, *providerprocess.Provider, *project.Project) (string, error)) error {
+type bindingStep struct {
+	phase progressv1.Phase
+	title progress.Title
+}
+
+func withBindingProvider(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, command string, step bindingStep, drive func(context.Context, *providerprocess.Provider, *project.Project) (string, error)) error {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -178,7 +185,11 @@ func withBindingProvider(ctx context.Context, invocation commands.Invocation, cw
 	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: opts.tier()}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		run, provider := p.Run, p.Provider
+		phase := run.Phase(step.phase)
+		span := phase.Child(cfg.Slug, step.title)
 		headline, err := drive(ctx, provider, cfg)
+		span.End(err)
+		phase.End(err)
 		if err == nil && headline != "" {
 			run.Succeed(headline)
 		}
@@ -196,7 +207,7 @@ func runBindingsSet(ctx context.Context, invocation commands.Invocation, cwd str
 	if owner == bindings.InlineRecordOwner {
 		return fmt.Errorf("publisher %q is the one ocel writes an inline binding's record as, at deploy, from the config; publish as your own tool with --owner", owner)
 	}
-	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings set", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings set", bindingStep{phase: progressv1.Phase_PHASE_PROVISION, title: progress.Updating.Title("the binding " + binding.GetName() + " in " + describeBindingCoordinate(opts))}, func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
 		client, err := provider.VariableStore()
 		if err != nil {
 			return "", err
@@ -318,7 +329,7 @@ func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd,
 	if bindings.IsInlineRecord(name) {
 		return fmt.Errorf("%s is the record ocel keeps for a binding written inline in `bindings`, and the next deploy writes it again: remove that binding from the config, and the deploy after removes the record", name)
 	}
-	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings rm", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings rm", bindingStep{phase: progressv1.Phase_PHASE_DESTROY, title: progress.Removing.Title("the binding " + name + " from " + describeBindingCoordinate(opts))}, func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
 		client, err := provider.VariableStore()
 		if err != nil {
 			return "", err
@@ -352,7 +363,7 @@ func runBindingsRemove(ctx context.Context, invocation commands.Invocation, cwd,
 }
 
 func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, stdout io.Writer) error {
-	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings ls", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings ls", readingPublished(opts), func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
 		client, err := provider.VariableStore()
 		if err != nil {
 			return "", err
@@ -374,7 +385,7 @@ func runBindingsList(ctx context.Context, invocation commands.Invocation, cwd st
 }
 
 func runBindingsGenerate(ctx context.Context, invocation commands.Invocation, cwd string, opts bindingsOptions, stdout io.Writer) error {
-	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings generate", func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
+	return withBindingProvider(ctx, invocation, cwd, opts, "ocel bindings generate", readingPublished(opts), func(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project) (string, error) {
 		client, err := provider.VariableStore()
 		if err != nil {
 			return "", err
@@ -402,6 +413,10 @@ func runBindingsGenerate(ctx context.Context, invocation commands.Invocation, cw
 		}
 		return headline, nil
 	})
+}
+
+func readingPublished(opts bindingsOptions) bindingStep {
+	return bindingStep{phase: progressv1.Phase_PHASE_CHECK, title: progress.Reading.Title("the bindings published to " + describeBindingCoordinate(opts))}
 }
 
 func describeBindingCoordinate(opts bindingsOptions) string {
