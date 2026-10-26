@@ -15,6 +15,12 @@ sst deploy
 ocel deploy
 ```
 
+`sst deploy` also publishes two variables with `bind.variables`: `API_KEY`, the value of an
+`sst.Secret` (a placeholder until `sst secret set ApiKey <value>`), and `DATABASE_PORT`, the
+database's port, stored as JSON. The app declares both in its discovery folder's `variables.ts`
+and reads them as it reads any variable; `ocel env ls` names the SST resource that wrote them, and
+`ocel env set` refuses to change one.
+
 That order is a contract, not a convention. Ocel resolves the published records while it
 renders, so `ocel deploy` before `sst deploy` — or after `sst remove` — refuses before it
 provisions anything, naming the binding it could not read, the property, and the field a

@@ -6,4 +6,10 @@ export const env = defineEnv({
     class: "plain",
     schema: z.string().default("hello"),
   },
+  API_KEY: {
+    class: "secret",
+  },
+  DATABASE_PORT: {
+    class: "plain",
+  },
 });

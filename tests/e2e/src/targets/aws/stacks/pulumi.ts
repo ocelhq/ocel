@@ -54,6 +54,11 @@ async function configureStack(
     ["config", "set", "--secret", "dbPassword", randomBytes(16).toString("hex")],
     env,
   );
+  await pulumi(
+    dir,
+    ["config", "set", "--secret", "apiKey", `ak-${randomBytes(16).toString("hex")}`],
+    env,
+  );
   if (!endpoint) {
     return;
   }

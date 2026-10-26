@@ -67,6 +67,12 @@ export default $config({
       securityGroupIds: vpc.securityGroups,
     });
 
+    const apiKey = new sst.Secret("ApiKey", `ak-${$app.stage}`);
+    bind.variables({
+      API_KEY: apiKey.value,
+      DATABASE_PORT: orders.port,
+    });
+
     return {
       host: orders.host,
       database: orders.database,

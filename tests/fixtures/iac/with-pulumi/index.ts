@@ -3,7 +3,9 @@ import * as aws from "@pulumi/aws";
 import { Config, interpolate } from "@pulumi/pulumi";
 
 const region = aws.config.requireRegion();
-const password = new Config().requireSecret("dbPassword");
+const config = new Config();
+const password = config.requireSecret("dbPassword");
+const apiKey = config.requireSecret("apiKey");
 
 const vpc = new aws.ec2.Vpc("orders", {
   cidrBlock: "10.0.0.0/16",
@@ -83,6 +85,11 @@ bind.postgres("orders", {
 bind.custom("network", {
   subnetIds,
   securityGroupIds: [security.id],
+});
+
+bind.variables({
+  API_KEY: apiKey,
+  DATABASE_PORT: orders.port,
 });
 
 export const endpoint = interpolate`${orders.address}:${orders.port}`;

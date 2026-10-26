@@ -133,7 +133,9 @@ export default defineConfig({
 ```
 
 `${NAME}` is for values that differ per machine, and is read unchecked, as a string. Secrets
-belong in [variables](/docs/environments), stored in your own account.
+belong in [variables](/docs/environments), stored in your own account, which you set with
+`ocel env set` or your own infrastructure
+[publishes](/docs/environments#values-your-infrastructure-publishes).
 
 ### registry
 

@@ -31,3 +31,16 @@ export const bindingQueryCheck: Check = {
 };
 
 export const bindingChecks: Check[] = [bindingCheck, bindingQueryCheck];
+
+export const publishedVariablesCheck: Check = {
+  title:
+    "GET /api/variables answers with the plain and the secret variable the IaC program published",
+  run: async (ctx) => {
+    const binding = (await json(ctx, "/api/binding")).body as { port: number };
+    const { res, body } = await json(ctx, "/api/variables");
+    assert.equal(res.status, 200);
+    const variables = body as { databasePort: string; apiKeyIsPublished: boolean };
+    assert.equal(variables.databasePort, String(binding.port));
+    assert.equal(variables.apiKeyIsPublished, true, "the app read no published API_KEY");
+  },
+};
