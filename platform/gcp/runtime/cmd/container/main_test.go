@@ -56,7 +56,7 @@ func TestContainerHelper(t *testing.T) {
 	}()
 
 	if role == "report" {
-		if err := os.WriteFile(os.Getenv(reportVar), []byte(os.Getenv(containerimage.NodeOptionsEnvVar)), 0o600); err != nil {
+		if err := os.WriteFile(os.Getenv(reportVar), []byte(os.Getenv("NODE_OPTIONS")), 0o600); err != nil {
 			os.Exit(96)
 		}
 		os.Exit(0)
@@ -502,7 +502,7 @@ func reportedNodeOptions(t *testing.T, environ ...string) string {
 }
 
 func TestTheRuntimeRunsAContainersAppWithTheNodeOptionsItIsGiven(t *testing.T) {
-	if got := reportedNodeOptions(t, containerimage.NodeOptionsEnvVar+"=--max-old-space-size=512"); got != "--max-old-space-size=512" {
+	if got := reportedNodeOptions(t, "NODE_OPTIONS=--max-old-space-size=512"); got != "--max-old-space-size=512" {
 		t.Errorf("NODE_OPTIONS = %q, want the image's own %q", got, "--max-old-space-size=512")
 	}
 }

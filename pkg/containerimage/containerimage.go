@@ -24,9 +24,8 @@ func IsHealthCheckPath(path string) bool {
 }
 
 const (
-	PortEnvVar        = "PORT"
-	NodeOptionsEnvVar = "NODE_OPTIONS"
-	Port              = 8080
+	PortEnvVar = "PORT"
+	Port       = 8080
 )
 
 var PortText = strconv.Itoa(Port)

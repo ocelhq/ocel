@@ -17,29 +17,14 @@ export interface NextHost {
 
 const hostKey = Symbol.for("ocel.next.host.v1");
 
-const slots = globalThis as Record<symbol, NextHost | (() => NextHost) | undefined>;
+const slots = globalThis as Record<symbol, NextHost | undefined>;
 
 export function installNextHost(host: NextHost): void {
   slots[hostKey] = host;
 }
 
-export function installNextHostOnFirstUse(newHost: () => NextHost): void {
-  slots[hostKey] = newHost;
-}
-
 export function getNextHost(): NextHost {
-  const slot = slots[hostKey];
-  if (typeof slot !== "function") return slot ?? {};
-  try {
-    const host = slot();
-    slots[hostKey] = host;
-    return host;
-  } catch (err) {
-    slots[hostKey] = () => {
-      throw err;
-    };
-    throw err;
-  }
+  return slots[hostKey] ?? {};
 }
 
 export function refuseIncompleteHost(host: NextHost, env: NodeJS.ProcessEnv): Error | undefined {

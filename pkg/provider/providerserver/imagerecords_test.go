@@ -21,7 +21,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/ocelhq/ocel/pkg/arch"
-	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -363,7 +362,7 @@ func wrappingServedOn(t *testing.T, architecture string) (contractv1connect.Prov
 }
 
 func wrappedCoordinate() string {
-	return "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, containerRuntimeBytes, nil)
+	return "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, containerRuntimeBytes)
 }
 
 func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItShipsNames(t *testing.T) {
@@ -577,57 +576,6 @@ func daemonServing(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Setenv(images.DockerCertPathEnv, "")
 	t.Setenv(images.DockerHostEnv, "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
 	return daemon
-}
-
-func nextContainerRequest() *contractv1.DeployRequest {
-	req := registryDeployRequest()
-	req.Manifest.Apps[0].Framework = &contractv1.Framework{Name: "next"}
-	return req
-}
-
-func TestANextContainerIsWrappedInItsProvidersNextServerRuntime(t *testing.T) {
-	builtProject(t)
-	daemonWithTheBuiltImage(t, "amd64")
-	client, vendor := wrappingServed(t)
-	vendor.ServingNextServer()
-
-	result, _ := deploy(t, client, nextContainerRequest())
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
-	}
-
-	pushed := vendor.ImageStore().Pushed()
-	if len(pushed) != 1 || pushed[0].Built == nil {
-		t.Fatalf("the store was handed %v, want the wrapped image", pushed)
-	}
-	if env := configOf(t, pushed[0].Built).Env; slices.ContainsFunc(env, func(entry string) bool {
-		return strings.HasPrefix(entry, "NEXT_ADAPTER_PATH=") || strings.HasPrefix(entry, "NODE_OPTIONS=")
-	}) {
-		t.Errorf("the pushed image has env %v, want the Next adapter path and node options left to the app and the container runtime", env)
-	}
-	next := &images.NextServerRuntime{Files: map[string][]byte{containerimage.NextServerPreloadFile: []byte(fake.NextServerPreload)}}
-	if tag := "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, containerRuntimeBytes, next); pushed[0].ImageRef != tag {
-		t.Errorf("the image is pushed as %q, want %q: the tag names the Next runtime it carries", pushed[0].ImageRef, tag)
-	}
-}
-
-func TestANextContainerOnAProviderWithoutANextServerRuntimeIsWrappedAsBefore(t *testing.T) {
-	builtProject(t)
-	daemonWithTheBuiltImage(t, "amd64")
-	client, vendor := wrappingServed(t)
-
-	result, _ := deploy(t, client, nextContainerRequest())
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
-	}
-
-	pushed := vendor.ImageStore().Pushed()
-	if len(pushed) != 1 || pushed[0].Built == nil {
-		t.Fatalf("the store was handed %v, want the wrapped image", pushed)
-	}
-	if pushed[0].ImageRef != wrappedCoordinate() {
-		t.Errorf("the image is pushed as %q, want today's %q", pushed[0].ImageRef, wrappedCoordinate())
-	}
 }
 
 var projectRegistry = &contractv1.ImageRegistry{Server: "registry.example.com", Namespace: "acme", Username: "acme-bot", Password: "hunter2"}

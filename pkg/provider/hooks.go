@@ -20,7 +20,6 @@ type Hooks struct {
 	OpenRegistryImages   func(ctx context.Context, target RegistryTarget) (ImageStore, error)
 	OpenDirectImages     func(ctx context.Context) (ImageStore, error)
 	CheckHost            func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
-	NextServerRuntime    func(ctx context.Context) (map[string][]byte, error)
 	BindingAccess        *BindingAccessHooks
 	EnvSource            *EnvSourceHooks
 	Cost                 *CostHooks
