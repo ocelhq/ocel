@@ -118,7 +118,7 @@ func (r RemovablePart) apis(b Engine, tier environment.Tier) []string {
 	return r.APIs
 }
 
-func (b Engine) PartAPIs(tier environment.Tier, named []string) []string {
+func (b Engine) partAPIs(tier environment.Tier, named []string) []string {
 	var apis []string
 	for _, each := range b.Removable {
 		if slices.Contains(named, each.Name) {
@@ -128,20 +128,12 @@ func (b Engine) PartAPIs(tier environment.Tier, named []string) []string {
 	return apis
 }
 
-func (b Engine) TouchedAPIs(tier environment.Tier) []string {
-	named := make([]string, 0, len(b.Removable))
+func (b Engine) touchedAPIs(tier environment.Tier) []string {
+	apis := slices.Clone(BootstrapAPIs)
 	for _, each := range b.Removable {
-		named = append(named, each.Name)
+		apis = append(apis, each.apis(b, tier)...)
 	}
-	return uniqueAPIs(slices.Concat(BootstrapAPIs, b.PartAPIs(tier, named)))
-}
-
-func (b Engine) neededAPIs(req provider.BootstrapRequest) []string {
-	parts := slices.Clone(req.Parts)
-	if len(b.fronted(req.Parts)) > 0 {
-		parts = append(parts, frontedParts...)
-	}
-	return uniqueAPIs(slices.Concat(BootstrapAPIs, b.PartAPIs(req.Tier, parts)))
+	return apis
 }
 
 func uniqueAPIs(apis []string) []string {
@@ -154,42 +146,45 @@ func uniqueAPIs(apis []string) []string {
 	return unique
 }
 
-func (b Engine) readTouchedServices(ctx context.Context, tier environment.Tier) error {
-	_, err := b.ListServicesOff(ctx, b.TouchedAPIs(tier))
-	return err
+func (b Engine) ServicesToSwitchOn(ctx context.Context, tier environment.Tier, parts, apis []string) ([]string, error) {
+	needed := slices.Concat(apis, b.partAPIs(tier, parts))
+	if len(needed) == 0 {
+		return nil, nil
+	}
+	if _, err := b.ListServicesOff(ctx, slices.Concat(b.touchedAPIs(tier), needed)); err != nil {
+		return nil, err
+	}
+	switching := slices.DeleteFunc(uniqueAPIs(needed), func(api string) bool { return !b.IsOff(api) })
+	return switching, b.RefuseSwitchOnDenied(ctx, switching)
 }
 
-func (b Engine) preflight(ctx context.Context, req provider.BootstrapRequest) ([]string, error) {
-	if err := b.readTouchedServices(ctx, req.Tier); err != nil {
-		return nil, err
-	}
-	switching, err := b.ListServicesOff(ctx, b.neededAPIs(req))
+func (b Engine) SwitchOnServices(ctx context.Context, tier environment.Tier, parts, apis []string, progress progress.Log) error {
+	switching, err := b.ServicesToSwitchOn(ctx, tier, parts, apis)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if err := b.RefuseSwitchOnDenied(ctx, switching); err != nil {
-		return nil, err
+	if err := b.switchOn(ctx, switching, progress); err != nil {
+		return err
 	}
-	return switching, b.Permitted(ctx, req.Parts)
+	return b.refuseRunRegionUnserved(ctx)
 }
 
 func (b Engine) IsOff(api string) bool { return b.ServiceStates.IsOff(api) }
 
-func (b Engine) SwitchOnGroup(apis []string) provider.ChangeGroup {
-	return provider.ChangeGroup{
+func (b Engine) PlanSwitchOn(switching []string) []provider.ChangeGroup {
+	if len(switching) == 0 {
+		return nil
+	}
+	changes := make([]provider.Change, 0, len(switching))
+	for _, api := range switching {
+		changes = append(changes, provider.Change{Kind: string(KindServiceUsage), Name: api, Action: provider.ActionUpdate, Reason: reasonSwitchedOff})
+	}
+	return []provider.ChangeGroup{{
 		Kind:    provider.StackGroupKind,
 		Name:    string(gcloud.Vendor) + "/" + b.Clients.Project() + "/services",
 		Action:  provider.ActionUpdate,
-		Changes: switchOnChanges(apis),
-	}
-}
-
-func switchOnChanges(apis []string) []provider.Change {
-	changes := make([]provider.Change, 0, len(apis))
-	for _, api := range apis {
-		changes = append(changes, provider.Change{Kind: string(KindServiceUsage), Name: api, Action: provider.ActionUpdate, Reason: reasonSwitchedOff})
-	}
-	return changes
+		Changes: changes,
+	}}
 }
 
 func (b Engine) RefuseSwitchOnDenied(ctx context.Context, off []string) error {
@@ -209,17 +204,6 @@ func (b Engine) RefuseSwitchOnDenied(ctx context.Context, off []string) error {
 		"%s may not switch on %s in project %s.\n"+
 			"Have someone who may run `gcloud services enable %s --project %s`, then try again",
 		principal, strings.Join(off, ", "), project, strings.Join(off, " "), project)
-}
-
-func (b Engine) SwitchOnServices(ctx context.Context, apis []string, progress progress.Log) error {
-	off, err := b.ListServicesOff(ctx, apis)
-	if err != nil || len(off) == 0 {
-		return err
-	}
-	if err := b.RefuseSwitchOnDenied(ctx, off); err != nil {
-		return err
-	}
-	return b.switchOn(ctx, off, progress)
 }
 
 func (b Engine) switchOn(ctx context.Context, off []string, progress progress.Log) error {

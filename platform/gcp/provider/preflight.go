@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -31,8 +30,9 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	keeps := newDeployUse(pre).keepsProjectRecords()
-	if !keeps && len(parts) == 0 && !p.readsServices(parts, deployAPIs(pre)) {
+	apis := deployAPIs(pre)
+	keeps, reads := newDeployUse(pre).keepsProjectRecords(), p.readsServices(parts, apis)
+	if !keeps && len(parts) == 0 && !reads {
 		return provider.Plan{}, nil
 	}
 	b, err := bootstrapGate{p}.openBootstrap(ctx)
@@ -42,13 +42,13 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 	if b, err = p.withDeployNetworkPatches(ctx, b, pre.Deploy, parts); err != nil {
 		return provider.Plan{}, err
 	}
-	switching, err := p.listServicesToSwitchOn(ctx, b, pre.Deploy.Tier, parts, deployAPIs(pre))
-	if err != nil {
-		return provider.Plan{}, err
-	}
 	var plan provider.Plan
-	if len(switching) > 0 {
-		plan.Groups = append(plan.Groups, b.SwitchOnGroup(switching))
+	if reads {
+		switching, err := b.ServicesToSwitchOn(ctx, pre.Deploy.Tier, parts, apis)
+		if err != nil {
+			return provider.Plan{}, err
+		}
+		plan.Groups = b.PlanSwitchOn(switching)
 	}
 	if keeps {
 		groups, err := variables.PlanProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.options.OwnDatabase)
@@ -147,21 +147,6 @@ func deployAPIs(pre provider.DeployPreflight) []string {
 	return apis
 }
 
-func usedAPIs(b bootstrap.Engine, tier environment.Tier, parts, apis []string) []string {
-	return slices.Concat(apis, b.PartAPIs(tier, parts))
-}
-
-func (p *Provider) listServicesToSwitchOn(ctx context.Context, b bootstrap.Engine, tier environment.Tier, parts, apis []string) ([]string, error) {
-	if !p.readsServices(parts, apis) {
-		return nil, nil
-	}
-	switching, err := b.ListServicesOff(ctx, usedAPIs(b, tier, parts, apis))
-	if err != nil {
-		return nil, err
-	}
-	return switching, b.RefuseSwitchOnDenied(ctx, switching)
-}
-
 func (p *Provider) switchOnServices(ctx context.Context, pre provider.DeployPreflight, parts, apis []string) error {
 	if !p.readsServices(parts, apis) {
 		return nil
@@ -170,7 +155,7 @@ func (p *Provider) switchOnServices(ctx context.Context, pre provider.DeployPref
 	if err != nil {
 		return err
 	}
-	return b.SwitchOnServices(ctx, usedAPIs(b, pre.Deploy.Tier, parts, apis), pre.Progress)
+	return b.SwitchOnServices(ctx, pre.Deploy.Tier, parts, apis, pre.Progress)
 }
 
 func (p *Provider) ensureProjectDatabase(ctx context.Context, pre provider.DeployPreflight) error {

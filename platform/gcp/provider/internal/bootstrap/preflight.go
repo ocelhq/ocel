@@ -9,6 +9,7 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
@@ -223,14 +224,45 @@ func (b Engine) Permitted(ctx context.Context, parts []string) error {
 		strings.Join(missing, ", "), b.Clients.Project(), strings.Join(grants.RolesGranting(missing), ", "))
 }
 
+func (b Engine) preflight(ctx context.Context, req provider.BootstrapRequest, removing []string) ([]string, error) {
+	if _, err := b.ListServicesOff(ctx, b.touchedAPIs(req.Tier)); err != nil {
+		return nil, err
+	}
+	parts, err := b.partsApplyMakes(ctx, req, removing)
+	if err != nil {
+		return nil, err
+	}
+	switching, err := b.ServicesToSwitchOn(ctx, req.Tier, parts, BootstrapAPIs)
+	if err != nil {
+		return nil, err
+	}
+	if err := b.Permitted(ctx, req.Parts); err != nil {
+		return nil, err
+	}
+	return switching, b.RegionServed(ctx, b.newSurvey(req.Tier))
+}
+
+func (b Engine) partsApplyMakes(ctx context.Context, req provider.BootstrapRequest, removing []string) ([]string, error) {
+	parts := slices.Clone(req.Parts)
+	if len(b.fronted(req.Parts)) > 0 {
+		parts = append(parts, frontedParts...)
+	}
+	return parts, nil
+}
+
+func (b Engine) refuseRunRegionUnserved(ctx context.Context) error {
+	if b.SkipChecks || b.Clients.Emulated() || b.IsOff(RunAPI) {
+		return nil
+	}
+	return b.Clients.RefuseRegionNotServed(ctx)
+}
+
 func (b Engine) RegionServed(ctx context.Context, read Survey) error {
 	if read.Emulated {
 		return nil
 	}
-	if !b.SkipChecks && !b.Clients.Emulated() && !b.IsOff(RunAPI) {
-		if err := b.Clients.RefuseRegionNotServed(ctx); err != nil {
-			return err
-		}
+	if err := b.refuseRunRegionUnserved(ctx); err != nil {
+		return err
 	}
 	if b.IsOff(FirestoreAPI) {
 		return nil

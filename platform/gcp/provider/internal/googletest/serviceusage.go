@@ -16,12 +16,13 @@ const servicesPrefix = "/v1/projects/" + Project + "/services"
 type ServiceUsage struct {
 	mu sync.Mutex
 
-	ServicesOff    []string
-	Unbilled       bool
-	UnbilledAtOnce bool
-	Precondition   string
-	Pending        int
-	Propagating    int
+	ServicesOff     []string
+	EveryServiceOff bool
+	Unbilled        bool
+	UnbilledAtOnce  bool
+	Precondition    string
+	Pending         int
+	Propagating     int
 
 	BatchGets   int
 	Gets        int
@@ -34,6 +35,13 @@ type ServiceUsage struct {
 func (s *ServiceUsage) IsOff(api string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.off(api)
+}
+
+func (s *ServiceUsage) off(api string) bool {
+	if s.EveryServiceOff {
+		return api != "" && !slices.ContainsFunc(s.Enabled, func(batch []string) bool { return slices.Contains(batch, api) })
+	}
 	return slices.Contains(s.ServicesOff, api)
 }
 
@@ -65,7 +73,7 @@ func (s *ServiceUsage) Serve(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func (s *ServiceUsage) state(api string) string {
-	if slices.Contains(s.ServicesOff, api) {
+	if s.off(api) {
 		return "DISABLED"
 	}
 	return "ENABLED"

@@ -46,11 +46,6 @@ func (f *freshProject) readsBeyondServiceUsage() []string {
 	return reads
 }
 
-func everyServiceOff() []string {
-	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: googletest.Clients("http://unused")})
-	return b.TouchedAPIs(environment.TierProduction)
-}
-
 func (f *freshProject) serve(t *testing.T) string {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +97,7 @@ func switchedOnInPlan(plan provider.Plan) []string {
 
 func TestABootstrapPlanOverAProjectWithEveryServiceOffReadsNoneOfThemAndShowsSwitchingOnOnlyThoseItNeeds(t *testing.T) {
 	t.Parallel()
-	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: everyServiceOff()}}
+	f := &freshProject{usage: &googletest.ServiceUsage{EveryServiceOff: true}}
 	b := openingFreshProject(t, f)
 
 	plan, err := b.Plan(t.Context(), keysBootstrap)
@@ -122,16 +117,24 @@ func TestABootstrapPlanOverAProjectWithEveryServiceOffReadsNoneOfThemAndShowsSwi
 	if len(f.usage.Enabled) > 0 {
 		t.Errorf("Plan() switched on %v, want nothing switched on before the plan is consented to", f.usage.Enabled)
 	}
-	for _, change := range plan.Groups[0].Changes {
-		if change.Action == provider.ActionKeep && change.Reason == provider.ReasonCurrent {
-			t.Errorf("the plan keeps %s %s as current, want it read as absent: its service is off", change.Kind, change.Name)
+	for i, group := range plan.Groups {
+		for _, change := range group.Changes {
+			if change.Action == provider.ActionKeep && change.Reason == provider.ReasonCurrent {
+				t.Errorf("the plan keeps %s %s as current, want it read as absent: its service is off", change.Kind, change.Name)
+			}
+			if switching := change.Kind == string(bootstrap.KindServiceUsage); switching != (i == 0) {
+				t.Errorf("the plan lists %s %s in group %s, want every switch-on in the first group and nothing else there", change.Kind, change.Name, group.Name)
+			}
 		}
+	}
+	if plan.Groups[0].Name != "gcp/acme-prod/services" || plan.Groups[0].Action != provider.ActionUpdate {
+		t.Errorf("the plan's first group is %s %s, want the switch-ons as an update of gcp/acme-prod/services, as a deploy's plan shows them", plan.Groups[0].Action, plan.Groups[0].Name)
 	}
 }
 
 func TestABootstrapStatusOverAProjectWithEveryServiceOffReadsNoneOfThemAndFindsNoBootstrap(t *testing.T) {
 	t.Parallel()
-	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: everyServiceOff()}}
+	f := &freshProject{usage: &googletest.ServiceUsage{EveryServiceOff: true}}
 	b := openingFreshProject(t, f)
 
 	described, err := b.Describe(t.Context(), environment.TierProduction)
@@ -152,7 +155,7 @@ func TestABootstrapStatusOverAProjectWithEveryServiceOffReadsNoneOfThemAndFindsN
 
 func TestABootstrapSwitchesOnTheServicesItNeedsBeforeItReadsAnything(t *testing.T) {
 	t.Parallel()
-	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: everyServiceOff()}}
+	f := &freshProject{usage: &googletest.ServiceUsage{EveryServiceOff: true}}
 	b := openingFreshProject(t, f)
 
 	if err := b.Apply(t.Context(), keysBootstrap, nil); err == nil {
@@ -178,7 +181,7 @@ func TestABootstrapWhoseCredentialMayNotSwitchServicesOnIsRefusedOnceBeforeItRea
 		"plan":  func(b bootstrap.Engine) error { _, err := b.Plan(t.Context(), keysBootstrap); return err },
 		"apply": func(b bootstrap.Engine) error { return b.Apply(t.Context(), keysBootstrap, nil) },
 	} {
-		f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: everyServiceOff()}, withheld: []string{"serviceusage.services.enable"}}
+		f := &freshProject{usage: &googletest.ServiceUsage{EveryServiceOff: true}, withheld: []string{"serviceusage.services.enable"}}
 
 		err := run(openingFreshProject(t, f))
 
@@ -217,7 +220,7 @@ func TestAPartAddedOnFirstUseSwitchesOnTheServicesItNeedsBeforeItMakesAnything(t
 
 func TestTheRecordsOfAProjectWhoseFirestoreIsOffReadAsAbsentWithoutACall(t *testing.T) {
 	t.Parallel()
-	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: everyServiceOff()}}
+	f := &freshProject{usage: &googletest.ServiceUsage{EveryServiceOff: true}}
 	p := pushing(t, f.serve(t))
 	p.records = nil
 	tier := environment.TierProduction
@@ -241,7 +244,7 @@ func TestTheRecordsOfAProjectWhoseFirestoreIsOffReadAsAbsentWithoutACall(t *test
 
 func TestABootstrapPlanBehindAnEdgeThatRunsCodeReadsNoneOfItsAssetsWhileTheirServicesAreOff(t *testing.T) {
 	t.Parallel()
-	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: everyServiceOff()}}
+	f := &freshProject{usage: &googletest.ServiceUsage{EveryServiceOff: true}}
 	b := openingFreshProject(t, f)
 	b.Edges = &frontRegistry{front: &countingFront{runsCode: true}}
 
@@ -264,7 +267,7 @@ func TestABootstrapPlanBehindAnEdgeThatRunsCodeReadsNoneOfItsAssetsWhileTheirSer
 
 func TestABootstrapThatSwitchedServicesOnSurveysAgainRatherThanTrustAReadDrawnWhileTheyWereOff(t *testing.T) {
 	t.Parallel()
-	f := &freshProject{usage: &googletest.ServiceUsage{ServicesOff: everyServiceOff()}}
+	f := &freshProject{usage: &googletest.ServiceUsage{EveryServiceOff: true}}
 	b := openingFreshProject(t, f)
 	if _, err := b.Describe(t.Context(), environment.TierProduction); err != nil {
 		t.Fatalf("Describe() = %v", err)

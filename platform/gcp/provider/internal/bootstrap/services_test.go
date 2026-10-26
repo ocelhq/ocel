@@ -94,7 +94,7 @@ func TestServicesSwitchedOffAreSwitchedOnInBatchesGoogleAcceptsAndWaitedForUntil
 	usage := &googletest.ServiceUsage{ServicesOff: slices.Clone(apis), Pending: 2, Propagating: 2}
 	b, _ := switchingOn(t, usage)
 
-	if err := b.SwitchOnServices(t.Context(), apis, nil); err != nil {
+	if err := b.SwitchOnServices(t.Context(), environment.TierProduction, nil, apis, nil); err != nil {
 		t.Fatalf("SwitchOnServices() = %v", err)
 	}
 
@@ -115,7 +115,7 @@ func TestSwitchingOnServicesThatAreAllOnAsksNothingOfTheCredential(t *testing.T)
 	usage := &googletest.ServiceUsage{}
 	b, tested := switchingOn(t, usage, credential.ServicesEnablePermission)
 
-	if err := b.SwitchOnServices(t.Context(), BootstrapAPIs, nil); err != nil {
+	if err := b.SwitchOnServices(t.Context(), environment.TierProduction, nil, BootstrapAPIs, nil); err != nil {
 		t.Fatalf("SwitchOnServices() with every service on = %v, want nothing asked of a credential that may not switch services on", err)
 	}
 	if len(*tested) > 0 || len(usage.Enabled) > 0 {
@@ -129,7 +129,7 @@ func TestACredentialThatMayNotSwitchServicesOnIsRefusedOnceNamingEveryServiceOff
 	usage := &googletest.ServiceUsage{ServicesOff: []string{"firestore.googleapis.com", "cloudkms.googleapis.com"}}
 	b, _ := switchingOn(t, usage, credential.ServicesEnablePermission)
 
-	err := b.SwitchOnServices(t.Context(), []string{"firestore.googleapis.com", "storage.googleapis.com", "cloudkms.googleapis.com"}, nil)
+	err := b.SwitchOnServices(t.Context(), environment.TierProduction, nil, []string{"firestore.googleapis.com", "storage.googleapis.com", "cloudkms.googleapis.com"}, nil)
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
@@ -154,7 +154,7 @@ func TestAProjectWithNoBillingAccountIsRefusedWithWhereToLinkOne(t *testing.T) {
 	} {
 		b, _ := switchingOn(t, usage)
 
-		err := b.SwitchOnServices(t.Context(), []string{"run.googleapis.com"}, nil)
+		err := b.SwitchOnServices(t.Context(), environment.TierProduction, nil, []string{"run.googleapis.com"}, nil)
 
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
@@ -192,7 +192,7 @@ func TestACredentialThatMayNotWaitOnASwitchOnIsRefusedBeforeItSwitchesAnythingOn
 	usage := &googletest.ServiceUsage{ServicesOff: []string{"run.googleapis.com"}, Pending: 1}
 	b, _ := switchingOn(t, usage, "serviceusage.operations.get")
 
-	err := b.SwitchOnServices(t.Context(), []string{"run.googleapis.com"}, nil)
+	err := b.SwitchOnServices(t.Context(), environment.TierProduction, nil, []string{"run.googleapis.com"}, nil)
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
@@ -209,7 +209,7 @@ func TestAPreconditionGoogleGivesNoBillingReasonForIsNotReadAsAMissingBillingAcc
 	usage := &googletest.ServiceUsage{ServicesOff: []string{"run.googleapis.com"}, Precondition: "the billing of this project is being migrated"}
 	b, _ := switchingOn(t, usage)
 
-	err := b.SwitchOnServices(t.Context(), []string{"run.googleapis.com"}, nil)
+	err := b.SwitchOnServices(t.Context(), environment.TierProduction, nil, []string{"run.googleapis.com"}, nil)
 
 	var refused refusal.Refusal
 	if err == nil || errors.As(err, &refused) {

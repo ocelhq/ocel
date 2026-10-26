@@ -19,13 +19,13 @@ func (p *Provider) PlanInfraPreflight(ctx context.Context, pre provider.DeployPr
 	if b, err = p.withDeployNetworkPatches(ctx, b, pre.Deploy, parts); err != nil {
 		return provider.Plan{}, err
 	}
-	switching, err := p.listServicesToSwitchOn(ctx, b, pre.Deploy.Tier, parts, nil)
-	if err != nil {
-		return provider.Plan{}, err
-	}
 	var plan provider.Plan
-	if len(switching) > 0 {
-		plan.Groups = append(plan.Groups, b.SwitchOnGroup(switching))
+	if p.readsServices(parts, nil) {
+		switching, err := b.ServicesToSwitchOn(ctx, pre.Deploy.Tier, parts, nil)
+		if err != nil {
+			return provider.Plan{}, err
+		}
+		plan.Groups = b.PlanSwitchOn(switching)
 	}
 	groups, err := b.PlanParts(ctx, pre.Deploy.Tier, parts)
 	if err != nil {
