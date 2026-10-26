@@ -159,7 +159,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 
 	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Intent: commands.ManageBootstrap, Tier: tier, Policy: policy, DryRun: policy.DryRun}, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider := p.Run, p.Check, p.Provider
-		planned, err := describeBootstrap(ctx, provider, cfg, tier)
+		planned, err := describeBootstrap(ctx, check, provider, cfg, tier)
 		check.End(err)
 		if err != nil {
 			return err
@@ -175,7 +175,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 			Edge:   cfg.EdgeSelection(),
 		}
 		if len(named) > 0 && len(going) == 0 {
-			if err := refuseUnofferedParts(ctx, provider, req); err != nil {
+			if err := refuseUnofferedParts(ctx, planning, provider, req); err != nil {
 				return err
 			}
 			sayNothingToRemove(planning, tier, named)
@@ -248,11 +248,7 @@ func (d drawnPlan) rendered() bool { return len(d.shown.GetGroups()) > 0 }
 
 func drawPlan(ctx context.Context, planning *run.Span, provider *providerprocess.Provider, req *contractv1.BootstrapRequest) (drawnPlan, error) {
 	tier := readiness.TierName(req.GetTier())
-	dry := proto.CloneOf(req)
-	dry.Dry = true
-	span := planning.Child(tier, progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", tier)))
-	plan, err := providerprocess.Plan(ctx, provider, "Bootstrap", dry, contractv1connect.ProviderServiceClient.Bootstrap)
-	span.End(err)
+	plan, err := planChanges(ctx, planning, provider, req)
 	if err != nil {
 		return drawnPlan{}, err
 	}
@@ -266,10 +262,18 @@ func drawPlan(ctx context.Context, planning *run.Span, provider *providerprocess
 	return drawnPlan{shown: planning.Plan(fmt.Sprintf("Proposed changes to the %s bootstrap", tier), plan, notes...)}, nil
 }
 
-func refuseUnofferedParts(ctx context.Context, provider *providerprocess.Provider, req *contractv1.BootstrapRequest) error {
+func planChanges(ctx context.Context, planning *run.Span, provider *providerprocess.Provider, req *contractv1.BootstrapRequest) (*planv1.ChangePlan, error) {
+	tier := readiness.TierName(req.GetTier())
 	dry := proto.CloneOf(req)
 	dry.Dry = true
-	_, err := providerprocess.Plan(ctx, provider, "Bootstrap", dry, contractv1connect.ProviderServiceClient.Bootstrap)
+	span := planning.Child(tier, progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", tier)))
+	plan, err := providerprocess.Plan(ctx, provider, "Bootstrap", dry, contractv1connect.ProviderServiceClient.Bootstrap)
+	span.End(err)
+	return plan, err
+}
+
+func refuseUnofferedParts(ctx context.Context, planning *run.Span, provider *providerprocess.Provider, req *contractv1.BootstrapRequest) error {
+	_, err := planChanges(ctx, planning, provider, req)
 	return err
 }
 
@@ -294,7 +298,9 @@ func applyPlan(ctx context.Context, provider *providerprocess.Provider, req *con
 	return err
 }
 
-func describeBootstrap(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
+func describeBootstrap(ctx context.Context, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
+	name := readiness.TierName(tier)
+	span := check.Child(name, progress.Reading.Title("the parts of the "+name+" bootstrap"))
 	var planned *contractv1.DescribeBootstrapResponse
 	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
@@ -304,6 +310,7 @@ func describeBootstrap(ctx context.Context, provider *providerprocess.Provider, 
 		})
 		return err
 	})
+	span.End(err)
 	return planned, err
 }
 
