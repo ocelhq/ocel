@@ -201,13 +201,17 @@ func (b Engine) PlanSwitchOn(switching []string) []provider.ChangeGroup {
 }
 
 func (b Engine) RefuseSwitchOnDenied(ctx context.Context, off []string) error {
-	if len(off) == 0 {
+	if len(off) == 0 || b.IsOff(resourceManagerAPI) {
 		return nil
 	}
 	granted, err := b.heldPermissions(ctx, credential.SwitchOnPermissions)
 	if err != nil || !slices.ContainsFunc(credential.SwitchOnPermissions, func(permission string) bool { return !slices.Contains(granted, permission) }) {
 		return err
 	}
+	return b.refuseSwitchOn(ctx, off)
+}
+
+func (b Engine) refuseSwitchOn(ctx context.Context, off []string) error {
 	principal, err := b.Principal(ctx)
 	if err != nil {
 		return err
@@ -231,6 +235,9 @@ func (b Engine) switchOn(ctx context.Context, off []string, progress progress.Lo
 	for batch := range slices.Chunk(off, servicesPerSwitch) {
 		doing := "switching on " + strings.Join(batch, ", ") + " in project " + b.Clients.Project()
 		started, err := googleretry.Attempted(ctx, service.Services.BatchEnable(parent, &serviceusage.BatchEnableServicesRequest{ServiceIds: batch}).Context(ctx).Do)
+		if gcloud.Forbidden(err) && !gcloud.ServiceDisabled(err) {
+			return b.refuseSwitchOn(ctx, off)
+		}
 		if err != nil {
 			if refused := b.refuseUnbilled(gcloud.AnsweredReason(err) == billingNotFound); refused != nil {
 				return refused

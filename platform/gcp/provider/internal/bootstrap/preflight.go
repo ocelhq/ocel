@@ -205,6 +205,9 @@ func (b Engine) heldPermissions(ctx context.Context, needed []string) ([]string,
 }
 
 func (b Engine) Permitted(ctx context.Context, parts []string) error {
+	if b.IsOff(resourceManagerAPI) {
+		return nil
+	}
 	grants := GrantsFor(parts)
 	needed := grants.Permissions()
 	granted, err := b.heldPermissions(ctx, needed)

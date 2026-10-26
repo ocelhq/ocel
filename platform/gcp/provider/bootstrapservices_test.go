@@ -52,7 +52,17 @@ func (f *freshProject) serve(t *testing.T) string {
 		f.mu.Lock()
 		f.calls = append(f.calls, r.Method+" "+r.URL.Path)
 		f.mu.Unlock()
+		if strings.HasSuffix(r.URL.Path, ":batchEnable") && slices.Contains(f.withheld, "serviceusage.services.enable") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"Permission denied to enable service [run.googleapis.com]"}}`))
+			return
+		}
 		if f.usage.Serve(w, r) {
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/v1/projects/"+googletest.Project+":testIamPermissions" && f.usage.IsOff(resourceManagerAPI) {
+			googletest.WriteServiceDisabled(w, resourceManagerAPI)
 			return
 		}
 		if r.Method == http.MethodPost && r.URL.Path == "/v1/projects/"+googletest.Project+":testIamPermissions" {
@@ -174,32 +184,74 @@ func TestABootstrapSwitchesOnTheServicesItNeedsBeforeItReadsAnything(t *testing.
 	}
 }
 
+const resourceManagerAPI = "cloudresourcemanager.googleapis.com"
+
+func everyServiceButResourceManager() []string {
+	return append(slices.DeleteFunc(slices.Clone(bootstrap.BootstrapAPIs), func(api string) bool { return api == resourceManagerAPI }), "cloudkms.googleapis.com")
+}
+
 func TestABootstrapWhoseCredentialMayNotSwitchServicesOnIsRefusedOnceBeforeItReadsOrChangesAnything(t *testing.T) {
 	t.Parallel()
 
-	for name, run := range map[string]func(bootstrap.Engine) error{
-		"plan":  func(b bootstrap.Engine) error { _, err := b.Plan(t.Context(), keysBootstrap); return err },
-		"apply": func(b bootstrap.Engine) error { return b.Apply(t.Context(), keysBootstrap, nil) },
+	plan := func(b bootstrap.Engine) error { _, err := b.Plan(t.Context(), keysBootstrap); return err }
+	apply := func(b bootstrap.Engine) error { return b.Apply(t.Context(), keysBootstrap, nil) }
+	for _, tc := range []struct {
+		name  string
+		usage *googletest.ServiceUsage
+		run   func(bootstrap.Engine) error
+		off   []string
+	}{
+		{"plan with Resource Manager on", &googletest.ServiceUsage{ServicesOff: everyServiceButResourceManager()}, plan, everyServiceButResourceManager()},
+		{"apply with Resource Manager on", &googletest.ServiceUsage{ServicesOff: everyServiceButResourceManager()}, apply, everyServiceButResourceManager()},
+		{"apply with Resource Manager off", &googletest.ServiceUsage{EveryServiceOff: true}, apply, append(slices.Clone(bootstrap.BootstrapAPIs), "cloudkms.googleapis.com")},
 	} {
-		f := &freshProject{usage: &googletest.ServiceUsage{EveryServiceOff: true}, withheld: []string{"serviceusage.services.enable"}}
+		f := &freshProject{usage: tc.usage, withheld: []string{"serviceusage.services.enable"}}
 
-		err := run(openingFreshProject(t, f))
+		err := tc.run(openingFreshProject(t, f))
 
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
-			t.Fatalf("%s = %v, want a %s refusal", name, err, refusal.CodeDenied)
+			t.Fatalf("%s = %v, want a %s refusal", tc.name, err, refusal.CodeDenied)
 		}
-		for _, api := range append(slices.Clone(bootstrap.BootstrapAPIs), "cloudkms.googleapis.com") {
+		for _, api := range tc.off {
 			if !strings.Contains(refused.Message, api) {
-				t.Errorf("%s refused with %q, want it to name %s", name, refused.Message, api)
+				t.Errorf("%s refused with %q, want it to name %s", tc.name, refused.Message, api)
 			}
 		}
 		if !strings.Contains(refused.Message, "admin@acme.example") || !strings.Contains(refused.Message, "gcloud services enable") {
-			t.Errorf("%s refused with %q, want the principal and the gcloud command", name, refused.Message)
+			t.Errorf("%s refused with %q, want the principal and the gcloud command", tc.name, refused.Message)
 		}
 		if reads := f.readsBeyondServiceUsage(); len(reads) > 0 || len(f.usage.Enabled) > 0 {
-			t.Errorf("%s read %v and switched on %v before refusing, want neither", name, reads, f.usage.Enabled)
+			t.Errorf("%s read %v and switched on %v before refusing, want neither", tc.name, reads, f.usage.Enabled)
 		}
+	}
+}
+
+func TestABootstrapOverAProjectWithResourceManagerOffAsksWhatTheCredentialMayDoOnlyOnceItIsOn(t *testing.T) {
+	t.Parallel()
+	f := &freshProject{usage: &googletest.ServiceUsage{EveryServiceOff: true}}
+
+	plan, err := openingFreshProject(t, f).Plan(t.Context(), keysBootstrap)
+	if err != nil {
+		t.Fatalf("Plan() with Resource Manager off = %v, want the switch-ons planned and the permission checks left to the apply", err)
+	}
+	if !slices.Contains(switchedOnInPlan(plan), resourceManagerAPI) {
+		t.Errorf("the plan switches on %v, want %s among them", switchedOnInPlan(plan), resourceManagerAPI)
+	}
+	if asked := slices.ContainsFunc(f.called(), func(call string) bool { return strings.HasSuffix(call, ":testIamPermissions") }); asked {
+		t.Errorf("Plan() called %v, want testIamPermissions left alone while Resource Manager is off", f.called())
+	}
+
+	_ = openingFreshProject(t, f).Apply(t.Context(), keysBootstrap, nil)
+
+	calls := f.called()
+	enabled := slices.IndexFunc(calls, func(call string) bool { return strings.HasSuffix(call, ":batchEnable") })
+	tested := slices.IndexFunc(calls, func(call string) bool { return strings.HasSuffix(call, ":testIamPermissions") })
+	if enabled < 0 || tested < enabled {
+		t.Errorf("Apply() called %v, want testIamPermissions asked once the switch-on has turned Resource Manager on", calls)
+	}
+	if first := f.readsBeyondServiceUsage(); len(first) > 0 && slices.Index(calls, first[0]) < tested {
+		t.Errorf("Apply() called %v, want the permissions checked before anything else is read", calls)
 	}
 }
 
