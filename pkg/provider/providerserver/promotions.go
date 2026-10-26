@@ -48,67 +48,78 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 			return nil, err
 		}
 		production := environmentScope{tier: environment.TierProduction, slug: req.GetSlug(), env: stackrecords.ProductionEnv}
-		hold, err := h.leases.takeUnderNewToken(ctx, vendor.KeyValues(), production, stackrecords.LeaseRollback)
+		var hold *leaseHold
+		var promoted router.Promotion
+		root := RootSpan(SpanPromotion, req.GetSlug(), rollbackTitle(req), progressv1.Phase_PHASE_PROMOTE)
+		err = inSpan(sender, root, func(_ *eventStream, log progress.Log) (err error) {
+			if hold, err = h.leases.takeUnderNewToken(ctx, vendor.KeyValues(), production, stackrecords.LeaseRollback); err != nil {
+				return err
+			}
+			defer func() { _ = hold.release(ctx) }()
+			promoted, err = h.rollBack(ctx, hold, req, log)
+			return err
+		})
 		if err != nil {
-			return nil, err
+			return nil, hold.explain(err)
 		}
-		defer func() { _ = hold.release(ctx) }()
-		result, err := h.rollBack(ctx, hold, req, sender)
-		return result, hold.explain(err)
+		return rollbackResult(promoted), nil
 	})
 }
 
-func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv1.RollbackRequest, sender *eventStream) (*progressv1.OperationEvent, error) {
+func rollbackTitle(req *contractv1.RollbackRequest) progress.Title {
+	switch {
+	case req.GetTag() != "":
+		return progress.Switching.Title("production traffic back to the promotion tagged " + req.GetTag())
+	case req.GetTo() != "":
+		return progress.Switching.Title("production traffic back to promotion " + req.GetTo())
+	default:
+		return progress.Switching.Title("production traffic back to the promotion before the live one")
+	}
+}
+
+func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv1.RollbackRequest, log progress.Log) (router.Promotion, error) {
 	leased := hold.context(ctx)
 	session, err := h.openEdgeSession(leased, environment.TierProduction, req.GetSlug(), req.GetEdge())
 	if err != nil {
-		return nil, err
+		return router.Promotion{}, err
 	}
 	current, err := session.ledger.Read(leased, "")
 	if err != nil {
-		return nil, err
+		return router.Promotion{}, err
 	}
 	target, err := rollbackTarget(current.History(), req.GetTo(), req.GetTag())
 	if err != nil {
-		return nil, err
+		return router.Promotion{}, err
 	}
 	promotionID, err := newPromotionID()
 	if err != nil {
-		return nil, err
+		return router.Promotion{}, err
 	}
-	var promoted router.Promotion
-	root := RootSpan(SpanPromotion, req.GetSlug(),
-		progress.Switching.Title("production traffic back to promotion "+target.PromotionID), progressv1.Phase_PHASE_PROMOTE)
-	if err := inSpan(sender, root, func(_ *eventStream, log progress.Log) error {
-		propagation, err := session.readSlowestPropagation(slices.Collect(maps.Values(session.state.Apps)))
-		if err != nil {
-			return err
-		}
-		promoted = router.Promotion{
-			PromotionID: promotionID,
-			Ts:          time.Now().Unix(),
-			Releases:    target.Releases,
-			Propagation: &propagation,
-		}
-		dropped, err := session.promoteApps(leased, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted, confirm: hold.confirm}, session.readAppRouter, log)
-		teardown := provider.StackDestroy{Images: removalImages(leased, session.provider, req.GetProjectRegistry(), log), Lease: hold.lease()}
-		if err != nil {
-			return errors.Join(err, session.reclaimDropped(leased, teardown, "", dropped, log))
-		}
-		recording, stop := newRecordContext(leased)
-		err = session.checkpoint(recording)
-		stop()
-		if err != nil {
-			return err
-		}
-		if err := session.reclaimDropped(leased, teardown, "", dropped, log); err != nil {
-			log.Warn(unreclaimedWarning(promoted.PromotionID, err))
-		}
-		return nil
-	}); err != nil {
-		return nil, err
+	propagation, err := session.readSlowestPropagation(slices.Collect(maps.Values(session.state.Apps)))
+	if err != nil {
+		return router.Promotion{}, err
 	}
-	return rollbackResult(promoted), nil
+	promoted := router.Promotion{
+		PromotionID: promotionID,
+		Ts:          time.Now().Unix(),
+		Releases:    target.Releases,
+		Propagation: &propagation,
+	}
+	dropped, err := session.promoteApps(leased, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted, confirm: hold.confirm}, session.readAppRouter, log)
+	teardown := provider.StackDestroy{Images: removalImages(leased, session.provider, req.GetProjectRegistry(), log), Lease: hold.lease()}
+	if err != nil {
+		return router.Promotion{}, errors.Join(err, session.reclaimDropped(leased, teardown, "", dropped, log))
+	}
+	recording, stop := newRecordContext(leased)
+	err = session.checkpoint(recording)
+	stop()
+	if err != nil {
+		return router.Promotion{}, err
+	}
+	if err := session.reclaimDropped(leased, teardown, "", dropped, log); err != nil {
+		log.Warn(unreclaimedWarning(promoted.PromotionID, err))
+	}
+	return promoted, nil
 }
 
 func rollbackResult(promoted router.Promotion) *progressv1.OperationEvent {

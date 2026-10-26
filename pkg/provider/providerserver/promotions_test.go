@@ -159,6 +159,50 @@ func TestARollbackHoldsProductionWhileItMovesThePointerAndFreesItAfter(t *testin
 	}
 }
 
+func TestEveryRecordARollbackReadsOrWritesIsReadOrWrittenWhileItsSpanNamesIt(t *testing.T) {
+	t.Parallel()
+	client, vendor, calls := timedServed(t)
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1", "p2")
+	calls.reset()
+
+	rolled, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"})
+
+	if err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	if unnamed := callsNoSpanNamed(rolled.events, calls.list()); len(unnamed) > 0 {
+		t.Errorf("the rollback made these calls while no span named what it waited on: %v", unnamed)
+	}
+}
+
+func TestARollbackRefusedWhileADeployHoldsProductionSaysSoInTheSpanSwitchingTraffic(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
+	seedPromotions(t, provider, environment.TierProduction, "shop", "", "p1", "p2")
+	takeLeaseOver(t, provider.KeyValues(), otherEnvironmentLease)
+
+	rolled, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop", To: "p1"})
+
+	if err == nil {
+		t.Fatal("Rollback() succeeded, want it refused while a deploy holds production")
+	}
+	titles := map[string]string{}
+	for _, span := range startedSpans(rolled.events) {
+		titles[span.id] = span.title
+	}
+	var failed []string
+	for _, event := range rolled.events {
+		if event.GetEnded().GetStatus() == progressv1.SpanStatus_SPAN_STATUS_ERROR {
+			failed = append(failed, titles[string(event.GetSpanId())])
+		}
+	}
+	if want := []string{"Switching production traffic back to promotion p1"}; !slices.Equal(failed, want) {
+		t.Errorf("the spans that failed = %q, want the refusal reported in %q", failed, want)
+	}
+}
+
 func relayPlane(provider *fake.Provider) *fake.DataPlane {
 	return provider.Routers().(*fake.Routers).DataPlane(fake.RouterRelay)
 }
