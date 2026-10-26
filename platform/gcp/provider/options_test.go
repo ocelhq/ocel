@@ -40,12 +40,12 @@ func TestAnOptionThisProviderDoesNotTakeIsRefused(t *testing.T) {
 			code:    refusal.CodeUnknownOption,
 		},
 		{
-			name: "a billing Cloud Run has no name for",
+			name: "per-app Cloud Run settings, which a transform's template.containers.resources.cpuIdle now sets",
 			options: provider.Options{"project": "acme-prod", "region": "europe-west1", "apps": map[string]any{
-				"web": map[string]any{"billing": "requests"},
+				"web": map[string]any{"billing": "request"},
 			}},
-			names: `"apps.web.billing"`,
-			code:  refusal.CodeInvalid,
+			names: "apps",
+			code:  refusal.CodeUnknownOption,
 		},
 		{
 			name:    "no region",

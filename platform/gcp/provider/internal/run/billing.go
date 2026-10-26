@@ -18,3 +18,10 @@ func ResolveBilling(chosen Billing, compute provider.Compute) Billing {
 	}
 	return BillingInstance
 }
+
+func DefaultBilling(compute provider.Compute, servesNext bool) Billing {
+	if servesNext {
+		return BillingInstance
+	}
+	return ResolveBilling("", compute)
+}

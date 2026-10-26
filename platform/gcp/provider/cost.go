@@ -12,6 +12,7 @@ import (
 	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/next"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/envsource"
@@ -23,9 +24,6 @@ import (
 )
 
 func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
-	if err := p.options.refuseUnknownApps(req.Deploy.Apps); err != nil {
-		return nil, err
-	}
 	names := names.New(p.namespace, p.options.Project)
 	tree := &pricing.Tree{}
 	region := p.options.Region
@@ -73,30 +71,48 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 		tree.AddShaped(environment, shape.Vendor, shape.Region, shape.Environment)
 	}
 
+	registry := p.components()
+	candidates := registry.TransformCandidates(req.Resources)
+	for _, app := range req.Deploy.Apps {
+		candidates = append(candidates, release.ServiceCandidates(app.App, app.Compute(), functionNamesOf(req, app), workerNamesOf(app))...)
+	}
+	transforms, err := surface.Evaluate(ctx, p.transforms, surface.Request(req.Deploy.Tier, req.Deploy.Env, candidates), p.transformed())
+	if err != nil {
+		return nil, err
+	}
+
 	for _, app := range req.Deploy.Apps {
 		scope := tree.Scope(environment, pricing.ScopeApp, app.App)
-		memory := run.RevisionMemory
+		served := run.Serving{Compute: app.Compute(), Billing: run.DefaultBilling(app.Compute(), servesNext(app)), Ingress: ingress}
 		if servesNext(app) {
-			memory = run.FormatMemoryLimit(next.MemoryMB)
+			served.Memory = next.MemoryMB
 		}
-		billsPerRequest := p.options.resolveBilling(app.App, app.Compute(), servesNext(app)) == run.BillingRequest
+		price := func(service, kind, name string, served run.Serving) error {
+			properties, unknown, err := release.PriceService(names.Project(), region, served, app.App, kind, name, transforms)
+			if err != nil {
+				return err
+			}
+			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, properties, unknown...)
+			return nil
+		}
 		if app.Compute() == provider.ComputeContainer {
 			service, err := names.Service(req.Deploy.Slug, req.Deploy.Env, app.App, app.App)
 			if err != nil {
 				return nil, err
 			}
-			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(billsPerRequest, app.Instances.Min, memory, ingress))
-		} else {
-			specs := req.Functions[app.App]
-			if len(specs) == 0 {
-				specs = []provider.FunctionSpec{{Name: app.App}}
+			served.Instances = provider.Instances{Min: app.Instances.Min}
+			if err := price(service, release.TransformContainer, app.App, served); err != nil {
+				return nil, err
 			}
-			for _, spec := range specs {
-				service, err := names.Service(req.Deploy.Slug, req.Deploy.Env, app.App, spec.Name)
+		} else {
+			for _, function := range functionNamesOf(req, app) {
+				service, err := names.Service(req.Deploy.Slug, req.Deploy.Env, app.App, function)
 				if err != nil {
 					return nil, err
 				}
-				tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(billsPerRequest, 0, memory, ingress))
+				if err := price(service, release.TransformFunction, function, served); err != nil {
+					return nil, err
+				}
 			}
 		}
 		for _, shape := range shapes {
@@ -107,20 +123,37 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 			if err != nil {
 				return nil, err
 			}
-			tree.Add(scope, string(gcloud.Vendor), cost.CloudRunServiceType, service, region, run.PricedProperties(true, 0, run.RevisionMemory, run.IngressInternal))
+			if err := price(service, release.TransformWorker, worker.Name, run.Serving{Compute: provider.ComputeServerless, Ingress: run.IngressInternal}); err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	registry := p.components()
-	transforms, err := surface.Evaluate(ctx, p.transforms, surface.Request(req.Deploy.Tier, req.Deploy.Env, registry.TransformCandidates(req.Resources)), registry.Transformed())
-	if err != nil {
-		return nil, err
-	}
 	if err := registry.Shape(component.Shape{Tree: tree, Vendor: string(gcloud.Vendor), Names: names, Request: req, Region: region, Shared: shared, Environment: environment, Transforms: transforms}, req.Resources, use.parts()); err != nil {
 		return nil, err
 	}
 
 	return tree.Set(provider.CostSource)
+}
+
+func functionNamesOf(req provider.ShapeRequest, app provider.AppEntry) []string {
+	specs := req.Functions[app.App]
+	if len(specs) == 0 {
+		return []string{app.App}
+	}
+	functions := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		functions = append(functions, spec.Name)
+	}
+	return functions
+}
+
+func workerNamesOf(app provider.AppEntry) []string {
+	workers := make([]string, 0, len(app.Workers))
+	for _, worker := range app.Workers {
+		workers = append(workers, worker.Name)
+	}
+	return workers
 }
 
 func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {

@@ -75,6 +75,7 @@ type Serving struct {
 	Billing     Billing
 	Labels      map[string]string
 	Audiences   []string
+	Patch       func(service *run.GoogleCloudRunV2Service) error
 
 	OpensOnPromotion bool
 }
@@ -210,6 +211,11 @@ func ServiceOf(s Serving) (*run.GoogleCloudRunV2Service, error) {
 		service.Labels[OpensOnPromotionLabel] = opensToEveryone
 	}
 	labelTier(service, s)
+	if s.Patch != nil {
+		if err := s.Patch(service); err != nil {
+			return nil, err
+		}
+	}
 	stampServing(service)
 	return service, nil
 }

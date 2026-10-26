@@ -53,6 +53,10 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	if err != nil {
 		return nil, err
 	}
+	patches, err := p.ReadAppPatches(ctx, c.Project(), spec)
+	if err != nil {
+		return nil, err
+	}
 	tasks, declared, err := p.Topics.Tasks(ctx, c, spec)
 	if err != nil {
 		return nil, err
@@ -84,7 +88,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 		Env:       values,
 		Account:   account,
 		Compute:   provider.ComputeContainer,
-		Billing:   p.ResolveBilling(app.App, provider.ComputeContainer, next.Serves(app)),
+		Billing:   run.DefaultBilling(provider.ComputeContainer, next.Serves(app)),
 		Health:    app.HealthCheckPath,
 		Instances: instances,
 		Public:    true,
@@ -92,11 +96,15 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 		Egress:    p.EgressFor(named, spec),
 		Tag:       p.RevisionTag(spec),
 		Labels:    labels,
+		Patch:     patches.For(release.TransformContainer, app.App).Apply,
 
 		OpensOnPromotion: !run.FactsOf(spec.Edge).RunsCode,
 	}
 	if next.Serves(app) {
 		served = next.FillContainerDefaults(served)
+		if served.Memory, err = release.ReadMemory(served); err != nil {
+			return nil, err
+		}
 		buckets, err := c.TierBuckets(ctx, spec.Ref.Tier, naming.StorageEdge, naming.StorageCache)
 		if err != nil {
 			return nil, err
