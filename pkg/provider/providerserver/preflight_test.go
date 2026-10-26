@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -354,6 +355,38 @@ func TestAPreflightAskedToRecordWantsRecordsEveryPartTheProjectWantsThatTheBoots
 	want := map[string][]string{fake.PartImages: {"shop"}}
 	if got := wantedParts(t, vendor, environment.TierProduction); !maps.EqualFunc(got, want, slices.Equal) {
 		t.Errorf("wants = %v, want %v: the bootstrap holds cache, and the relay edge also wants images", got, want)
+	}
+}
+
+func TestAPreflightRecordsWantsAndResolvesTheProvidersOwnRegistryWhileAStepNamesIt(t *testing.T) {
+	t.Parallel()
+
+	client, vendor, calls := timedServed(t)
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Edge: &contractv1.EdgeSelection{Kind: "direct"}})
+	vendor.WithHooks(func(hooks *provider.Hooks) {
+		hooks.EnsureImageRegistry = func(context.Context, environment.Tier) (provider.RegistryTarget, error) {
+			defer calls.time("resolve the provider's own image registry", time.Now())
+			return ownRegistry, nil
+		}
+	})
+	calls.reset()
+
+	_, steps, err := preflightWithSteps(context.Background(), client, &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+		Edge:         &contractv1.EdgeSelection{Kind: "relay"},
+		RecordWants:  true,
+		Containers:   []*contractv1.ContainerApp{{App: "web"}},
+	})
+
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if unnamed := callsNoSpanNamed(steps, calls.list()); len(unnamed) > 0 {
+		t.Errorf("the preflight made these calls while no step named what it waited on: %v", unnamed)
+	}
+	if got := wantedParts(t, vendor, environment.TierProduction); !slices.Equal(got[fake.PartImages], []string{"shop"}) {
+		t.Errorf("wants = %v, want shop to want %s", got, fake.PartImages)
 	}
 }
 

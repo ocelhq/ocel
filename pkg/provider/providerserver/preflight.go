@@ -94,9 +94,19 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	required = bootstrapplan.InOfferedOrder(offered, append(required, req.GetWantedParts()...))
 
 	var status bootstrapStatus
+	var own provider.RegistryTarget
+	var ownErr error
 	err = steps.run(string(vendor), progress.Reading.Title(bootstrapName(req.GetRequiredTier())), func() (err error) {
-		status, err = readBootstrap(ctx, p, readiness, tier, req, h.skipChecks)
-		return err
+		if status, err = readBootstrap(ctx, p, readiness, tier, req, h.skipChecks); err != nil || !status.own.Present {
+			return err
+		}
+		if req.GetRecordWants() {
+			if err := readiness.RecordWants(ctx, tier, req.GetSlug(), bootstrapplan.MissingParts(status.own.Parts, required)); err != nil {
+				return err
+			}
+		}
+		own, ownErr = resolveOwnRegistry(ctx, p, tier, req)
+		return nil
 	})
 	if err != nil {
 		return nil, provider.RefusalError(err)
@@ -109,13 +119,8 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 		return resp, nil
 	}
 	resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
-	if req.GetRecordWants() {
-		if err := readiness.RecordWants(ctx, tier, req.GetSlug(), bootstrapplan.MissingParts(status.own.Parts, required)); err != nil {
-			return nil, provider.RefusalError(err)
-		}
-	}
 	resp.KnownSlugs, resp.PreviewWildcard = status.knownSlugs, status.previewWildcard
-	if err := verifyOwnPushAccess(ctx, steps, p, tier, req, resp); err != nil {
+	if err := verifyOwnPushAccess(ctx, steps, p, req, resp, own, ownErr); err != nil {
 		return nil, err
 	}
 	if len(resp.GetCredentialProblems()) > 0 {
@@ -283,12 +288,15 @@ func verifyProjectPushAccess(ctx context.Context, steps preflightSteps, p provid
 	}, req.GetContainers(), resp)
 }
 
-func verifyOwnPushAccess(ctx context.Context, steps preflightSteps, p provider.Provider, tier environment.Tier, req *contractv1.PreflightRequest, resp *contractv1.PreflightResponse) error {
+func resolveOwnRegistry(ctx context.Context, p provider.Provider, tier environment.Tier, req *contractv1.PreflightRequest) (provider.RegistryTarget, error) {
 	ensure := p.Hooks().EnsureImageRegistry
 	if ensure == nil || req.GetProjectRegistry().GetServer() != "" || len(req.GetContainers()) == 0 {
-		return nil
+		return provider.RegistryTarget{}, nil
 	}
-	own, err := ensure(ctx, tier)
+	return ensure(ctx, tier)
+}
+
+func verifyOwnPushAccess(ctx context.Context, steps preflightSteps, p provider.Provider, req *contractv1.PreflightRequest, resp *contractv1.PreflightResponse, own provider.RegistryTarget, err error) error {
 	if _, asked := provider.QuestionOf(err); asked {
 		return provider.RefusalError(err)
 	}
