@@ -15,7 +15,10 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
+	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
+
+const ownAccount = "the app's own account"
 
 type ServicePatch struct {
 	resource string
@@ -38,6 +41,7 @@ type serviceKey struct {
 }
 
 type AppPatches struct {
+	Account  string
 	services map[serviceKey]ServicePatch
 }
 
@@ -54,6 +58,7 @@ func (p *Release) ReadAppPatches(ctx context.Context, project string, spec provi
 	ceiling := postgres.ConnectionBudgetOf(spec, len(candidates)).Ceiling()
 	at := servicePlacement{project: project, region: p.Region}
 	patches := AppPatches{services: map[serviceKey]ServicePatch{}}
+	runAs := map[string][]string{}
 	for _, candidate := range candidates {
 		patch := ServicePatch{
 			resource: candidate.Type + " " + candidate.Name,
@@ -67,18 +72,49 @@ func (p *Release) ReadAppPatches(ctx context.Context, project string, spec provi
 		if err := refuseOverBudget(patch.resource, probe.Template.Scaling, ceiling); err != nil {
 			return AppPatches{}, err
 		}
+		runAs[probe.Template.ServiceAccount] = append(runAs[probe.Template.ServiceAccount], patch.resource)
 		patches.services[serviceKey{kind: candidate.Type, name: candidate.Name}] = patch
+	}
+	if len(runAs) > 1 {
+		return AppPatches{}, refuseDisagreeingAccounts(spec.App.App, runAs)
+	}
+	for account := range runAs {
+		patches.Account = account
 	}
 	return patches, nil
 }
 
 func (p *Release) RefuseAppPatches(ctx context.Context, spec provider.StackSpec) error {
-	names, err := p.ReadNames(ctx)
+	c, err := p.OpenClients(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = p.ReadAppPatches(ctx, names.Project(), spec)
-	return err
+	patches, err := p.ReadAppPatches(ctx, c.Project(), spec)
+	if err != nil || patches.Account == "" {
+		return err
+	}
+	claim, err := readAccountClaim(ctx, p.Records, spec.Ref.Tier, patches.Account)
+	if err != nil {
+		return err
+	}
+	if err := refuseClaimedElsewhere(spec.Ref, spec.App.App, patches.Account, claim); err != nil || p.SkipChecks {
+		return err
+	}
+	_, declared, err := p.Topics.Tasks(ctx, c, spec)
+	if err != nil {
+		return err
+	}
+	referenced, err := variables.ReferencedOwners(ctx, p.Records, p.Cipher, spec)
+	if err != nil {
+		return err
+	}
+	account := c.AppAccount(spec.Ref.Project, spec.Ref.Name.Env, spec.App.App)
+	want, err := AppGrants(ctx, c, p.Components, p.CacheGrants, spec, account, "serviceAccount:"+patches.Account, declared, referenced)
+	if err != nil {
+		return err
+	}
+	_, owed := splitOwnAccountGrants(want, account)
+	return refuseUnheldIdentity(ctx, c, spec.App.App, patches.Account, owed)
 }
 
 func ReadMemory(served run.Serving) (int, error) {
@@ -104,6 +140,20 @@ func refuseOverBudget(resource string, scaling *runv2.GoogleCloudRunV2RevisionSc
 	return refusal.Refuse(refusal.CodeInvalid,
 		"a transform scales %s to %d instances, and its share of the app's postgres connections fits %d: patch %s.template.scaling to at most %d",
 		resource, asked, ceiling, serviceSurfaceName, ceiling)
+}
+
+func refuseDisagreeingAccounts(app string, runAs map[string][]string) error {
+	var said []string
+	for _, account := range slices.Sorted(maps.Keys(runAs)) {
+		named := account
+		if named == "" {
+			named = ownAccount
+		}
+		said = append(said, strings.Join(runAs[account], ", ")+" as "+named)
+	}
+	return refusal.Refuse(refusal.CodeInvalid,
+		"a transform runs the services of app %s as different accounts (%s), and an app runs as one: patch every one with the same %s.template.serviceAccount",
+		app, strings.Join(said, "; "), serviceSurfaceName)
 }
 
 func PriceService(project, region string, served run.Serving, app, kind, name string, evaluated surface.Evaluated) (map[string]any, []string, error) {

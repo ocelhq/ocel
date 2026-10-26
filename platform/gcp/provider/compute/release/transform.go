@@ -22,9 +22,10 @@ const (
 
 	serviceSurfaceName = "service"
 
-	gpuLimit          = "nvidia.com/gpu"
-	maxRequestsAtOnce = 1000
-	computeAPIPrefix  = "https://www.googleapis.com/compute/v1/"
+	gpuLimit             = "nvidia.com/gpu"
+	maxRequestsAtOnce    = 1000
+	serviceAccountDomain = ".gserviceaccount.com"
+	computeAPIPrefix     = "https://www.googleapis.com/compute/v1/"
 )
 
 var (
@@ -57,6 +58,7 @@ func newServiceSurface(at servicePlacement, timed bool) serviceSurface {
 		{Name: "encryption key", Paths: []servicePath{surface.NewPath("template.encryptionKey", patchEncryptionKey)}},
 		{Name: "binary authorization", Paths: []servicePath{surface.NewPath("binaryAuthorization", patchBinaryAuthorization)}},
 		{Name: "VPC access", Paths: []servicePath{surface.NewPath(surface.EgressPlacement, at.patchVPCAccess)}},
+		{Name: "service account", Paths: []servicePath{surface.NewPath("template.serviceAccount", patchServiceAccount)}},
 	}
 	if timed {
 		fields = append(fields, serviceField{Name: "request timeout", Paths: []servicePath{surface.NewPath("template.timeout", patchTimeout)}})
@@ -298,4 +300,13 @@ func (at servicePlacement) resolve(written, scope, collection, where string) (st
 		return path, nil
 	}
 	return "", fmt.Errorf("%s is not a %s of project %s%s, the one this deploy runs in: name one by its name or as %s<name>", written, strings.TrimSuffix(collection, "s"), at.project, where, want)
+}
+
+func patchServiceAccount(desired *runv2.GoogleCloudRunV2Service, email string) error {
+	name, domain, found := strings.Cut(email, "@")
+	if !found || name == "" || !strings.HasSuffix(domain, serviceAccountDomain) {
+		return fmt.Errorf("%q is not a service account's email, such as web@acme.iam.gserviceaccount.com", email)
+	}
+	desired.Template.ServiceAccount = email
+	return nil
 }

@@ -11,11 +11,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -75,6 +75,63 @@ func isAppRecorded(stacks []stackrecords.NamedStack, env, app string) bool {
 	return false
 }
 
+type appRuns struct {
+	store records.Store
+	tier  environment.Tier
+	read  map[string][]stackrecords.NamedStack
+}
+
+func (r appRuns) isRunning(ctx context.Context, project, env, app string) (bool, error) {
+	stacks, read := r.read[project]
+	if !read {
+		var err error
+		if stacks, err = stackrecords.List(ctx, r.store, r.tier, project); err != nil {
+			return false, fmt.Errorf("check whether app %s of %s still runs: %w", app, project, err)
+		}
+		r.read[project] = stacks
+	}
+	if isAppRecorded(stacks, env, app) {
+		return true, nil
+	}
+	stacks, err := stackrecords.List(ctx, r.store, r.tier, project)
+	if err != nil {
+		return false, fmt.Errorf("check whether app %s of %s still runs: %w", app, project, err)
+	}
+	return isAppRecorded(stacks, env, app), nil
+}
+
+func revokeUnusedIdentities(ctx context.Context, b bootstrap.Engine, runs appRuns, progress progress.Log) []error {
+	listed, err := b.Records.List(ctx, records.Partition{Tier: runs.tier, Root: stackrecords.RootBootstrap}, appIdentityRecord)
+	if err != nil {
+		return []error{fmt.Errorf("read the accounts the %s tier's apps run as: %w", runs.tier, err)}
+	}
+	var failures []error
+	for _, entry := range listed {
+		named, ok := entry.Key.Under(appIdentityRecord)
+		if !ok || len(named) != 3 {
+			continue
+		}
+		project, env, app := named[0], named[1], named[2]
+		running, err := runs.isRunning(ctx, project, env, app)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		if running {
+			continue
+		}
+		revoked, _, err := RevokeAppGrants(ctx, b.Clients, b.Records, runs.tier, project, env, app)
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		if revoked {
+			progress.Debug("Revoked what app " + app + " of " + project + " was granted in environment " + env + " of the " + string(runs.tier) + " tier: nothing runs it any more")
+		}
+	}
+	return failures
+}
+
 func DeleteUnusedAccounts(ctx context.Context, b bootstrap.Engine, req provider.BootstrapRequest, progress progress.Log) error {
 	progress = gcloud.EnsureProgress(progress)
 	service, err := b.Clients.Accounts()
@@ -100,27 +157,17 @@ func DeleteUnusedAccounts(ctx context.Context, b bootstrap.Engine, req provider.
 
 	var failures []error
 	deleted := 0
-	readProjects := map[string][]stackrecords.NamedStack{}
+	runs := appRuns{store: b.Records, tier: req.Tier, read: map[string][]stackrecords.NamedStack{}}
 	for _, candidate := range candidates {
-		stacks, read := readProjects[candidate.Project]
-		if !read {
-			var err error
-			if stacks, err = stackrecords.List(ctx, b.Records, candidate.Tier, candidate.Project); err != nil {
-				failures = append(failures, fmt.Errorf("check whether app %s of %s still runs: %w", candidate.App, candidate.Project, err))
-				continue
-			}
-			readProjects[candidate.Project] = stacks
-		}
-		if isAppRecorded(stacks, candidate.Env, candidate.App) {
+		running, err := runs.isRunning(ctx, candidate.Project, candidate.Env, candidate.App)
+		if err != nil {
+			failures = append(failures, err)
 			continue
 		}
-		if stacks, err := stackrecords.List(ctx, b.Records, candidate.Tier, candidate.Project); err != nil {
-			failures = append(failures, fmt.Errorf("check whether app %s of %s still runs: %w", candidate.App, candidate.Project, err))
-			continue
-		} else if isAppRecorded(stacks, candidate.Env, candidate.App) {
+		if running {
 			continue
 		}
-		if _, err := grants.RevokeAll(ctx, b.Clients, b.Records, candidate.Tier, candidate.ID); err != nil {
+		if _, _, err := RevokeAppGrants(ctx, b.Clients, b.Records, candidate.Tier, candidate.Project, candidate.Env, candidate.App); err != nil {
 			failures = append(failures, err)
 			continue
 		}
@@ -134,6 +181,7 @@ func DeleteUnusedAccounts(ctx context.Context, b bootstrap.Engine, req provider.
 			progress.Debug("Deleted the " + candidate.ID + " service account app " + candidate.App + " of " + candidate.Project + " ran as in environment " + candidate.Env + " of the " + string(candidate.Tier) + " tier")
 		}
 	}
+	failures = append(failures, revokeUnusedIdentities(ctx, b, runs, progress)...)
 	if deleted > 0 {
 		progress.Say(fmt.Sprintf("Deleted %d of the %s tier's app service accounts: no environment runs their apps any more", deleted, req.Tier))
 	} else if len(failures) == 0 {

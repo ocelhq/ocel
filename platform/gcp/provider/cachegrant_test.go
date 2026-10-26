@@ -175,7 +175,7 @@ func TestARedeployOfANextAppWritesNoIAMPolicyAtAll(t *testing.T) {
 	server := appAccountsOnly()
 	p, c := ensuringAccounts(t, server)
 	first := routedNextSpec()
-	if _, _, err := p.release().EnsureAccount(context.Background(), c, first, nil); err != nil {
+	if _, _, err := ensureAccount(p, context.Background(), c, first, nil); err != nil {
 		t.Fatalf("EnsureAccount() = %v", err)
 	}
 	before := iamWrites(server)
@@ -187,7 +187,7 @@ func TestARedeployOfANextAppWritesNoIAMPolicyAtAll(t *testing.T) {
 	release := cachedRelease()
 	release.Release = naming.NewReleaseToken("d2", "f2")
 	redeployed.App.StorageCoordinate = release
-	if _, _, err := p.release().EnsureAccount(context.Background(), c, redeployed, nil); err != nil {
+	if _, _, err := ensureAccount(p, context.Background(), c, redeployed, nil); err != nil {
 		t.Fatalf("second EnsureAccount() = %v", err)
 	}
 	if got := iamWrites(server) - before; got != 0 {
@@ -322,7 +322,7 @@ func writtenDatabases(t *testing.T, server *googletest.IAM, p *Provider, c *gclo
 	for _, project := range projects {
 		spec := reachingTopics(routedNextSpec())
 		spec.Ref.Project = project
-		email, _, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
+		email, _, err := ensureAccount(p, context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}})
 		if err != nil {
 			t.Fatalf("ensureAppAccount(%s) = %v", project, err)
 		}

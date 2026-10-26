@@ -403,7 +403,7 @@ func revisionFrom(name string, template *runv2.GoogleCloudRunV2RevisionTemplate)
 	if template == nil {
 		return revision
 	}
-	revision.Labels, revision.Annotations = template.Labels, template.Annotations
+	revision.Labels, revision.Annotations, revision.ServiceAccount = template.Labels, template.Annotations, template.ServiceAccount
 	for _, container := range template.Containers {
 		revision.Containers = append(revision.Containers, &runv2.GoogleCloudRunV2Container{Image: container.Image})
 	}

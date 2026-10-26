@@ -43,6 +43,19 @@ func (c *Clients) ReadAccount(ctx context.Context, account string) (*iam.Service
 	return found, nil
 }
 
+func (c *Clients) ReadAccountPermissions(ctx context.Context, email string, asked []string) ([]string, error) {
+	service, err := c.Accounts()
+	if err != nil {
+		return nil, err
+	}
+	answer, err := googleretry.Attempted(ctx, service.Projects.ServiceAccounts.TestIamPermissions(EmailAccountPath(email),
+		&iam.TestIamPermissionsRequest{Permissions: asked}).Context(ctx).Do)
+	if err != nil {
+		return nil, fmt.Errorf("read what the deploy credential may do on the %s service account: %w", email, err)
+	}
+	return answer.Permissions, nil
+}
+
 func (c *Clients) CreateAccount(ctx context.Context, tier environment.Tier, account, displayName, description string) error {
 	found, err := c.ReadAccount(ctx, account)
 	if err != nil {

@@ -242,7 +242,7 @@ func Apply(ctx context.Context, c *gcloud.Clients, tier environment.Tier, grante
 	return nil
 }
 
-func Reconcile(ctx context.Context, c *gcloud.Clients, store records.Store, tier environment.Tier, account string, want []Grant) error {
+func Reconcile(ctx context.Context, c *gcloud.Clients, store records.Store, tier environment.Tier, account string, want, kept, retained []Grant) error {
 	recorded, err := Read(ctx, store, tier, account)
 	if err != nil {
 		return err
@@ -253,21 +253,39 @@ func Reconcile(ctx context.Context, c *gcloud.Clients, store records.Store, tier
 			return err
 		}
 	}
-	if err := Apply(ctx, c, tier, want, withoutGrants(recorded, want)); err != nil {
+	if err := Apply(ctx, c, tier, want, withoutGrants(withoutGrants(withoutGrants(recorded, want), kept), retained)); err != nil {
 		return err
 	}
-	if sameGrants(held, want) {
+	final := unionOf(want, retained)
+	if sameGrants(held, final) {
 		return nil
 	}
-	return recordAppGrants(ctx, store, tier, account, want)
+	return recordAppGrants(ctx, store, tier, account, final)
 }
 
-func RevokeAll(ctx context.Context, c *gcloud.Clients, store records.Store, tier environment.Tier, account string) (bool, error) {
+func Revoke(ctx context.Context, c *gcloud.Clients, store records.Store, tier environment.Tier, account string, going, kept []Grant) error {
+	if len(going) == 0 {
+		return nil
+	}
+	if err := Apply(ctx, c, tier, nil, withoutGrants(going, kept)); err != nil {
+		return err
+	}
+	recorded, err := Read(ctx, store, tier, account)
+	if err != nil {
+		return err
+	}
+	if left := withoutGrants(recorded, going); len(left) > 0 {
+		return recordAppGrants(ctx, store, tier, account, left)
+	}
+	return records.Forget(ctx, store, appGrantsKey(tier, account))
+}
+
+func RevokeAll(ctx context.Context, c *gcloud.Clients, store records.Store, tier environment.Tier, account string, kept []Grant) (bool, error) {
 	recorded, err := Read(ctx, store, tier, account)
 	if err != nil {
 		return false, err
 	}
-	if err := Apply(ctx, c, tier, nil, recorded); err != nil {
+	if err := Apply(ctx, c, tier, nil, withoutGrants(recorded, kept)); err != nil {
 		return false, err
 	}
 	return len(recorded) > 0, records.Forget(ctx, store, appGrantsKey(tier, account))
