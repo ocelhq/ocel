@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/build/image"
 	"github.com/ocelhq/ocel/cli/internal/build/toolchain"
@@ -22,14 +23,46 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/progress"
 )
 
 type Log struct {
 	Shared io.Writer
 	AppLog func(app string) (log io.Writer, ended func(error))
+	Step   func(subject string, title progress.Title) (ended func(error))
 
 	hidden       redaction.Values
 	sharedHidden *redaction.Writer
+}
+
+func (l Log) openStep(subject string, title progress.Title) (ended func(error)) {
+	if l.Step == nil {
+		return func(error) {}
+	}
+	opened := l.Step(subject, title)
+	var once sync.Once
+	return func(err error) {
+		once.Do(func() { opened(l.hidden.HideError(err)) })
+	}
+}
+
+func (l Log) step(subject string, title progress.Title, do func() error) error {
+	ended := l.openStep(subject, title)
+	err := do()
+	ended(err)
+	return err
+}
+
+func (l Log) endingOnFirstApp(ended func(error)) Log {
+	if l.AppLog == nil {
+		return l
+	}
+	appLog := l.AppLog
+	l.AppLog = func(app string) (io.Writer, func(error)) {
+		ended(nil)
+		return appLog(app)
+	}
+	return l
 }
 
 func (l Log) shared() io.Writer {
@@ -165,8 +198,8 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	if err != nil {
 		return err
 	}
-	if err := os.RemoveAll(outputDir); err != nil {
-		return fmt.Errorf("reset %s: %w", buildoutput.Dir, err)
+	if err := removePreviousOutput(log, cfg.Slug, outputDir); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", buildoutput.Dir, err)
@@ -293,44 +326,92 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	}
 
 	if len(req.Apps) > 0 {
-		scriptPath, err := t.buildScript()
+		loading := log.openStep(cfg.Slug, progress.Loading.Title("the build adapters for "+nameApps(req.Apps)))
+		err := t.runNodeBuild(ctx, req, log.endingOnFirstApp(loading))
+		loading(err)
 		if err != nil {
-			return err
-		}
-		if _, err := os.Stat(scriptPath); err != nil {
-			return fmt.Errorf("the node build script is not at %s: %w", scriptPath, err)
-		}
-		payload, err := json.Marshal(req)
-		if err != nil {
-			return fmt.Errorf("marshal build request: %w", err)
-		}
-		if err := t.node(ctx, scriptPath, payload, log); err != nil {
 			return err
 		}
 	}
 	variants := toolchain.NewPlatformVariantCache()
 	defer variants.Close()
 	for _, target := range traced {
-		if err := variants.InstallTraced(ctx, target.App, target.Source, target.FunctionDir, target.Framework.Arch); err != nil {
+		if err := log.step(target.App, installingPlatformPackages(target.App), func() error {
+			return variants.InstallTraced(ctx, target.App, target.Source, target.FunctionDir, target.Framework.Arch)
+		}); err != nil {
 			return err
 		}
-		if err := toolchain.DescribeTrace(ctx, target); err != nil {
+		describe := func() error { return toolchain.DescribeTrace(ctx, target) }
+		if target.WorkerSource != "" {
+			err = log.step(target.App, buildingWorkerEntry(target.App), describe)
+		} else {
+			err = describe()
+		}
+		if err != nil {
 			return err
 		}
 	}
 	for _, a := range scriptBuilt {
 		architecture := readFunctionArchitecture(a, archs)
-		if err := addWorkerEntryToFunction(ctx, cfg, a, outputDir, architecture); err != nil {
+		if err := addWorkerEntryToFunction(ctx, cfg, a, outputDir, architecture, log); err != nil {
 			return err
 		}
-		if err := installTracedPlatformVariants(ctx, variants, cfg, a, outputDir, architecture, newAppHost(host, a).MaxFunctionBytes); err != nil {
+		if err := log.step(a.Name, installingPlatformPackages(a.Name), func() error {
+			return installTracedPlatformVariants(ctx, variants, cfg, a, outputDir, architecture, newAppHost(host, a).MaxFunctionBytes)
+		}); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a project.App, outputDir, architecture string) error {
+func removePreviousOutput(log Log, slug, outputDir string) error {
+	if _, err := os.Lstat(outputDir); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return log.step(slug, progress.Removing.Title("the previous build output in "+buildoutput.Dir), func() error {
+		if err := os.RemoveAll(outputDir); err != nil {
+			return fmt.Errorf("reset %s: %w", buildoutput.Dir, err)
+		}
+		return nil
+	})
+}
+
+func (t tools) runNodeBuild(ctx context.Context, req nodeBuildRequest, log Log) error {
+	scriptPath, err := t.buildScript()
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(scriptPath); err != nil {
+		return fmt.Errorf("the node build script is not at %s: %w", scriptPath, err)
+	}
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshal build request: %w", err)
+	}
+	return t.node(ctx, scriptPath, payload, log)
+}
+
+func nameApps(apps []nodeAppBuild) string {
+	names := make([]string, 0, len(apps))
+	for _, a := range apps {
+		names = append(names, a.Name)
+	}
+	if len(names) == 1 {
+		return "app " + names[0]
+	}
+	return "apps " + english.And(names)
+}
+
+func installingPlatformPackages(app string) progress.Title {
+	return progress.Installing.Title("the platform packages of app " + app)
+}
+
+func buildingWorkerEntry(app string) progress.Title {
+	return progress.Building.Title("the worker entry of app " + app)
+}
+
+func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a project.App, outputDir, architecture string, log Log) error {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return err
@@ -342,21 +423,23 @@ func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a proje
 	if workerSource == "" {
 		return nil
 	}
-	functions, err := readAppFunctions(outputDir, buildoutput.AppRoot(outputDir, a.Name))
-	if err != nil {
-		return err
-	}
-	if len(functions) == 0 {
-		return fmt.Errorf("app %q is built with %s and ships no function to run a worker from", a.Name, a.Framework)
-	}
-	hosting := functions[0]
-	return toolchain.BundleWorker(ctx, toolchain.Target{
-		App:              a.Name,
-		Framework:        buildoutput.Framework{Name: a.Framework, Arch: architecture},
-		Source:           filepath.Join(cfg.Dir, a.Path),
-		FunctionDir:      filepath.Join(outputDir, filepath.FromSlash(hosting.ArtifactPath)),
-		WorkerSource:     workerSource,
-		WorkerResolveDir: workerResolveDir,
+	return log.step(a.Name, buildingWorkerEntry(a.Name), func() error {
+		functions, err := readAppFunctions(outputDir, buildoutput.AppRoot(outputDir, a.Name))
+		if err != nil {
+			return err
+		}
+		if len(functions) == 0 {
+			return fmt.Errorf("app %q is built with %s and ships no function to run a worker from", a.Name, a.Framework)
+		}
+		hosting := functions[0]
+		return toolchain.BundleWorker(ctx, toolchain.Target{
+			App:              a.Name,
+			Framework:        buildoutput.Framework{Name: a.Framework, Arch: architecture},
+			Source:           filepath.Join(cfg.Dir, a.Path),
+			FunctionDir:      filepath.Join(outputDir, filepath.FromSlash(hosting.ArtifactPath)),
+			WorkerSource:     workerSource,
+			WorkerResolveDir: workerResolveDir,
+		})
 	})
 }
 

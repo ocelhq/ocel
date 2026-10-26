@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -178,8 +179,12 @@ func TestAScriptBuiltAppGainsTheWorkerEntryInTheFunctionAWorkerRunsFrom(t *testi
 		}
 	}
 
-	if err := addWorkerEntryToFunction(context.Background(), cfg, app, outputDir, app.Architecture()); err != nil {
+	var steps stepsSeen
+	if err := addWorkerEntryToFunction(context.Background(), cfg, app, outputDir, app.Architecture(), steps.output()); err != nil {
 		t.Fatalf("addWorkerEntryToFunction() = %v", err)
+	}
+	if want := []string{"open web: Building the worker entry of app web", "end Building the worker entry of app web"}; !slices.Equal(steps.list(), want) {
+		t.Errorf("the build reported %q, want %q", steps.list(), want)
 	}
 
 	first := filepath.Join(appDir, buildoutput.FunctionsDir, "bundle-0"+buildoutput.FunctionDirSuffix)

@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -1160,6 +1161,68 @@ func TestAnAppsOwnBuildFailureEndsNoSecondSpan(t *testing.T) {
 	}
 	if strings.Join(phaseOutput, "\n") != "the builder started" {
 		t.Errorf("build phase output = %q, want what the builder said before web's build", phaseOutput)
+	}
+}
+
+func steppingThenBuilding(failing error) func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+	return func(ctx context.Context, cfg *project.Project, variables map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, out build.Log) (build.Output, error) {
+		ended := out.Step(cfg.Slug, progress.Loading.Title("the build adapters for apps web and api"))
+		ended(failing)
+		if failing != nil {
+			return build.Output{}, failing
+		}
+		return buildingEach("")(ctx, cfg, variables, archs, workers, host, out)
+	}
+}
+
+func TestEachStepTheBuildNamesOutsideItsAppsIsASpanOfItsOwnInTheBuildPhase(t *testing.T) {
+	dependencies, fixture := twoAppProject(t)
+	dependencies.BuildApps = steppingThenBuilding(nil)
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; output=%s", err, out)
+	}
+
+	scopes, phaseOutput := buildScopes(t, out)
+	var got []string
+	for _, scope := range scopes {
+		got = append(got, scope.subject+": "+scope.message+" "+scope.status.String())
+	}
+	want := []string{
+		clitest.FixtureSlug + ": Collecting the resources " + clitest.FixtureSlug + " declares SPAN_STATUS_OK",
+		clitest.FixtureSlug + ": Loading the build adapters for apps web and api SPAN_STATUS_OK",
+		"web: Building app web SPAN_STATUS_OK",
+		"api: Building app api SPAN_STATUS_OK",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("build spans =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if strings.Join(phaseOutput, "\n") != "the builder started" {
+		t.Errorf("build phase output = %q, want what no app's build said and nothing else", phaseOutput)
+	}
+}
+
+func TestAStepTheBuildNamesThatFailsEndsNoSecondSpan(t *testing.T) {
+	dependencies, fixture := twoAppProject(t)
+	dependencies.BuildApps = steppingThenBuilding(errors.New("the node build failed: Cannot find module"))
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err == nil {
+		t.Fatal("runDeploy succeeded, want the step's failure")
+	}
+
+	scopes, _ := buildScopes(t, out)
+	var got []string
+	for _, scope := range scopes {
+		got = append(got, scope.subject+": "+scope.message+" "+scope.status.String())
+	}
+	want := []string{
+		clitest.FixtureSlug + ": Collecting the resources " + clitest.FixtureSlug + " declares SPAN_STATUS_OK",
+		clitest.FixtureSlug + ": Loading the build adapters for apps web and api SPAN_STATUS_ERROR",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("build spans =\n%s\nwant\n%s: the step's span already reports the failure", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 

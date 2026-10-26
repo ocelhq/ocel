@@ -266,19 +266,28 @@ func (b *buildSteps) open(subject string, title progress.Title) *run.Span {
 	return b.phase.Child(subject, title)
 }
 
+func (b *buildSteps) openReporting(subject string, title progress.Title) (*run.Span, func(error)) {
+	child := b.open(subject, title)
+	return child, func(err error) {
+		if err != nil {
+			b.mu.Lock()
+			b.failed = true
+			b.mu.Unlock()
+		}
+		child.End(err)
+	}
+}
+
 func (b *buildSteps) log() build.Log {
 	return build.Log{
 		Shared: b,
 		AppLog: func(app string) (io.Writer, func(error)) {
-			child := b.open(app, progress.Building.Title("app "+app))
-			return child.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), func(err error) {
-				if err != nil {
-					b.mu.Lock()
-					b.failed = true
-					b.mu.Unlock()
-				}
-				child.End(err)
-			}
+			child, ended := b.openReporting(app, progress.Building.Title("app "+app))
+			return child.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), ended
+		},
+		Step: func(subject string, title progress.Title) func(error) {
+			_, ended := b.openReporting(subject, title)
+			return ended
 		},
 	}
 }
