@@ -423,9 +423,11 @@ restored as the base of a fresh AOF; a bucket store from a read-only mount.
 Containers log with Docker's `local` driver, at most 100 MiB each. Read them with
 [`ocel logs`](/docs/cli/logs).
 
-Nothing ocel runs on the box caches responses. A Next app runs as a plain Next server, so Next's
-own cache inside the container is the only one, and a deploy that replaces the container starts it
-over from what the build prerendered. Its build reads its public values as build arguments; see
+Nothing ocel runs on the box caches responses. A Next app runs as a plain Next server under `next
+start`, built by Railpack or from a Dockerfile, the one `image.dockerfile` names or the one beside
+the app, so Next's own cache inside the container is the only one, and a deploy that replaces the
+container starts it over from what the build prerendered. Its build reads its public values:
+Railpack's build step is handed them, and a Dockerfile reads them as build arguments; see
 [Environment variables](/docs/frameworks/nextjs#environment-variables).
 
 ## Upgrades

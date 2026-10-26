@@ -190,20 +190,28 @@ about a quarter lower and has no per-request fee, so it costs less only for an i
 most of its life, roughly three quarters or more, answering requests. `ocel cost` prices the services
 this way.
 
-A Next app on `compute: "container"` runs `next start` in its image with 2 GiB of memory and its
-CPU always allocated, so it is billed per instance unless a transform [bills it
-otherwise](#billing), and it keeps at least one instance running unless `instances.min` is 0. ocel
-runs the image as built, like any container: Next keeps its cache in each instance, a revalidated
-page moves only on the instance that revalidated it, and Cloud CDN stores what the response headers
-allow, which no revalidation clears. Its build reads its public values as build arguments (see
+A Next app on `compute: "container"` with no Dockerfile is built as a serverless Next app is:
+ocel's Next adapter runs `next build`, and the one function it makes runs in the image a serverless
+Next function runs in. It is routed, cached, seeded with its prerendered pages and purged as a
+serverless Next app is, and its static files go to the edge bucket the same way. What makes it a
+container is its Cloud Run service, as below. `image.command` and `image.context` are refused on
+it, since the adapter reads neither: set `image.dockerfile` to build the image yourself.
+
+Either way a Next container runs with 2 GiB of memory and its CPU always allocated, so it is billed
+per instance unless a transform [bills it otherwise](#billing), and it keeps at least one instance
+running unless `instances.min` is 0. A Next container built from a Dockerfile, the one `image.dockerfile` names or
+the one beside the app, runs as built, like any container: `next start` in it keeps Next's own cache
+in each instance, a revalidated page moves only on the instance that revalidated it, and Cloud CDN
+stores what the response headers allow, which no revalidation clears. ocel installs nothing in it.
+Its build reads its public values as build arguments (see
 [Environment variables](/docs/frameworks/nextjs#environment-variables)).
 
-A serverless Next app's static files (the `public` directory, `_next/static` and the prerendered
-fallbacks) are uploaded at deploy to the tier's edge bucket under
-`assets/<project>/<env>/<app>/<release token>/`, and its image config under
-`image-config/<project>/<env>/<app>/<release token>/`. The service reads them from there: its image
-carries none. An app's service account may read only the files of its own app in its own
-environment. Removing a release removes them with it.
+The static files of a serverless Next app or a Next container with no Dockerfile (the `public`
+directory, `_next/static` and the prerendered fallbacks) are uploaded at deploy to the tier's edge
+bucket under `assets/<project>/<env>/<app>/<release token>/`, and its image config under
+`image-config/<project>/<env>/<app>/<release token>/`. The service reads them from there. An app's
+service account may read only the files of its own app in its own environment. Removing a release
+removes them with it.
 
 Behind the `alb` edge, a request for a file under one of the build's immutable prefixes, such as
 `/_next/static/`, never reaches Cloud Run: the load balancer sends it to a backend bucket over the
