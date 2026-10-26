@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -28,6 +29,7 @@ type statusLine struct {
 	startedAt time.Time
 
 	phase      progressv1.Phase
+	phaseRoots map[string]progressv1.Phase
 	spans      spanTree[statusSpan]
 	shown      string
 	shownAt    time.Time
@@ -46,9 +48,10 @@ func (u *statusSpan) latest() string {
 
 func newStatusLine(now func() time.Time, present Presentation) *statusLine {
 	return &statusLine{
-		now:     now,
-		present: present,
-		spans:   newSpanTree[statusSpan](),
+		now:        now,
+		present:    present,
+		phaseRoots: make(map[string]progressv1.Phase),
+		spans:      newSpanTree[statusSpan](),
 	}
 }
 
@@ -81,10 +84,14 @@ func (l *statusLine) open(span string, ev *streamv1.RunEvent, at time.Time) {
 	if !l.spans.joins(ev) {
 		l.phase = ev.GetOperation().GetPhase()
 	}
+	if isPhaseSpan(ev) {
+		l.phaseRoots[span] = ev.GetOperation().GetPhase()
+	}
 	l.spans.open(span, ev, at, &statusSpan{opened: ev})
 }
 
 func (l *statusLine) end(span string) {
+	delete(l.phaseRoots, span)
 	if tracked, _, _ := l.spans.close(span); tracked != nil && l.shown == span {
 		l.shown = ""
 	}
@@ -125,8 +132,15 @@ func (l *statusLine) render(width int) string {
 	}
 	head += l.present.Palette().Accent(spinnerFrame(int(at.Sub(l.startedAt) / frameRate)))
 	spinnerEnds := displayWidth(head)
-	if tracked := l.spans.tracked[l.shown]; tracked != nil {
+	switch tracked := l.spans.tracked[l.shown]; {
+	case tracked != nil:
 		head += " " + l.naming(tracked)
+	case l.phaseOpen(l.phase):
+		if described, ok := run.DescribePhase(l.phase); ok {
+			head += " " + strings.ToUpper(described.Gerund[:1]) + described.Gerund[1:]
+		}
+	default:
+		return ""
 	}
 	took := formatDuration(at.Sub(tally.since))
 	if tally.opened > 0 {
@@ -141,6 +155,15 @@ func (l *statusLine) render(width int) string {
 	}
 	head = fitToWidth(head, room)
 	return head + strings.Repeat(" ", max(room-displayWidth(head), 0)) + liveGutter + l.present.Palette().Muted(took)
+}
+
+func (l *statusLine) phaseOpen(phase progressv1.Phase) bool {
+	for _, open := range l.phaseRoots {
+		if open == phase {
+			return true
+		}
+	}
+	return false
 }
 
 func (l *statusLine) naming(tracked *statusSpan) string {
