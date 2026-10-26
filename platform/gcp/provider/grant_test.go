@@ -56,7 +56,7 @@ func TestAPolicyChangedUnderTheGrantIsReReadAndWrittenAgain(t *testing.T) {
 	t.Parallel()
 
 	server := &policyServer{refusals: 1}
-	if err := (composed(bootstrap.Engine{Clients: server.open(t)})).GrantRunAs(context.Background(), "ocel-production"); err != nil {
+	if err := (composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.open(t)})).GrantRunAs(context.Background(), "ocel-production"); err != nil {
 		t.Fatalf("grantRunAs() against a policy that changed once under it = %v, want the grant to land: another run bootstrapping the sibling tier writes this same policy", err)
 	}
 	if got := server.writes.Load(); got != 2 {
@@ -72,7 +72,7 @@ func TestAPolicyThatKeepsChangingUnderTheGrantIsRefusedRatherThanRetriedForever(
 
 	ctx := deadlineAt(2)
 	server := &policyServer{refusals: math.MaxInt64, refused: ctx.conflicted}
-	err := (composed(bootstrap.Engine{Clients: server.open(t)})).GrantRunAs(ctx, "ocel-production")
+	err := (composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.open(t)})).GrantRunAs(ctx, "ocel-production")
 	if err == nil {
 		t.Fatal("grantRunAs() over a policy that never stops changing = nil, want the refusal that names what the grant is for")
 	}

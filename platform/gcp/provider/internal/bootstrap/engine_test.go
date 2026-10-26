@@ -39,7 +39,7 @@ func describing(t *testing.T, skipChecks bool) (Engine, *atomic.Int32) {
 	}))
 	t.Cleanup(server.Close)
 	clients := &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL, Records: fake.NewKeyValues()}
-	return Engine{Clients: clients, Surveyed: &Surveys{}, SkipChecks: skipChecks}, &calls
+	return Engine{ServiceStates: &ServiceStates{}, Clients: clients, Surveyed: &Surveys{}, SkipChecks: skipChecks}, &calls
 }
 
 func TestABootstrapStatusReadsTheBootstrapsResourcesOnlyWhenTheChecksAreNotSkipped(t *testing.T) {
@@ -63,7 +63,7 @@ func TestABootstrapStatusReadsTheBootstrapsResourcesOnlyWhenTheChecksAreNotSkipp
 func TestABootstrapWhoseResourcesWereNotReadIsCurrentWhenItsStampNamesWhatThisBuildProvisions(t *testing.T) {
 	t.Parallel()
 
-	b := Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
+	b := Engine{ServiceStates: &ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}}
 	stamped := func(digest string, resourcesRead bool) Survey {
 		read := b.newSurvey(environment.TierProduction)
 		read.Present, read.ResourcesRead = true, resourcesRead

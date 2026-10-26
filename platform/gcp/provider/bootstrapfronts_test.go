@@ -108,7 +108,7 @@ func frontingWithSecrets(t *testing.T) (bootstrap.Engine, *frontRegistry, *offer
 	t.Helper()
 	registry := &frontRegistry{front: &countingFront{}}
 	h := newOffersHarness(t)
-	return composed(bootstrap.Engine{Edges: registry, Clients: h.clients, Records: h.records}), registry, h
+	return composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Edges: registry, Clients: h.clients, Records: h.records}), registry, h
 }
 
 func surveyed(parts ...string) bootstrap.Survey {
@@ -550,14 +550,14 @@ func TestAFirstBootstrapPlansTheFrontsPartsBeforeItsRecordsDatabaseExists(t *tes
 func TestTheLoadBalancerBehindTheALBEdgeIsAPartNoBootstrapRequires(t *testing.T) {
 	t.Parallel()
 
-	offered := composed(bootstrap.Engine{}).Parts()
+	offered := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}}).Parts()
 	for _, kind := range []edge.Kind{alb.Kind, edge.None} {
 		required := bootstrapplan.RequiredParts(offered, kind)
 		if len(required) != 0 {
 			t.Errorf("a bootstrap fronted by %q requires %v, want nothing: the first deploy behind the alb adds its load balancer", kind, required)
 		}
 	}
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
 	balancer := albpart.NewPart(b, environment.TierProduction)
 	if !strings.Contains(balancer.Summary, "$18") || !balancer.Retires {
 		t.Errorf("the %s part is %+v, want its summary to say the price and it retiring with its last project", albpart.PartName, balancer)
@@ -572,7 +572,7 @@ func TestTheLoadBalancerBehindTheALBEdgeIsAPartNoBootstrapRequires(t *testing.T)
 func TestTheCloudflareOriginPartHoldsNoLoadBalancerAndOnlyTheCloudflareEdgePullsItIn(t *testing.T) {
 	t.Parallel()
 
-	b := composed(bootstrap.Engine{})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}})
 	offered := b.Parts()
 	at := slices.IndexFunc(offered, func(f provider.Part) bool { return f.Name == bootstrap.CloudflareOriginPart })
 	if at < 0 {
@@ -615,7 +615,7 @@ func TestTheCloudflareOriginPartHoldsNoLoadBalancerAndOnlyTheCloudflareEdgePulls
 func TestTheServicesTheLoadBalancerNeedsAreOnlyDemandedWhenItIsBeingAdded(t *testing.T) {
 	t.Parallel()
 
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
 	balancer := albpart.NewPart(b, environment.TierPreview)
 	for _, api := range []string{"compute.googleapis.com", "certificatemanager.googleapis.com", "networkservices.googleapis.com"} {
 		if !slices.Contains(balancer.APIs, api) {
@@ -649,7 +649,7 @@ func TestTheEdgeBucketAndKeysAreNotRemovedWhileAnInstalledFrontReadsThem(t *test
 	t.Parallel()
 	ctx := context.Background()
 	tier := environment.TierProduction
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues()})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues()})
 	for _, part := range []string{bootstrap.KeysPart, bootstrap.EdgeBucketPart} {
 		if err := stackrecords.MarkBootstrapPartReady(ctx, b.Records, tier, part, stackrecords.BootstrapPart{}); err != nil {
 			t.Fatal(err)

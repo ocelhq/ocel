@@ -43,9 +43,6 @@ func (s *ServiceStates) IsOff(api string) bool {
 }
 
 func (s *ServiceStates) recall(api string) (on, known bool) {
-	if s == nil {
-		return false, false
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	on, known = s.on[api]
@@ -61,15 +58,8 @@ func (s *ServiceStates) remember(api string, on bool) {
 	s.on[api] = on
 }
 
-func (b Engine) services() *ServiceStates {
-	if b.ServiceStates != nil {
-		return b.ServiceStates
-	}
-	return &ServiceStates{}
-}
-
 func (b Engine) ListServicesOff(ctx context.Context, apis []string) ([]string, error) {
-	states := b.services()
+	states := b.ServiceStates
 	wanted := uniqueAPIs(apis)
 	var unread []string
 	for _, api := range wanted {
@@ -281,7 +271,7 @@ func (b Engine) refuseUnbilled(message string, precondition bool) error {
 }
 
 func (b Engine) awaitServicesOn(ctx context.Context, apis []string) error {
-	states := b.services()
+	states := b.ServiceStates
 	_, err := gcloud.Until(ctx, "Google reporting "+strings.Join(apis, ", ")+" on in project "+b.Clients.Project(), func() ([]string, error) {
 		if err := b.readServices(ctx, states, apis); err != nil {
 			return nil, err

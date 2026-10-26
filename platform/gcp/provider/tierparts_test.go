@@ -257,7 +257,7 @@ func usedPart(t *testing.T, b bootstrap.Engine, tier environment.Tier, part stri
 func TestAPartADeployAddedIsKeptWhileAProjectUsesItAndRetiresWithItsLastUser(t *testing.T) {
 	ctx := context.Background()
 	tier := environment.TierProduction
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts(network.Patches{})})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts(network.Patches{})})
 	usedPart(t, b, tier, bootstrap.RealtimePart, "shop")
 
 	var refused refusal.Refusal
@@ -287,7 +287,7 @@ func TestAPartADeployAddedIsKeptWhileAProjectUsesItAndRetiresWithItsLastUser(t *
 func TestTheKeysAreKeptWhileAnyProjectOfTheTierIsRecorded(t *testing.T) {
 	ctx := context.Background()
 	tier := environment.TierProduction
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts(network.Patches{})})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts(network.Patches{})})
 	usedPart(t, b, tier, bootstrap.KeysPart)
 	if _, err := b.Records.Write(ctx, records.Entry{Key: stackrecords.ProjectKey(tier, "docs"), Value: []byte(`{}`)}); err != nil {
 		t.Fatal(err)

@@ -16,7 +16,7 @@ import (
 func TestATiersRealtimeAccountMayHoldSubscriptionsOnlyWhereItsTiersDeployCredentialReaches(t *testing.T) {
 	t.Parallel()
 	server := googletest.GrantedIAM()
-	b := bootstrap.Engine{Clients: server.Open(t), Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}}}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.Open(t), Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}}}
 	tier := environment.TierProduction
 	account := b.Clients.RealtimeAccount(tier)
 	ctx := context.Background()
@@ -64,7 +64,7 @@ func TestTheRealtimeAccountIsGrantedAPredefinedRoleTheDeployCredentialMayGrantAn
 func TestARealtimeAccountThatMayNotHoldItsSubscriptionsIsSurveyedAsMendable(t *testing.T) {
 	t.Parallel()
 	server := googletest.GrantedIAM()
-	b := bootstrap.Engine{Clients: server.Open(t), Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}}}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.Open(t), Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}}}
 	tier := environment.TierProduction
 
 	found, err := b.AccountPresence(context.Background(), tier, b.Clients.RealtimeAccount(tier))
@@ -83,7 +83,7 @@ func TestARealtimeAccountThatMayNotHoldItsSubscriptionsIsSurveyedAsMendable(t *t
 func TestRemovingTheRealtimeAccountTakesItsRoleOffTheProject(t *testing.T) {
 	t.Parallel()
 	server := googletest.GrantedIAM()
-	b := bootstrap.Engine{Clients: server.Open(t), Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}}}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.Open(t), Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}}}
 	tier := environment.TierProduction
 	account := b.Clients.RealtimeAccount(tier)
 	ctx := context.Background()
@@ -102,7 +102,7 @@ func TestRemovingTheRealtimeAccountTakesItsRoleOffTheProject(t *testing.T) {
 func TestAnAccountNoPurposeNamesIsRefusedRatherThanTreatedAsTheRealtimeAccount(t *testing.T) {
 	t.Parallel()
 	server := googletest.GrantedIAM()
-	b := bootstrap.Engine{Clients: server.Open(t), Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}}}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: server.Open(t), Accounts: []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}}}
 	tier := environment.TierProduction
 	ctx := context.Background()
 

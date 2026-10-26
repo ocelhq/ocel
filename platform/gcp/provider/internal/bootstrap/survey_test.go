@@ -46,7 +46,7 @@ func newScriptedResources(n int) []Resource {
 
 func surveyScripted(read Survey, items []Resource, answer script) error {
 	ctx := context.WithValue(context.Background(), scriptKey{}, answer)
-	return (Engine{}).surveyPresence(ctx, read, items)
+	return (Engine{ServiceStates: &ServiceStates{}}).surveyPresence(ctx, read, items)
 }
 
 func newEmptySurvey() Survey {
@@ -189,7 +189,7 @@ func TestASurveyThatCannotReadItsSiblingTiersBucketsNorAnyResourceFailsWithTheSi
 	t.Cleanup(server.Close)
 	errSibling := errors.New("the preview tier's buckets are unreadable")
 	store := unreadableTierBuckets{KeyValues: fake.NewKeyValues(), tier: environment.TierPreview, err: errSibling}
-	engine := Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL, Records: store}}
+	engine := Engine{ServiceStates: &ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL, Records: store}}
 
 	_, err := engine.survey(context.Background(), environment.TierProduction)
 	if !errors.Is(err, errSibling) {

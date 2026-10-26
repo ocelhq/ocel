@@ -43,7 +43,7 @@ func TestTheServiceShapeMatchesWhatServiceOfSends(t *testing.T) {
 func TestTheEnvSourceSyncShapeMatchesWhatTheBootstrapDeploys(t *testing.T) {
 	t.Parallel()
 
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}})
 	sent, err := run.ServiceOf(envsource.SyncServing(b, environment.TierProduction))
 	if err != nil {
 		t.Fatal(err)

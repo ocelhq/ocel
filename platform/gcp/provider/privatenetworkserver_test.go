@@ -54,7 +54,7 @@ func servingNetworks(t *testing.T) (bootstrap.Engine, *networkServer) {
 	t.Cleanup(served.Close)
 	names := names.New("ocel", "acme-prod")
 	registry := &frontRegistry{front: &countingFront{}}
-	return composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: served.URL}, Edges: registry}), server
+	return composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: &gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: served.URL}, Edges: registry}), server
 }
 
 func deployingNetworks(t *testing.T) (*Provider, *networkServer) {

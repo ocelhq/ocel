@@ -322,7 +322,7 @@ func TestACloudflareBootstrapChecksTheHMACKeyPermissionsAndAPlainOneDoesNot(t *t
 
 func frontWithAssetReader(h *assetStoreHarness) (bootstrap.Engine, *frontRegistry) {
 	registry := &frontRegistry{front: &countingFront{runsCode: true}}
-	return composed(bootstrap.Engine{Edges: registry, Clients: h.clients, Records: fake.NewKeyValues()}), registry
+	return composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Edges: registry, Clients: h.clients, Records: fake.NewKeyValues()}), registry
 }
 
 func TestRaisingAFrontThatRunsCodeRaisesItsAssetReaderAndDroppingItTakesTheReaderDown(t *testing.T) {

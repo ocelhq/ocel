@@ -42,8 +42,9 @@ func (h *heldStores) stores() projectStores {
 func removing(t *testing.T, project, database string) (bootstrap.Engine, *heldStores) {
 	t.Helper()
 	engine := bootstrap.Engine{
-		Clients: &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Region: "europe-west1"},
-		Records: fake.NewKeyValues(),
+		ServiceStates: &bootstrap.ServiceStates{},
+		Clients:       &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Region: "europe-west1"},
+		Records:       fake.NewKeyValues(),
 	}
 	tier := environment.TierProduction
 	value, err := ports.ProjectDatabaseRecord(database)
@@ -141,7 +142,7 @@ func TestRemovingAProjectAsksGoogleForNoKey(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(google.Close)
-	b := bootstrap.Engine{Clients: googletest.Clients(google.URL), Records: fake.NewKeyValues()}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: googletest.Clients(google.URL), Records: fake.NewKeyValues()}
 	value, err := ports.ProjectDatabaseRecord(ports.SharedDatabase("ocel", tier))
 	if err != nil {
 		t.Fatal(err)

@@ -15,7 +15,7 @@ import (
 
 func TestRemovingAProjectBehindTheALBPlansReleasingItInOneGroupForTheProject(t *testing.T) {
 	t.Parallel()
-	b := bootstrap.Engine{Clients: googletest.Clients("http://127.0.0.1:1"), Records: fake.NewKeyValues()}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: googletest.Clients("http://127.0.0.1:1"), Records: fake.NewKeyValues()}
 	tier := environment.TierProduction
 	if _, err := b.Records.Write(context.Background(), records.Entry{Key: albpart.ConsumerAt(tier, "shop"), Value: []byte(`{}`)}); err != nil {
 		t.Fatal(err)

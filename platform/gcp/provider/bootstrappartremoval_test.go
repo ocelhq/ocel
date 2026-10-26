@@ -23,7 +23,7 @@ import (
 func TestTheBootstrapOffersEveryPartADeployAddsAndNoEdgeRequiresOne(t *testing.T) {
 	t.Parallel()
 
-	offered := composed(bootstrap.Engine{}).Parts()
+	offered := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}}).Parts()
 	for _, name := range []string{
 		bootstrap.KeysPart, bootstrap.EdgeBucketPart, bootstrap.CacheBucketPart, network.PartName, albpart.PartName,
 		bootstrap.RealtimePart, bootstrap.TopicsPart, envsource.PartName, bastion.PartName,
@@ -84,7 +84,7 @@ func TestRemovingThePrivateNetworkByNameWhileAStoreIsOnItIsRefusedBeforeAnyPlan(
 func TestARemovalSplitsThePartsADeployAddedFromTheBootstrapsOwn(t *testing.T) {
 	t.Parallel()
 
-	named, rest := composed(bootstrap.Engine{Removable: tierParts(network.Patches{})}).SplitRemovals(provider.BootstrapRequest{Remove: []string{network.PartName, bootstrap.CloudflareOriginPart, envsource.PartName}})
+	named, rest := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Removable: tierParts(network.Patches{})}).SplitRemovals(provider.BootstrapRequest{Remove: []string{network.PartName, bootstrap.CloudflareOriginPart, envsource.PartName}})
 	if !slices.Equal(named, []string{network.PartName, envsource.PartName}) || !slices.Equal(rest.Remove, []string{bootstrap.CloudflareOriginPart}) {
 		t.Errorf("splitRemovals() = %v, %v, want the parts a deploy added apart from %s", named, rest.Remove, bootstrap.CloudflareOriginPart)
 	}

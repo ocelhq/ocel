@@ -24,8 +24,9 @@ import (
 
 func recordingEngine() bootstrap.Engine {
 	return bootstrap.Engine{
-		Clients: &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Region: "europe-west1", Endpoint: "http://127.0.0.1:1"},
-		Records: fake.NewKeyValues(),
+		ServiceStates: &bootstrap.ServiceStates{},
+		Clients:       &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Region: "europe-west1", Endpoint: "http://127.0.0.1:1"},
+		Records:       fake.NewKeyValues(),
 	}
 }
 
@@ -136,7 +137,7 @@ func refusingDatabases(t *testing.T) *gcloud.Clients {
 func TestADatabaseTheDeployCredentialMayNotCreateIsRefusedNamingTheTieredDatabasesRole(t *testing.T) {
 	t.Parallel()
 	c := refusingDatabases(t)
-	b := bootstrap.Engine{Clients: c}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: c}
 
 	err := makeAppDatabase(context.Background(), b, environment.TierProduction, c.OwnDatabase(environment.TierProduction, "shop"), nil, nil)
 
@@ -151,7 +152,7 @@ func TestADatabaseGoogleDoesNotServeYetIsLaidOutOnceItDoes(t *testing.T) {
 	tags := googletest.NewTieredTags(t)
 	databases := googletest.NewDatabases(t, tags)
 	databases.LayoutUnserved = 2
-	b := bootstrap.Engine{Clients: tags.Tagged(googletest.Clients(databases.URL))}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: tags.Tagged(googletest.Clients(databases.URL))}
 	layout := Layout{
 		Expiring: []LayoutField{{Group: "runs", Path: "purgeAt"}},
 		Indexes:  []LayoutIndex{{Group: "runs", Index: &firestoreadmin.GoogleFirestoreAdminV1Index{QueryScope: "COLLECTION"}}},
@@ -170,7 +171,7 @@ func TestEveryTimeToLiveAndIndexOfADatabaseIsStartedBeforeAnyIsAwaited(t *testin
 	tags := googletest.NewTieredTags(t)
 	databases := googletest.NewDatabases(t, tags)
 	databases.OperationPolls = 2
-	b := bootstrap.Engine{Clients: tags.Tagged(googletest.Clients(databases.URL))}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: tags.Tagged(googletest.Clients(databases.URL))}
 	database := b.Clients.SharedDatabase(environment.TierProduction)
 	layout := Layout{
 		Expiring:  []LayoutField{{Group: "runs", Path: "purgeAt"}, {Group: "tags", Path: "purgeAt"}},
@@ -199,7 +200,7 @@ func TestAnIndexFirestoreRefusesAsContendedIsCreatedAgainRatherThanTakenAsPresen
 	tags := googletest.NewTieredTags(t)
 	databases := googletest.NewDatabases(t, tags)
 	databases.LayoutContended = 1
-	b := bootstrap.Engine{Clients: tags.Tagged(googletest.Clients(databases.URL))}
+	b := bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: tags.Tagged(googletest.Clients(databases.URL))}
 	layout := Layout{Indexes: []LayoutIndex{{Group: "runs", Index: &firestoreadmin.GoogleFirestoreAdminV1Index{QueryScope: "COLLECTION"}}}}
 
 	if err := makeAppDatabase(context.Background(), b, environment.TierProduction, b.Clients.SharedDatabase(environment.TierProduction), []Layout{layout}, nil); err != nil {

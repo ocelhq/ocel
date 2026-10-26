@@ -25,7 +25,7 @@ func TestAFirestoreOperationThatOutlastsAFastCallsWaitIsAwaitedUntilItEnds(t *te
 	t.Cleanup(func() { firestorePatience = patience })
 	databases := googletest.NewDatabases(t, nil)
 	databases.OperationPolls = gcloud.WaitAttempts + 1
-	b := Engine{Clients: googletest.Clients(databases.URL)}
+	b := Engine{ServiceStates: &ServiceStates{}, Clients: googletest.Clients(databases.URL)}
 
 	err := b.Awaited(context.Background(), "building an index on the runs of shop", &firestoreadmin.GoogleLongrunningOperation{
 		Name: "projects/" + googletest.Project + "/databases/shop/operations/1",
@@ -39,7 +39,7 @@ func tieredDatabases(t *testing.T) (Engine, *googletest.Databases, *googletest.T
 	t.Helper()
 	tags := googletest.NewTieredTags(t)
 	databases := googletest.NewDatabases(t, tags)
-	return Engine{Clients: tags.Tagged(googletest.Clients(databases.URL))}, databases, tags
+	return Engine{ServiceStates: &ServiceStates{}, Clients: tags.Tagged(googletest.Clients(databases.URL))}, databases, tags
 }
 
 func TestADatabaseWhoseCreateFailsToTagItIsTakenAsMadeWhenItExists(t *testing.T) {

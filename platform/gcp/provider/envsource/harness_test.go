@@ -19,5 +19,5 @@ func syncOpened(s *googletest.Sync, t *testing.T) bootstrap.Engine {
 	t.Helper()
 	c := s.Open(t)
 	services := &run.Services{OpenClients: googletest.Opener(c), Records: fake.NewKeyValues()}
-	return syncComposed(bootstrap.Engine{Clients: c, DeployAndRoute: services.DeployAndRoute, TearDown: services.TearDown, PushBinary: s.Push})
+	return syncComposed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: c, DeployAndRoute: services.DeployAndRoute, TearDown: services.TearDown, PushBinary: s.Push})
 }

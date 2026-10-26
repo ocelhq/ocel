@@ -47,7 +47,7 @@ func (f *freshProject) readsBeyondServiceUsage() []string {
 }
 
 func everyServiceOff() []string {
-	b := composed(bootstrap.Engine{Clients: googletest.Clients("http://unused")})
+	b := composed(bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: googletest.Clients("http://unused")})
 	return b.TouchedAPIs(environment.TierProduction)
 }
 

@@ -14,7 +14,7 @@ func taggedDatabases(t *testing.T) (bootstrap.Engine, *googletest.Databases, *go
 	t.Helper()
 	tags := googletest.NewTieredTags(t)
 	databases := googletest.NewDatabases(t, tags)
-	return bootstrap.Engine{Clients: tags.Tagged(googletest.Clients(databases.URL))}, databases, tags
+	return bootstrap.Engine{ServiceStates: &bootstrap.ServiceStates{}, Clients: tags.Tagged(googletest.Clients(databases.URL))}, databases, tags
 }
 
 func TestAProjectsDatabaseOfATierCarriesItsTiersTagFromItsCreation(t *testing.T) {
