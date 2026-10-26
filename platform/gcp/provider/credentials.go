@@ -57,7 +57,6 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	principal := provider.Principal{
 		Vendor:   gcloud.Vendor,
 		Account:  project,
-		Name:     gcloud.EmulatorPrincipal,
 		Location: c.Region,
 	}
 	if c.Endpoint != "" {
