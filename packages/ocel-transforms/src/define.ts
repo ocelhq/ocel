@@ -1,4 +1,5 @@
 import type { AwsSurfaces } from "./aws/index.js";
+import type { GcpSurfaces } from "./gcp/index.js";
 import type { TransformBindings } from "./index.js";
 import type { VpsSurfaces } from "./vps/index.js";
 
@@ -31,6 +32,7 @@ export const reservedTagPrefix = "ocel:";
 /** What a provider renders that a transform may patch, keyed by provider name. */
 export interface ProviderSurfaces {
   aws: AwsSurfaces;
+  gcp: GcpSurfaces;
   vps: VpsSurfaces;
 }
 

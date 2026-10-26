@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -48,6 +49,8 @@ type appBucket struct {
 	attrs    storage.BucketAttrs
 	emulated bool
 	tag      func(ctx context.Context, name string) error
+
+	patched surface.RecordedPatch[storage.BucketAttrs, storage.BucketAttrsToUpdate]
 }
 
 type recordedBucket struct {
@@ -58,7 +61,23 @@ func bucketKey(ref provider.StackRef, bucket string) records.Key {
 	return records.Partition{Tier: ref.Tier, Root: RootBuckets}.Key(ref.Project, ref.Name.Env, bucket)
 }
 
-func (p *Bucket) declaredBucket(clients *gcloud.Clients, in resources.ProvisionRequest) (appBucket, error) {
+func (p *Bucket) declaredBucket(ctx context.Context, clients *gcloud.Clients, in resources.ProvisionRequest) (appBucket, error) {
+	declared, err := ownBucket(clients, in)
+	if err != nil {
+		return appBucket{}, err
+	}
+	evaluated, _ := surface.ReadEvaluated(ctx, in.Ref)
+	result := evaluated.For(transformKind, in.Resource.Name)
+	record := surface.Record{Store: p.records, Key: surface.KeyFor(in.Ref, transformKind, in.Resource.Name)}
+	declared.patched, err = bucketSurface.PatchRecorded(ctx, record, "bucket "+in.Resource.Name, declared.attrs, result)
+	if err != nil {
+		return appBucket{}, err
+	}
+	declared.attrs = declared.patched.Desired
+	return declared, nil
+}
+
+func ownBucket(clients *gcloud.Clients, in resources.ProvisionRequest) (appBucket, error) {
 	spec := provider.BucketSpec{}
 	if in.Resource.Bucket != nil {
 		spec = *in.Resource.Bucket
@@ -112,7 +131,7 @@ func bucketLifecycle() storage.Lifecycle {
 	}}
 }
 
-func (b appBucket) drift(current *storage.BucketAttrs) (storage.BucketAttrsToUpdate, []string) {
+func (b appBucket) drift(current *storage.BucketAttrs) (storage.BucketAttrsToUpdate, []string, error) {
 	var update storage.BucketAttrsToUpdate
 	var differences []string
 	if !b.keepsNoAccess(current) && !current.UniformBucketLevelAccess.Enabled {
@@ -135,7 +154,11 @@ func (b appBucket) drift(current *storage.BucketAttrs) (storage.BucketAttrsToUpd
 		update.Lifecycle = &lifecycle
 		differences = append(differences, fmt.Sprintf("lifecycle rules change from %s to %s", describeRules(current.Lifecycle), describeRules(b.attrs.Lifecycle)))
 	}
-	return update, differences
+	patched, err := b.patched.Drift(current, &update)
+	if err != nil {
+		return update, nil, err
+	}
+	return update, append(differences, patched...), nil
 }
 
 func (b appBucket) keepsNoAccess(current *storage.BucketAttrs) bool {
@@ -179,9 +202,15 @@ func sameCORS(current, desired []storage.CORS) bool {
 
 func sameLifecycle(current, desired storage.Lifecycle) bool {
 	return slices.EqualFunc(current.Rules, desired.Rules, func(a, b storage.LifecycleRule) bool {
-		return a.Action.Type == b.Action.Type && a.Condition.AgeInDays == b.Condition.AgeInDays &&
-			slices.Equal(a.Condition.MatchesPrefix, b.Condition.MatchesPrefix)
+		return a.Action == b.Action && sameCondition(a.Condition, b.Condition)
 	})
+}
+
+func sameCondition(a, b storage.LifecycleCondition) bool {
+	return a.AllObjects == b.AllObjects && a.AgeInDays == b.AgeInDays && a.Liveness == b.Liveness &&
+		a.CreatedBefore.Equal(b.CreatedBefore) && a.CustomTimeBefore.Equal(b.CustomTimeBefore) && a.NoncurrentTimeBefore.Equal(b.NoncurrentTimeBefore) &&
+		a.DaysSinceCustomTime == b.DaysSinceCustomTime && a.DaysSinceNoncurrentTime == b.DaysSinceNoncurrentTime && a.NumNewerVersions == b.NumNewerVersions &&
+		slices.Equal(a.MatchesPrefix, b.MatchesPrefix) && slices.Equal(a.MatchesSuffix, b.MatchesSuffix) && slices.Equal(a.MatchesStorageClasses, b.MatchesStorageClasses)
 }
 
 func (p *Bucket) Provision(ctx context.Context, in resources.ProvisionRequest, progress progress.Log) (provider.Binding, error) {
@@ -193,7 +222,7 @@ func (p *Bucket) Provision(ctx context.Context, in resources.ProvisionRequest, p
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	declared, err := p.declaredBucket(clients, in)
+	declared, err := p.declaredBucket(ctx, clients, in)
 	if err != nil {
 		return provider.Binding{}, err
 	}
@@ -216,7 +245,7 @@ func (p *Bucket) Plan(ctx context.Context, in resources.ProvisionRequest, _ *pro
 	if err != nil {
 		return "", "", err
 	}
-	declared, err := p.declaredBucket(clients, in)
+	declared, err := p.declaredBucket(ctx, clients, in)
 	if err != nil {
 		return "", "", err
 	}
@@ -235,7 +264,11 @@ func (b appBucket) plan(ctx context.Context, store records.Store, client *storag
 	if current == nil {
 		return provider.ActionCreate, "", nil
 	}
-	if _, differences := b.drift(current); len(differences) > 0 {
+	_, differences, err := b.drift(current)
+	if err != nil {
+		return "", "", err
+	}
+	if len(differences) > 0 {
 		return provider.ActionUpdate, strings.Join(differences, "; "), nil
 	}
 	return provider.ActionKeep, provider.ReasonCurrent, nil
@@ -310,17 +343,24 @@ func (b appBucket) ensure(ctx context.Context, store records.Store, client *stor
 		return "", err
 	}
 	if current == nil {
-		return name, b.create(ctx, store, client, project, name, declared, progress)
+		return name, b.patched.Apply(ctx, func() error {
+			return b.create(ctx, store, client, project, name, declared, progress)
+		})
 	}
-	update, differences := b.drift(current)
+	update, differences, err := b.drift(current)
+	if err != nil {
+		return "", err
+	}
 	if len(differences) == 0 {
-		return name, nil
+		return name, b.patched.Apply(ctx, func() error { return nil })
 	}
 	gcloud.EnsureProgress(progress).Say("Updating bucket " + declared + " on Cloud Storage bucket " + name + ": " + strings.Join(differences, "; "))
-	if _, err := client.Bucket(name).Update(ctx, update); err != nil {
-		return "", fmt.Errorf("update the Cloud Storage bucket %s that bucket %s stores into: %w", name, declared, err)
-	}
-	return name, nil
+	return name, b.patched.Apply(ctx, func() error {
+		if _, err := client.Bucket(name).Update(ctx, update); err != nil {
+			return fmt.Errorf("update the Cloud Storage bucket %s that bucket %s stores into: %w", name, declared, err)
+		}
+		return nil
+	})
 }
 
 func (b appBucket) create(ctx context.Context, store records.Store, client *storage.Client, project, name, declared string, progress progress.Log) error {
@@ -396,6 +436,10 @@ func (p *Bucket) Remove(ctx context.Context, ref provider.StackRef, binding prov
 	if err := handle.Delete(ctx); err != nil && !errors.Is(err, storage.ErrBucketNotExist) && !gcloud.Absent(err) {
 		return fmt.Errorf("delete the Cloud Storage bucket %s that bucket %s stores into: %w", name, binding.Name, err)
 	}
+	patches := surface.Record{Store: p.records, Key: surface.KeyFor(ref, transformKind, binding.Name)}
+	if err := patches.Forget(ctx); err != nil {
+		return err
+	}
 	return forgetBucket(ctx, p.records, bucketKey(ref, binding.Name), name)
 }
 
@@ -444,6 +488,7 @@ func (p *Bucket) Component() component.Component {
 		Grants: func(_ context.Context, app component.App) ([]grants.Grant, error) {
 			return bucketGrants(app.Spec, app.Account, app.Member), nil
 		},
+		Transforms: map[provider.BindingType]*component.Transform{provider.BindingBucket: transformTarget()},
 	}
 }
 
@@ -463,8 +508,20 @@ func shapeBuckets(shape component.Shape, declared []provider.Resource) error {
 		if err != nil {
 			return err
 		}
+		result := shape.Transforms.For(transformKind, resource.Name)
+		known, unknown := bucketSurface.SplitOutputs(result.Patches[transformSurface])
+		patched, err := bucketSurface.Patch("bucket "+resource.Name, storage.BucketAttrs{StorageClass: defaultStorageClass}, known, nil, surface.Recorded{})
+		if err != nil {
+			return err
+		}
 		shape.Tree.Add(shape.Environment, shape.Vendor, cost.StorageBucketType, bucket, shape.Region,
-			map[string]any{"location": shape.Region, "storage_class": "STANDARD", "versioning": map[string]any{"enabled": false}})
+			map[string]any{"location": shape.Region, "storage_class": patched.Desired.StorageClass, "versioning": map[string]any{"enabled": patched.Desired.VersioningEnabled}},
+			surface.ListPriced(unknown, pricedPaths)...)
 	}
 	return nil
+}
+
+var pricedPaths = map[string]string{
+	"storageClass":       "storage_class",
+	"versioning.enabled": "versioning",
 }

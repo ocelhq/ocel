@@ -19,6 +19,10 @@
       "types": "./dist/aws/index.d.ts",
       "import": "./dist/aws/index.js"
     },
+    "./gcp": {
+      "types": "./dist/gcp/index.d.ts",
+      "import": "./dist/gcp/index.js"
+    },
     "./vps": {
       "types": "./dist/vps/index.d.ts",
       "import": "./dist/vps/index.js"
@@ -36,6 +40,7 @@
   },
   "dependencies": {
     "@pulumi/aws": "7.36.0",
+    "@pulumi/gcp": "9.36.1",
     "@pulumi/pulumi": "^3.259.0"
   },
   "devDependencies": {

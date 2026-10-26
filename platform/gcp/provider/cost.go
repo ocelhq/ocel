@@ -19,9 +19,10 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 )
 
-func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
+func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
 	if err := p.options.refuseUnknownApps(req.Deploy.Apps); err != nil {
 		return nil, err
 	}
@@ -110,7 +111,12 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		}
 	}
 
-	if err := p.components().Shape(component.Shape{Tree: tree, Vendor: string(gcloud.Vendor), Names: names, Request: req, Region: region, Shared: shared, Environment: environment}, req.Resources, use.parts()); err != nil {
+	registry := p.components()
+	transforms, err := surface.Evaluate(ctx, p.transforms, surface.Request(req.Deploy.Tier, req.Deploy.Env, registry.TransformCandidates(req.Resources)), registry.Transformed())
+	if err != nil {
+		return nil, err
+	}
+	if err := registry.Shape(component.Shape{Tree: tree, Vendor: string(gcloud.Vendor), Names: names, Request: req, Region: region, Shared: shared, Environment: environment, Transforms: transforms}, req.Resources, use.parts()); err != nil {
 		return nil, err
 	}
 

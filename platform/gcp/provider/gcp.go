@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
@@ -42,6 +43,7 @@ type Provider struct {
 
 	writtenBy  provider.WrittenBy
 	skipChecks bool
+	transforms transform.Pass
 
 	records           records.Store
 	recordedDatabases sync.Map
@@ -66,6 +68,7 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 		return nil, err
 	}
 	p.writtenBy = settings.WrittenBy
+	p.transforms = transformPass(settings.ProjectDir, settings.Transforms)
 	return p, nil
 }
 
@@ -113,9 +116,10 @@ func (p *Provider) Facts() provider.Facts {
 			{Edge: alb.Kind, Router: router.Kind(alb.Kind), Computes: provider.Computes()},
 			{Edge: cloudflare.Kind, Router: router.Kind(cloudflare.Kind), Computes: provider.Computes()},
 		},
-		DNSKinds:        []provider.DNSKind{dnsCloudflare},
-		StoresArtifacts: true,
-		WorkerCeilings:  slices.Clone(release.WorkerCeilings),
+		DNSKinds:          []provider.DNSKind{dnsCloudflare},
+		StoresArtifacts:   true,
+		RendersTransforms: true,
+		WorkerCeilings:    slices.Clone(release.WorkerCeilings),
 
 		RunsGates:             true,
 		RunsFunctionsAsImages: true,

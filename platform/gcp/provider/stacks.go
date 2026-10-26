@@ -19,6 +19,9 @@ func (s stacks) Plan(ctx context.Context, spec provider.StackSpec, runProgress p
 	if err != nil {
 		return provider.Plan{}, err
 	}
+	if ctx, err = s.p.evaluateTransforms(ctx, spec); err != nil {
+		return provider.Plan{}, err
+	}
 	return s.Stacks.Plan(ctx, spec, runProgress)
 }
 
@@ -28,6 +31,9 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 		return provider.StackResult{}, err
 	}
 	if spec, err = s.p.functionImages().WithImages(ctx, spec); err != nil {
+		return provider.StackResult{}, err
+	}
+	if ctx, err = s.p.evaluateTransforms(ctx, spec); err != nil {
 		return provider.StackResult{}, err
 	}
 	ctx = release.WithEdgeFacts(ctx, spec, facts)

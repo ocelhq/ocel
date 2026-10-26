@@ -8,6 +8,7 @@ import {
   type TransformDefinition,
   type TransformRule,
 } from "./define.js";
+import { gcpAllowedPaths } from "./gcp/index.js";
 import type { TransformBindings } from "./index.js";
 import { bindings, isBindingOutput } from "./output.js";
 import { vpsOwnedFields } from "./vps/index.js";
@@ -52,10 +53,20 @@ export interface TransformModule {
   readonly definition: TransformDefinition;
 }
 
-const ownedFields: Record<string, Record<string, Record<string, readonly string[]>>> = {
+type SurfaceNames = Record<string, Record<string, readonly string[]>>;
+
+const ownedFields: Record<string, SurfaceNames> = {
   aws: awsOwnedFields,
   vps: vpsOwnedFields,
 };
+
+const allowedPaths: Record<string, SurfaceNames> = {
+  gcp: gcpAllowedPaths,
+};
+
+function surfacesOf(provider: string): SurfaceNames | undefined {
+  return ownedFields[provider] ?? allowedPaths[provider];
+}
 
 interface LoadedModule {
   readonly specifier: string;
@@ -142,7 +153,7 @@ function checkRuleKeys(specifier: string, rule: TransformRule, provider: string)
   for (const key of Object.keys(rule)) {
     if (ruleKeywords.includes(key as (typeof ruleKeywords)[number])) continue;
     if (key === provider) continue;
-    if (Object.hasOwn(ownedFields, key)) continue;
+    if (surfacesOf(key) !== undefined) continue;
     throw new Error(
       `${specifier}: a rule targets ${key}, which is neither a provider nor ${ruleKeywords.join(", ")}`,
     );
@@ -167,7 +178,7 @@ function readGroup(
   branch: unknown,
   type: string,
 ): Record<string, unknown> | undefined {
-  const known = ownedFields[provider];
+  const known = surfacesOf(provider);
   if (known === undefined) {
     throw new Error(`${specifier}: this build renders nothing for ${provider}`);
   }
@@ -192,21 +203,52 @@ function applyPatch(
   into: Patches,
 ): void {
   const owned = ownedFields[provider]?.[type]?.[key];
-  if (owned === undefined) {
-    const rendered = Object.keys(ownedFields[provider]?.[type] ?? {}).join(", ");
+  const allowed = allowedPaths[provider]?.[type]?.[key];
+  if (owned === undefined && allowed === undefined) {
+    const rendered = Object.keys(surfacesOf(provider)?.[type] ?? {}).join(", ");
     throw new Error(
       `${specifier}: a rule patches ${provider}.${type}.${key}, which this provider does not construct (it constructs ${rendered})`,
     );
   }
   const fields = patch as Record<string, unknown>;
+  if (allowed !== undefined) {
+    const refused = refusedPaths("", fields, allowed);
+    if (refused.length > 0) {
+      const named = refused.map((path) => `${provider}.${type}.${key}.${path}`).join(", ");
+      throw new Error(
+        `${specifier}: a rule sets ${named}, which ocel does not patch; drop it (${provider}.${type}.${key} takes ${allowed.join(", ")})`,
+      );
+    }
+  }
   for (const field of Object.keys(fields)) {
-    if (owned.includes(field)) {
+    if (owned?.includes(field)) {
       throw new Error(
         `${specifier}: a rule sets ${provider}.${type}.${key}.${field}, which ocel fills from what this deploy built; drop it and let ocel own it`,
       );
     }
   }
   into[key] = mergePatch(into[key] ?? {}, fields) as Record<string, unknown>;
+}
+
+function refusedPaths(prefix: string, value: unknown, allowed: readonly string[]): string[] {
+  if (value === undefined) return [];
+  if (isEmpty(value)) {
+    const reaches = allowed.some((path) => path === prefix || path.startsWith(`${prefix}.`));
+    return prefix === "" || reaches ? [] : [prefix];
+  }
+  if (Array.isArray(value) && value.some(plainObject)) {
+    return [...new Set(value.flatMap((item) => refusedPaths(prefix, item, allowed)))];
+  }
+  if (!plainObject(value)) return allowed.includes(prefix) ? [] : [prefix];
+  return Object.entries(value).flatMap(([key, item]) =>
+    refusedPaths(prefix === "" ? key : `${prefix}.${key}`, item, allowed),
+  );
+}
+
+function isEmpty(value: unknown): boolean {
+  if (value === null) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  return plainObject(value) && Object.keys(value).length === 0;
 }
 
 function mergePatch(base: unknown, over: unknown): unknown {
