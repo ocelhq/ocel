@@ -198,5 +198,6 @@ Some of the route table is applied only where the edge can do it:
 - A container app is given no route table, and nothing in its container shapes or tags its
   responses. CloudFront and the load balancer store them as their own headers allow, untagged,
   so a revalidation does not reach them. A Next container with no Dockerfile is the exception:
-  it is built, routed and cached as a serverless Next app is. Behind Cloudflare a container app is forwarded to the load balancer and runs none of the
-  gateway, so the gateway caches nothing for it.
+  it is built, routed and cached as a serverless Next app is. Behind Cloudflare, see
+  [Caching container apps](/docs/providers/cloudflare#caching-container-apps) for what the
+  worker keeps of a container app.

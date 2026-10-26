@@ -202,8 +202,9 @@ per instance unless a transform [bills it otherwise](#billing), and it keeps at 
 running unless `instances.min` is 0. A Next container built from a Dockerfile, the one `image.dockerfile` names or
 the one beside the app, runs as built, like any container: `next start` in it keeps Next's own cache
 in each instance, a revalidated page moves only on the instance that revalidated it, and Cloud CDN
-stores what the response headers allow, which no revalidation clears. ocel installs nothing in it.
-Its build reads its public values as build arguments (see
+stores what the response headers allow, which no revalidation clears; behind Cloudflare with
+`cache` the worker keeps what those headers allow, as it does for any container. ocel installs
+nothing in it. Its build reads its public values as build arguments (see
 [Environment variables](/docs/frameworks/nextjs#environment-variables)).
 
 The static files of a serverless Next app or a Next container with no Dockerfile (the `public`
@@ -403,8 +404,9 @@ certificate is entered on the preview tier's load balancer, and each of the proj
 previews is an exact host rule under it.
 
 [`cloudflare`](/docs/providers/cloudflare) is the edge bought independently of Google.
-Name it and Cloudflare runs a worker in front of every app, serverless or container, which reaches
-each deployment on its Cloud Run revision-tag URL and presents the tier's origin secret. Each
+Name it and Cloudflare runs a worker in front of every app, serverless or container, which runs a
+Next app's middleware and edge-runtime routes itself, and reaches each deployment on its Cloud Run
+revision-tag URL presenting the tier's origin secret. Each
 service it reaches takes ingress `all`, and the runtime refuses a request without the secret
 before the app runs, so a request that skips Cloudflare is turned away. No load balancer stands
 behind the worker. `ocel bootstrap` keeps the

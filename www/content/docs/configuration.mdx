@@ -358,8 +358,8 @@ Fields as in the [compute](#compute) example.
 | [`health.path`](#health) | The path checked before a release serves traffic. |
 | [`instances`](#instances) | `min` and `max` instances. |
 
-On AWS and Google Cloud a Next.js app with no Dockerfile is built by ocel's Next adapter rather
-than into an image, so `image.context` and `image.command` are refused on it. Set
+On AWS, Google Cloud, and a box behind `cloudflare({ cache: true })`, a Next.js app with no
+Dockerfile is built by ocel's Next adapter rather than into an image, so `image.context` and `image.command` are refused on it. Set
 `image.dockerfile` to build your own.
 
 #### health
