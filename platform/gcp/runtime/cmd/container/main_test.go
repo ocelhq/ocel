@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -23,9 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
-	variables "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 )
 
 const (
@@ -490,14 +487,10 @@ func TestRun(t *testing.T) {
 	})
 }
 
-func imageWith(files ...string) func(string) bool {
-	return func(path string) bool { return slices.Contains(files, path) }
-}
-
-func reportedNodeOptions(t *testing.T, present func(string) bool, environ ...string) string {
+func reportedNodeOptions(t *testing.T, environ ...string) string {
 	t.Helper()
 	report := filepath.Join(t.TempDir(), "node-options")
-	r := launchHolding(t, present, "report", append(environ, reportVar+"="+report)...)
+	r := launchHolding(t, fileExists, "report", append(environ, reportVar+"="+report)...)
 	if code := r.await(t); code != 0 {
 		t.Fatalf("run = %d, want 0 from an app that reported its node options", code)
 	}
@@ -508,37 +501,8 @@ func reportedNodeOptions(t *testing.T, present func(string) bool, environ ...str
 	return string(got)
 }
 
-func TestTheRuntimeRunsANextContainersAppWithTheServerPreloadAfterTheNodeOptionsItIsGiven(t *testing.T) {
-	preload := "--import " + containerimage.NextServerPreloadPath
-	next := imageWith(containerimage.NextServerPreloadPath)
-
-	if got := reportedNodeOptions(t, next); got != preload {
-		t.Errorf("NODE_OPTIONS = %q with none given, want %q", got, preload)
-	}
-	if got, want := reportedNodeOptions(t, next, containerimage.NodeOptionsEnvVar+"=--max-old-space-size=512"), "--max-old-space-size=512 "+preload; got != want {
-		t.Errorf("NODE_OPTIONS = %q, want %q: the image's or the deploy's node options are kept and the preload follows them", got, want)
-	}
-}
-
-func TestTheRuntimeLeavesTheNodeOptionsOfAContainerWithoutTheNextServerPreload(t *testing.T) {
-	if got := reportedNodeOptions(t, imageWith(), containerimage.NodeOptionsEnvVar+"=--max-old-space-size=512"); got != "--max-old-space-size=512" {
+func TestTheRuntimeRunsAContainersAppWithTheNodeOptionsItIsGiven(t *testing.T) {
+	if got := reportedNodeOptions(t, containerimage.NodeOptionsEnvVar+"=--max-old-space-size=512"); got != "--max-old-space-size=512" {
 		t.Errorf("NODE_OPTIONS = %q, want the image's own %q", got, "--max-old-space-size=512")
-	}
-}
-
-func TestTheRuntimeRunsAWorkerInANextContainerWithoutTheServerPreload(t *testing.T) {
-	manifest, err := variables.Render(variables.Manifest{
-		Project: "p", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Tier: "preview",
-		Tasks: &variables.Tasks{Environment: "t", Topics: map[string]provider.TopicSpec{}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got := reportedNodeOptions(t, imageWith(containerimage.NextServerPreloadPath),
-		containerimage.NodeOptionsEnvVar+"=--max-old-space-size=512", processenv.WorkerEnvVar+"=worker", variables.EnvVar+"="+string(manifest))
-
-	if got != "--max-old-space-size=512" {
-		t.Errorf("NODE_OPTIONS = %q, want the image's own %q: a worker is not the Next server the preload is for", got, "--max-old-space-size=512")
 	}
 }

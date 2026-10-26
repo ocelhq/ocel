@@ -270,26 +270,6 @@ func TestARedeployOfANextAppWritesNoTagRecordsPolicy(t *testing.T) {
 	}
 }
 
-func TestANextContainersAccountMayUseItsOwnCachePrefixAndTagRecords(t *testing.T) {
-	t.Parallel()
-	server := &googletest.Run{}
-	p := providerServing(server, t)
-	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
-	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
-	account := "serviceAccount:" + server.Created[0].Template.ServiceAccount
-
-	expressions := cacheExpressionsOf(server.Identities(), account)
-	coordinate := env["OCEL_STORAGE_COORDINATE"]
-	if want := cacheConditions(env["OCEL_EDGE_BUCKET"], env["OCEL_CACHE_BUCKET"], coordinate[:strings.LastIndex(coordinate, "/")]); !slices.Equal(expressions, want) {
-		t.Errorf("the container's grants are %q, want %q: every cache kind of the release at OCEL_STORAGE_COORDINATE %q", expressions, want, coordinate)
-	}
-	if got := tagRecordBindingsOf(server.Identities()); len(got) != 1 || !strings.Contains(got[0], account) {
-		t.Errorf("the project's tag record bindings = %q, want the one of %s", got, account)
-	}
-}
-
 func writableDatabasesOf(server *googletest.IAM, member string) []string {
 	server.Mu.Lock()
 	defer server.Mu.Unlock()

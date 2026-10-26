@@ -1,15 +1,7 @@
-import type http from "node:http";
 import { type DispatchHost, dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import type { Invoke } from "@framework/node-runtime/host";
-import { beforeWriteHead } from "@framework/node-runtime/write-head";
-import { type HeaderLookup, isStoredBySomeEdge } from "@platform/edge-contract/cache-control";
-import {
-  cacheTagsForCloudCdn,
-  cloudCdnTagLimits,
-  isImmutable,
-  uncacheable,
-} from "../cache/cloud-cdn-tags.mjs";
+import { cacheTagsForCloudCdn, cloudCdnTagLimits, uncacheable } from "../cache/cloud-cdn-tags.mjs";
 
 const routerStateTree = "next-router-state-tree";
 
@@ -28,34 +20,6 @@ export function trimVaryForCloudCdn(vary: string | null): string | null {
 }
 
 export const cloudCdnShapedTagsPerObject = cloudCdnTagLimits.perObject - 1;
-
-export function isWithheldFromCloudCdn(
-  headers: HeaderLookup,
-  now: number,
-  edgeCacheControlHeader: string | undefined,
-): boolean {
-  return (
-    !isImmutable(headers.get("cache-control")) &&
-    isStoredBySomeEdge(headers, now, edgeCacheControlHeader)
-  );
-}
-
-export function withholdResponsesFromCloudCdn(
-  prototype: http.ServerResponse,
-  edgeCacheControlHeader: string | undefined,
-): void {
-  beforeWriteHead(prototype, (res) => {
-    const headers = {
-      get: (name: string): string | null => {
-        const value = res.getHeader(name);
-        return value === undefined ? null : String(value);
-      },
-    };
-    if (isWithheldFromCloudCdn(headers, Date.now(), edgeCacheControlHeader)) {
-      res.setHeader("cache-control", uncacheable);
-    }
-  });
-}
 
 export function forCloudCdn(response: Response, release: string | null, url: string): Response {
   const vary = response.headers.get("vary");
