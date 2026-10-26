@@ -2,9 +2,6 @@ package gcloud
 
 import (
 	"context"
-	"errors"
-
-	"github.com/googleapis/gax-go/v2/apierror"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
@@ -34,10 +31,4 @@ func (c *Clients) RefuseBillingDenied(ctx context.Context) error {
 		billed, credential.BillingPermission, credential.BillingRole, ports.QuotaProjectEnvVar)
 }
 
-func isBillingDenied(err error) bool {
-	var parsed *apierror.APIError
-	if !errors.As(err, &parsed) {
-		parsed, _ = apierror.ParseError(err, false)
-	}
-	return parsed != nil && parsed.Reason() == userProjectDenied
-}
+func isBillingDenied(err error) bool { return AnsweredReason(err) == userProjectDenied }

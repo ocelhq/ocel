@@ -121,6 +121,7 @@ export const BOOTSTRAP_APIS = [
   "iam.googleapis.com",
   "cloudresourcemanager.googleapis.com",
   "logging.googleapis.com",
+  "run.googleapis.com",
 ];
 
 const PART_APIS = [

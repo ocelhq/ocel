@@ -224,7 +224,15 @@ func (b Engine) Permitted(ctx context.Context, parts []string) error {
 }
 
 func (b Engine) RegionServed(ctx context.Context, read Survey) error {
-	if read.Emulated || b.IsOff(FirestoreAPI) {
+	if read.Emulated {
+		return nil
+	}
+	if !b.SkipChecks && !b.Clients.Emulated() && !b.IsOff(RunAPI) {
+		if err := b.Clients.RefuseRegionNotServed(ctx); err != nil {
+			return err
+		}
+	}
+	if b.IsOff(FirestoreAPI) {
 		return nil
 	}
 	service, err := b.Clients.Databases()

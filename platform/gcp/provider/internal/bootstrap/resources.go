@@ -36,6 +36,7 @@ var BootstrapAPIs = []string{
 	IAMAPI,
 	resourceManagerAPI,
 	loggingAPI,
+	RunAPI,
 }
 
 type Resource struct {

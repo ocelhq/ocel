@@ -18,7 +18,6 @@ import (
 )
 
 const (
-	runAPI     = "run.googleapis.com"
 	signingAPI = "iamcredentials.googleapis.com"
 )
 
@@ -140,7 +139,7 @@ func (p *Provider) readsServices(parts, apis []string) bool {
 func deployAPIs(pre provider.DeployPreflight) []string {
 	var apis []string
 	if len(pre.Deploy.Apps) > 0 {
-		apis = append(apis, runAPI)
+		apis = append(apis, bootstrap.RunAPI)
 	}
 	if slices.ContainsFunc(pre.Resources, func(resource provider.Resource) bool { return resource.Type == provider.BindingBucket }) {
 		apis = append(apis, signingAPI)

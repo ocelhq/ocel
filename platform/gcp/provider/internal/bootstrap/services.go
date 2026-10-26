@@ -3,14 +3,12 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"slices"
 	"strings"
 	"sync"
 
-	"github.com/googleapis/gax-go/v2/apierror"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/serviceusage/v1"
 
@@ -237,7 +235,7 @@ func (b Engine) switchOn(ctx context.Context, off []string, progress progress.Lo
 		doing := "switching on " + strings.Join(batch, ", ") + " in project " + b.Clients.Project()
 		started, err := googleretry.Attempted(ctx, service.Services.BatchEnable(parent, &serviceusage.BatchEnableServicesRequest{ServiceIds: batch}).Context(ctx).Do)
 		if err != nil {
-			if refused := b.refuseUnbilled(answeredReason(err) == billingNotFound); refused != nil {
+			if refused := b.refuseUnbilled(gcloud.AnsweredReason(err) == billingNotFound); refused != nil {
 				return refused
 			}
 			return fmt.Errorf("%s: %w", doing, err)
@@ -263,17 +261,6 @@ func (b Engine) switchOn(ctx context.Context, off []string, progress progress.Lo
 	}
 	gcloud.EnsureProgress(progress).Say("Switched on " + strings.Join(off, ", ") + " in project " + b.Clients.Project())
 	return nil
-}
-
-func answeredReason(err error) string {
-	var parsed *apierror.APIError
-	if !errors.As(err, &parsed) {
-		parsed, _ = apierror.ParseError(err, false)
-	}
-	if parsed == nil {
-		return ""
-	}
-	return parsed.Reason()
 }
 
 func isBillingNotFound(detail googleapi.RawMessage) bool {

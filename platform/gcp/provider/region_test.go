@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -183,4 +184,26 @@ func TestARunOfAUserCredentialThatMayNotBillTheProjectIsRefusedBeforeItCallsAnyt
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied || !strings.Contains(refused.Message, credential.BillingPermission) {
 		t.Errorf("openClients() = %v, want a %s refusal naming %s: a user's credential bills every later call to the project", err, refusal.CodeDenied, credential.BillingPermission)
 	}
+}
+
+func TestARegionIsLeftUncheckedWhileCloudRunIsOffAndCheckedOnceItIsOn(t *testing.T) {
+	t.Parallel()
+
+	var runOn atomic.Bool
+	served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if !runOn.Load() {
+			googletest.WriteServiceDisabled(w, bootstrap.RunAPI)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		googletest.WriteBody(w, runLocationsPage{Locations: []runLocation{{Name: "projects/acme-prod/locations/us-east1", LocationID: "us-east1"}}})
+	}))
+	t.Cleanup(served.Close)
+	c := &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Endpoint: served.URL, Region: "europe-west1"}
+
+	if err := c.RefuseRegionNotServed(context.Background()); err != nil {
+		t.Fatalf("RefuseRegionNotServed() while Cloud Run is off = %v, want the region left unchecked: the credential lacks nothing", err)
+	}
+	runOn.Store(true)
+	refusedRegion(t, c, "europe-west1")
 }

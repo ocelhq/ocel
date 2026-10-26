@@ -84,6 +84,8 @@ type Clients struct {
 	projectNumber int64
 	tierBuckets   tierBucketsRead
 	tierTags      tierTagsRead
+	regionLock    sync.Mutex
+	regionServed  bool
 }
 
 func opened[T any](c *Clients, cache *Memo[T], doing string, open func() (T, error)) (T, error) {

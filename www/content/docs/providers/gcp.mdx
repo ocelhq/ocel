@@ -626,8 +626,8 @@ A bootstrap or deploy reads whether each service it uses is on, and switches on 
 off: its plan lists them, applying it switches them on, and ocel never switches one off. A
 bootstrap uses `firestore.googleapis.com`, `storage.googleapis.com`,
 `secretmanager.googleapis.com`, `artifactregistry.googleapis.com`, `iam.googleapis.com`,
-`cloudresourcemanager.googleapis.com` and `logging.googleapis.com`, and every deploy
-`run.googleapis.com`. Each part uses its own when a deploy adds it: `cloudkms.googleapis.com` for
+`cloudresourcemanager.googleapis.com`, `logging.googleapis.com` and `run.googleapis.com`, which
+every deploy uses too. Each part uses its own when a deploy adds it: `cloudkms.googleapis.com` for
 `keys`, `pubsub.googleapis.com` for `realtime`, `pubsub.googleapis.com` and
 `cloudtasks.googleapis.com` for `topics`, `cloudscheduler.googleapis.com` for `env-source-sync`,
 and those [the private network](#private-network) names. A deploy declaring a bucket uses

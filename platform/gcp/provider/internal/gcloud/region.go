@@ -22,11 +22,20 @@ const (
 )
 
 func (c *Clients) RefuseRegionNotServed(ctx context.Context) error {
+	c.regionLock.Lock()
+	defer c.regionLock.Unlock()
+	if c.regionServed {
+		return nil
+	}
 	served, err := c.listRunRegions(ctx)
+	if ServiceDisabled(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
 	if slices.Contains(served, c.Region) {
+		c.regionServed = true
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid, "option %q names %q, which is not a region Cloud Run serves.%s Regions: %s. See %s",
@@ -46,6 +55,9 @@ func (c *Clients) listRunRegions(ctx context.Context) ([]string, error) {
 			call = call.PageToken(token)
 		}
 		page, err := googleretry.Attempted(ctx, call.Do)
+		if ServiceDisabled(err) {
+			return nil, err
+		}
 		if googleretry.AnsweredCode(err) == http.StatusForbidden {
 			return nil, refusal.Refuse(refusal.CodeDenied,
 				"this credential may not list the regions Cloud Run serves project %s from, which every run checks its region against: it lacks %s.\n"+
