@@ -9,6 +9,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 )
 
 type bindingSpec struct {
@@ -18,10 +19,15 @@ type bindingSpec struct {
 	Tier           environment.Tier
 	CertificateMap string
 	Hosts          map[string]Host
+	Patches        map[string]transform.Result
 }
 
-func bindingProgram(spec bindingSpec) Program {
-	return func(ctx *pulumi.Context, in string) error {
+func bindingProgram(spec bindingSpec) (Program, error) {
+	patches, err := newAppPatches(spec)
+	if err != nil {
+		return Program{}, err
+	}
+	return Program{Patches: patches.applied, Run: func(ctx *pulumi.Context, in string) error {
 		project := pulumi.String(in)
 		for _, hostname := range slices.Sorted(maps.Keys(spec.Hosts)) {
 			host := spec.Hosts[hostname]
@@ -30,14 +36,17 @@ func bindingProgram(spec bindingSpec) Program {
 				if err != nil {
 					return err
 				}
-				if _, err := certificatemanager.NewCertificateMapEntry(ctx, entry,
-					&certificatemanager.CertificateMapEntryArgs{
-						Name:         pulumi.String(entry),
-						Project:      project,
-						Map:          pulumi.String(spec.CertificateMap),
-						Hostname:     pulumi.String(hostname),
-						Certificates: pulumi.StringArray{pulumi.String(host.Certificate)},
-					}); err != nil {
+				args := &certificatemanager.CertificateMapEntryArgs{
+					Name:         pulumi.String(entry),
+					Project:      project,
+					Map:          pulumi.String(spec.CertificateMap),
+					Hostname:     pulumi.String(hostname),
+					Certificates: pulumi.StringArray{pulumi.String(host.Certificate)},
+				}
+				if labels := patches.labelsOf(host.App); labels != nil {
+					args.Labels = labels
+				}
+				if _, err := certificatemanager.NewCertificateMapEntry(ctx, entry, args); err != nil {
 					return err
 				}
 			}
@@ -48,12 +57,12 @@ func bindingProgram(spec bindingSpec) Program {
 			if err != nil {
 				return err
 			}
-			if err := servingBackend(ctx, project, spec.Region, neg, host, newCDNPolicy(), responseHeadersOf(spec.Tier)); err != nil {
+			if err := servingBackend(ctx, project, spec.Region, neg, host, newCDNPolicy(), responseHeaders(spec.Tier, patches.headersOf(host.App))); err != nil {
 				return err
 			}
 		}
 		return nil
-	}
+	}}, nil
 }
 
 func servingBackend(ctx *pulumi.Context, project pulumi.String, region, neg string, host Host, cdn *compute.BackendServiceCdnPolicyArgs, headers pulumi.StringArray) error {

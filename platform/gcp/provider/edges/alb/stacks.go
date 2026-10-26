@@ -8,9 +8,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 )
 
-type Program func(ctx *pulumi.Context, project string) error
+type Program struct {
+	Run     func(ctx *pulumi.Context, project string) error
+	Patches *ocelpulumi.Patches
+}
 
 type Target struct {
 	Tier environment.Tier

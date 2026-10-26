@@ -79,7 +79,7 @@ func TestAnALBStackIsTornDownWithoutBeingHandedTheProgramThatRaisedIt(t *testing
 
 	stacks := stacking(t)
 	config, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", Target{Tier: environment.TierProduction, Slug: "shop"}, "secret")
-	if _, err := pulumi.New(config).Workspace(ref, nil); err != nil {
+	if _, err := pulumi.New(config).Workspace(ref, Program{}); err != nil {
 		t.Errorf("Workspace() for a teardown = %v, want the stack ready to destroy: a teardown has no program to hand it", err)
 	}
 }
@@ -113,7 +113,7 @@ func TestATierWhosePassphraseWasNeverMadeRefusesToRaiseItsLoadBalancer(t *testin
 	t.Parallel()
 
 	target := Target{Tier: environment.TierProduction}
-	_, err := unsealedStacks(t).Up(context.Background(), target, nil, progress.Discard())
+	_, err := unsealedStacks(t).Up(context.Background(), target, Program{}, progress.Discard())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Errorf("Up() = %v, want a %s refusal naming `ocel bootstrap`: it seals state under the passphrase", err, refusal.CodeNotReady)

@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -114,7 +115,7 @@ func balancer() map[string]string {
 
 func (w *world) Up(_ context.Context, target Target, program Program, _ progress.Log) (map[string]string, error) {
 	stack := target.Name()
-	if program == nil {
+	if program.Run == nil {
 		return nil, errors.New("a stack was raised with no program to raise")
 	}
 	w.mu.Lock()
@@ -484,17 +485,34 @@ var _ Routes = (*world)(nil)
 
 var _ Entries = (*world)(nil)
 
-func declared(program Program) (map[string]declaration, error) {
+func declared(program Program, built ...error) (map[string]declaration, error) {
+	if err := errors.Join(built...); err != nil {
+		return nil, err
+	}
 	seen := map[string]declaration{}
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
-		return program(ctx, "acme-prod")
+		if err := program.Patches.Install(ctx); err != nil {
+			return err
+		}
+		return program.Run(ctx, "acme-prod")
 	}, pulumi.WithMocks("alb", "test", mocks{mu: &sync.Mutex{}, seen: seen}))
-	return seen, err
+	if err != nil || program.Patches.IsEmpty() {
+		return seen, err
+	}
+	for name, resource := range seen {
+		ref := ocelpulumi.ResourceRef{Token: resource.Token, Name: name}
+		if _, claimed := program.Patches.Claim(ref, pulumi.Map{}); claimed {
+			resource.Patch, _ = program.Patches.For(ref)
+			seen[name] = resource
+		}
+	}
+	return seen, nil
 }
 
 type declaration struct {
 	Token string
 	Args  map[string]any
+	Patch map[string]any
 }
 
 type mocks struct {

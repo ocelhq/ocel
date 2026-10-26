@@ -22,6 +22,13 @@ func (s stacks) Plan(ctx context.Context, spec provider.StackSpec, runProgress p
 	if ctx, err = s.p.evaluateTransforms(ctx, spec); err != nil {
 		return provider.Plan{}, err
 	}
+	edgePatches, err := s.p.evaluateAppEdge(ctx, spec)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	if err := s.p.refuseUnusableSecurityPolicies(ctx, edgePatches); err != nil {
+		return provider.Plan{}, err
+	}
 	if spec.App != nil {
 		if err := s.p.release().RefuseAppPatches(ctx, spec); err != nil {
 			return provider.Plan{}, err
@@ -41,6 +48,13 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 	if ctx, err = s.p.evaluateTransforms(ctx, spec); err != nil {
 		return provider.StackResult{}, err
 	}
+	edgePatches, err := s.p.evaluateAppEdge(ctx, spec)
+	if err != nil {
+		return provider.StackResult{}, err
+	}
+	if err := s.p.refuseUnusableSecurityPolicies(ctx, edgePatches); err != nil {
+		return provider.StackResult{}, err
+	}
 	ctx = release.WithEdgeFacts(ctx, spec, facts)
 	routeTableKey, err := s.p.objects().PutEdgeRouteTable(ctx, spec, runProgress)
 	if err != nil {
@@ -50,6 +64,7 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 	if err != nil {
 		return result, err
 	}
+	s.p.recordAppEdge(spec, edgePatches)
 	result.RouteTableKey = routeTableKey
 	result.PurgeSecret = facts.PurgeSecret
 	if facts.OriginSecret.Present() {

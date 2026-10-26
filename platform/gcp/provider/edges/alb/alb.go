@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
@@ -41,6 +42,9 @@ type Deps struct {
 	ReadAssetsBucket   func(ctx context.Context, tier environment.Tier) (AssetsBucket, error)
 	CopyImmutableFiles func(ctx context.Context, tier environment.Tier, from, to StaticRoutes) error
 	FrontPart          *FrontPart
+
+	EvaluateFront func(ctx context.Context, tier environment.Tier) (transform.Result, error)
+	ReadApps      func(tier environment.Tier, slug string) map[string]transform.Result
 }
 
 type FrontPart struct {
@@ -99,7 +103,7 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 		return edge.BootstrapOutput{}, refusal.Refuse(refusal.CodeInvalid,
 			"the %q edge provisions one load balancer per tier, and this bootstrap names none", Kind)
 	}
-	if _, err := e.raise(ctx, tier, progress.Discard()); err != nil {
+	if _, err := e.raise(ctx, tier, "", progress.Discard()); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
 	if err := e.publishGates(ctx, tier, gateProof{}, progress.Discard()); err != nil {
@@ -108,7 +112,7 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
 }
 
-func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progress.Log) (LoadBalancer, error) {
+func (e *Edge) raise(ctx context.Context, tier environment.Tier, project string, progress progress.Log) (LoadBalancer, error) {
 	var preview previewEntry
 	if tier == environment.TierPreview {
 		recorded, err := e.recordedPreview(ctx)
@@ -117,10 +121,10 @@ func (e *Edge) raise(ctx context.Context, tier environment.Tier, progress progre
 		}
 		preview = recorded
 	}
-	return e.raiseServing(ctx, tier, preview, progress)
+	return e.raiseServing(ctx, tier, preview, project, progress)
 }
 
-func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, progress progress.Log) (LoadBalancer, error) {
+func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, project string, progress progress.Log) (LoadBalancer, error) {
 	spec := loadBalancerSpec{
 		Namespace: e.deps.Namespace,
 		Region:    e.deps.Region,
@@ -133,8 +137,16 @@ func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview 
 		return LoadBalancer{}, err
 	}
 	spec.Assets = &assets
+	patches, _, err := e.readFrontPatches(ctx, tier, project)
+	if err != nil {
+		return LoadBalancer{}, err
+	}
+	spec.Patches = patches.result()
 	outputs, err := e.raiseFront(ctx, spec, progress)
 	if err != nil {
+		return LoadBalancer{}, err
+	}
+	if err := e.recordFront(ctx, tier, patches); err != nil {
 		return LoadBalancer{}, err
 	}
 	balancer := loadBalancerOf(outputs)
@@ -196,7 +208,10 @@ func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
 	if err := e.removeGate(ctx, tier); err != nil {
 		return err
 	}
-	return e.deps.Stacks.Destroy(ctx, e.loadBalancerTarget(tier), progress.Discard())
+	if err := e.deps.Stacks.Destroy(ctx, e.loadBalancerTarget(tier), progress.Discard()); err != nil {
+		return err
+	}
+	return e.forgetFront(ctx, tier)
 }
 
 type edgeRecord struct {
@@ -207,6 +222,16 @@ type edgeRecord struct {
 	TagsToRemove   []RevisionTag       `json:"tagsToRemove,omitempty"`
 
 	Served map[string]servedRelease `json:"served,omitempty"`
+
+	Patches map[string]recordedPatches `json:"patches,omitempty"`
+}
+
+func (r edgeRecord) appResults() map[string]transform.Result {
+	results := make(map[string]transform.Result, len(r.Patches))
+	for app, recorded := range r.Patches {
+		results[app] = recorded.result()
+	}
+	return results
 }
 
 type RevisionTag struct {
@@ -239,11 +264,22 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 			"no %s load balancer is provisioned for tier %s: the %q edge serves every project in a tier from one, at %s, which a deploy adds before it reaches the edge. Deploy again",
 			Kind, spec.Tier, Kind, BaselineCost)
 	}
+	said := sayingTo(spec.Say)
+	repatched, raised, err := e.repatchFront(ctx, spec.Tier, spec.Slug, said)
+	if err != nil {
+		return nil, err
+	}
+	if raised {
+		balancer = repatched
+	}
 	next := prior
 	next.Slug = spec.Slug
 	next.Tier = spec.Tier
 	s := &stack{e: e, state: next}
 	if err := s.adopt(balancer); err != nil {
+		return nil, err
+	}
+	if err := s.applyAppPatches(ctx, said); err != nil {
 		return nil, err
 	}
 	if err := s.syncGate(ctx, spec); err != nil {

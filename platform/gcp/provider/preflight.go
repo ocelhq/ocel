@@ -21,6 +21,11 @@ const (
 )
 
 func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
+	if pre.Edge == alb.Kind {
+		if err := p.refuseUnusableFrontPolicies(ctx, pre); err != nil {
+			return provider.Plan{}, err
+		}
+	}
 	parts, err := p.partsUsedBy(ctx, pre)
 	if err != nil {
 		return provider.Plan{}, err
@@ -51,6 +56,15 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 		return provider.Plan{}, err
 	}
 	plan.Groups = append(plan.Groups, groups...)
+	if pre.Edge == alb.Kind {
+		repatched, err := p.edges().OpenALB().PlanFrontRepatch(ctx, pre.Deploy.Tier, pre.Deploy.Slug)
+		if err != nil {
+			return provider.Plan{}, err
+		}
+		if repatched != nil {
+			plan.Groups = append(plan.Groups, *repatched)
+		}
+	}
 	return plan, nil
 }
 
@@ -65,10 +79,12 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	if err := p.warnStaleOriginSecret(ctx, pre); err != nil {
 		return err
 	}
-	if pre.Edge != alb.Kind {
-		if err := p.leaveALB(ctx, pre); err != nil {
+	if pre.Edge == alb.Kind {
+		if err := p.refuseUnusableFrontPolicies(ctx, pre); err != nil {
 			return err
 		}
+	} else if err := p.leaveALB(ctx, pre); err != nil {
+		return err
 	}
 	if err := p.addParts(ctx, pre, parts); err != nil {
 		return err

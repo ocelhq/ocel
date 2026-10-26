@@ -6,7 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-func binding(hosts map[string]Host) Program {
+func binding(hosts map[string]Host) (Program, error) {
 	return bindingProgram(bindingSpec{
 		Namespace:      "ocel",
 		Region:         "europe-west1",

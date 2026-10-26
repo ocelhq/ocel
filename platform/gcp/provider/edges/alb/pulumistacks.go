@@ -108,7 +108,12 @@ func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, target
 				"GOOGLE_REGION":  clients.Region,
 			},
 		},
-		Program: func(ctx *sdk.Context, program Program) error { return program(ctx, clients.Project()) },
+		Program: func(ctx *sdk.Context, program Program) error {
+			if err := program.Patches.Install(ctx); err != nil {
+				return err
+			}
+			return program.Run(ctx, clients.Project())
+		},
 	}
 	if target.Slug == "" {
 		config.Refresh = s.refreshesTheFront

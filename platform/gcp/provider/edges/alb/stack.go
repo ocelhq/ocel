@@ -219,15 +219,22 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 	if len(hosts) == 0 {
 		return s.e.deps.Stacks.Destroy(ctx, target, progress.Discard())
 	}
-	_, err := s.e.deps.Stacks.Up(ctx, target, bindingProgram(bindingSpec{
+	program, err := bindingProgram(bindingSpec{
 		Namespace:      s.e.deps.Namespace,
 		Region:         s.e.deps.Region,
 		Slug:           s.state.Slug,
 		Tier:           s.state.Tier,
 		CertificateMap: s.recorded.LoadBalancer.CertificateMap,
 		Hosts:          hosts,
-	}), progress.Discard())
-	return err
+		Patches:        s.recorded.appResults(),
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := s.e.deps.Stacks.Up(ctx, target, program, progress.Discard()); err != nil {
+		return err
+	}
+	return program.Patches.RefuseUnclaimed()
 }
 
 func (s *stack) serving(ctx context.Context, app string) (Host, error) {

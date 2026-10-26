@@ -12,9 +12,9 @@ const (
 )
 
 func cdnBinding() Program {
-	return binding(map[string]Host{"shop.example.com": {
+	return must(binding(map[string]Host{"shop.example.com": {
 		App: "web", Certificate: cdnCertificate, Service: "ocel-shop-prod-web", Backend: cdnBackend,
-	}})
+	}}))
 }
 
 func TestABindingsBackendKeysTheRSCVariantsNextServesOnOneURL(t *testing.T) {

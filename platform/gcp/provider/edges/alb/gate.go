@@ -52,7 +52,7 @@ func GateStack(tier environment.Tier) string {
 }
 
 func gateProgram(spec gateSpec) Program {
-	return func(ctx *pulumi.Context, project string) error {
+	return Program{Run: func(ctx *pulumi.Context, project string) error {
 		versions := networkservices.WasmPluginVersionArray{declareGateVersion(spec.Main)}
 		for _, before := range spec.Before {
 			versions = append(versions, declareGateVersion(before))
@@ -94,7 +94,7 @@ func gateProgram(spec gateSpec) Program {
 		}
 		ctx.Export(outputGateVersion, pulumi.String(spec.Main.ID))
 		return nil
-	}
+	}}
 }
 
 func declareGateVersion(version gateVersion) *networkservices.WasmPluginVersionArgs {
