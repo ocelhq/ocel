@@ -17,7 +17,6 @@
     "./instance-cache": "./src/instance-cache.mts",
     "./origin-tags": "./src/origin-tags.mts",
     "./served-route": "./src/served-route.mts",
-    "./server-preload": "./src/server-preload.mts",
     "./purge-signal": "./src/purge-signal.mts",
     "./tag-clock": "./src/tag-clock.mts",
     "./tags-manifest": "./src/tags-manifest.mts",

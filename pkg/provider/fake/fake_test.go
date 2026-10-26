@@ -6,7 +6,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -60,21 +59,6 @@ func TestNewRefusesOptionsTheReferenceProviderDoesNotAccept(t *testing.T) {
 	}
 	if _, err := fake.New(context.Background(), provider.Settings{Options: provider.Options{"region": "nowhere"}}); err != nil {
 		t.Fatalf("New() error = %v", err)
-	}
-}
-
-func TestAFakeProviderForAProjectShipsANextServerRuntimeWithItsPreload(t *testing.T) {
-	t.Parallel()
-
-	files, err := fake.NewForProject(fake.Options{}).Hooks().NextServerRuntime(context.Background())
-	if err != nil {
-		t.Fatalf("NextServerRuntime() error = %v", err)
-	}
-	if got := string(files[containerimage.NextServerPreloadFile]); got != fake.NextServerPreload {
-		t.Errorf("ReadNextServerRuntime()[%s] = %q, want %q", containerimage.NextServerPreloadFile, got, fake.NextServerPreload)
-	}
-	if bare := fake.NewProvider(fake.Options{}).Hooks().NextServerRuntime; bare != nil {
-		t.Errorf("a bare fake provider ships a Next server runtime, want none")
 	}
 }
 

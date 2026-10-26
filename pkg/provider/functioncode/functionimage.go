@@ -108,7 +108,7 @@ func wrapFunction(ctx context.Context, source ImageSource, name string, framewor
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"this provider ships no container runtime built for %s, and %s is built for it", goarch, name)
 	}
-	wrapped, err := images.WrapContainer(image, body, nil)
+	wrapped, err := images.WrapContainer(image, body)
 	if err != nil {
 		return nil, fmt.Errorf("wrap %s's image in the runtime: %w", name, err)
 	}

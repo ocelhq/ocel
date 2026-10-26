@@ -24,7 +24,7 @@ import (
 
 const builtContentDigest = "sha256:18f506afda961821b6026743c6309340f89b9b842bf994d53c1d6e6119199165"
 
-var pushedCoordinate = "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, []byte(fake.RuntimeBinary), nil)
+var pushedCoordinate = "ghcr.io/acme/shop.web:" + images.RuntimeTag(builtContentDigest, []byte(fake.RuntimeBinary))
 
 func registryDeployRequest() *contractv1.DeployRequest {
 	return namingARegistry(containerDeployRequest("/"))
@@ -395,7 +395,7 @@ func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *test
 	}
 }
 
-var loadedCoordinate = "ocel/shop/web:" + images.RuntimeTag(builtContentDigest, []byte(fake.RuntimeBinary), nil)
+var loadedCoordinate = "ocel/shop/web:" + images.RuntimeTag(builtContentDigest, []byte(fake.RuntimeBinary))
 
 type loadingProvider struct {
 	*fake.Provider

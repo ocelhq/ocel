@@ -68,7 +68,7 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 }
 
 func NewForProject(options Options) *Provider {
-	p := NewProvider(options).ServingNextServer()
+	p := NewProvider(options)
 	return p.WithHooks(p.everyHook)
 }
 

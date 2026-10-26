@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -126,17 +125,5 @@ func RunHooks(t *testing.T, p provider.Provider) {
 			t.Skip("this provider scales no demoted release down, so every release it keeps runs as it was deployed")
 		}
 		RunContainerReleases(t, hooks.ContainerReleases)
-	})
-	t.Run("NextServerRuntime", func(t *testing.T) {
-		if hooks.NextServerRuntime == nil {
-			t.Skip("this provider ships no Next server runtime, so its Next containers run Next with Next's defaults")
-		}
-		files, err := hooks.NextServerRuntime(context.Background())
-		if err != nil {
-			t.Fatalf("NextServerRuntime() error = %v", err)
-		}
-		if _, ok := files[containerimage.NextServerPreloadFile]; !ok {
-			t.Errorf("NextServerRuntime() has no %s, which a Next container runs in front of next start", containerimage.NextServerPreloadFile)
-		}
 	})
 }
