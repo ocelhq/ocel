@@ -219,9 +219,6 @@ func NewStorageOptions(ctx context.Context, endpoint, quotaProject string) ([]op
 			option.WithoutAuthentication(),
 		}, nil
 	}
-	if quotaProject == "" {
-		return nil, nil
-	}
 	client, err := NewHTTPClient(ctx, quotaProject)
 	if err != nil {
 		return nil, err
