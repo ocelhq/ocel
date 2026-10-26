@@ -131,29 +131,22 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string, opts o
 	}
 	phase := building.Phase(progressv1.Phase_PHASE_BUILD)
 
-	declarations, err := readDeclarations(ctx, provider, cfg, env)
+	collecting := phase.Child(cfg.Slug, progress.Collecting.Title("the resources "+cfg.Slug+" declares"))
+	inputs, err := collectInputs(ctx, dependencies, provider, cfg, env, collecting)
+	collecting.End(err)
 	if err != nil {
 		return err
 	}
-	workers, err := collectDeclarations(ctx, dependencies, cfg, declarations, phase)
-	if err != nil {
-		return err
-	}
-	values, secrets, err := resolveValues(ctx, declarations, cfg, env)
-	if err != nil {
-		return err
-	}
-	clients := variables.ClientAppsOf(cfg, declarations.Definitions(), values)
 	releaseOutput, err := build.LockOutput(ctx, phase, cfg)
 	if err != nil {
 		return err
 	}
 	defer releaseOutput()
-	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.SplitVariablesByClass(clients, secrets), declaredArchs(cfg), workers, host, appBuildLog(phase))
+	built, err := dependencies.BuildApps(run.ContextWithSpan(ctx, phase), cfg, build.SplitVariablesByClass(inputs.clients, inputs.secrets), declaredArchs(cfg), inputs.workers, host, appBuildLog(phase))
 	if err != nil {
 		return err
 	}
-	if err := variables.RecordClientValues(cfg.Dir, env, clients); err != nil {
+	if err := variables.RecordClientValues(cfg.Dir, env, inputs.clients); err != nil {
 		return err
 	}
 	phase.End(nil)
@@ -181,6 +174,28 @@ func nothingToBuild(cfg *project.Project) error {
 	return &clierror.Error{Code: clierror.CodeProjectInvalidConfig, Hint: "apps", Cause: cause}
 }
 
+type buildInputs struct {
+	workers build.HostedWorkers
+	clients []variables.ClientApp
+	secrets map[string]map[string]string
+}
+
+func collectInputs(ctx context.Context, dependencies Dependencies, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, span *run.Span) (buildInputs, error) {
+	declarations, err := readDeclarations(ctx, provider, cfg, env)
+	if err != nil {
+		return buildInputs{}, err
+	}
+	workers, err := collectDeclarations(ctx, dependencies, cfg, declarations, span)
+	if err != nil {
+		return buildInputs{}, err
+	}
+	values, secrets, err := resolveValues(ctx, declarations, cfg, env)
+	if err != nil {
+		return buildInputs{}, err
+	}
+	return buildInputs{workers: workers, clients: variables.ClientAppsOf(cfg, declarations.Definitions(), values), secrets: secrets}, nil
+}
+
 func readDeclarations(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment) (*variables.Declarations, error) {
 	if env == nil {
 		return variables.NewDeclarations(variables.NoValues{}, variables.Scope{Apps: variables.AppsOf(cfg)}), nil
@@ -195,8 +210,8 @@ func readDeclarations(ctx context.Context, provider *providerprocess.Provider, c
 	return variables.NewDeclarations(store, scope), nil
 }
 
-func collectDeclarations(ctx context.Context, dependencies Dependencies, cfg *project.Project, declarations *variables.Declarations, phase *run.Span) (build.HostedWorkers, error) {
-	said := phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
+func collectDeclarations(ctx context.Context, dependencies Dependencies, cfg *project.Project, declarations *variables.Declarations, span *run.Span) (build.HostedWorkers, error) {
+	said := span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
 	resources, err := dependencies.CollectDeclarations(ctx, cfg, declarations, said, said)
 	if err != nil {
 		return nil, err
