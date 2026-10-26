@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/envsource"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
@@ -299,6 +300,29 @@ func TestEnvUIUpdatesAValueTheEnvSourceHoldsUnderWriteValues(t *testing.T) {
 	})
 	if _, updated := source.writes(); !slices.Contains(updated, "STRIPE_API_KEY=sk_rotated") {
 		t.Errorf("updated %q, want STRIPE_API_KEY updated in the env source", updated)
+	}
+}
+
+func TestEnvUIHoldsTheRunWhileTheEditorWaitsOnAPerson(t *testing.T) {
+	root := setUpEnvFixture(t).Root
+	var stream bytes.Buffer
+	dependencies := newJSONDependencies(&stream)
+	dependencies.ServeVariableEditor = func(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error) {
+		s, err := ServeVariableEditor(ctx, cfg, provider, tier, declarations, recovery)
+		if err == nil {
+			s.Close()
+		}
+		return s, err
+	}
+
+	if err := runEnvUI(context.Background(), dependencies, root, envOptions{}, strings.NewReader(""), io.Discard, &stream); err != nil {
+		t.Fatalf("runEnvUI err = %v; stream=%s", err, stream.String())
+	}
+	events := clitest.RunEvents(t, stream.String())
+	held := slices.IndexFunc(events, func(ev *streamv1.RunEvent) bool { return ev.GetWaiting() != nil })
+	resumed := slices.IndexFunc(events, func(ev *streamv1.RunEvent) bool { return ev.GetResumed() != nil })
+	if held < 0 || resumed < held {
+		t.Errorf("stream = %s, want the run held while the editor waits and resumed once it closes", stream.String())
 	}
 }
 
