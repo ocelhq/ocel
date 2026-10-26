@@ -85,6 +85,9 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 			run.SetDeploymentReport(report)
 		}()
 		facts, err := runPreflight(ctx, dependencies, policy, check, provider, p.Project, p.Preflight, opts.Prebuilt, env)
+		if err == nil && !facts.declined && !opts.Dry {
+			attempt = p.NewAttempt(ctx, check, target.kind(), facts.project, env, dependencies.DiscoverPRNumber())
+		}
 		check.End(err)
 		if err != nil {
 			return err
@@ -96,9 +99,6 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		cfg := facts.project
 		infra := newInfraProvisioning(provider, env, facts)
 		defer func() { err = errors.Join(err, infra.release(ctx, cfg.Slug)) }()
-		if !opts.Dry {
-			attempt = p.NewAttempt(ctx, target.kind(), cfg, env, dependencies.DiscoverPRNumber())
-		}
 
 		d := newDeployRun(dependencies, target, cfg, provider, env, facts, infra, opts, dependencies.IsBrowserReachable(stdin))
 		phase := run.Phase(progressv1.Phase_PHASE_BUILD)

@@ -117,9 +117,8 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 			return nil
 		}
 
-		attempt = p.NewAttempt(ctx, consolev1.DeploymentKind_DEPLOYMENT_KIND_ROLLBACK, resolvedProject(p, cfg), &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}, "")
-
 		promoting := run.Phase(progressv1.Phase_PHASE_PROMOTE)
+		attempt = p.NewAttempt(ctx, promoting, consolev1.DeploymentKind_DEPLOYMENT_KIND_ROLLBACK, resolvedProject(p, cfg), &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}, "")
 		rolled, err := promote(ctx, promoting, provider, cfg, target)
 		promoting.End(err)
 		if err != nil {

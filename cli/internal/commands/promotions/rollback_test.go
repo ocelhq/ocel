@@ -500,3 +500,23 @@ func TestARollbackSendsTheRegistryTheProjectNamesSoTheImagesOfWhatItDropsGoWithT
 		t.Errorf("the rollback sent %d requests, want one naming the project's registry with its secret resolved", len(requests))
 	}
 }
+
+func TestARollbackNamesTheReadingOfItsTargetAndSourceUnderPromote(t *testing.T) {
+	project := promotedTwice(t)
+	invocation := clitest.NewInvocation()
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+	if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	for line := range strings.Lines(stdout.String()) {
+		if strings.Contains(line, "Read the target and the source checkout") {
+			if !strings.Contains(line, "[promote]") {
+				t.Errorf("the reading was reported as %q, want it under [promote], the phase it runs in", line)
+			}
+			return
+		}
+	}
+	t.Errorf("stdout = %q, want the reading of the target and source checkout reported", stdout.String())
+}
