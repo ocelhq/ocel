@@ -440,6 +440,9 @@ func TestADeployWhoseForwardIsNotReadyBuildsWithoutThatBindingAndDeploysSayingWh
 	if !strings.Contains(said, "The build goes without the bindings of main: ") || !strings.Contains(said, "is not running") {
 		t.Errorf("the deploy said %q, want it to say the build goes without main and why", said)
 	}
+	if strings.Contains(said, "Forwarded ports") {
+		t.Errorf("the deploy said %q, want no claim that it forwarded the ports the provider refused", said)
+	}
 }
 
 func TestANextAppBuiltAsAnImageIsBuiltWithTheBindingsOfWhatItUsesPointedAtPortForwards(t *testing.T) {
