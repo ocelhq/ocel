@@ -328,8 +328,8 @@ func TestABuildNamesEveryStepBetweenItsAppsBuilds(t *testing.T) {
 		"end Loading the build adapters for app web",
 		"open app web",
 		"end app web",
-		"open web: Installing the platform packages of app web",
-		"end Installing the platform packages of app web",
+		"open web: Checking the platform packages of app web",
+		"end Checking the platform packages of app web",
 	}
 	if got := steps.list(); !slices.Equal(got, want) {
 		t.Errorf("the build reported\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

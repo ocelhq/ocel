@@ -336,7 +336,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	variants := toolchain.NewPlatformVariantCache()
 	defer variants.Close()
 	for _, target := range traced {
-		if err := log.step(target.App, installingPlatformPackages(target.App), func() error {
+		if err := log.step(target.App, checkingPlatformPackages(target.App), func() error {
 			return variants.InstallTraced(ctx, target.App, target.Source, target.FunctionDir, target.Framework.Arch)
 		}); err != nil {
 			return err
@@ -356,7 +356,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 		if err := addWorkerEntryToFunction(ctx, cfg, a, outputDir, architecture, log); err != nil {
 			return err
 		}
-		if err := log.step(a.Name, installingPlatformPackages(a.Name), func() error {
+		if err := log.step(a.Name, checkingPlatformPackages(a.Name), func() error {
 			return installTracedPlatformVariants(ctx, variants, cfg, a, outputDir, architecture, newAppHost(host, a).MaxFunctionBytes)
 		}); err != nil {
 			return err
@@ -403,8 +403,8 @@ func nameApps(apps []nodeAppBuild) string {
 	return "apps " + english.And(names)
 }
 
-func installingPlatformPackages(app string) progress.Title {
-	return progress.Installing.Title("the platform packages of app " + app)
+func checkingPlatformPackages(app string) progress.Title {
+	return progress.Checking.Title("the platform packages of app " + app)
 }
 
 func buildingWorkerEntry(app string) progress.Title {
