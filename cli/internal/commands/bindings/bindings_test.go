@@ -66,6 +66,66 @@ func bindingList(t *testing.T, root string, opts bindingsOptions) string {
 	return stdout.String()
 }
 
+func TestEveryBindingsCommandNamesItsWorkWithTheRecords(t *testing.T) {
+	cases := []struct {
+		name  string
+		run   func(root string, stderr *bytes.Buffer) error
+		phase string
+		ended string
+	}{
+		{
+			name: "set",
+			run: func(root string, stderr *bytes.Buffer) error {
+				return runBindingsSet(context.Background(), newStreamedInvocation(stderr), root, strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{}, &bytes.Buffer{})
+			},
+			phase: "provision",
+			ended: "Updated the binding main in production",
+		},
+		{
+			name: "rm",
+			run: func(root string, stderr *bytes.Buffer) error {
+				return runBindingsRemove(context.Background(), newStreamedInvocation(stderr), root, "main", bindingsOptions{preview: true, environment: "pr-7"}, &bytes.Buffer{})
+			},
+			phase: "destroy",
+			ended: "Removed the binding main from the preview environment pr-7",
+		},
+		{
+			name: "ls",
+			run: func(root string, stderr *bytes.Buffer) error {
+				return runBindingsList(context.Background(), newStreamedInvocation(stderr), root, bindingsOptions{}, &bytes.Buffer{})
+			},
+			phase: "check",
+			ended: "Read the bindings published to production",
+		},
+		{
+			name: "generate",
+			run: func(root string, stderr *bytes.Buffer) error {
+				return runBindingsGenerate(context.Background(), newStreamedInvocation(stderr), root, bindingsOptions{preview: true}, &bytes.Buffer{})
+			},
+			phase: "check",
+			ended: "Read the bindings published to preview",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := setUpBindingFixture(t)
+			var stderr bytes.Buffer
+			if err := c.run(root, &stderr); err != nil {
+				t.Fatalf("err = %v; stderr=%s", err, stderr.String())
+			}
+			for line := range strings.Lines(stderr.String()) {
+				if strings.Contains(line, c.ended) {
+					if !strings.Contains(line, "["+c.phase+"]") {
+						t.Errorf("%q was reported as %q, want it under [%s]", c.ended, line, c.phase)
+					}
+					return
+				}
+			}
+			t.Errorf("transcript = %q, want %q reported", stderr.String(), c.ended)
+		})
+	}
+}
+
 func newStreamedInvocation(stderr io.Writer) commands.Invocation {
 	invocation := newTestInvocation()
 	clitest.AttachTerminalSink(invocation, stderr)
