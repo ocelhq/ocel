@@ -173,12 +173,8 @@ var bootstrapRoles = []string{
 	gcloud.TierTagUserRole,
 }
 
-const servicesRoleWhy = "it lets ocel switch on a service a bootstrap needs while it is off, and a credential without it bootstraps only where every one is on"
-
-func BootstrapRoles() []string { return append(slices.Clone(bootstrapRoles), ServicesRole) }
-
-func BootstrapRoleLines() []string {
-	return append(slices.Clone(bootstrapRoles), ServicesRole+": "+servicesRoleWhy)
+func BootstrapRoles() []string {
+	return append(slices.Clone(bootstrapRoles), ServicesRole+": "+credential.SwitchOnWhy)
 }
 
 func GrantsFor(parts []string) gcloud.Grants {

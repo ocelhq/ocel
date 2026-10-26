@@ -194,8 +194,8 @@ func (b Engine) RefuseSwitchOnDenied(ctx context.Context, off []string) error {
 	if len(off) == 0 {
 		return nil
 	}
-	granted, err := b.heldPermissions(ctx, []string{credential.ServicesEnablePermission})
-	if err != nil || slices.Contains(granted, credential.ServicesEnablePermission) {
+	granted, err := b.heldPermissions(ctx, credential.SwitchOnPermissions)
+	if err != nil || !slices.ContainsFunc(credential.SwitchOnPermissions, func(permission string) bool { return !slices.Contains(granted, permission) }) {
 		return err
 	}
 	principal, err := b.Principal(ctx)

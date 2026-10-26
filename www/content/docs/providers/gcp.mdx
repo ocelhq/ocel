@@ -633,8 +633,9 @@ bootstrap uses `firestore.googleapis.com`, `storage.googleapis.com`,
 and those [the private network](#private-network) names. A deploy declaring a bucket uses
 `iamcredentials.googleapis.com`, which apps sign their buckets' urls through.
 
-Switching a service on takes `serviceusage.services.enable`, which
-`roles/serviceusage.serviceUsageAdmin` holds, and only where a service is off. A credential without
+Switching a service on takes `serviceusage.services.enable`, and waiting for Google to finish takes
+`serviceusage.operations.get`. `roles/serviceusage.serviceUsageAdmin` holds both, and either is needed
+only where a service is off. A credential without
 it is refused before anything changes, naming the `gcloud services enable` command for someone who
 may to run. A project with no billing account linked is refused with the page to link one on.
 
@@ -701,8 +702,8 @@ each tier's credential for your project and namespace. For the preview tier they
   reach. It checks making a ring against the location, whose name holds no ring.
   `roles/cloudkms.admin` on the ring would hand over the ring's policy, which every key in it
   inherits.
-- A custom role you make, holding `serviceusage.services.enable`, unconditioned, where a service a deploy
-  uses is off.
+- A custom role you make, holding `serviceusage.services.enable` and `serviceusage.operations.get`,
+  unconditioned, where a service a deploy uses is off.
 
 A transform that attaches a Cloud Armor policy to the `alb` edge also needs the credential to hold
 `compute.securityPolicies.use` in the policy's project. `ocel permissions deploy` does not print

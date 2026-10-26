@@ -33,7 +33,13 @@ const (
 	modifiedGrantsByRole = "api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])"
 )
 
-const ServicesEnablePermission = "serviceusage.services.enable"
+const (
+	ServicesEnablePermission     = "serviceusage.services.enable"
+	ServicesOperationsPermission = "serviceusage.operations.get"
+	SwitchOnWhy                  = "it lets ocel switch on a service a run needs while it is off, and a credential without it runs only where every one is on"
+)
+
+var SwitchOnPermissions = []string{ServicesEnablePermission, ServicesOperationsPermission}
 
 var TieredRoles = []string{RunRole, TopicsRole, BucketsRole, SecretsRole, RepositoriesRole, DatabasesRole, InstancesRole, AccountsRole, RunAsRole}
 
@@ -142,8 +148,8 @@ func (d Deploy) Billing() Grant {
 
 func (d Deploy) Services() Grant {
 	return Grant{
-		Permissions: []string{ServicesEnablePermission},
-		Why:         "it lets ocel switch on a service a deploy needs while it is off, and a credential without it deploys only where every one is on",
+		Permissions: SwitchOnPermissions,
+		Why:         SwitchOnWhy,
 	}
 }
 

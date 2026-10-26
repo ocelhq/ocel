@@ -185,3 +185,20 @@ func TestEveryResourceABootstrapOrItsPartsReadsIsHostedByAServiceItChecks(t *tes
 		}
 	}
 }
+
+func TestACredentialThatMayNotWaitOnASwitchOnIsRefusedBeforeItSwitchesAnythingOn(t *testing.T) {
+	t.Parallel()
+
+	usage := &googletest.ServiceUsage{ServicesOff: []string{"run.googleapis.com"}, Pending: 1}
+	b, _ := switchingOn(t, usage, "serviceusage.operations.get")
+
+	err := b.SwitchOnServices(t.Context(), []string{"run.googleapis.com"}, nil)
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+		t.Fatalf("SwitchOnServices() = %v, want a %s refusal: Google answers the switch-on as an operation only serviceusage.operations.get may read", err, refusal.CodeDenied)
+	}
+	if len(usage.Enabled) > 0 {
+		t.Errorf("switched on %v, want nothing", usage.Enabled)
+	}
+}
