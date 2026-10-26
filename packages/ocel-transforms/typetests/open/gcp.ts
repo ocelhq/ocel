@@ -280,6 +280,7 @@ export const tunedService = defineTransform({
           timeout: "900s",
           nodeSelector: { accelerator: "nvidia-l4" },
           encryptionKey: bindings.custom.keys.serviceKey,
+          serviceAccount: bindings.custom.identity.webAccount,
           vpcAccess: {
             egress: "ALL_TRAFFIC",
             networkInterfaces: [{ network: "apps", subnetwork: "apps-eu", tags: ["nat"] }],

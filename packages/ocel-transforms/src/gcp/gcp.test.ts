@@ -101,6 +101,7 @@ describe("the gcp branch", () => {
                         resources: { limits: { cpu: "2", "nvidia.com/gpu": "1" }, cpuIdle: false },
                       },
                     ],
+                    serviceAccount: "web@acme.iam.gserviceaccount.com",
                     timeout: "900s",
                   },
                 },
@@ -126,6 +127,7 @@ describe("the gcp branch", () => {
           containers: [
             { resources: { limits: { cpu: "2", "nvidia.com/gpu": "1" }, cpuIdle: false } },
           ],
+          serviceAccount: "web@acme.iam.gserviceaccount.com",
           timeout: "900s",
         },
       },

@@ -62,9 +62,12 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 			return nil, err
 		}
 	}
-	account, databases, err := p.EnsureAccount(ctx, c, spec, declared)
+	account, databases, err := p.EnsureAccount(ctx, c, spec, patches, declared)
 	if err != nil {
 		return nil, err
+	}
+	if tasks != nil {
+		tasks.Account = account
 	}
 	own, err := p.RuntimeEnv(named, spec, tasks, databases)
 	if err != nil {
@@ -183,7 +186,7 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 	if err != nil {
 		return nil, err
 	}
-	workers, err := p.ProvisionWorkers(ctx, c, spec, image, account, values, declared, instances, progress)
+	workers, err := p.ProvisionWorkers(ctx, c, spec, patches, image, account, values, declared, instances, progress)
 	if err != nil {
 		return nil, err
 	}

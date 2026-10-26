@@ -72,12 +72,12 @@ func TestAWorkerServiceIsLabelledWithNoApp(t *testing.T) {
 	p := providerServing(server, t)
 	spec := functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{})
 	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
-	account, _, err := p.release().EnsureAccount(context.Background(), p.resolved, spec, nil)
+	account, _, err := ensureAccount(p, context.Background(), p.resolved, spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := p.release().ProvisionWorkers(context.Background(), p.resolved, spec, "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc", account, nil, nil, provider.Instances{}, nil); err != nil {
+	if err := provisionWorkers(p, spec, "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc", account, nil, nil, provider.Instances{}, nil); err != nil {
 		t.Fatalf("provisionWorkers() = %v", err)
 	}
 

@@ -28,7 +28,7 @@ func TestAnAppThatOpensNoValueIsGrantedNoRecordsOrKeyOfTheNamespaceOrTheTier(t *
 	server := appAccountsOnly()
 	p, c := ensuringAccounts(t, server)
 
-	email, _, err := p.release().EnsureAccount(context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil)
+	email, _, err := ensureAccount(p, context.Background(), c, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestAnAppWhoseValueReferencesAnotherProjectMayReadAndOpenThatProjectsRecord
 		"blog":    recordOwnDatabase(t, c, tier, "blog"),
 	}
 
-	email, _, err := p.release().EnsureAccount(ctx, c, spec, nil)
+	email, _, err := ensureAccount(p, ctx, c, spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

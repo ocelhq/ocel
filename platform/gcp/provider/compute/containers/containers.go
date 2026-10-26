@@ -65,9 +65,12 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	if err != nil {
 		return nil, err
 	}
-	account, databases, err := p.EnsureAccount(ctx, c, spec, declared)
+	account, databases, err := p.EnsureAccount(ctx, c, spec, patches, declared)
 	if err != nil {
 		return nil, err
+	}
+	if tasks != nil {
+		tasks.Account = account
 	}
 	own, err := p.RuntimeEnv(named, spec, tasks, databases)
 	if err != nil {
@@ -138,7 +141,7 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	deployed := []provider.AppContainer{{
 		Name: app.App, Physical: service, URL: address, Image: app.Image, Revision: ran.Revision,
 	}}
-	workers, err := p.ProvisionWorkers(ctx, c, spec, app.Image, account, values, declared, provider.Instances{Max: budget.Ceiling()}, progress)
+	workers, err := p.ProvisionWorkers(ctx, c, spec, patches, app.Image, account, values, declared, provider.Instances{Max: budget.Ceiling()}, progress)
 	if err != nil {
 		return nil, err
 	}

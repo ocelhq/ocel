@@ -67,7 +67,9 @@ export interface GcpResourceArgs {
   };
   /**
    * The Cloud Run service behind each function of a serverless app. Patches
-   * to `template.containers` apply to the one container ocel runs.
+   * to `template.containers` apply to the one container ocel runs, and
+   * `template.serviceAccount` names an account your own infrastructure owns,
+   * which every service of the app must agree on.
    */
   function: {
     service: cloudrunv2.ServiceArgs;
@@ -132,6 +134,7 @@ const workerServicePaths = [
   "template.nodeSelector.accelerator",
   "template.scaling.maxInstanceCount",
   "template.scaling.minInstanceCount",
+  "template.serviceAccount",
   "template.sessionAffinity",
   "template.vpcAccess.egress",
   "template.vpcAccess.networkInterfaces.network",

@@ -327,7 +327,7 @@ func TestAnAppAccountIsReadBackFromTheDescriptionItWasCreatedWith(t *testing.T) 
 	p, c := ensuringAccounts(t, server)
 	spec := appNamed("web", reachingTopics(routedNextSpec()))
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
-	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
+	if _, _, err := ensureAccount(p, context.Background(), c, spec, nil); err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
 	if len(server.Created) == 0 {
@@ -391,8 +391,8 @@ func TestABootstrapReadsAProjectsRecordsOnceToChooseAndOnceMoreBeforeEachDelete(
 	if got, want := server.deletes(), []string{names.AppAccount("shop", sweptEnv, "worker"), names.AppAccount("shop", sweptEnv, "cron")}; !slices.Equal(got, want) {
 		t.Errorf("deleted %v, want %v", got, want)
 	}
-	if records.lists != 3 {
-		t.Errorf("read the records %d times, want 3: once for the project and once before each of the two deletes", records.lists)
+	if records.lists != 4 {
+		t.Errorf("read the records %d times, want 4: once for the project, once before each of the two deletes and once for the identities the tier records", records.lists)
 	}
 }
 
@@ -417,5 +417,25 @@ func TestABootstrapKeepsTheAccountOfAnAppDeployedWhileItSweeps(t *testing.T) {
 	}
 	if got := server.deletes(); len(got) != 0 {
 		t.Errorf("deleted %v, want nothing: a deploy recorded the app after the sweep first read the records", got)
+	}
+}
+
+func TestABootstrapRevokesWhatAnAppThatOnlyRanAsAPatchedAccountLeftAndFreesTheAccount(t *testing.T) {
+	server := appAccountsOnly()
+	p, c := ensuringAccounts(t, server)
+	spec := functionStackDeclaring(environment.TierProduction, "production", openingASecret)
+	if _, err := ensureRunningAs(t, p, c, spec, runningAs(ownedAccount), nil); err != nil {
+		t.Fatalf("EnsureAccount(api) = %v", err)
+	}
+
+	if err := release.DeleteUnusedAccounts(context.Background(), composed(bootstrap.Engine{Clients: c, Records: p.KeyValues()}), sweepRequest(environment.TierProduction), &fake.Log{}); err != nil {
+		t.Fatalf("deleteUnusedAccounts() = %v", err)
+	}
+
+	if got := holdings(server, c, ownedMember); len(got) != 0 {
+		t.Errorf("the patched account holds %q, want nothing: no stack of app api is recorded", got)
+	}
+	if _, err := ensureRunningAs(t, p, c, appNamed("web", spec), runningAs(ownedAccount), nil); err != nil {
+		t.Errorf("EnsureAccount(web) = %v, want the account free once nothing of api is left", err)
 	}
 }

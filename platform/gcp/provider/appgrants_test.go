@@ -58,7 +58,7 @@ func grantedAccountOf(t *testing.T, server *googletest.IAM, spec provider.StackS
 	p, c := ensuringAccounts(t, server)
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
 	recordApp(t, p, spec.Ref, spec.Ref.Name)
-	email, _, err := p.release().EnsureAccount(context.Background(), c, spec, declared)
+	email, _, err := ensureAccount(p, context.Background(), c, spec, declared)
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
@@ -123,11 +123,11 @@ func TestEachEnvironmentOfAnAppRunsAsAnAccountOfItsOwn(t *testing.T) {
 	seven := functionStackDeclaring(environment.TierPreview, "pr-7", provider.AppValues{})
 	eight := functionStackDeclaring(environment.TierPreview, "pr-8", provider.AppValues{})
 
-	first, _, err := p.release().EnsureAccount(context.Background(), c, seven, nil)
+	first, _, err := ensureAccount(p, context.Background(), c, seven, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount(pr-7) = %v", err)
 	}
-	second, _, err := p.release().EnsureAccount(context.Background(), c, eight, nil)
+	second, _, err := ensureAccount(p, context.Background(), c, eight, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount(pr-8) = %v", err)
 	}
@@ -150,11 +150,11 @@ func TestAPreviewsAccountHoldsNothingOnAnotherPreviewsBucket(t *testing.T) {
 	eight := functionStackDeclaring(environment.TierPreview, "pr-8", provider.AppValues{})
 	eight.App.Values.Bindings = []provider.Binding{{Type: provider.BindingBucket, Name: "uploads", Properties: map[string]string{provider.PropertyBucket: eights}}}
 
-	sevenAccount, _, err := p.release().EnsureAccount(context.Background(), c, seven, nil)
+	sevenAccount, _, err := ensureAccount(p, context.Background(), c, seven, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount(pr-7) = %v", err)
 	}
-	if _, _, err := p.release().EnsureAccount(context.Background(), c, eight, nil); err != nil {
+	if _, _, err := ensureAccount(p, context.Background(), c, eight, nil); err != nil {
 		t.Fatalf("ensureAppAccount(pr-8) = %v", err)
 	}
 
@@ -170,7 +170,7 @@ func TestADeployThatStopsBindingABucketOfAnotherEnvironmentTakesTheGrantOnItAway
 	existingBuckets(buckets, shared)
 	spec := functionStackDeclaring(environment.TierPreview, "pr-7", provider.AppValues{})
 	spec.App.Grants = []provider.Binding{{Type: provider.BindingBucket, Name: "media", Properties: map[string]string{provider.PropertyBucket: shared}}}
-	account, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil)
+	account, _, err := ensureAccount(p, context.Background(), c, spec, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
@@ -179,7 +179,7 @@ func TestADeployThatStopsBindingABucketOfAnotherEnvironmentTakesTheGrantOnItAway
 	}
 	spec.App.Grants = nil
 
-	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
+	if _, _, err := ensureAccount(p, context.Background(), c, spec, nil); err != nil {
 		t.Fatalf("ensureAppAccount() without the grant = %v", err)
 	}
 
@@ -196,7 +196,7 @@ func TestADeployRecordsWhatItGrantsBeforeItGrantsIt(t *testing.T) {
 	p, c := ensuringAccounts(t, server)
 	spec := reachingTopics(functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 
-	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err == nil {
+	if _, _, err := ensureAccount(p, context.Background(), c, spec, nil); err == nil {
 		t.Fatal("ensureAppAccount() over a denied account policy = nil, want the refusal")
 	}
 
@@ -291,7 +291,7 @@ func TestRedeployingAnEnvironmentAfterItsRemovalCreatesAndGrantsItsAccountAgain(
 	before := holdings(server, c, member)
 	removeStack(t, p, c, spec.Ref)
 
-	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}}); err != nil {
+	if _, _, err := ensureAccount(p, context.Background(), c, spec, map[string]*provider.TopicSpec{"resize": {}}); err != nil {
 		t.Fatalf("ensureAppAccount() after the removal = %v", err)
 	}
 
@@ -329,7 +329,7 @@ func TestRemovingOneEnvironmentLeavesAnotherEnvironmentsAccountAlone(t *testing.
 	other := spec
 	other.Ref.Name = stackOf("pr-8", "web", "r1")
 	recordApp(t, p, other.Ref, other.Ref.Name)
-	otherMember, _, err := p.release().EnsureAccount(context.Background(), c, other, map[string]*provider.TopicSpec{"resize": {}})
+	otherMember, _, err := ensureAccount(p, context.Background(), c, other, map[string]*provider.TopicSpec{"resize": {}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +394,7 @@ func TestADeployThatStopsReachingATopicTakesItsPublisherGrantAway(t *testing.T) 
 	server.TopicPolicies[resizePath(t, c, spec)].Bindings = append(server.TopicPolicies[resizePath(t, c, spec)].Bindings,
 		&pubsub.Binding{Role: "roles/pubsub.publisher", Members: []string{"serviceAccount:other@acme-prod.iam.gserviceaccount.com"}})
 
-	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, map[string]*provider.TopicSpec{}); err != nil {
+	if _, _, err := ensureAccount(p, context.Background(), c, spec, map[string]*provider.TopicSpec{}); err != nil {
 		t.Fatalf("ensureAppAccount() without the topic = %v", err)
 	}
 

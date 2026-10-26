@@ -78,11 +78,11 @@ func TestAnAppIsGrantedTheObjectsOfTheBucketsItBindsAndNoOtherBucket(t *testing.
 	api = appNamed("api", api)
 	api.App.Grants = []provider.Binding{bindingBucket(t, c, "avatars")}
 
-	webAccount, _, err := p.release().EnsureAccount(context.Background(), c, web, nil)
+	webAccount, _, err := ensureAccount(p, context.Background(), c, web, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount(web) = %v", err)
 	}
-	apiAccount, _, err := p.release().EnsureAccount(context.Background(), c, api, nil)
+	apiAccount, _, err := ensureAccount(p, context.Background(), c, api, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount(api) = %v", err)
 	}
@@ -108,7 +108,7 @@ func TestAnAppBindingNoBucketHoldsNoBucketGrantAndCannotSignAsItself(t *testing.
 	uploads := appBucketOf(t, c.Names, "prod", "uploads")
 	existingBuckets(buckets, uploads)
 
-	account, _, err := p.release().EnsureAccount(context.Background(), c, appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{})), nil)
+	account, _, err := ensureAccount(p, context.Background(), c, appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{})), nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
@@ -130,7 +130,7 @@ func TestAnAppBindingABucketMaySignAsItsOwnAccount(t *testing.T) {
 	spec := appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 	spec.App.Values.Bindings = []provider.Binding{bindingBucket(t, c, "uploads")}
 
-	account, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil)
+	account, _, err := ensureAccount(p, context.Background(), c, spec, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
@@ -150,7 +150,7 @@ func TestAnAppsBucketGrantRacingAnotherWriteIsRetriedOnTheFreshPolicy(t *testing
 	spec := appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 	spec.App.Values.Bindings = []provider.Binding{bindingBucket(t, c, "uploads")}
 
-	account, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil)
+	account, _, err := ensureAccount(p, context.Background(), c, spec, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount() with a policy written under it = %v, want the grant retried", err)
 	}
@@ -166,7 +166,7 @@ func TestAnAppBindingABucketThatIsGoneIsRefusedNamingTheBucket(t *testing.T) {
 	spec := appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 	spec.App.Values.Bindings = []provider.Binding{bindingBucket(t, c, "uploads")}
 
-	_, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil)
+	_, _, err := ensureAccount(p, context.Background(), c, spec, nil)
 
 	if err == nil || !strings.Contains(err.Error(), appBucketOf(t, c.Names, "prod", "uploads")) {
 		t.Errorf("ensureAppAccount() = %v, want an error naming the bucket it could not grant", err)
@@ -182,14 +182,14 @@ func TestADeployThatStopsBindingABucketTakesTheAppsGrantOnItAway(t *testing.T) {
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
 	p.records = recordingBucketStacks(t, spec, bindingBucket(t, c, "uploads"), bindingBucket(t, c, "avatars"))
 	spec.App.Values.Bindings = []provider.Binding{bindingBucket(t, c, "uploads"), bindingBucket(t, c, "avatars")}
-	account, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil)
+	account, _, err := ensureAccount(p, context.Background(), c, spec, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
 	member := "serviceAccount:" + account
 	spec.App.Values.Bindings = []provider.Binding{bindingBucket(t, c, "uploads")}
 
-	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
+	if _, _, err := ensureAccount(p, context.Background(), c, spec, nil); err != nil {
 		t.Fatalf("ensureAppAccount() without the avatars binding = %v", err)
 	}
 
@@ -208,7 +208,7 @@ func TestADeployThatStopsBindingABucketAlreadyDeletedIsNotRefused(t *testing.T) 
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
 	p.records = recordingBucketStacks(t, spec, bindingBucket(t, c, "uploads"))
 
-	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
+	if _, _, err := ensureAccount(p, context.Background(), c, spec, nil); err != nil {
 		t.Errorf("ensureAppAccount() with a recorded bucket already deleted = %v, want nothing to revoke", err)
 	}
 }
@@ -221,7 +221,7 @@ func TestRemovingTheLastReleaseOfAnEnvironmentRevokesItsBuckets(t *testing.T) {
 	spec := appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
 	spec.App.Values.Bindings = []provider.Binding{bindingBucket(t, c, "uploads")}
-	account, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil)
+	account, _, err := ensureAccount(p, context.Background(), c, spec, nil)
 	if err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
@@ -243,7 +243,7 @@ func TestRevokingAnAppsBucketsToleratesABucketAlreadyDeleted(t *testing.T) {
 	spec := appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
 	spec.App.Values.Bindings = []provider.Binding{bindingBucket(t, c, "uploads")}
-	if _, _, err := p.release().EnsureAccount(context.Background(), c, spec, nil); err != nil {
+	if _, _, err := ensureAccount(p, context.Background(), c, spec, nil); err != nil {
 		t.Fatalf("ensureAppAccount() = %v", err)
 	}
 	buckets.mu.Lock()

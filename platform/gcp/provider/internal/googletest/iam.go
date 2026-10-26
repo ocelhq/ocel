@@ -38,10 +38,11 @@ type IAM struct {
 	KeyPolicy map[string]*iampb.Policy
 	KeyRaces  int
 
-	KeyUnserved int
-	Project     *cloudresourcemanager.Policy
-	Writes      int
-	Created     []*iam.CreateServiceAccountRequest
+	KeyUnserved     int
+	Project         *cloudresourcemanager.Policy
+	ProjectPolicies map[string]*cloudresourcemanager.Policy
+	Writes          int
+	Created         []*iam.CreateServiceAccountRequest
 
 	Accounts       map[string]bool
 	Unseen         int
@@ -51,10 +52,14 @@ type IAM struct {
 	ProjectWrites   int
 	ProjectStale    int
 	ProjectAttempts int
+	ProjectDenied   bool
 	MissingRole     string
 	MissingRoleAsks int
 
 	AccountPolicies     map[string]*iam.Policy
+	Roles               map[string][]string
+	AccountPermissions  map[string][]string
+	AbsentAccounts      []string
 	accountDescriptions map[string]string
 	AccountWrites       int
 	AccountPolicyUnseen int
@@ -305,6 +310,16 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		path := r.URL.Path
 		switch {
+		case r.Method == http.MethodGet && strings.Contains(path, "roles/"):
+			permissions, found := s.Roles[strings.TrimPrefix(path, "/v1/")]
+			if !found {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"role not found"}}`))
+				return
+			}
+			WriteBody(w, &iam.Role{Name: strings.TrimPrefix(path, "/v1/"), IncludedPermissions: permissions})
+		case strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":testIamPermissions"):
+			s.serveAccountPermissions(w, r, strings.TrimSuffix(path[strings.LastIndex(path, "/")+1:], ":testIamPermissions"))
 		case strings.HasPrefix(path, "/storage/v1/b/") && strings.HasSuffix(path, "/iam"):
 			s.serveBucketPolicy(w, r, strings.TrimSuffix(strings.TrimPrefix(path, "/storage/v1/b/"), "/iam"))
 		case r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/projects/acme-prod/services/"):
@@ -316,6 +331,10 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 		case r.Method == http.MethodGet && path == "/v1/projects/acme-prod":
 			_, _ = w.Write([]byte(`{"projectId":"acme-prod","projectNumber":"123456789"}`))
 		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":getIamPolicy") && !strings.Contains(path, "/serviceAccounts/") && !strings.Contains(path, "/topics/"):
+			if other, set := s.ProjectPolicies[strings.TrimSuffix(strings.TrimPrefix(path, "/v1/projects/"), ":getIamPolicy")]; set {
+				_ = json.NewEncoder(w).Encode(other)
+				return
+			}
 			_ = json.NewEncoder(w).Encode(s.Project)
 		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":setIamPolicy") && !strings.Contains(path, "/serviceAccounts/") && !strings.Contains(path, "/topics/"):
 			var asked cloudresourcemanager.SetIamPolicyRequest
@@ -324,6 +343,11 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 				return
 			}
 			s.ProjectAttempts++
+			if s.ProjectDenied {
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"denied"}}`))
+				return
+			}
 			if s.MissingRole != "" && slices.ContainsFunc(asked.Policy.Bindings, func(b *cloudresourcemanager.Binding) bool { return b.Role == s.MissingRole }) {
 				s.MissingRoleAsks++
 				w.WriteHeader(http.StatusBadRequest)
@@ -397,6 +421,8 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 			_, _ = w.Write([]byte(`{"etag":"BwXhoLA=","bindings":[{"role":"roles/iam.serviceAccountUser","members":["user:emulator"]}]}`))
 		case strings.Contains(path, "/serviceAccounts/") && strings.HasSuffix(path, ":setIamPolicy"):
 			_, _ = w.Write([]byte(`{"etag":"BwXhoLB="}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(path, "/serviceAccounts"):
+			WriteBody(w, &iam.ListServiceAccountsResponse{})
 		case r.Method == http.MethodPost && strings.HasSuffix(path, "/serviceAccounts"):
 			var asked iam.CreateServiceAccountRequest
 			if err := json.NewDecoder(r.Body).Decode(&asked); err == nil {
@@ -444,6 +470,23 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}
+}
+
+func (s *IAM) serveAccountPermissions(w http.ResponseWriter, r *http.Request, email string) {
+	if slices.Contains(s.AbsentAccounts, email) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":404,"status":"NOT_FOUND","message":"service account not found"}}`))
+		return
+	}
+	asked := ReadBody[iam.TestIamPermissionsRequest](w, r)
+	if asked == nil {
+		return
+	}
+	granted := asked.Permissions
+	if held, set := s.AccountPermissions[email]; set {
+		granted = slices.DeleteFunc(slices.Clone(granted), func(permission string) bool { return !slices.Contains(held, permission) })
+	}
+	WriteBody(w, &iam.TestIamPermissionsResponse{Permissions: granted})
 }
 
 func (s *IAM) Open(t *testing.T) *gcloud.Clients {

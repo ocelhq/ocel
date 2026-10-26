@@ -42,12 +42,16 @@ func AbsentWhenNotFound(err error) error {
 }
 
 func ProjectPolicy(c *Clients) policy.Resource {
-	return policy.Resource{Name: "project " + c.Project(), Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
+	return ProjectPolicyOf(c, c.Project())
+}
+
+func ProjectPolicyOf(c *Clients, project string) policy.Resource {
+	return policy.Resource{Name: "project " + project, Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
 		service, err := c.Projects()
 		if err != nil {
 			return nil, nil, err
 		}
-		held, err := googleretry.Attempted(ctx, service.Projects.GetIamPolicy(c.Project(),
+		held, err := googleretry.Attempted(ctx, service.Projects.GetIamPolicy(project,
 			&cloudresourcemanager.GetIamPolicyRequest{
 				Options: &cloudresourcemanager.GetPolicyOptions{RequestedPolicyVersion: policy.ConditionalVersion},
 			}).Context(ctx).Do)
@@ -60,7 +64,7 @@ func ProjectPolicy(c *Clients) policy.Resource {
 				held.Bindings = append(held.Bindings, &cloudresourcemanager.Binding{Role: binding.Role, Members: binding.Members, Condition: projectExpr(binding.Condition)})
 			}
 			held.Version = policy.ConditionalVersion
-			_, err := googleretry.Attempted(ctx, service.Projects.SetIamPolicy(c.Project(),
+			_, err := googleretry.Attempted(ctx, service.Projects.SetIamPolicy(project,
 				&cloudresourcemanager.SetIamPolicyRequest{Policy: held}).Context(ctx).Do)
 			return err
 		}
@@ -87,7 +91,14 @@ func projectExpr(condition *policy.Condition) *cloudresourcemanager.Expr {
 }
 
 func AccountPolicy(c *Clients, account string) policy.Resource {
-	path := AccountPath(c, account)
+	return accountPolicyAt(c, AccountPath(c, account), account)
+}
+
+func EmailAccountPolicy(c *Clients, email string) policy.Resource {
+	return accountPolicyAt(c, EmailAccountPath(email), email)
+}
+
+func accountPolicyAt(c *Clients, path, account string) policy.Resource {
 	return policy.Resource{Name: "the " + account + " service account", Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
 		service, err := c.Accounts()
 		if err != nil {

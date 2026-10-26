@@ -18,6 +18,10 @@ func AccountPath(c *Clients, name string) string {
 	return "projects/" + c.Project() + "/serviceAccounts/" + name + "@" + c.Project() + names.AccountDomain
 }
 
+func EmailAccountPath(email string) string {
+	return "projects/-/serviceAccounts/" + email
+}
+
 func RepositoryParent(c *Clients) string {
 	return fmt.Sprintf("projects/%s/locations/%s", c.Project(), c.Region)
 }

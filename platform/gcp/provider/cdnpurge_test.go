@@ -170,7 +170,7 @@ func TestAnAppNoEnvironmentRunsLosesItsCachePurgeGrant(t *testing.T) {
 	}
 
 	account := c.AppAccount("shop", stackrecords.ProductionEnv, "web")
-	if _, err := grants.RevokeAll(context.Background(), c, p.KeyValues(), environment.TierProduction, account); err != nil {
+	if _, err := grants.RevokeAll(context.Background(), c, p.KeyValues(), environment.TierProduction, account, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := purgeBindingsOf(server.Identities()); len(got) != 0 {
