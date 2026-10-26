@@ -83,10 +83,13 @@ def read_binding():
     return raw
 
 
+def read_binding_seed():
+    return json.loads(read_binding())["realtime"].get("signingKey", "")
+
+
 def read_signing_key(signed_by):
     if signed_by == "binding":
-        seed = base64.b64decode(json.loads(read_binding())["realtime"]["signingKey"])
-        return Ed25519PrivateKey.from_private_bytes(seed)
+        return Ed25519PrivateKey.from_private_bytes(base64.b64decode(read_binding_seed()))
     if signed_by == "another-key":
         return Ed25519PrivateKey.generate()
     if signed_by == "nobody":
@@ -107,6 +110,12 @@ def sign_token(environ, start_response):
             {"error": "signing a token needs the nonce the harness set"},
         )
     sent = read_json(environ)
+    if sent["signedBy"] == "binding" and not read_binding_seed():
+        return answer(
+            start_response,
+            "404 Not Found",
+            {"error": "the realtime binding holds no signing key"},
+        )
     signing_input = f"{encode_segment(sent['header'])}.{encode_segment(sent['claims'])}"
     key = read_signing_key(sent["signedBy"])
     signature = ""

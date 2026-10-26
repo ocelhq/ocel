@@ -94,22 +94,30 @@ func readBinding() ([]byte, error) {
 	return []byte(raw), nil
 }
 
+func readBindingSeed() ([]byte, error) {
+	raw, err := readBinding()
+	if err != nil {
+		return nil, err
+	}
+	var delivered struct {
+		Realtime struct {
+			SigningKey []byte `json:"signingKey"`
+		} `json:"realtime"`
+	}
+	if err := json.Unmarshal(raw, &delivered); err != nil {
+		return nil, err
+	}
+	return delivered.Realtime.SigningKey, nil
+}
+
 func readSigningKey(signedBy string) (ed25519.PrivateKey, error) {
 	switch signedBy {
 	case "binding":
-		raw, err := readBinding()
+		seed, err := readBindingSeed()
 		if err != nil {
 			return nil, err
 		}
-		var delivered struct {
-			Realtime struct {
-				SigningKey []byte `json:"signingKey"`
-			} `json:"realtime"`
-		}
-		if err := json.Unmarshal(raw, &delivered); err != nil {
-			return nil, err
-		}
-		return ed25519.NewKeyFromSeed(delivered.Realtime.SigningKey), nil
+		return ed25519.NewKeyFromSeed(seed), nil
 	case "another-key":
 		_, key, err := ed25519.GenerateKey(nil)
 		return key, err
@@ -128,6 +136,17 @@ func serveTokens(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAnswer(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
+	}
+	if req.SignedBy == "binding" {
+		seed, err := readBindingSeed()
+		if err != nil {
+			writeAnswer(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if len(seed) == 0 {
+			writeAnswer(w, http.StatusNotFound, map[string]string{"error": "the realtime binding holds no signing key"})
+			return
+		}
 	}
 	key, err := readSigningKey(req.SignedBy)
 	if err != nil {

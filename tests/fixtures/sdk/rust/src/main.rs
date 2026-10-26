@@ -243,15 +243,20 @@ fn read_binding() -> Result<String, String> {
     std::env::var(BINDING_KEY).map_err(|_| format!("{BINDING_KEY} was not delivered"))
 }
 
+fn read_binding_seed() -> Result<String, String> {
+    let binding: Value = serde_json::from_str(&read_binding()?).map_err(|err| err.to_string())?;
+    Ok(binding["realtime"]["signingKey"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string())
+}
+
 fn read_signing_key(signed_by: &str) -> Result<Option<Ed25519KeyPair>, String> {
     match signed_by {
         "binding" => {
-            let binding: Value =
-                serde_json::from_str(&read_binding()?).map_err(|err| err.to_string())?;
-            let seed = binding["realtime"]["signingKey"]
-                .as_str()
-                .ok_or("the binding carries no signing key")?;
-            let seed = STANDARD.decode(seed).map_err(|err| err.to_string())?;
+            let seed = STANDARD
+                .decode(read_binding_seed()?)
+                .map_err(|err| err.to_string())?;
             Ed25519KeyPair::from_seed_unchecked(&seed)
                 .map(Some)
                 .map_err(|err| err.to_string())
@@ -286,6 +291,18 @@ async fn sign_token(
             StatusCode::FORBIDDEN,
             json!({ "error": "signing a token needs the nonce the harness set" }),
         );
+    }
+    if sent.signed_by == "binding" {
+        match read_binding_seed() {
+            Err(err) => return answer(StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": err })),
+            Ok(seed) if seed.is_empty() => {
+                return answer(
+                    StatusCode::NOT_FOUND,
+                    json!({ "error": "the realtime binding holds no signing key" }),
+                )
+            }
+            Ok(_) => {}
+        }
     }
     let input = format!(
         "{}.{}",

@@ -306,12 +306,18 @@ function newServerClock(live: DecodedToken): ServerClock {
 
 type TokenToSign = DecodedToken & { signedBy: Signer };
 
-async function signToken(ctx: CheckContext, name: string, token: TokenToSign): Promise<string> {
-  const sent = await json(ctx, "/api/tokens", {
+const BINDING_HOLDS_NO_SIGNING_KEY = 404;
+
+function postToken(ctx: CheckContext, token: TokenToSign) {
+  return json(ctx, "/api/tokens", {
     method: "POST",
     headers: { "content-type": "application/json", [JOURNEY_NONCE_HEADER]: ctx.journeyNonce },
     body: JSON.stringify(token),
   });
+}
+
+async function signToken(ctx: CheckContext, name: string, token: TokenToSign): Promise<string> {
+  const sent = await postToken(ctx, token);
   assert.equal(
     sent.res.status,
     200,
@@ -340,21 +346,30 @@ async function readRefusal(attempt: Promise<unknown>): Promise<string | undefine
 async function requestVectorGrants(ctx: CheckContext): Promise<HandlerAnswer> {
   const { expect } = readTokenVectors().tokens;
   const orderId = expect.ch.split("/").at(-1) ?? "";
-  const answer = await requestBatch(
+  return requestBatch(
     ctx,
     { connect: true, ops: [buildSubscribe("orders/:orderId", { orderId })] },
     { user: "ada", orders: [orderId] },
   );
-  assert.equal(
-    readGrant(answer, 0).wire,
-    expect.ch,
-    "the vectors name another channel than the fixture's",
-  );
-  return answer;
 }
 
-function signUnchanged(ctx: CheckContext, live: DecodedToken): Promise<string> {
-  return signToken(ctx, "the live token re-signed", { ...live, signedBy: "binding" });
+function assertVectorChannel(answer: HandlerAnswer): void {
+  assert.equal(
+    readGrant(answer, 0).wire,
+    readTokenVectors().tokens.expect.ch,
+    "the vectors name another channel than the fixture's",
+  );
+}
+
+async function signUnchanged(ctx: CheckContext, live: DecodedToken): Promise<string | undefined> {
+  const sent = await postToken(ctx, { ...live, signedBy: "binding" });
+  if (sent.res.status === BINDING_HOLDS_NO_SIGNING_KEY) return undefined;
+  assert.equal(
+    sent.res.status,
+    200,
+    `signing the live token re-signed answered ${describeResponse(sent.res, sent.text)}`,
+  );
+  return (sent.body as { token: string }).token;
 }
 
 function describeAccepted(forgery: Forgery, refusal: string | undefined): string | undefined {
@@ -370,14 +385,13 @@ export const realtimeConnectTokenVectorsCheck: Check = {
     const answer = await requestVectorGrants(ctx);
     const live = decodeToken(readConnectToken(answer));
     const serverSecond = newServerClock(live);
+    const resigned = await signUnchanged(ctx, live);
+    if (resigned === undefined) return;
+    assertVectorChannel(answer);
     const reached = await ctx.reach(answer.url);
     const open = (token: string) =>
       readRefusal(EventSocket.open(reached, answer.host, token).then((socket) => socket.close()));
-    assert.equal(
-      await open(await signUnchanged(ctx, live)),
-      undefined,
-      "the live token re-signed was refused",
-    );
+    assert.equal(await open(resigned), undefined, "the live token re-signed was refused");
     const wrong: string[] = [];
     for (const forgery of forgeRefusedCases(readTokenVectors(), live)) {
       const accepted = describeAccepted(
@@ -399,6 +413,9 @@ export const realtimeSubscribeTokenVectorsCheck: Check = {
     const grant = readGrant(answer, 0);
     const live = decodeToken(grant.token);
     const serverSecond = newServerClock(live);
+    const resigned = await signUnchanged(ctx, live);
+    if (resigned === undefined) return;
+    assertVectorChannel(answer);
     await runWithSocket(ctx, answer, async (socket) => {
       const wrong: string[] = [];
       for (const [n, forgery] of forgeRefusedCases(readTokenVectors(), live).entries()) {
@@ -414,7 +431,7 @@ export const realtimeSubscribeTokenVectorsCheck: Check = {
         [],
         "the transport did not refuse a bad subscribe token as unauthorized",
       );
-      await socket.subscribe("re-signed", grant.wire, await signUnchanged(ctx, live));
+      await socket.subscribe("re-signed", grant.wire, resigned);
     });
   },
 };
