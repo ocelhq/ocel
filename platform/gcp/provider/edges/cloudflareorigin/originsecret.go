@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -37,28 +36,6 @@ func RequireOriginSecret(ctx context.Context, c *gcloud.Clients, tier environmen
 			kind, tier, c.OriginSecret(tier, kind), provider.BootstrapCommand(tier))
 	}
 	return secret, nil
-}
-
-func PlannedOriginSecret(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind, now time.Time) (provider.Change, error) {
-	secret, _, err := ReadOriginSecret(ctx, c, tier, kind)
-	if err != nil {
-		return provider.Change{}, err
-	}
-	change := provider.Change{Kind: string(bootstrap.KindSecret), Name: c.OriginSecret(tier, kind)}
-	change.Action, change.Reason = secret.PlanChange(now)
-	return change, nil
-}
-
-func PlannedOriginSecretRemoval(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind) (provider.Change, error) {
-	_, held, err := ReadOriginSecret(ctx, c, tier, kind)
-	if err != nil {
-		return provider.Change{}, err
-	}
-	change := provider.Change{Kind: string(bootstrap.KindSecret), Name: c.OriginSecret(tier, kind), Action: provider.ActionKeep, Reason: bootstrap.ReasonAbsent}
-	if held {
-		change.Action, change.Reason = provider.ActionDelete, ""
-	}
-	return change, nil
 }
 
 func EnsureOriginSecret(ctx context.Context, c *gcloud.Clients, tier environment.Tier, kind edge.Kind, now time.Time, runProgress progress.Log) error {

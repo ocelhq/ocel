@@ -25,28 +25,20 @@ var FrontParts = bootstrap.FrontParts{
 		return TakeAssetStore(ctx, b.Clients, tier)
 	},
 	PlanAssets: func(ctx context.Context, b bootstrap.Engine, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
-		if b.IsOff(bootstrap.IAMAPI) || b.IsOff(bootstrap.SecretManagerAPI) {
-			return PlannedAbsentAssets(b.Clients, tier, kind, time.Now()), nil
-		}
-		assets, err := PlannedAssetStore(ctx, b.Clients, tier, kind)
-		if err != nil {
-			return nil, err
-		}
-		secret, err := PlannedOriginSecret(ctx, b.Clients, tier, kind, time.Now())
-		return append(assets, secret), err
+		held, err := ReadAssets(ctx, b, tier, kind)
+		return held.Planned(b.Clients, tier, kind, time.Now()), err
 	},
 	PlanAssetsRemoval: func(ctx context.Context, b bootstrap.Engine, tier environment.Tier, kind edge.Kind) ([]provider.Change, error) {
-		assets, err := PlannedAssetStoreRemoval(ctx, b.Clients, tier, kind)
-		if err != nil {
-			return nil, err
-		}
-		secret, err := PlannedOriginSecretRemoval(ctx, b.Clients, tier, kind)
-		return append(assets, secret), err
+		held, err := ReadAssets(ctx, b, tier, kind)
+		return held.PlannedRemoval(b.Clients, tier, kind), err
 	},
 	RaiseOriginSecret: func(ctx context.Context, b bootstrap.Engine, tier environment.Tier, kind edge.Kind, progress progress.Log) error {
 		return EnsureOriginSecret(ctx, b.Clients, tier, kind, time.Now(), progress)
 	},
 	HasOriginSecret: func(ctx context.Context, b bootstrap.Engine, tier environment.Tier, kind edge.Kind) (bool, error) {
+		if b.IsOff(bootstrap.SecretManagerAPI) {
+			return false, nil
+		}
 		_, found, err := ReadOriginSecret(ctx, b.Clients, tier, kind)
 		return found, err
 	},

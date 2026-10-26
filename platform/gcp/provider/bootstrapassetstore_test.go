@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -30,6 +31,8 @@ func newAssetStoreHarness(t *testing.T) *assetStoreHarness {
 	rest := h.iam.Rest(t)
 	h.clients = h.iam.Serve(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case strings.Contains(r.URL.Path, "/secrets") && h.iam.IsOff(bootstrap.SecretManagerAPI):
+			googletest.WriteServiceDisabled(w, bootstrap.SecretManagerAPI)
 		case strings.Contains(r.URL.Path, "/secrets"):
 			h.secrets.Serve(t, w, r)
 		case strings.Contains(r.URL.Path, "/hmacKeys"):
@@ -282,11 +285,17 @@ func TestTakingTheAssetStoreDownWhereNothingWasRaisedIsNotAnError(t *testing.T) 
 func TestAnEdgeThatRunsCodePlansTheAccountAndKeyItsBootstrapRaises(t *testing.T) {
 	t.Parallel()
 	h := newAssetStoreHarness(t)
-
-	changes, err := cloudflareorigin.PlannedAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
-	if err != nil {
-		t.Fatalf("plannedAssetStore() = %v", err)
+	b, _ := frontWithAssetReader(h)
+	planned := func() []provider.Change {
+		t.Helper()
+		changes, err := b.FrontParts.PlanAssets(t.Context(), b, environment.TierProduction, cloudflareKind)
+		if err != nil {
+			t.Fatalf("PlanAssets() = %v", err)
+		}
+		return slices.DeleteFunc(changes, func(change provider.Change) bool { return change.Kind == string(bootstrap.KindSecret) })
 	}
+
+	changes := planned()
 	for _, change := range changes {
 		if change.Action != provider.ActionCreate {
 			t.Errorf("%s %s is planned to %s, want create where nothing exists", change.Kind, change.Name, change.Action)
@@ -297,11 +306,7 @@ func TestAnEdgeThatRunsCodePlansTheAccountAndKeyItsBootstrapRaises(t *testing.T)
 	}
 
 	h.raise(t)
-	changes, err = cloudflareorigin.PlannedAssetStore(t.Context(), h.clients, environment.TierProduction, cloudflareKind)
-	if err != nil {
-		t.Fatalf("plannedAssetStore() = %v", err)
-	}
-	for _, change := range changes {
+	for _, change := range planned() {
 		if change.Action != provider.ActionKeep {
 			t.Errorf("%s %s is planned to %s, want keep once raised", change.Kind, change.Name, change.Action)
 		}
@@ -413,5 +418,56 @@ func TestAPlanOfAFrontThatRunsCodeNamesItsAssetReader(t *testing.T) {
 	}
 	if len(removed) != 1 || removed[0].Action != provider.ActionDelete {
 		t.Errorf("the removal plan = %+v, want one edge group that deletes", removed)
+	}
+}
+
+func switchingOff(t *testing.T, h *assetStoreHarness, b bootstrap.Engine, off ...string) {
+	t.Helper()
+	h.iam.ServicesOff = off
+	if _, err := b.ListServicesOff(t.Context(), []string{bootstrap.IAMAPI, bootstrap.SecretManagerAPI, bootstrap.StorageAPI}); err != nil {
+		t.Fatalf("ListServicesOff() = %v", err)
+	}
+}
+
+func TestABootstrapPlanBehindAnEdgeThatRunsCodeReadsEachAssetWhoseOwnServiceIsOn(t *testing.T) {
+	t.Parallel()
+	h := newAssetStoreHarness(t)
+	h.raise(t)
+	b, _ := frontWithAssetReader(h)
+	switchingOff(t, h, b, bootstrap.SecretManagerAPI)
+
+	changes, err := b.FrontParts.PlanAssets(t.Context(), b, environment.TierProduction, cloudflareKind)
+	if err != nil {
+		t.Fatalf("PlanAssets() with Secret Manager off = %v", err)
+	}
+
+	want := map[string]provider.ChangeAction{
+		string(bootstrap.KindServiceAccount): provider.ActionKeep,
+		"storage:hmackey":                    provider.ActionCreate,
+		string(bootstrap.KindSecret):         provider.ActionCreate,
+	}
+	for _, change := range changes {
+		if change.Action != want[change.Kind] {
+			t.Errorf("%s %s is planned to %s, want %s: only Secret Manager is off", change.Kind, change.Name, change.Action, want[change.Kind])
+		}
+	}
+	if len(changes) != len(want) {
+		t.Errorf("the plan = %+v, want the account, the key and the origin secret", changes)
+	}
+}
+
+func TestAFrontWhoseSecretManagerIsOffReadsAsNotInstalledRatherThanFailing(t *testing.T) {
+	t.Parallel()
+	h := newAssetStoreHarness(t)
+	b, registry := frontWithAssetReader(h)
+	registry.front.installed = true
+	if err := cloudflareorigin.EnsureOriginSecret(t.Context(), h.clients, environment.TierProduction, registry.front.Kind(), time.Now(), nil); err != nil {
+		t.Fatalf("EnsureOriginSecret() = %v", err)
+	}
+	switchingOff(t, h, b, bootstrap.SecretManagerAPI)
+
+	installed, err := b.FrontInstalled(t.Context(), environment.TierProduction, bootstrap.CloudflareOriginPart)
+	if err != nil || installed {
+		t.Errorf("FrontInstalled() with Secret Manager off = %t, %v, want not installed and no error", installed, err)
 	}
 }

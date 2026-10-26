@@ -186,7 +186,7 @@ type stamped struct {
 }
 
 func (b Engine) stamped(ctx context.Context, bucket string) (stamped, error) {
-	if bucket == "" || b.IsOff(storageAPI) {
+	if bucket == "" || b.IsOff(StorageAPI) {
 		return stamped{}, nil
 	}
 	client, err := b.Clients.Storage()

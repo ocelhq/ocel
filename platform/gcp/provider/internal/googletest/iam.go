@@ -511,7 +511,7 @@ func (s *IAM) Serve(t *testing.T, rest http.HandlerFunc) *gcloud.Clients {
 			return
 		}
 		if api := restAPI(r.URL.Path); s.IsOff(api) {
-			writeServiceDisabled(w, api)
+			WriteServiceDisabled(w, api)
 			return
 		}
 		rest(w, r)
@@ -547,7 +547,7 @@ func serviceDisabled(api string) string {
 	return api + " has not been used in project " + Project + " before or it is disabled"
 }
 
-func writeServiceDisabled(w http.ResponseWriter, api string) {
+func WriteServiceDisabled(w http.ResponseWriter, api string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusForbidden)
 	_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"` + serviceDisabled(api) + `.",` +
