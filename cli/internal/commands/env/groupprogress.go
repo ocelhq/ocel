@@ -6,13 +6,17 @@ import (
 	"io"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variables"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 )
 
-func printGroupProgress(ctx context.Context, store variablestorev1connect.VariableStoreServiceClient, slug string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, opts envOptions, changed []envSetPair, stdout io.Writer) error {
+func printGroupProgress(ctx context.Context, run *run.Run, store variablestorev1connect.VariableStoreServiceClient, cfg *project.Project, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, opts envOptions, changed []envSetPair, stdout io.Writer) error {
 	touched := map[string]bool{}
 	for _, pair := range changed {
 		for _, definition := range definitions {
@@ -24,7 +28,11 @@ func printGroupProgress(ctx context.Context, store variablestorev1connect.Variab
 	if len(touched) == 0 {
 		return nil
 	}
-	listed, err := store.ListValues(ctx, &variablestorev1.ListValuesRequest{Tier: opts.tier(), Slug: slug})
+	var listed *variablestorev1.ListValuesResponse
+	err := runInSpan(run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title(describeTierValues(opts)), func() (err error) {
+		listed, err = store.ListValues(ctx, &variablestorev1.ListValuesRequest{Tier: opts.tier(), Slug: cfg.Slug})
+		return err
+	})
 	if err != nil {
 		return err
 	}

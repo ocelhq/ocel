@@ -13,7 +13,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/progress"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -61,4 +63,13 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 		check.End(nil)
 		return drive(ctx, run, provider, cfg, status.Response)
 	})
+}
+
+func runInSpan(run *run.Run, phase progressv1.Phase, cfg *project.Project, title progress.Title, work func() error) error {
+	root := run.Phase(phase)
+	span := root.Child(cfg.Slug, title)
+	err := work()
+	span.End(err)
+	root.End(err)
+	return err
 }
