@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
@@ -32,6 +33,7 @@ type loadBalancerSpec struct {
 	Tier      environment.Tier
 	Assets    *AssetsBucket
 	Preview   previewEntry
+	Patches   transform.Result
 }
 
 const notFoundStatus = 404
@@ -78,14 +80,22 @@ func previewWildcardResources(ctx *pulumi.Context, spec loadBalancerSpec, projec
 	return err
 }
 
-func loadBalancerProgram(spec loadBalancerSpec) Program {
-	return func(ctx *pulumi.Context, project string) error {
+func loadBalancerProgram(spec loadBalancerSpec) (Program, error) {
+	patches, err := newFrontPatches(spec.Names, spec.Tier, spec.Patches)
+	if err != nil {
+		return Program{}, err
+	}
+	return Program{Patches: patches.applied, Run: func(ctx *pulumi.Context, project string) error {
 		projectID := pulumi.String(project)
-		address, err := compute.NewGlobalAddress(ctx, spec.Names.Address, &compute.GlobalAddressArgs{
+		addressArgs := &compute.GlobalAddressArgs{
 			Name:        pulumi.String(spec.Names.Address),
 			Project:     projectID,
 			AddressType: pulumi.String("EXTERNAL"),
-		})
+		}
+		if patches.labels != nil {
+			addressArgs.Labels = patches.labels
+		}
+		address, err := compute.NewGlobalAddress(ctx, spec.Names.Address, addressArgs)
 		if err != nil {
 			return err
 		}
@@ -101,17 +111,20 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 			return err
 		}
 		if spec.Assets != nil {
-			assets, err := declareAssetsBackend(ctx, spec.Names, spec.Tier, *spec.Assets, projectID)
+			assets, err := declareAssetsBackend(ctx, spec.Names, responseHeaders(spec.Tier, patches.assetsHeaders), *spec.Assets, projectID)
 			if err != nil {
 				return err
 			}
 			ctx.Export(outputAssetsBackend, assets.Name)
 		}
-		certificates, err := certificatemanager.NewCertificateMapResource(ctx, spec.Names.CertificateMap,
-			&certificatemanager.CertificateMapResourceArgs{
-				Name:    pulumi.String(spec.Names.CertificateMap),
-				Project: projectID,
-			})
+		certificateArgs := &certificatemanager.CertificateMapResourceArgs{
+			Name:    pulumi.String(spec.Names.CertificateMap),
+			Project: projectID,
+		}
+		if patches.labels != nil {
+			certificateArgs.Labels = patches.labels
+		}
+		certificates, err := certificatemanager.NewCertificateMapResource(ctx, spec.Names.CertificateMap, certificateArgs)
 		if err != nil {
 			return err
 		}
@@ -134,7 +147,7 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 		if err != nil {
 			return err
 		}
-		if _, err := compute.NewGlobalForwardingRule(ctx, spec.Names.Rule, &compute.GlobalForwardingRuleArgs{
+		ruleArgs := &compute.GlobalForwardingRuleArgs{
 			Name:                pulumi.String(spec.Names.Rule),
 			Project:             projectID,
 			Target:              proxy.SelfLink,
@@ -142,7 +155,11 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 			PortRange:           pulumi.String(httpsPortRange),
 			LoadBalancingScheme: pulumi.String(externalManaged),
 			NetworkTier:         pulumi.String(premiumTier),
-		}); err != nil {
+		}
+		if patches.labels != nil {
+			ruleArgs.Labels = patches.labels
+		}
+		if _, err := compute.NewGlobalForwardingRule(ctx, spec.Names.Rule, ruleArgs); err != nil {
 			return err
 		}
 		if err := previewWildcardResources(ctx, spec, project); err != nil {
@@ -153,5 +170,5 @@ func loadBalancerProgram(spec loadBalancerSpec) Program {
 		ctx.Export(outputURLMap, routes.Name)
 		ctx.Export(outputNotFound, notFound.Name)
 		return nil
-	}
+	}}, nil
 }

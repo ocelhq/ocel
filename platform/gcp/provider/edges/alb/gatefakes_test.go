@@ -151,7 +151,7 @@ func eventsMentioning(events []string, part string) []string {
 func pluginConfigIsSecret(program Program) (bool, error) {
 	var secret bool
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
-		return program(ctx, "acme-prod")
+		return program.Run(ctx, "acme-prod")
 	}, pulumi.WithMocks("alb", "test", secretMocks{secret: &secret}))
 	return secret, err
 }

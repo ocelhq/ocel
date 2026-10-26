@@ -30,6 +30,9 @@ func (p *Provider) edges() edges.Registry {
 		ReadProject: p.Project,
 		Region:      p.options.Region,
 		FrontPart:   albpart.Front(bootstrapGate{p}.openBootstrap),
+
+		EvaluateFront: p.evaluateFront,
+		ReadApps:      p.appEdges.Read,
 	}
 }
 

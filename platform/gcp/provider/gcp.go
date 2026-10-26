@@ -45,8 +45,10 @@ type Provider struct {
 	skipChecks bool
 	transforms transform.Pass
 
+	evaluatedFronts     sync.Map
 	evaluatedNetworks   sync.Map
 	evaluatedPlacements sync.Map
+	appEdges            alb.AppPatches
 
 	records           records.Store
 	recordedDatabases sync.Map

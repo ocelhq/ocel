@@ -119,7 +119,7 @@ func revokeBypassCommand(tier environment.Tier) string {
 
 func (e *Edge) raiseGate(ctx context.Context, tier environment.Tier, image string, log progress.Log) error {
 	var written writtenPublication
-	program := func(ctx *pulumi.Context, project string) error {
+	program := Program{Run: func(ctx *pulumi.Context, project string) error {
 		publication, entry, err := e.recordGatePublication(ctx.Context(), tier, image, !ctx.DryRun())
 		if err != nil {
 			return err
@@ -129,8 +129,8 @@ func (e *Edge) raiseGate(ctx context.Context, tier environment.Tier, image strin
 			Names:  loadBalancerNames(e.deps.Namespace, tier),
 			Main:   publication.Main,
 			Before: publication.Before,
-		})(ctx, project)
-	}
+		}).Run(ctx, project)
+	}}
 	for attempt := 1; ; attempt++ {
 		_, err := e.deps.Stacks.Up(ctx, e.gateTarget(tier), program, log)
 		if err == nil {

@@ -662,12 +662,11 @@ func TestThePluginConfigIsNeverHeldInThePlainByTheKeyValueStore(t *testing.T) {
 func TestEveryPreviewBackendAndTheAssetsBucketMarkTheirResponsesNoindex(t *testing.T) {
 	t.Parallel()
 
-	preview := bindingProgram(bindingSpec{
+	seen, err := declared(bindingProgram(bindingSpec{
 		Namespace: "ocel",
 		Region:    "europe-west1", Slug: "shop", Tier: environment.TierPreview, CertificateMap: "certs",
 		Hosts: map[string]Host{aliasHost: {Service: previewService, Backend: must(backendName("ocel", "shop", environment.TierPreview, aliasHost))}},
-	})
-	seen, err := declared(preview)
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}

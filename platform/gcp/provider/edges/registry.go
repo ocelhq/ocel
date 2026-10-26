@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
@@ -38,6 +39,9 @@ type Registry struct {
 	ReadProject func(context.Context) (string, error)
 	Region      string
 	FrontPart   *alb.FrontPart
+
+	EvaluateFront func(ctx context.Context, tier environment.Tier) (transform.Result, error)
+	ReadApps      func(tier environment.Tier, slug string) map[string]transform.Result
 }
 
 var Supported = []edge.Kind{alb.Kind, cloudflare.Kind}
@@ -93,6 +97,9 @@ func (e Registry) OpenALB() *alb.Edge {
 		ReadAssetsBucket:   e.Assets,
 		CopyImmutableFiles: e.CopyFiles,
 		FrontPart:          e.FrontPart,
+
+		EvaluateFront: e.EvaluateFront,
+		ReadApps:      e.ReadApps,
 	})
 }
 

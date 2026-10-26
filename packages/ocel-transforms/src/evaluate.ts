@@ -8,7 +8,7 @@ import {
   type TransformDefinition,
   type TransformRule,
 } from "./define.js";
-import { gcpAllowedPaths } from "./gcp/index.js";
+import { gcpAllowedPaths, gcpOwnedFields } from "./gcp/index.js";
 import type { TransformBindings } from "./index.js";
 import { bindings, isBindingOutput } from "./output.js";
 import { vpsOwnedFields } from "./vps/index.js";
@@ -57,6 +57,7 @@ type SurfaceNames = Record<string, Record<string, readonly string[]>>;
 
 const ownedFields: Record<string, SurfaceNames> = {
   aws: awsOwnedFields,
+  gcp: gcpOwnedFields,
   vps: vpsOwnedFields,
 };
 
@@ -65,7 +66,10 @@ const allowedPaths: Record<string, SurfaceNames> = {
 };
 
 function surfacesOf(provider: string): SurfaceNames | undefined {
-  return ownedFields[provider] ?? allowedPaths[provider];
+  const owned = ownedFields[provider];
+  const allowed = allowedPaths[provider];
+  if (owned === undefined && allowed === undefined) return undefined;
+  return { ...owned, ...allowed };
 }
 
 interface LoadedModule {
@@ -220,14 +224,23 @@ function applyPatch(
       );
     }
   }
-  for (const field of Object.keys(fields)) {
-    if (owned?.includes(field)) {
+  for (const field of owned ?? []) {
+    if (sets(fields, field)) {
       throw new Error(
         `${specifier}: a rule sets ${provider}.${type}.${key}.${field}, which ocel fills from what this deploy built; drop it and let ocel own it`,
       );
     }
   }
   into[key] = mergePatch(into[key] ?? {}, fields) as Record<string, unknown>;
+}
+
+function sets(fields: Record<string, unknown>, path: string): boolean {
+  const [head, ...rest] = path.split(".");
+  if (head === undefined || !Object.hasOwn(fields, head)) return false;
+  if (rest.length === 0) return true;
+  const nested = fields[head];
+  if (nested === undefined) return false;
+  return !plainObject(nested) || sets(nested, rest.join("."));
 }
 
 function refusedPaths(prefix: string, value: unknown, allowed: readonly string[]): string[] {

@@ -159,6 +159,69 @@ export const ownedPersistence = defineTransform({
   },
 });
 
+export const armored = defineTransform({
+  gcp: {
+    edge: {
+      backendService: {
+        securityPolicy: bindings.custom.armor.policy,
+        timeoutSec: 120,
+        logConfig: { enable: true, sampleRate: 0.5 },
+        customResponseHeaders: ["Strict-Transport-Security: max-age=31536000"],
+        cdnPolicy: { serveWhileStale: 86400, negativeCaching: true },
+      },
+      certificateMapEntry: { description: "web" },
+    },
+    loadBalancer: {
+      httpsProxy: { sslPolicy: "modern-tls", quicOverride: "ENABLE" },
+      assetsBackend: { compressionMode: "AUTOMATIC" },
+    },
+  },
+});
+
+export const ownedBackendName = defineTransform({
+  gcp: {
+    edge: {
+      backendService: {
+        // @ts-expect-error ocel names the backend service itself
+        name: "mine",
+      },
+    },
+  },
+});
+
+export const ownedCacheMode = defineTransform({
+  gcp: {
+    edge: {
+      backendService: {
+        // @ts-expect-error the edge's invalidation relies on ocel's cache mode
+        cdnPolicy: { cacheMode: "CACHE_ALL_STATIC" },
+      },
+    },
+  },
+});
+
+export const ownedHostRules = defineTransform({
+  gcp: {
+    loadBalancer: {
+      urlMap: {
+        // @ts-expect-error ocel writes the url map's host rules itself
+        hostRules: [],
+      },
+    },
+  },
+});
+
+export const boundFront = defineTransform({
+  gcp: {
+    loadBalancer: {
+      httpsProxy: {
+        // @ts-expect-error the tier's load balancer reads no project's bindings
+        sslPolicy: bindings.custom.tls.policy,
+      },
+    },
+  },
+});
+
 export const retainedTopic = defineTransform({
   gcp: {
     topic: {

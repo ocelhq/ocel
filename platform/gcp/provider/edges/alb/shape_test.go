@@ -71,14 +71,14 @@ func TestTheLoadBalancerShapeMatchesItsProgram(t *testing.T) {
 
 	spec := loadBalancerSpec{Namespace: "ocel", Region: "europe-west1", Names: loadBalancerNames("ocel", environment.TierPreview),
 		Assets: &tierAssets, Preview: previewEntry{BaseDomain: "preview.example.com", Certificate: "cert"}}
-	registered := declaredCounts(t, loadBalancerProgram(spec))
+	registered := declaredCounts(t, must(loadBalancerProgram(spec)))
 	maps.Copy(registered, declaredCounts(t, gateProgram(gateSpec{Names: spec.Names, Main: newGateVersion("image", "config")})))
 	shaped := shapedCounts(shapedBalancer(t, environment.TierPreview))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("the balancer and gate programs register %v, the shape lists %v", registered, shaped)
 	}
 
-	registered = declaredCounts(t, loadBalancerProgram(frontSpec()))
+	registered = declaredCounts(t, must(loadBalancerProgram(frontSpec())))
 	maps.Copy(registered, declaredCounts(t, gateProgram(gateSpec{Names: frontSpec().Names, Main: newGateVersion("image", "config")})))
 	shaped = shapedCounts(shapedBalancer(t, environment.TierProduction))
 	if !maps.Equal(registered, shaped) {
@@ -112,7 +112,7 @@ func TestTheHostShapeMatchesTheBindingProgram(t *testing.T) {
 		"shop.example.com":  {Certificate: "cert", Service: "svc-a", Backend: must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))},
 		"admin.example.com": {Certificate: "cert", Service: "svc-b", Backend: must(backendName("ocel", "shop", environment.TierProduction, "admin.example.com"))},
 	}
-	registered := declaredCounts(t, binding(hosts))
+	registered := declaredCounts(t, must(binding(hosts)))
 	shaped := shapedCounts(shapedHosts(t, environment.TierProduction, "shop.example.com", "admin.example.com"))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("the binding program registers %v, the shape lists %v", registered, shaped)

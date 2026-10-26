@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defineTransform } from "../define.js";
 import { type EvaluateRequest, evaluate, type TransformModule } from "../evaluate.js";
+import { bindings } from "../output.js";
 
 function request(): EvaluateRequest {
   return {
@@ -365,5 +366,128 @@ describe("the gcp branch for a database and a store", () => {
     expect(() => evaluate(requesting("kv", "cache"), modules)).toThrow(
       /gcp\.kv\.instance\.nodeType/,
     );
+  });
+});
+
+describe("the gcp branch over the load balancer ocel provisions with Pulumi", () => {
+  function edgeRequest(): EvaluateRequest {
+    return {
+      provider: "gcp",
+      envTier: "production",
+      env: "",
+      resources: [{ type: "edge", name: "web", app: "web" }],
+    };
+  }
+
+  function frontRequest(): EvaluateRequest {
+    return {
+      provider: "gcp",
+      envTier: "production",
+      env: "",
+      resources: [{ type: "loadBalancer", name: "production" }],
+    };
+  }
+
+  it("hands the provider an app's backend service patch, in the args @pulumi/gcp takes", () => {
+    const modules = [
+      module(
+        "./armor.transform.ts",
+        defineTransform({
+          gcp: {
+            edge: {
+              backendService: {
+                securityPolicy: "web-armor",
+                timeoutSec: 120,
+                logConfig: { enable: true, sampleRate: 0.5 },
+                cdnPolicy: { serveWhileStale: 86400 },
+              },
+            },
+          },
+        }),
+      ),
+    ];
+
+    expect(evaluate(edgeRequest(), modules).resources[0]?.patches).toEqual({
+      backendService: {
+        securityPolicy: "web-armor",
+        timeoutSec: 120,
+        logConfig: { enable: true, sampleRate: 0.5 },
+        cdnPolicy: { serveWhileStale: 86400 },
+      },
+    });
+  });
+
+  it.each([
+    ["backendService", { name: "mine" }, "backendService.name"],
+    ["backendService", { backends: [] }, "backendService.backends"],
+    [
+      "backendService",
+      { cdnPolicy: { cacheMode: "CACHE_ALL_STATIC" } },
+      "backendService.cdnPolicy.cacheMode",
+    ],
+    ["backendService", { cdnPolicy: null }, "backendService.cdnPolicy.bypassCacheOnRequestHeaders"],
+    [
+      "backendService",
+      { cdnPolicy: bindings.custom!.edge!.policy },
+      "backendService.cdnPolicy.bypassCacheOnRequestHeaders",
+    ],
+    ["backendService", { cdnPolicy: [] }, "backendService.cdnPolicy.bypassCacheOnRequestHeaders"],
+    ["neg", { cloudRun: { service: "other" } }, "neg.cloudRun"],
+    ["certificateMapEntry", { hostname: "other.example.com" }, "certificateMapEntry.hostname"],
+  ])("refuses %s %o, which routing depends on", (key, patch, named) => {
+    const modules = [
+      module("./owned.transform.ts", defineTransform({ gcp: { edge: { [key]: patch } } } as never)),
+    ];
+
+    expect(() => evaluate(edgeRequest(), modules)).toThrow(
+      new RegExp(`gcp\\.edge\\.${named.replaceAll(".", "\\.")}`),
+    );
+  });
+
+  it("keeps a sibling of a nested field ocel owns open", () => {
+    const modules = [
+      module(
+        "./stale.transform.ts",
+        defineTransform({
+          gcp: { edge: { backendService: { cdnPolicy: { negativeCaching: true } } } },
+        }),
+      ),
+    ];
+
+    expect(evaluate(edgeRequest(), modules).resources[0]?.patches).toEqual({
+      backendService: { cdnPolicy: { negativeCaching: true } },
+    });
+  });
+
+  it("patches the tier's load balancer beside a bucket in one rule", () => {
+    const definition = defineTransform({
+      gcp: {
+        bucket: { bucket: { storageClass: "NEARLINE" } },
+        loadBalancer: { httpsProxy: { sslPolicy: "modern-tls", quicOverride: "ENABLE" } },
+      },
+    });
+    const evaluated = evaluate(
+      {
+        ...frontRequest(),
+        resources: [...frontRequest().resources, { type: "bucket", name: "uploads" }],
+      },
+      [module("./front.transform.ts", definition)],
+    );
+
+    expect(evaluated.resources.map((resource) => resource.patches)).toEqual([
+      { httpsProxy: { sslPolicy: "modern-tls", quicOverride: "ENABLE" } },
+      { bucket: { storageClass: "NEARLINE" } },
+    ]);
+  });
+
+  it("refuses the url map's host rules, which ocel writes itself", () => {
+    const modules = [
+      module(
+        "./routes.transform.ts",
+        defineTransform({ gcp: { loadBalancer: { urlMap: { hostRules: [] } } } } as never),
+      ),
+    ];
+
+    expect(() => evaluate(frontRequest(), modules)).toThrow(/gcp\.loadBalancer\.urlMap\.hostRules/);
   });
 });

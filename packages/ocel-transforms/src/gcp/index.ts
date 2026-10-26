@@ -1,4 +1,5 @@
 import type {
+  certificatemanager,
   cloudrunv2,
   cloudscheduler,
   compute,
@@ -308,6 +309,218 @@ type Translated<T extends GcpResourceType, K extends keyof GcpResourceArgs[T]> =
   AllowedNames<GcpAllowed[T][K & keyof GcpAllowed[T]]>
 >;
 
+/**
+ * One key per Pulumi resource the GCP provider constructs for an ocel
+ * resource, typed from the `@pulumi/gcp` args for the same resource. A patch
+ * reaches these resources as written, less the fields ocel owns.
+ */
+export interface GcpPulumiResourceArgs {
+  /**
+   * What the `alb` edge serves one app's hostnames through, one of each per
+   * hostname: the serverless network endpoint group that reaches the app's
+   * Cloud Run service, the backend service in front of it, and the certificate
+   * map entry for the hostname. `customResponseHeaders` are added after the
+   * `X-Robots-Tag: noindex` header a preview tier's backends send. A rule sees
+   * no `env` for it, since one backend serves the hostname in every
+   * environment of the tier, and the patch applies the next time the app is
+   * deployed.
+   */
+  edge: {
+    backendService: compute.BackendServiceArgs;
+    neg: compute.RegionNetworkEndpointGroupArgs;
+    certificateMapEntry: certificatemanager.CertificateMapEntryArgs;
+  };
+  /**
+   * The tier's global external Application Load Balancer, shared by every
+   * project behind the `alb` edge: its address, the backend that answers
+   * unclaimed hostnames, the backend bucket that serves static files, the
+   * certificate map, the URL map, the HTTPS proxy and the forwarding rule. A
+   * rule sees no `env` or `app` for it. Patches from the projects of one tier
+   * must agree: a deploy whose patches differ from the ones the load balancer
+   * carries provisions it again with its own.
+   */
+  loadBalancer: {
+    address: compute.GlobalAddressArgs;
+    notFoundBackend: compute.BackendServiceArgs;
+    assetsBackend: compute.BackendBucketArgs;
+    certificateMap: certificatemanager.CertificateMapArgs;
+    urlMap: compute.URLMapArgs;
+    httpsProxy: compute.TargetHttpsProxyArgs;
+    forwardingRule: compute.GlobalForwardingRuleArgs;
+  };
+}
+
+/** The ocel resource types the GCP provider renders Pulumi resources for. */
+export type GcpPulumiResourceType = keyof GcpPulumiResourceArgs;
+
+/** A field of `T`, or a field of one of `T`'s object fields, as a dotted path. */
+export type OwnedPath<T> = {
+  [K in keyof T & string]-?: NonNullable<T[K]> extends readonly unknown[]
+    ? K
+    : NonNullable<T[K]> extends object
+      ? K | `${K}.${keyof NonNullable<T[K]> & string}`
+      : K;
+}[keyof T & string];
+
+type OwnedFieldNames = {
+  [T in GcpPulumiResourceType]: {
+    [K in keyof GcpPulumiResourceArgs[T]]: readonly OwnedPath<
+      Unwrap<GcpPulumiResourceArgs[T][K]>
+    >[];
+  };
+};
+
+const ownedBackendService = [
+  "backends",
+  "cdnPolicy.bypassCacheOnRequestHeaders",
+  "cdnPolicy.cacheKeyPolicy",
+  "cdnPolicy.cacheMode",
+  "deletionPolicy",
+  "enableCdn",
+  "externalManagedMigrationState",
+  "externalManagedMigrationTestingPercentage",
+  "loadBalancingScheme",
+  "name",
+  "params",
+  "project",
+  "protocol",
+] as const;
+
+/**
+ * The fields of the Pulumi resources under `gcp` that ocel fills itself —
+ * the names it minted, what each resource routes to, the protocol, scheme and
+ * port a request arrives on, the cache mode and key the edge's invalidation
+ * relies on, how teardown deletes them, and the labels it writes from a
+ * rule's tags. A patch naming one is refused where it is written.
+ */
+export const gcpOwnedFields = {
+  edge: {
+    backendService: ownedBackendService,
+    neg: [
+      "appEngine",
+      "cloudFunction",
+      "cloudRun",
+      "deletionPolicy",
+      "name",
+      "network",
+      "networkEndpointType",
+      "project",
+      "pscData",
+      "pscTargetService",
+      "region",
+      "serverlessDeployment",
+      "subnetwork",
+    ],
+    certificateMapEntry: [
+      "certificates",
+      "deletionPolicy",
+      "hostname",
+      "labels",
+      "map",
+      "matcher",
+      "name",
+      "project",
+    ],
+  },
+  loadBalancer: {
+    address: [
+      "address",
+      "addressType",
+      "deletionPolicy",
+      "ipVersion",
+      "labels",
+      "name",
+      "network",
+      "prefixLength",
+      "project",
+      "purpose",
+    ],
+    notFoundBackend: [
+      "backends",
+      "cdnPolicy",
+      "deletionPolicy",
+      "enableCdn",
+      "externalManagedMigrationState",
+      "externalManagedMigrationTestingPercentage",
+      "loadBalancingScheme",
+      "name",
+      "params",
+      "project",
+      "protocol",
+    ],
+    assetsBackend: [
+      "bucketName",
+      "cdnPolicy.cacheMode",
+      "cdnPolicy.negativeCaching",
+      "deletionPolicy",
+      "enableCdn",
+      "loadBalancingScheme",
+      "name",
+      "params",
+      "project",
+    ],
+    certificateMap: ["deletionPolicy", "labels", "name", "project"],
+    urlMap: [
+      "defaultRouteAction",
+      "defaultService",
+      "defaultUrlRedirect",
+      "deletionPolicy",
+      "headerAction",
+      "hostRules",
+      "name",
+      "pathMatchers",
+      "project",
+      "tests",
+    ],
+    httpsProxy: [
+      "certificateManagerCertificates",
+      "certificateMap",
+      "deletionPolicy",
+      "name",
+      "project",
+      "proxyBind",
+      "sslCertificates",
+      "urlMap",
+    ],
+    forwardingRule: [
+      "allowPscGlobalAccess",
+      "deletionPolicy",
+      "externalManagedBackendBucketMigrationState",
+      "externalManagedBackendBucketMigrationTestingPercentage",
+      "ipAddress",
+      "ipProtocol",
+      "ipVersion",
+      "labels",
+      "loadBalancingScheme",
+      "metadataFilters",
+      "name",
+      "network",
+      "networkTier",
+      "noAutomateDnsZone",
+      "portRange",
+      "project",
+      "serviceDirectoryRegistrations",
+      "sourceIpRanges",
+      "subnetwork",
+      "target",
+    ],
+  },
+} as const satisfies OwnedFieldNames;
+
+type GcpOwned = typeof gcpOwnedFields;
+
+type OwnedNames<L> = L extends readonly (infer F)[] ? Extract<F, string> : never;
+
+type TopOf<P extends string> = P extends `${string}.${string}` ? never : P;
+
+type UnderOf<P extends string, K extends string> = P extends `${K}.${infer F}` ? F : never;
+
+type OmitOwned<T, P extends string> = {
+  [K in keyof T as K extends TopOf<P> ? never : K]: [UnderOf<P, K & string>] extends [never]
+    ? T[K]
+    : Omit<NonNullable<T[K]>, UnderOf<P, K & string>>;
+};
+
 type WrittenDown<T> = T extends undefined | null
   ? never
   : T extends readonly (infer E)[]
@@ -316,10 +529,17 @@ type WrittenDown<T> = T extends undefined | null
       ? { readonly [K in keyof T]?: WrittenDown<T[K]> }
       : T;
 
+type Patchable<
+  T extends GcpPulumiResourceType,
+  K extends keyof GcpPulumiResourceArgs[T],
+> = OmitOwned<Unwrap<GcpPulumiResourceArgs[T][K]>, OwnedNames<GcpOwned[T][K & keyof GcpOwned[T]]>>;
+
 /**
- * What a rule may patch under `gcp`: the args `@pulumi/gcp` takes for the
- * resource, cut down to the paths ocel translates. A binding output can take
- * the place of any leaf but the network's: it belongs to every project of the
+ * What a rule may patch under `gcp`: for a resource ocel calls Google's API
+ * for itself, the args `@pulumi/gcp` takes cut down to the paths ocel
+ * translates; for one ocel provisions with Pulumi, the args with the fields
+ * ocel owns removed. A binding output can take the place of any leaf but the
+ * network's and the load balancer's: each belongs to every project of the
  * tier, so no project's binding fills it.
  */
 export type GcpSurfaces = {
@@ -327,5 +547,11 @@ export type GcpSurfaces = {
     [K in keyof GcpResourceArgs[T]]: T extends "network"
       ? WrittenDown<Translated<T, K>>
       : Patch<Translated<T, K>>;
+  };
+} & {
+  [T in GcpPulumiResourceType]: {
+    [K in keyof GcpPulumiResourceArgs[T]]: T extends "loadBalancer"
+      ? WrittenDown<Patchable<T, K>>
+      : Patch<Patchable<T, K>>;
   };
 };

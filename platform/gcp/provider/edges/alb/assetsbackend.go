@@ -8,7 +8,6 @@ import (
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/projects"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -23,7 +22,7 @@ type AssetsBucket struct {
 	Agent string
 }
 
-func declareAssetsBackend(ctx *pulumi.Context, names names, tier environment.Tier, assets AssetsBucket, project pulumi.String) (*compute.BackendBucket, error) {
+func declareAssetsBackend(ctx *pulumi.Context, names names, headers pulumi.StringArray, assets AssetsBucket, project pulumi.String) (*compute.BackendBucket, error) {
 	args := &compute.BackendBucketArgs{
 		Name:       pulumi.String(names.AssetsBackend),
 		Project:    project,
@@ -34,7 +33,7 @@ func declareAssetsBackend(ctx *pulumi.Context, names names, tier environment.Tie
 			NegativeCaching: pulumi.Bool(false),
 		},
 	}
-	if headers := responseHeadersOf(tier); len(headers) > 0 {
+	if len(headers) > 0 {
 		args.CustomResponseHeaders = headers
 	}
 	bucket, err := compute.NewBackendBucket(ctx, names.AssetsBackend, args)
@@ -55,9 +54,16 @@ func declareAssetsBackend(ctx *pulumi.Context, names names, tier environment.Tie
 }
 
 func (e *Edge) raiseFront(ctx context.Context, spec loadBalancerSpec, progress progress.Log) (map[string]string, error) {
+	program, err := loadBalancerProgram(spec)
+	if err != nil {
+		return nil, err
+	}
 	for attempt := 1; ; attempt++ {
-		outputs, err := e.deps.Stacks.Up(ctx, e.loadBalancerTarget(spec.Tier), loadBalancerProgram(spec), progress)
-		if err == nil || !isUnseenAgent(err, spec.Assets) || attempt == agentAppearsAttempts {
+		outputs, err := e.deps.Stacks.Up(ctx, e.loadBalancerTarget(spec.Tier), program, progress)
+		if err == nil {
+			return outputs, program.Patches.RefuseUnclaimed()
+		}
+		if !isUnseenAgent(err, spec.Assets) || attempt == agentAppearsAttempts {
 			return outputs, err
 		}
 		if !e.deps.WaitBeforeRetry(ctx, attempt) {

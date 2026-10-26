@@ -53,8 +53,10 @@ type IAM struct {
 	ProjectStale    int
 	ProjectAttempts int
 	ProjectDenied   bool
-	MissingRole     string
-	MissingRoleAsks int
+
+	ProjectDeniedPermissions []string
+	MissingRole              string
+	MissingRoleAsks          int
 
 	AccountPolicies     map[string]*iam.Policy
 	Roles               map[string][]string
@@ -330,6 +332,14 @@ func (s *IAM) Rest(t *testing.T) http.HandlerFunc {
 			_ = json.NewEncoder(w).Encode(map[string]string{"name": path, "state": state})
 		case r.Method == http.MethodGet && path == "/v1/projects/acme-prod":
 			_, _ = w.Write([]byte(`{"projectId":"acme-prod","projectNumber":"123456789"}`))
+		case r.Method == http.MethodPost && path == "/v1/projects/acme-prod:testIamPermissions":
+			asked := ReadBody[cloudresourcemanager.TestIamPermissionsRequest](w, r)
+			if asked == nil {
+				return
+			}
+			WriteBody(w, &cloudresourcemanager.TestIamPermissionsResponse{Permissions: slices.DeleteFunc(asked.Permissions, func(permission string) bool {
+				return slices.Contains(s.ProjectDeniedPermissions, permission)
+			})})
 		case strings.HasPrefix(path, "/v1/projects/") && strings.HasSuffix(path, ":getIamPolicy") && !strings.Contains(path, "/serviceAccounts/") && !strings.Contains(path, "/topics/"):
 			if other, set := s.ProjectPolicies[strings.TrimSuffix(strings.TrimPrefix(path, "/v1/projects/"), ":getIamPolicy")]; set {
 				_ = json.NewEncoder(w).Encode(other)
