@@ -32,9 +32,8 @@ func (r *deployRun) newSpans() deploySpans {
 			progress.Attaching.Title(namedList("production hostname", "production hostnames", r.hostnames())), progressv1.Phase_PHASE_PROVISION),
 		Lease: RootSpan(SpanLease, env,
 			progress.Checking.Title("that no other deploy to "+where+" is running"), progressv1.Phase_PHASE_PROVISION),
-		Promotion: RootSpan(SpanPromotion, env,
-			progress.Switching.Title("traffic to promotion "+r.spec.PromotionID), progressv1.Phase_PHASE_PROMOTE),
-		Apps: make(map[string]Span, len(r.spec.Apps)),
+		Promotion: RootSpan(SpanPromotion, env, r.mode.promotionTitle(r.spec.PromotionID, where), progressv1.Phase_PHASE_PROMOTE),
+		Apps:      make(map[string]Span, len(r.spec.Apps)),
 	}
 	for _, entry := range r.spec.Apps {
 		s.Apps[entry.App] = RootSpan(entry.Stack.String(), entry.App,
@@ -46,6 +45,11 @@ func (r *deployRun) newSpans() deploySpans {
 func checkingSpan(spec provider.DeploySpec) Span {
 	return RootSpan(SpanEnvironment, environmentSubject(spec.Tier, spec.Env),
 		progress.Checking.Title("the bootstrap, domains and bindings for "+spec.Slug), progressv1.Phase_PHASE_PROVISION)
+}
+
+func releasingSpan(spec provider.DeploySpec) Span {
+	return RootSpan(SpanLeaseEnd, environmentSubject(spec.Tier, spec.Env),
+		progress.Releasing.Title(environmentPhrase(spec.Tier, spec.Env)+" for other deploys"), progressv1.Phase_PHASE_PROVISION)
 }
 
 func (r *deployRun) describeInfra() string {

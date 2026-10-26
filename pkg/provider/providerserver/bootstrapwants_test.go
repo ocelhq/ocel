@@ -210,6 +210,20 @@ func TestADeployThroughAnEdgeIsRefusedByABootstrapLackingThePartsThatEdgeRequire
 	}
 }
 
+func TestADeployTheProviderRefusesForAPartItWantsLeavesTheWantForTheBootstrapCommandToAdd(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	refusingForAWantedPart(vendor)
+
+	if result, _ := deploy(t, client, deployRequest()); result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want it refused for the part the provider wants")
+	}
+
+	if got := wantedParts(t, vendor, environment.TierProduction); !slices.Equal(got[fake.PartCache], []string{"shop"}) {
+		t.Errorf("wants = %v, want shop to want %s", got, fake.PartCache)
+	}
+}
+
 func TestARefusedDeployLeavesTheWantForTheBootstrapCommandToAdd(t *testing.T) {
 	builtApps(t, "web")
 	client, vendor := contractServed(t, "1.0.0")

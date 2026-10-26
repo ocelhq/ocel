@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -356,6 +357,34 @@ func TestADeployNamesItsCheckThatItStillHoldsTheEnvironmentBeforeItSwitchesTraff
 	}
 	if checked < 0 || switching < 0 || checked > switching {
 		t.Errorf("the check ended at event %d and the switch started at %d, want the deploy to name its check that it still holds prod before it switches traffic", checked, switching)
+	}
+}
+
+func TestADeployReleasesItsEnvironmentInASpanOfItsOwnWhetherItSwitchedTrafficOrWasRefused(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		refuse func(vendor *fake.Provider)
+	}{
+		{name: "a deploy that switched traffic", refuse: func(*fake.Provider) {}},
+		{name: "a deploy refused while it checks the bootstrap", refuse: refusingForAWantedPart},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			builtProject(t)
+			client, vendor := deployServed(t)
+			tc.refuse(vendor)
+
+			_, events := deploy(t, client, deployRequest())
+
+			var released []progressv1.Phase
+			for _, span := range startedSpans(events) {
+				if span.title == "Releasing prod for other deploys" {
+					released = append(released, span.phase)
+				}
+			}
+			if want := []progressv1.Phase{progressv1.Phase_PHASE_PROVISION}; !slices.Equal(released, want) {
+				t.Errorf("the deploy released prod in phases %v, want %v", released, want)
+			}
+		})
 	}
 }
 

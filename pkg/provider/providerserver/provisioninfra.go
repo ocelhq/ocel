@@ -35,13 +35,14 @@ func (h *handlers) ProvisionInfra(ctx context.Context, req *contractv1.Provision
 		var hold *leaseHold
 		var run *deployRun
 		var undeclared []*contractv1.ManifestResource
-		err = newSpanEvents(sender).run(checkingSpan(spec), func(env *spanRun) error {
+		spans := newSpanEvents(sender)
+		err = spans.run(checkingSpan(spec), func(env *spanRun) error {
 			return env.phase(func(progress progress.Log) error {
 				if hold, err = h.takeEnvironment(ctx, spec, req.GetLeaseToken()); err != nil {
 					return err
 				}
 				leased := hold.context(ctx)
-				if run, err = h.openInfraRun(leased, req, spec, sender); err != nil {
+				if run, err = h.openInfraRun(leased, req, spec, spans); err != nil {
 					return err
 				}
 				if undeclared, err = run.readCurrentInfra(leased); err != nil {
@@ -67,7 +68,7 @@ func (h *handlers) ProvisionInfra(ctx context.Context, req *contractv1.Provision
 	})
 }
 
-func (h *handlers) openInfraRun(ctx context.Context, req *contractv1.ProvisionInfraRequest, spec provider.DeploySpec, sender *eventStream) (*deployRun, error) {
+func (h *handlers) openInfraRun(ctx context.Context, req *contractv1.ProvisionInfraRequest, spec provider.DeploySpec, spans *spanEvents) (*deployRun, error) {
 	deploy := &contractv1.DeployRequest{
 		Manifest:       req.GetManifest(),
 		Environment:    req.GetEnvironment(),
@@ -80,7 +81,7 @@ func (h *handlers) openInfraRun(ctx context.Context, req *contractv1.ProvisionIn
 	if err != nil {
 		return nil, err
 	}
-	return h.openDeploy(ctx, deploy, spec, mode, sender)
+	return h.openDeploy(ctx, deploy, spec, mode, spans)
 }
 
 func refuseInfraRequest(req *contractv1.ProvisionInfraRequest) error {

@@ -5,15 +5,22 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func assertSpansClose(t *testing.T, events []*progressv1.OperationEvent) {
@@ -327,4 +334,167 @@ func TestBootstrapEndsEverySpanItStarts(t *testing.T) {
 			}
 		}
 	})
+}
+
+type timedCall struct {
+	name            string
+	began, returned time.Time
+}
+
+type timedCalls struct {
+	mu    sync.Mutex
+	calls []timedCall
+}
+
+func (c *timedCalls) time(name string, began time.Time) {
+	returned := time.Now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls = append(c.calls, timedCall{name: name, began: began, returned: returned})
+}
+
+func (c *timedCalls) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls = nil
+}
+
+func (c *timedCalls) list() []timedCall {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.calls)
+}
+
+type timedStore struct {
+	records.Store
+	calls *timedCalls
+}
+
+func (s timedStore) Read(ctx context.Context, key records.Key) (records.Entry, error) {
+	defer s.calls.time("read "+key.String(), time.Now())
+	return s.Store.Read(ctx, key)
+}
+
+func (s timedStore) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
+	defer s.calls.time("write "+entry.Key.String(), time.Now())
+	return s.Store.Write(ctx, entry)
+}
+
+func (s timedStore) WritePair(ctx context.Context, first, second records.Entry) error {
+	defer s.calls.time("write "+first.Key.String()+" and "+second.Key.String(), time.Now())
+	return s.Store.WritePair(ctx, first, second)
+}
+
+func (s timedStore) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
+	defer s.calls.time("remove "+key.String(), time.Now())
+	return s.Store.Remove(ctx, key, expected)
+}
+
+func (s timedStore) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
+	defer s.calls.time("list "+in.String(), time.Now())
+	return s.Store.List(ctx, in, under...)
+}
+
+type timedProvider struct {
+	*fake.Provider
+	store timedStore
+}
+
+func (p timedProvider) KeyValues() records.Store { return p.store }
+
+func timedServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider, *timedCalls) {
+	t.Helper()
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	calls := &timedCalls{}
+	client := servedProvider(t, "1.0.0", timedProvider{Provider: vendor, store: timedStore{Store: vendor.KeyValues(), calls: calls}})
+	return client, vendor, calls
+}
+
+func callsNoSpanNamed(events []*progressv1.OperationEvent, calls []timedCall) []string {
+	type window struct{ start, end time.Time }
+	started := map[string]time.Time{}
+	var windows []window
+	for _, event := range events {
+		id := string(event.GetSpanId())
+		if opened := event.GetStarted(); opened != nil && len(opened.GetParentSpanId()) == 0 {
+			started[id] = event.GetTime().AsTime()
+		}
+		if start, open := started[id]; open && event.GetEnded() != nil {
+			windows = append(windows, window{start: start, end: event.GetTime().AsTime()})
+		}
+	}
+	var unnamed []string
+	for _, call := range calls {
+		if !slices.ContainsFunc(windows, func(w window) bool { return !call.began.Before(w.start) && !call.returned.After(w.end) }) {
+			unnamed = append(unnamed, call.name)
+		}
+	}
+	return unnamed
+}
+
+func timeRetirementPlans(vendor *fake.Provider, calls *timedCalls) {
+	vendor.WithHooks(func(hooks *provider.Hooks) {
+		retirement := *hooks.Retirement
+		plan := retirement.Plan
+		retirement.Plan = func(ctx context.Context, live provider.LiveApps, log progress.Log) (provider.Plan, error) {
+			defer calls.time("plan which apps retire", time.Now())
+			return plan(ctx, live, log)
+		}
+		hooks.Retirement = &retirement
+	})
+}
+
+func refusingForAWantedPart(vendor *fake.Provider) {
+	vendor.WithHooks(func(hooks *provider.Hooks) {
+		hooks.Preflight = &provider.PreflightHooks{
+			Plan: func(context.Context, provider.DeployPreflight) (provider.Plan, error) { return provider.Plan{}, nil },
+			Apply: func(context.Context, provider.DeployPreflight) error {
+				return provider.WantedPartError{Part: fake.PartCache, Err: refusal.Refuse(refusal.CodeNotReady, "the bootstrap has no cache")}
+			},
+		}
+	})
+}
+
+func TestEveryRecordADeployReadsOrWritesIsReadOrWrittenWhileASpanNamesIt(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		preview bool
+		request func(t *testing.T, vendor *fake.Provider) *contractv1.DeployRequest
+	}{
+		{name: "a production deploy", request: func(*testing.T, *fake.Provider) *contractv1.DeployRequest { return deployRequest() }},
+		{name: "a dry run", request: func(*testing.T, *fake.Provider) *contractv1.DeployRequest {
+			req := deployRequest()
+			req.Dry = true
+			return req
+		}},
+		{name: "a preview deploy", preview: true, request: func(*testing.T, *fake.Provider) *contractv1.DeployRequest { return previewRequest() }},
+		{name: "a deploy that fails attaching its hostnames", request: func(t *testing.T, vendor *fake.Provider) *contractv1.DeployRequest {
+			writer, err := vendor.DNS().Open(fake.KindZone, "shop.example", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			writer.(*fake.DNSRecords).Refuse(errors.New("the zone's api answered 500"))
+			req := deployRequest()
+			req.Edge = writtenBy("shop.example")
+			return req
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			builtProject(t)
+			client, vendor, calls := timedServed(t)
+			bootstrappedOverRPC(t, client)
+			if tc.preview {
+				previewBootstrapped(t, client)
+			}
+			timeRetirementPlans(vendor, calls)
+			req := tc.request(t, vendor)
+			calls.reset()
+
+			_, events := deploy(t, client, req)
+
+			if unnamed := callsNoSpanNamed(events, calls.list()); len(unnamed) > 0 {
+				t.Errorf("the deploy made these calls while no span named what it waited on: %v", unnamed)
+			}
+		})
+	}
 }

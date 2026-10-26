@@ -42,6 +42,7 @@ func TestEverySpanAProductionDeployOpensNamesWhichThingItWorksOnAndWhatItDoes(t 
 		{"relay", "Attaching production hostname shop.example"},
 		{"prod", "Checking that no other deploy to prod is running"},
 		{"prod", "Switching traffic to promotion " + result.GetPromotionId()},
+		{"prod", "Releasing prod for other deploys"},
 	}
 	if got := openedSpans(events); !slices.Equal(got, want) {
 		t.Errorf("the deploy opened spans\n%v\nwant\n%v", got, want)
@@ -63,6 +64,7 @@ func TestEverySpanADryRunOpensSaysItOnlyReadsOrPlans(t *testing.T) {
 		{"relay", "Reading the routes for shop in prod"},
 		{"prod", "Planning shared resource orders"},
 		{"web", "Planning the serverless app for prod"},
+		{"prod", "Planning the promotion to prod"},
 	}
 	if got := openedSpans(events); !slices.Equal(got, want) {
 		t.Errorf("the dry run opened spans\n%v\nwant\n%v", got, want)
@@ -85,6 +87,7 @@ func TestAPreviewDeploysSpansNameThePreviewTheyDeployTo(t *testing.T) {
 		{"web", "Deploying the serverless app to preview pr-7"},
 		{"pr-7", "Checking that no other deploy to preview pr-7 is running"},
 		{"pr-7", "Switching traffic to promotion " + result.GetPromotionId()},
+		{"pr-7", "Releasing preview pr-7 for other deploys"},
 	}
 	if got := openedSpans(events); !slices.Equal(got, want) {
 		t.Errorf("the preview deploy opened spans\n%v\nwant\n%v", got, want)

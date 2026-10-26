@@ -16,6 +16,7 @@ import (
 
 type deployMode interface {
 	verbs() spanVerbs
+	promotionTitle(promotionID, where string) progress.Title
 	claim(ctx context.Context, h *handlers, spec provider.DeploySpec, token string) (*leaseHold, error)
 	finish(ctx context.Context, r *deployRun, err error) error
 
@@ -61,6 +62,10 @@ type planned struct {
 
 func (*planned) verbs() spanVerbs {
 	return spanVerbs{routes: progress.Reading, infra: progress.Planning, app: progress.Planning, onto: "for"}
+}
+
+func (*planned) promotionTitle(_, where string) progress.Title {
+	return progress.Planning.Title("the promotion to " + where)
 }
 
 func (*planned) claim(context.Context, *handlers, provider.DeploySpec, string) (*leaseHold, error) {
@@ -135,12 +140,20 @@ func (p *planned) app(ctx context.Context, r *deployRun, slot int, release appSt
 func (*planned) hostnames(context.Context, *deployRun) error { return nil }
 
 func (p *planned) promote(ctx context.Context, r *deployRun) (*progressv1.OperationEvent, error) {
-	retired, err := planRetirement(ctx, r.provider, r.liveApps(), progress.Discard())
+	err := r.spanEvents.run(r.spans.Promotion, func(u *spanRun) error {
+		return u.phase(func(progress.Log) error {
+			retired, err := planRetirement(ctx, r.provider, r.liveApps(), progress.Discard())
+			if err != nil {
+				return err
+			}
+			p.drawn.retired = retired
+			p.drawn.promotion = r.planPromotionGroup()
+			return nil
+		})
+	})
 	if err != nil {
 		return nil, err
 	}
-	p.drawn.retired = retired
-	p.drawn.promotion = r.planPromotionGroup()
 	r.sender.send(planEvent(ChangePlanProto(p.drawn.plan(), r.spec.Slug, string(r.front.Kind()))))
 	return okResult(), nil
 }
@@ -153,6 +166,10 @@ type applied struct {
 
 func (applied) verbs() spanVerbs {
 	return spanVerbs{routes: progress.Reconciling, infra: progress.Provisioning, app: progress.Deploying, onto: "to"}
+}
+
+func (applied) promotionTitle(promotionID, _ string) progress.Title {
+	return progress.Switching.Title("traffic to promotion " + promotionID)
 }
 
 func (applied) claim(ctx context.Context, h *handlers, spec provider.DeploySpec, token string) (*leaseHold, error) {
