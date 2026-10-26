@@ -819,3 +819,78 @@ func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheCo
 		t.Errorf("stdout = %q, stream = %q: want what the console has on stdout and not on the stream", stdout.String(), stderr.String())
 	}
 }
+
+func requireNamedUnder(t *testing.T, transcript, phase string, ended ...string) {
+	t.Helper()
+	for _, want := range ended {
+		line := ""
+		for candidate := range strings.Lines(transcript) {
+			if strings.Contains(candidate, want) {
+				line = candidate
+				break
+			}
+		}
+		switch {
+		case line == "":
+			t.Errorf("transcript = %q, want %q reported", transcript, want)
+		case !strings.Contains(line, "["+phase+"]"):
+			t.Errorf("%q was reported as %q, want it under [%s]", want, line, phase)
+		}
+	}
+}
+
+func TestAddNamesEachStepItWaitsOn(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+		t.Fatalf("runAdd err = %v\n%s", err, stdout.String())
+	}
+	requireNamedUnder(t, stdout.String(), "check", "Read the target")
+	requireNamedUnder(t, stdout.String(), "provision",
+		"Added this target to the console",
+		"Loaded the connector built for ",
+		"Updated the console with this connector's address",
+	)
+}
+
+func TestRemoveNamesItsForgettingInTheConsole(t *testing.T) {
+	for _, flagged := range []bool{false, true} {
+		t.Run(fmt.Sprintf("--target %t", flagged), func(t *testing.T) {
+			project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+			root := project.Root
+			srv := newConsoleServer(t, &consolev1.Connector{
+				Id: registeredID, Target: fingerprint, Vendor: "fake", Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
+				Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
+			})
+			linked(t, root, srv.URL)
+
+			dependencies := newTestDependencies()
+			dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+			opts := opened(t, srv)
+			if flagged {
+				opts.target = fingerprint
+			}
+
+			var stdout bytes.Buffer
+			clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+			if err := runRemove(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
+				t.Fatalf("runRemove err = %v\n%s", err, stdout.String())
+			}
+			if !flagged {
+				requireNamedUnder(t, stdout.String(), "check", "Read the target")
+			}
+			requireNamedUnder(t, stdout.String(), "destroy",
+				"Checked what the console has registered for "+fingerprint,
+				"Removed the connector from the console",
+			)
+		})
+	}
+}

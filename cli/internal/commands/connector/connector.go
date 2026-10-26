@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -153,11 +154,13 @@ func reachTarget(ctx context.Context, dependencies Dependencies, cfg *project.Pr
 	if err != nil {
 		return nil, nil, err
 	}
+	reading := check.Child(cfg.Slug, progress.Reading.Title("the target"))
 	var described *contractv1.DescribeConnectorTargetResponse
 	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		described, err = client.DescribeConnectorTarget(ctx, &contractv1.DescribeConnectorTargetRequest{})
 		return err
 	})
+	reading.End(err)
 	if err != nil {
 		provider.Close()
 		return nil, nil, err
