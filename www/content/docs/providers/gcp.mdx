@@ -634,10 +634,18 @@ and those [the private network](#private-network) names. A deploy declaring a bu
 `iamcredentials.googleapis.com`, which apps sign their buckets' urls through.
 
 Switching a service on takes `serviceusage.services.enable`, and waiting for Google to finish takes
-`serviceusage.operations.get`. `roles/serviceusage.serviceUsageAdmin` holds both, and either is needed
-only where a service is off. A credential without
-it is refused before anything changes, naming the `gcloud services enable` command for someone who
-may to run. A project with no billing account linked is refused with the page to link one on.
+`serviceusage.operations.get`. `roles/serviceusage.serviceUsageAdmin` holds both, and either is
+needed only where a service is off. A credential without them is refused before anything changes,
+naming the `gcloud services enable` command for someone who may run it. While
+`cloudresourcemanager.googleapis.com` is off, ocel cannot ask what a credential may do, so the plan
+leaves that to applying it: Google refuses the switch-on itself, changing nothing, and the
+bootstrap's other permissions are checked right after it. A project with no billing account linked
+is refused with the page to link one on.
+
+The region is checked against Cloud Run and, for a bootstrap, Firestore before anything changes, or,
+where either is off, right after switching it on. A part added outside a plan, as sealing a tier's
+first value adds `keys`, switches nothing on: it names the services that are off and the
+`gcloud services enable` command.
 
 ### The tier tag
 
