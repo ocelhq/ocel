@@ -181,7 +181,7 @@ func TestInfraProvisioningRenewsItsLeaseWhileItsDeployBuilds(t *testing.T) {
 		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
 		infra := newInfraProvisioning(p.Provider, env, preflightFacts{project: p.Project})
 		infra.renewal = time.Millisecond
-		defer func() { _ = infra.release(ctx, p.Project.Slug) }()
+		defer func() { _ = infra.release(ctx, p.Run, p.Project.Slug) }()
 		if err := infra.provision(ctx, []declaration.Resource{orders}, nil); err != nil {
 			return err
 		}
@@ -278,7 +278,7 @@ func TestABuildWhoseLeaseRenewalIsRefusedStopsAndSaysTheLeaseWasLost(t *testing.
 		env := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
 		infra := newInfraProvisioning(p.Provider, env, preflightFacts{project: p.Project})
 		infra.renewal = time.Millisecond
-		defer func() { _ = infra.release(ctx, p.Project.Slug) }()
+		defer func() { _ = infra.release(ctx, p.Run, p.Project.Slug) }()
 		building, release := infra.holdLease(ctx)
 		defer release()
 		if err := infra.provision(building, []declaration.Resource{orders}, nil); err != nil {
@@ -386,6 +386,42 @@ func TestADeployWhoseBuildFailsAfterItsInfraFreesTheEnvironmentItHeld(t *testing
 	if environmentLeaseHeld(t, fixture) {
 		t.Error("the environment still holds the lease of a deploy whose build failed, want it abandoned so the next deploy is not refused until it expires")
 	}
+}
+
+func failingBuild(dependencies *Dependencies) {
+	dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
+		return build.Output{}, errors.New("simulated build failure")
+	}
+}
+
+func TestADeployWhoseBuildFailsNamesTheReleaseOfItsLeaseUnderProvision(t *testing.T) {
+	dependencies := newTestDependencies()
+	failingBuild(&dependencies)
+	fixture := setUpDeployProject(t)
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		t.Fatal("runDeploy succeeded through a failed build")
+	}
+
+	assertReportedUnder(t, stdout.String(), "Released this deploy's lease on prod in ", "provision")
+}
+
+func TestAPreviewDeployWhoseBuildFailsNamesTheReleaseOfItsUnclaimedURLsUnderCheck(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	identity := previewKey(t, "feature/login")
+	dependencies := previewDependencies("feature/login", "")
+	failingBuild(&dependencies)
+	coverEphemeralPreview(t, fixture, dependencies, previewUpOptions{})
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	if err := runPreviewUp(context.Background(), dependencies, fixture.Root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err == nil {
+		t.Fatal("runPreviewUp succeeded through a failed build")
+	}
+
+	assertReportedUnder(t, stdout.String(), "Released the unclaimed preview URLs of preview "+identity+" in ", "check")
 }
 
 func TestADeployWhoseProvisionInfraFailsAbandonsTheLeaseItSentIt(t *testing.T) {
