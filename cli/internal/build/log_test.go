@@ -2,17 +2,22 @@ package build
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -249,5 +254,101 @@ func TestAGoAppCompiledHereBuildsInASpanOfItsOwnThatEndsWithItsCompileError(t *t
 	}
 	if ended, ok := spans.ended["api"]; !ok || ended == nil || ended.Error() != err.Error() {
 		t.Errorf("api ended with %v (ended %t), want the compile error %q", ended, ok, err)
+	}
+}
+
+type stepsSeen struct {
+	mu   sync.Mutex
+	seen []string
+}
+
+func (s *stepsSeen) add(line string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.seen = append(s.seen, line)
+}
+
+func (s *stepsSeen) list() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.seen)
+}
+
+func (s *stepsSeen) output() Log {
+	return Log{
+		AppLog: func(app string) (io.Writer, func(error)) {
+			s.add("open app " + app)
+			return io.Discard, func(error) { s.add("end app " + app) }
+		},
+		Step: func(subject string, title progress.Title) func(error) {
+			s.add("open " + subject + ": " + title.Started)
+			return func(err error) {
+				if err != nil {
+					s.add("fail " + title.Started + ": " + err.Error())
+					return
+				}
+				s.add("end " + title.Started)
+			}
+		},
+	}
+}
+
+func nextProjectWithStaleOutput(t *testing.T) *project.Project {
+	t.Helper()
+	root := t.TempDir()
+	writeBuildScript(t, root)
+	writeFile(t, filepath.Join(outputRoot(t, root), "stale"), "from the last build")
+	return &project.Project{Slug: "shop", Dir: root, Apps: []project.App{nextApp("web", ".")}}
+}
+
+func TestABuildNamesEveryStepBetweenItsAppsBuilds(t *testing.T) {
+	t.Parallel()
+	cfg := nextProjectWithStaleOutput(t)
+	var steps stepsSeen
+	builder := nodeOnly{node: func(_ context.Context, _ string, request []byte, log Log) error {
+		var req nodeBuildRequest
+		if err := json.Unmarshal(request, &req); err != nil {
+			return err
+		}
+		_, ended := log.App("web")
+		writeFuncConfig(t, filepath.Dir(filepath.Dir(req.Apps[0].OutputDir)), "web", "index.func",
+			buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
+		ended(nil)
+		return nil
+	}}
+
+	if err := builder.Build(context.Background(), cfg, nil, steps.output()); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	want := []string{
+		"open shop: Removing the previous build output in " + buildoutput.Dir,
+		"end Removing the previous build output in " + buildoutput.Dir,
+		"open shop: Loading the build adapters for app web",
+		"end Loading the build adapters for app web",
+		"open app web",
+		"end app web",
+		"open web: Installing the platform packages of app web",
+		"end Installing the platform packages of app web",
+	}
+	if got := steps.list(); !slices.Equal(got, want) {
+		t.Errorf("the build reported\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestANodeBuildThatFailsBeforeAnyAppStartsFailsTheLoadingOfItsAdapters(t *testing.T) {
+	t.Parallel()
+	cfg := nextProjectWithStaleOutput(t)
+	var steps stepsSeen
+	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error {
+		return errors.New("the node build failed: Cannot find module")
+	}}
+
+	if err := builder.Build(context.Background(), cfg, nil, steps.output()); err == nil {
+		t.Fatal("Build succeeded, want the node build's failure")
+	}
+
+	if want := "fail Loading the build adapters for app web: the node build failed: Cannot find module"; !slices.Contains(steps.list(), want) {
+		t.Errorf("the build reported %q, want %q", steps.list(), want)
 	}
 }

@@ -289,6 +289,9 @@ func appBuildLog(phase *run.Span) build.Log {
 			span := phase.Child(app, progress.Building.Title("app "+app))
 			return span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), span.End
 		},
+		Step: func(subject string, title progress.Title) func(error) {
+			return phase.Child(subject, title).End
+		},
 	}
 }
 

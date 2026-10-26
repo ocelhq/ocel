@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
@@ -637,4 +638,19 @@ func TestBuildNamesTheCollectingOfWhatTheProjectDeclaresUnderBuild(t *testing.T)
 	said := builtSaying(t, dependencies, root)
 
 	assertReportedUnder(t, said, "Collected the resources test-app declares in ", "build")
+}
+
+func TestBuildNamesEachStepTheBuildNamesOutsideItsAppsUnderBuild(t *testing.T) {
+	t.Parallel()
+
+	root := writeServerlessProject(t)
+	dependencies := newTestDependencies()
+	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, log build.Log) (build.Output, error) {
+		log.Step(cfg.Slug, progress.Loading.Title("the build adapters for app web"))(nil)
+		return build.Output{}, nil
+	}
+
+	said := builtSaying(t, dependencies, root)
+
+	assertReportedUnder(t, said, "test-app: Loaded the build adapters for app web in ", "build")
 }
