@@ -106,9 +106,6 @@ func run(ctx context.Context, command []string, environ []string, present func(p
 	env = append(env, containerimage.PortEnvVar+"="+strconv.Itoa(internal))
 	env = append(env, values.Env()...)
 	env = append(env, fronting.Env("")...)
-	if worker == "" {
-		env = containerimage.AppendNextServerPreload(present, env)
-	}
 
 	release()
 	proc, err := child.Start(child.Options{Command: command, Env: env, Stdout: os.Stdout, Stderr: os.Stderr})

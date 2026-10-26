@@ -364,17 +364,6 @@ func TestANextServiceReadsItsTagsFromTheFirestoreEmulatorWhenTheLaneRunsOne(t *t
 	tagEmulatorEnv(t, p, googletest.EnvOf(server.Created[0].Template.Containers[0]))
 }
 
-func TestANextContainerReadsItsTagsFromTheFirestoreEmulatorWhenTheLaneRunsOne(t *testing.T) {
-	server := &googletest.Run{}
-	p := providerServing(server, t)
-	p.tagEndpoint = "http://127.0.0.1:8085"
-	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
-
-	tagEmulatorEnv(t, p, googletest.EnvOf(server.Created[0].Template.Containers[0]))
-}
-
 func TestAnAppWithoutISRIsToldNoTagsDatabase(t *testing.T) {
 	env := googletest.EnvOf(releasedNext(t, nextSpec()))
 
@@ -401,7 +390,6 @@ func nextContainerSpec() provider.StackSpec {
 			HealthCheckPath:   "/",
 			Instances:         provider.Instances{Min: 1, Max: 1},
 			StorageCoordinate: cachedRelease(),
-			ISR:               &provider.ISRSpec{TagNamespace: "PROJECT#shop#STACK#prod--web--r1#TAG#"},
 		},
 	}
 }
@@ -449,33 +437,15 @@ func TestANextContainerAsksForTwoGibibytesOfMemory(t *testing.T) {
 	if got := container.Resources.Limits["cpu"]; got != run.RevisionCPU {
 		t.Errorf("a Next container asks for %q CPU, want %q", got, run.RevisionCPU)
 	}
-	if got := googletest.EnvOf(container)[next.MemoryEnvVar]; got != "2048" {
-		t.Errorf("the Next runtime reads %s=%q, want 2048", next.MemoryEnvVar, got)
-	}
 }
 
-func TestANextContainerIsToldTheCacheBucketStorageCoordinateAndTagsDatabaseItsEntriesLiveIn(t *testing.T) {
-	server := &googletest.Run{}
-	p := providerServing(server, t)
-	if _, err := p.ProvisionContainers(context.Background(), nextContainerSpec(), nil); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
-	env := googletest.EnvOf(server.Created[0].Template.Containers[0])
+func TestANextContainerBuiltFromItsOwnImageIsToldNoCacheLocation(t *testing.T) {
+	service, _ := releasedNextContainer(t, nextContainerSpec())
 
-	for name, want := range map[string]string{
-		"OCEL_EDGE_BUCKET":        "ocel-prod-edge-k3x9q2",
-		"OCEL_CACHE_BUCKET":       "ocel-prod-cache-k3x9q2",
-		"OCEL_STORAGE_COORDINATE": "shop/prod/web/r1a2b3c4d",
-		"OCEL_ISR_TAG_NAMESPACE":  "PROJECT#shop#STACK#prod--web--r1#TAG#",
-		"OCEL_TAG_DATABASE":       "projects/" + namesOf(t, p).Project() + "/databases/" + namesOf(t, p).SharedDatabase(environment.TierProduction),
-	} {
-		if got := env[name]; got != want {
-			t.Errorf("a Next container reads %s=%q, want %q", name, got, want)
-		}
-	}
-	for _, name := range []string{"OCEL_STORAGE_ENDPOINT", "OCEL_FIRESTORE_ENDPOINT"} {
-		if env[name] == "" {
-			t.Errorf("an emulated Next container reads no %s", name)
+	for name := range googletest.EnvOf(service.Template.Containers[0]) {
+		if strings.HasPrefix(name, "OCEL_ISR_") || name == next.TagDatabaseEnvVar || name == next.MemoryEnvVar ||
+			name == "OCEL_EDGE_BUCKET" || name == "OCEL_CACHE_BUCKET" || name == "OCEL_PURGE_SECRET" {
+			t.Errorf("a Next container built from its own image is told %s, and next start in it keeps its own cache", name)
 		}
 	}
 }

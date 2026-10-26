@@ -122,13 +122,6 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 	return env
 }
 
-func NewContainerEnv(spec provider.StackSpec, memory int, cache nextCache) map[string]string {
-	env := processenv.StorageEnv(spec.App.StorageCoordinate, cache.buckets)
-	maps.Copy(env, newNextCacheEnv(spec.App.ISR, cache))
-	env[MemoryEnvVar] = strconv.Itoa(memory)
-	return env
-}
-
 func FillContainerDefaults(s run.Serving) run.Serving {
 	if s.Memory == 0 {
 		s.Memory = MemoryMB

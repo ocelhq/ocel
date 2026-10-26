@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -105,20 +104,6 @@ func (p Containers) Provision(ctx context.Context, spec provider.StackSpec, prog
 	}
 	if next.Serves(app) {
 		served = next.FillContainerDefaults(served)
-		if served.Memory, err = release.ReadMemory(served); err != nil {
-			return nil, err
-		}
-		buckets, err := c.TierBuckets(ctx, spec.Ref.Tier, naming.StorageEdge, naming.StorageCache)
-		if err != nil {
-			return nil, err
-		}
-		database, err := c.Workload().ReadProjectDatabase(ctx, spec.Ref.Tier, spec.Ref.Project)
-		if err != nil {
-			return nil, err
-		}
-		if served.Env, err = run.MergeValues(app.App, release.NextValues, served.Env, next.NewContainerEnv(spec, served.Memory, next.NewCache(named, buckets, database, p.ContainerEndpoint, p.ContainerTagEndpoint, ""))); err != nil {
-			return nil, err
-		}
 	}
 	if served.Env, err = run.MergeValues(app.App, release.OriginGuardValues, served.Env, release.NewOriginGuardEnv(facts.OriginSecret)); err != nil {
 		return nil, err

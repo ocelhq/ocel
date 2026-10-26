@@ -539,22 +539,24 @@ describe("the Next cache a cell is held to", () => {
     }
   });
 
-  it("lists every check that reads a page from the Next server's cache red under #1815 on a Next container on gcp, which nothing seeds", () => {
-    const readFromNextCache = [
+  it("expects every check that reads a page from the Next server's cache, a prefetch or an optimized image green on a Next container on gcp, whose next start serves its build's prerenders from its own cache and which no Cloud CDN fronts", () => {
+    const greenOnTheContainer = [
       "the Next server serves a static page from its cache, frozen, with assets immutable for a year",
       "the Next server keeps an ISR page frozen inside its revalidate window and moves it after",
       "revalidating a path makes the Next server move the page it names and nothing else",
       "revalidating a tag makes the Next server move the page that carries it and nothing else",
       "a server action calling updateTag makes the Next server move the page it revalidates",
+      "the Next server answers a prefetch byte-identically to the request that is not one",
+      "the Next server's image optimizer serves a local image and refuses a bad host, width or quality",
     ];
     for (const lane of ["gcp", "gcp.floci"] as const) {
       const planned = planOn(lane, {}, EVERY_CELL);
       const listed = planned.expectedFailures["deploy/next-container/web"] ?? {};
-      for (const title of readFromNextCache) {
+      for (const title of greenOnTheContainer) {
         const key = Object.keys(listed).find((one) => one.endsWith(title));
-        expect({ title, issues: key ? listed[key]!.map((gap) => gap.issue) : [] }).toEqual({
+        expect({ title, gaps: key ? listed[key]!.map((gap) => gap.id) : [] }).toEqual({
           title,
-          issues: expect.arrayContaining([1815]),
+          gaps: [],
         });
       }
     }

@@ -44,13 +44,6 @@ await bundle(join(pkgDir, "src/next/entrypoint.mts"), join(directory, "entrypoin
   define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
 });
 
-await bundle(join(pkgDir, "src/next/server-preload.mts"), join(directory, "server-preload.mjs"), {
-  format: "esm",
-  minify: true,
-  banner: cjsInterop,
-  define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
-});
-
 stageSharp(directory, "x64");
 
 process.stdout.write(`${directory}\n`);

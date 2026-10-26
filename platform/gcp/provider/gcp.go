@@ -136,7 +136,6 @@ func (p *Provider) Hooks() provider.Hooks {
 		EnsureImageRegistry:  p.EnsureImageRegistry,
 		OpenDirectImages:     p.OpenDirectImages,
 		CheckBucket:          s3store.Check,
-		NextServerRuntime:    nextServerRuntime,
 		EnvSource:            &provider.EnvSourceHooks{ProveIdentity: ports.ProveIdentity, EnsureSync: p.EnsureEnvSourceSync},
 		BindingAccess:        &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
 		Cost:                 &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},

@@ -5,7 +5,7 @@ export const cloudCdnTagLimits = { perObject: 50, bytesPerTag: 120, bytesPerObje
 
 export const uncacheable = "private, no-cache, no-store, max-age=0, must-revalidate";
 
-export function isImmutable(cacheControl: string | null): boolean {
+function isImmutable(cacheControl: string | null): boolean {
   return (cacheControl ?? "")
     .split(",")
     .some((directive) => directive.trim().toLowerCase() === "immutable");
