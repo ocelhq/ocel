@@ -693,6 +693,43 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 }
 
+func TestBootstrapNamesItsReadingOfThePartsAndItsDryPlan(t *testing.T) {
+	requireNamed := func(t *testing.T, transcript, phase, ended string) {
+		t.Helper()
+		for line := range strings.Lines(transcript) {
+			if strings.Contains(line, ended) {
+				if !strings.Contains(line, "["+phase+"]") {
+					t.Errorf("%q was reported as %q, want it under [%s]", ended, line, phase)
+				}
+				return
+			}
+		}
+		t.Errorf("transcript = %q, want %q reported", transcript, ended)
+	}
+
+	t.Run("a bootstrap reads its parts under check", func(t *testing.T) {
+		project, invocation := bootstrapProject(t, "", partISR)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stdout=%s", err, stdout.String())
+		}
+		requireNamed(t, stdout.String(), "check", "Read the parts of the production bootstrap")
+	})
+
+	t.Run("a removal of a part that is not installed plans it under plan", func(t *testing.T) {
+		project, invocation := bootstrapProject(t, "", partISR)
+
+		var stdout, stderr bytes.Buffer
+		clitest.AttachTerminalSink(invocation, &stdout)
+		if err := Run(context.Background(), invocation, project.Root, environmentv1.Tier_TIER_PRODUCTION, Options{Yes: true, Remove: partImageOptimization}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runBootstrap err = %v; stdout=%s", err, stdout.String())
+		}
+		requireNamed(t, stdout.String(), "plan", "Planned the changes to the production bootstrap")
+	})
+}
+
 func TestBootstrapYesMeansYes(t *testing.T) {
 	t.Run("an interactive yes on a plan containing a replacement passes the consent it needs", func(t *testing.T) {
 		project, invocation := bootstrapProject(t, "", partISR)
