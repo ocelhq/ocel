@@ -30,6 +30,8 @@ func TestEveryProcedureTheServiceDeclaresMapsToAScope(t *testing.T) {
 		variablestorev1connect.VariableStoreServiceRemoveBindingProcedure:     CapabilityVariablesWrite,
 		variablestorev1connect.VariableStoreServiceSyncEnvSourceProcedure:     CapabilityVariablesWrite,
 		variablestorev1connect.VariableStoreServiceSetEnvSourceValueProcedure: CapabilityVariablesWrite,
+		variablestorev1connect.VariableStoreServicePublishValuesProcedure:     CapabilityVariablesWrite,
+		variablestorev1connect.VariableStoreServiceUnpublishValuesProcedure:   CapabilityVariablesWrite,
 		variablestorev1connect.VariableStoreServiceRevealValuesProcedure:      CapabilityVariablesReveal,
 		variablestorev1connect.VariableStoreServiceGetValueProcedure:          CapabilityVariablesRead,
 		variablestorev1connect.VariableStoreServiceListValuesProcedure:        CapabilityVariablesRead,

@@ -2568,6 +2568,7 @@ type EnvValueSummary struct {
 	UpdatedAt     string                 `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	EnvSource     string                 `protobuf:"bytes,8,opt,name=env_source,json=envSource,proto3" json:"env_source,omitempty"`
 	Target        *EnvCoordinate         `protobuf:"bytes,9,opt,name=target,proto3,oneof" json:"target,omitempty"`
+	Publisher     string                 `protobuf:"bytes,10,opt,name=publisher,proto3" json:"publisher,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2665,6 +2666,13 @@ func (x *EnvValueSummary) GetTarget() *EnvCoordinate {
 	return nil
 }
 
+func (x *EnvValueSummary) GetPublisher() string {
+	if x != nil {
+		return x.Publisher
+	}
+	return ""
+}
+
 type EnvGetResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
@@ -2675,6 +2683,7 @@ type EnvGetResult struct {
 	Target        *EnvCoordinate         `protobuf:"bytes,6,opt,name=target,proto3,oneof" json:"target,omitempty"`
 	Revealed      bool                   `protobuf:"varint,7,opt,name=revealed,proto3" json:"revealed,omitempty"`
 	Value         *string                `protobuf:"bytes,8,opt,name=value,proto3,oneof" json:"value,omitempty"`
+	Publisher     string                 `protobuf:"bytes,9,opt,name=publisher,proto3" json:"publisher,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2765,6 +2774,193 @@ func (x *EnvGetResult) GetValue() string {
 	return ""
 }
 
+func (x *EnvGetResult) GetPublisher() string {
+	if x != nil {
+		return x.Publisher
+	}
+	return ""
+}
+
+type EnvPublishResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Publisher     string                 `protobuf:"bytes,2,opt,name=publisher,proto3" json:"publisher,omitempty"`
+	Written       []*EnvWrittenValue     `protobuf:"bytes,3,rep,name=written,proto3" json:"written,omitempty"`
+	Removed       []*EnvCoordinate       `protobuf:"bytes,4,rep,name=removed,proto3" json:"removed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvPublishResult) Reset() {
+	*x = EnvPublishResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvPublishResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvPublishResult) ProtoMessage() {}
+
+func (x *EnvPublishResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvPublishResult.ProtoReflect.Descriptor instead.
+func (*EnvPublishResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *EnvPublishResult) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *EnvPublishResult) GetPublisher() string {
+	if x != nil {
+		return x.Publisher
+	}
+	return ""
+}
+
+func (x *EnvPublishResult) GetWritten() []*EnvWrittenValue {
+	if x != nil {
+		return x.Written
+	}
+	return nil
+}
+
+func (x *EnvPublishResult) GetRemoved() []*EnvCoordinate {
+	if x != nil {
+		return x.Removed
+	}
+	return nil
+}
+
+type EnvWrittenValue struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Coordinate    *EnvCoordinate         `protobuf:"bytes,1,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvWrittenValue) Reset() {
+	*x = EnvWrittenValue{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvWrittenValue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvWrittenValue) ProtoMessage() {}
+
+func (x *EnvWrittenValue) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvWrittenValue.ProtoReflect.Descriptor instead.
+func (*EnvWrittenValue) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *EnvWrittenValue) GetCoordinate() *EnvCoordinate {
+	if x != nil {
+		return x.Coordinate
+	}
+	return nil
+}
+
+func (x *EnvWrittenValue) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+type EnvUnpublishResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
+	Publisher     string                 `protobuf:"bytes,2,opt,name=publisher,proto3" json:"publisher,omitempty"`
+	Removed       []*EnvCoordinate       `protobuf:"bytes,3,rep,name=removed,proto3" json:"removed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvUnpublishResult) Reset() {
+	*x = EnvUnpublishResult{}
+	mi := &file_cli_result_v1_result_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvUnpublishResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvUnpublishResult) ProtoMessage() {}
+
+func (x *EnvUnpublishResult) ProtoReflect() protoreflect.Message {
+	mi := &file_cli_result_v1_result_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvUnpublishResult.ProtoReflect.Descriptor instead.
+func (*EnvUnpublishResult) Descriptor() ([]byte, []int) {
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *EnvUnpublishResult) GetTier() v1.Tier {
+	if x != nil {
+		return x.Tier
+	}
+	return v1.Tier(0)
+}
+
+func (x *EnvUnpublishResult) GetPublisher() string {
+	if x != nil {
+		return x.Publisher
+	}
+	return ""
+}
+
+func (x *EnvUnpublishResult) GetRemoved() []*EnvCoordinate {
+	if x != nil {
+		return x.Removed
+	}
+	return nil
+}
+
 type EnvRefsResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
@@ -2776,7 +2972,7 @@ type EnvRefsResult struct {
 
 func (x *EnvRefsResult) Reset() {
 	*x = EnvRefsResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[36]
+	mi := &file_cli_result_v1_result_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2788,7 +2984,7 @@ func (x *EnvRefsResult) String() string {
 func (*EnvRefsResult) ProtoMessage() {}
 
 func (x *EnvRefsResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[36]
+	mi := &file_cli_result_v1_result_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2801,7 +2997,7 @@ func (x *EnvRefsResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvRefsResult.ProtoReflect.Descriptor instead.
 func (*EnvRefsResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{36}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *EnvRefsResult) GetTier() v1.Tier {
@@ -2836,7 +3032,7 @@ type EnvHistoryResult struct {
 
 func (x *EnvHistoryResult) Reset() {
 	*x = EnvHistoryResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[37]
+	mi := &file_cli_result_v1_result_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2848,7 +3044,7 @@ func (x *EnvHistoryResult) String() string {
 func (*EnvHistoryResult) ProtoMessage() {}
 
 func (x *EnvHistoryResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[37]
+	mi := &file_cli_result_v1_result_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2861,7 +3057,7 @@ func (x *EnvHistoryResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvHistoryResult.ProtoReflect.Descriptor instead.
 func (*EnvHistoryResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{37}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *EnvHistoryResult) GetTier() v1.Tier {
@@ -2896,7 +3092,7 @@ type EnvVersion struct {
 
 func (x *EnvVersion) Reset() {
 	*x = EnvVersion{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[38]
+	mi := &file_cli_result_v1_result_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2908,7 +3104,7 @@ func (x *EnvVersion) String() string {
 func (*EnvVersion) ProtoMessage() {}
 
 func (x *EnvVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[38]
+	mi := &file_cli_result_v1_result_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2921,7 +3117,7 @@ func (x *EnvVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvVersion.ProtoReflect.Descriptor instead.
 func (*EnvVersion) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{38}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *EnvVersion) GetVersion() int64 {
@@ -2967,7 +3163,7 @@ type EnvSourceResult struct {
 
 func (x *EnvSourceResult) Reset() {
 	*x = EnvSourceResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[39]
+	mi := &file_cli_result_v1_result_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2979,7 +3175,7 @@ func (x *EnvSourceResult) String() string {
 func (*EnvSourceResult) ProtoMessage() {}
 
 func (x *EnvSourceResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[39]
+	mi := &file_cli_result_v1_result_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2992,7 +3188,7 @@ func (x *EnvSourceResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvSourceResult.ProtoReflect.Descriptor instead.
 func (*EnvSourceResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{39}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *EnvSourceResult) GetTier() v1.Tier {
@@ -3103,7 +3299,7 @@ type EnvSourceLink struct {
 
 func (x *EnvSourceLink) Reset() {
 	*x = EnvSourceLink{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[40]
+	mi := &file_cli_result_v1_result_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3115,7 +3311,7 @@ func (x *EnvSourceLink) String() string {
 func (*EnvSourceLink) ProtoMessage() {}
 
 func (x *EnvSourceLink) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[40]
+	mi := &file_cli_result_v1_result_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3128,7 +3324,7 @@ func (x *EnvSourceLink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvSourceLink.ProtoReflect.Descriptor instead.
 func (*EnvSourceLink) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{40}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *EnvSourceLink) GetFolder() string {
@@ -3154,7 +3350,7 @@ type PermissionsResult struct {
 
 func (x *PermissionsResult) Reset() {
 	*x = PermissionsResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[41]
+	mi := &file_cli_result_v1_result_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3166,7 +3362,7 @@ func (x *PermissionsResult) String() string {
 func (*PermissionsResult) ProtoMessage() {}
 
 func (x *PermissionsResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[41]
+	mi := &file_cli_result_v1_result_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3179,7 +3375,7 @@ func (x *PermissionsResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PermissionsResult.ProtoReflect.Descriptor instead.
 func (*PermissionsResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{41}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *PermissionsResult) GetGroups() []*PermissionGroup {
@@ -3199,7 +3395,7 @@ type PermissionGroup struct {
 
 func (x *PermissionGroup) Reset() {
 	*x = PermissionGroup{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[42]
+	mi := &file_cli_result_v1_result_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3211,7 +3407,7 @@ func (x *PermissionGroup) String() string {
 func (*PermissionGroup) ProtoMessage() {}
 
 func (x *PermissionGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[42]
+	mi := &file_cli_result_v1_result_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3224,7 +3420,7 @@ func (x *PermissionGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PermissionGroup.ProtoReflect.Descriptor instead.
 func (*PermissionGroup) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{42}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *PermissionGroup) GetHeading() string {
@@ -3253,7 +3449,7 @@ type LoginResult struct {
 
 func (x *LoginResult) Reset() {
 	*x = LoginResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[43]
+	mi := &file_cli_result_v1_result_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3265,7 +3461,7 @@ func (x *LoginResult) String() string {
 func (*LoginResult) ProtoMessage() {}
 
 func (x *LoginResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[43]
+	mi := &file_cli_result_v1_result_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3278,7 +3474,7 @@ func (x *LoginResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginResult.ProtoReflect.Descriptor instead.
 func (*LoginResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{43}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *LoginResult) GetEmail() string {
@@ -3319,7 +3515,7 @@ type LogoutResult struct {
 
 func (x *LogoutResult) Reset() {
 	*x = LogoutResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[44]
+	mi := &file_cli_result_v1_result_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3331,7 +3527,7 @@ func (x *LogoutResult) String() string {
 func (*LogoutResult) ProtoMessage() {}
 
 func (x *LogoutResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[44]
+	mi := &file_cli_result_v1_result_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3344,7 +3540,7 @@ func (x *LogoutResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutResult.ProtoReflect.Descriptor instead.
 func (*LogoutResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{44}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *LogoutResult) GetLoggedOut() bool {
@@ -3371,7 +3567,7 @@ type LinkResult struct {
 
 func (x *LinkResult) Reset() {
 	*x = LinkResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[45]
+	mi := &file_cli_result_v1_result_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3383,7 +3579,7 @@ func (x *LinkResult) String() string {
 func (*LinkResult) ProtoMessage() {}
 
 func (x *LinkResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[45]
+	mi := &file_cli_result_v1_result_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3396,7 +3592,7 @@ func (x *LinkResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LinkResult.ProtoReflect.Descriptor instead.
 func (*LinkResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{45}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *LinkResult) GetOrganization() *ConsoleOrganization {
@@ -3424,7 +3620,7 @@ type ConsoleOrganization struct {
 
 func (x *ConsoleOrganization) Reset() {
 	*x = ConsoleOrganization{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[46]
+	mi := &file_cli_result_v1_result_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3436,7 +3632,7 @@ func (x *ConsoleOrganization) String() string {
 func (*ConsoleOrganization) ProtoMessage() {}
 
 func (x *ConsoleOrganization) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[46]
+	mi := &file_cli_result_v1_result_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3449,7 +3645,7 @@ func (x *ConsoleOrganization) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsoleOrganization.ProtoReflect.Descriptor instead.
 func (*ConsoleOrganization) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{46}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ConsoleOrganization) GetId() string {
@@ -3484,7 +3680,7 @@ type ConsoleProject struct {
 
 func (x *ConsoleProject) Reset() {
 	*x = ConsoleProject{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[47]
+	mi := &file_cli_result_v1_result_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3496,7 +3692,7 @@ func (x *ConsoleProject) String() string {
 func (*ConsoleProject) ProtoMessage() {}
 
 func (x *ConsoleProject) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[47]
+	mi := &file_cli_result_v1_result_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3509,7 +3705,7 @@ func (x *ConsoleProject) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsoleProject.ProtoReflect.Descriptor instead.
 func (*ConsoleProject) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{47}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ConsoleProject) GetId() string {
@@ -3542,7 +3738,7 @@ type UnlinkResult struct {
 
 func (x *UnlinkResult) Reset() {
 	*x = UnlinkResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[48]
+	mi := &file_cli_result_v1_result_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3554,7 +3750,7 @@ func (x *UnlinkResult) String() string {
 func (*UnlinkResult) ProtoMessage() {}
 
 func (x *UnlinkResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[48]
+	mi := &file_cli_result_v1_result_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3567,7 +3763,7 @@ func (x *UnlinkResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlinkResult.ProtoReflect.Descriptor instead.
 func (*UnlinkResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{48}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *UnlinkResult) GetUnlinked() bool {
@@ -3589,7 +3785,7 @@ type LockResult struct {
 
 func (x *LockResult) Reset() {
 	*x = LockResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[49]
+	mi := &file_cli_result_v1_result_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3601,7 +3797,7 @@ func (x *LockResult) String() string {
 func (*LockResult) ProtoMessage() {}
 
 func (x *LockResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[49]
+	mi := &file_cli_result_v1_result_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3614,7 +3810,7 @@ func (x *LockResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LockResult.ProtoReflect.Descriptor instead.
 func (*LockResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{49}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *LockResult) GetPath() string {
@@ -3655,7 +3851,7 @@ type PinnedExecutable struct {
 
 func (x *PinnedExecutable) Reset() {
 	*x = PinnedExecutable{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[50]
+	mi := &file_cli_result_v1_result_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3667,7 +3863,7 @@ func (x *PinnedExecutable) String() string {
 func (*PinnedExecutable) ProtoMessage() {}
 
 func (x *PinnedExecutable) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[50]
+	mi := &file_cli_result_v1_result_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3680,7 +3876,7 @@ func (x *PinnedExecutable) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinnedExecutable.ProtoReflect.Descriptor instead.
 func (*PinnedExecutable) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{50}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *PinnedExecutable) GetName() string {
@@ -3706,7 +3902,7 @@ type GenerateResult struct {
 
 func (x *GenerateResult) Reset() {
 	*x = GenerateResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[51]
+	mi := &file_cli_result_v1_result_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3718,7 +3914,7 @@ func (x *GenerateResult) String() string {
 func (*GenerateResult) ProtoMessage() {}
 
 func (x *GenerateResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[51]
+	mi := &file_cli_result_v1_result_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3731,7 +3927,7 @@ func (x *GenerateResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateResult.ProtoReflect.Descriptor instead.
 func (*GenerateResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{51}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GenerateResult) GetFiles() []string {
@@ -3756,7 +3952,7 @@ type InitResult struct {
 
 func (x *InitResult) Reset() {
 	*x = InitResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[52]
+	mi := &file_cli_result_v1_result_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3768,7 +3964,7 @@ func (x *InitResult) String() string {
 func (*InitResult) ProtoMessage() {}
 
 func (x *InitResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[52]
+	mi := &file_cli_result_v1_result_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3781,7 +3977,7 @@ func (x *InitResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitResult.ProtoReflect.Descriptor instead.
 func (*InitResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{52}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *InitResult) GetConfigPath() string {
@@ -3842,7 +4038,7 @@ type SchemaListResult struct {
 
 func (x *SchemaListResult) Reset() {
 	*x = SchemaListResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[53]
+	mi := &file_cli_result_v1_result_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3854,7 +4050,7 @@ func (x *SchemaListResult) String() string {
 func (*SchemaListResult) ProtoMessage() {}
 
 func (x *SchemaListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[53]
+	mi := &file_cli_result_v1_result_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3867,7 +4063,7 @@ func (x *SchemaListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaListResult.ProtoReflect.Descriptor instead.
 func (*SchemaListResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{53}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *SchemaListResult) GetCommands() []*ListedCommand {
@@ -3886,7 +4082,7 @@ type SchemaResult struct {
 
 func (x *SchemaResult) Reset() {
 	*x = SchemaResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[54]
+	mi := &file_cli_result_v1_result_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3898,7 +4094,7 @@ func (x *SchemaResult) String() string {
 func (*SchemaResult) ProtoMessage() {}
 
 func (x *SchemaResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[54]
+	mi := &file_cli_result_v1_result_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3911,7 +4107,7 @@ func (x *SchemaResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SchemaResult.ProtoReflect.Descriptor instead.
 func (*SchemaResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{54}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *SchemaResult) GetSchema() *structpb.Struct {
@@ -3931,7 +4127,7 @@ type ListedCommand struct {
 
 func (x *ListedCommand) Reset() {
 	*x = ListedCommand{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[55]
+	mi := &file_cli_result_v1_result_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3943,7 +4139,7 @@ func (x *ListedCommand) String() string {
 func (*ListedCommand) ProtoMessage() {}
 
 func (x *ListedCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[55]
+	mi := &file_cli_result_v1_result_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3956,7 +4152,7 @@ func (x *ListedCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListedCommand.ProtoReflect.Descriptor instead.
 func (*ListedCommand) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{55}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ListedCommand) GetPath() string {
@@ -3984,7 +4180,7 @@ type SkillInstallResult struct {
 
 func (x *SkillInstallResult) Reset() {
 	*x = SkillInstallResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[56]
+	mi := &file_cli_result_v1_result_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3996,7 +4192,7 @@ func (x *SkillInstallResult) String() string {
 func (*SkillInstallResult) ProtoMessage() {}
 
 func (x *SkillInstallResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[56]
+	mi := &file_cli_result_v1_result_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4009,7 +4205,7 @@ func (x *SkillInstallResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillInstallResult.ProtoReflect.Descriptor instead.
 func (*SkillInstallResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{56}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *SkillInstallResult) GetWritten() bool {
@@ -4043,7 +4239,7 @@ type SkillTarget struct {
 
 func (x *SkillTarget) Reset() {
 	*x = SkillTarget{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[57]
+	mi := &file_cli_result_v1_result_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4055,7 +4251,7 @@ func (x *SkillTarget) String() string {
 func (*SkillTarget) ProtoMessage() {}
 
 func (x *SkillTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[57]
+	mi := &file_cli_result_v1_result_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4068,7 +4264,7 @@ func (x *SkillTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillTarget.ProtoReflect.Descriptor instead.
 func (*SkillTarget) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{57}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *SkillTarget) GetDir() string {
@@ -4094,7 +4290,7 @@ type ProjectListResult struct {
 
 func (x *ProjectListResult) Reset() {
 	*x = ProjectListResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[58]
+	mi := &file_cli_result_v1_result_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4106,7 +4302,7 @@ func (x *ProjectListResult) String() string {
 func (*ProjectListResult) ProtoMessage() {}
 
 func (x *ProjectListResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[58]
+	mi := &file_cli_result_v1_result_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4119,7 +4315,7 @@ func (x *ProjectListResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectListResult.ProtoReflect.Descriptor instead.
 func (*ProjectListResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{58}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *ProjectListResult) GetProjects() []*ProjectSummary {
@@ -4143,7 +4339,7 @@ type ProjectSummary struct {
 
 func (x *ProjectSummary) Reset() {
 	*x = ProjectSummary{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[59]
+	mi := &file_cli_result_v1_result_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4155,7 +4351,7 @@ func (x *ProjectSummary) String() string {
 func (*ProjectSummary) ProtoMessage() {}
 
 func (x *ProjectSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[59]
+	mi := &file_cli_result_v1_result_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4168,7 +4364,7 @@ func (x *ProjectSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectSummary.ProtoReflect.Descriptor instead.
 func (*ProjectSummary) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{59}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ProjectSummary) GetSlug() string {
@@ -4226,7 +4422,7 @@ type ProjectShowResult struct {
 
 func (x *ProjectShowResult) Reset() {
 	*x = ProjectShowResult{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[60]
+	mi := &file_cli_result_v1_result_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4238,7 +4434,7 @@ func (x *ProjectShowResult) String() string {
 func (*ProjectShowResult) ProtoMessage() {}
 
 func (x *ProjectShowResult) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[60]
+	mi := &file_cli_result_v1_result_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4251,7 +4447,7 @@ func (x *ProjectShowResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectShowResult.ProtoReflect.Descriptor instead.
 func (*ProjectShowResult) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{60}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ProjectShowResult) GetSlug() string {
@@ -4302,7 +4498,7 @@ type ProjectEnvironmentStatus struct {
 
 func (x *ProjectEnvironmentStatus) Reset() {
 	*x = ProjectEnvironmentStatus{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[61]
+	mi := &file_cli_result_v1_result_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4314,7 +4510,7 @@ func (x *ProjectEnvironmentStatus) String() string {
 func (*ProjectEnvironmentStatus) ProtoMessage() {}
 
 func (x *ProjectEnvironmentStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[61]
+	mi := &file_cli_result_v1_result_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4327,7 +4523,7 @@ func (x *ProjectEnvironmentStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectEnvironmentStatus.ProtoReflect.Descriptor instead.
 func (*ProjectEnvironmentStatus) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{61}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *ProjectEnvironmentStatus) GetTier() v1.Tier {
@@ -4377,7 +4573,7 @@ type ProjectResourceGroup struct {
 
 func (x *ProjectResourceGroup) Reset() {
 	*x = ProjectResourceGroup{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[62]
+	mi := &file_cli_result_v1_result_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4389,7 +4585,7 @@ func (x *ProjectResourceGroup) String() string {
 func (*ProjectResourceGroup) ProtoMessage() {}
 
 func (x *ProjectResourceGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[62]
+	mi := &file_cli_result_v1_result_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4402,7 +4598,7 @@ func (x *ProjectResourceGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectResourceGroup.ProtoReflect.Descriptor instead.
 func (*ProjectResourceGroup) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{62}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *ProjectResourceGroup) GetTier() v1.Tier {
@@ -4445,7 +4641,7 @@ type ProjectSharedPart struct {
 
 func (x *ProjectSharedPart) Reset() {
 	*x = ProjectSharedPart{}
-	mi := &file_cli_result_v1_result_proto_msgTypes[63]
+	mi := &file_cli_result_v1_result_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4457,7 +4653,7 @@ func (x *ProjectSharedPart) String() string {
 func (*ProjectSharedPart) ProtoMessage() {}
 
 func (x *ProjectSharedPart) ProtoReflect() protoreflect.Message {
-	mi := &file_cli_result_v1_result_proto_msgTypes[63]
+	mi := &file_cli_result_v1_result_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4470,7 +4666,7 @@ func (x *ProjectSharedPart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectSharedPart.ProtoReflect.Descriptor instead.
 func (*ProjectSharedPart) Descriptor() ([]byte, []int) {
-	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{63}
+	return file_cli_result_v1_result_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *ProjectSharedPart) GetTier() v1.Tier {
@@ -4691,7 +4887,7 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"\venvironment\x18\x04 \x01(\tR\venvironment\"x\n" +
 	"\rEnvListResult\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x126\n" +
-	"\x06values\x18\x02 \x03(\v2\x1e.cli.result.v1.EnvValueSummaryR\x06values\"\xd5\x02\n" +
+	"\x06values\x18\x02 \x03(\v2\x1e.cli.result.v1.EnvValueSummaryR\x06values\"\xf3\x02\n" +
 	"\x0fEnvValueSummary\x12<\n" +
 	"\n" +
 	"coordinate\x18\x01 \x01(\v2\x1c.cli.result.v1.EnvCoordinateR\n" +
@@ -4705,8 +4901,10 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"updated_at\x18\a \x01(\tR\tupdatedAt\x12\x1d\n" +
 	"\n" +
 	"env_source\x18\b \x01(\tR\tenvSource\x129\n" +
-	"\x06target\x18\t \x01(\v2\x1c.cli.result.v1.EnvCoordinateH\x00R\x06target\x88\x01\x01B\t\n" +
-	"\a_target\"\xd1\x02\n" +
+	"\x06target\x18\t \x01(\v2\x1c.cli.result.v1.EnvCoordinateH\x00R\x06target\x88\x01\x01\x12\x1c\n" +
+	"\tpublisher\x18\n" +
+	" \x01(\tR\tpublisherB\t\n" +
+	"\a_target\"\xef\x02\n" +
 	"\fEnvGetResult\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12<\n" +
 	"\n" +
@@ -4718,9 +4916,24 @@ const file_cli_result_v1_result_proto_rawDesc = "" +
 	"updated_at\x18\x05 \x01(\tR\tupdatedAt\x129\n" +
 	"\x06target\x18\x06 \x01(\v2\x1c.cli.result.v1.EnvCoordinateH\x00R\x06target\x88\x01\x01\x12\x1a\n" +
 	"\brevealed\x18\a \x01(\bR\brevealed\x12\x19\n" +
-	"\x05value\x18\b \x01(\tH\x01R\x05value\x88\x01\x01B\t\n" +
+	"\x05value\x18\b \x01(\tH\x01R\x05value\x88\x01\x01\x12\x1c\n" +
+	"\tpublisher\x18\t \x01(\tR\tpublisherB\t\n" +
 	"\a_targetB\b\n" +
-	"\x06_value\"\xbc\x01\n" +
+	"\x06_value\"\xd3\x01\n" +
+	"\x10EnvPublishResult\x12/\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x1c\n" +
+	"\tpublisher\x18\x02 \x01(\tR\tpublisher\x128\n" +
+	"\awritten\x18\x03 \x03(\v2\x1e.cli.result.v1.EnvWrittenValueR\awritten\x126\n" +
+	"\aremoved\x18\x04 \x03(\v2\x1c.cli.result.v1.EnvCoordinateR\aremoved\"i\n" +
+	"\x0fEnvWrittenValue\x12<\n" +
+	"\n" +
+	"coordinate\x18\x01 \x01(\v2\x1c.cli.result.v1.EnvCoordinateR\n" +
+	"coordinate\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\"\x9b\x01\n" +
+	"\x12EnvUnpublishResult\x12/\n" +
+	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12\x1c\n" +
+	"\tpublisher\x18\x02 \x01(\tR\tpublisher\x126\n" +
+	"\aremoved\x18\x03 \x03(\v2\x1c.cli.result.v1.EnvCoordinateR\aremoved\"\xbc\x01\n" +
 	"\rEnvRefsResult\x12/\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\x04tier\x12<\n" +
 	"\n" +
@@ -4911,7 +5124,7 @@ func file_cli_result_v1_result_proto_rawDescGZIP() []byte {
 }
 
 var file_cli_result_v1_result_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 67)
+var file_cli_result_v1_result_proto_msgTypes = make([]protoimpl.MessageInfo, 70)
 var file_cli_result_v1_result_proto_goTypes = []any{
 	(PromotionState)(0),              // 0: cli.result.v1.PromotionState
 	(ConnectorLiveness)(0),           // 1: cli.result.v1.ConnectorLiveness
@@ -4954,70 +5167,73 @@ var file_cli_result_v1_result_proto_goTypes = []any{
 	(*EnvListResult)(nil),            // 38: cli.result.v1.EnvListResult
 	(*EnvValueSummary)(nil),          // 39: cli.result.v1.EnvValueSummary
 	(*EnvGetResult)(nil),             // 40: cli.result.v1.EnvGetResult
-	(*EnvRefsResult)(nil),            // 41: cli.result.v1.EnvRefsResult
-	(*EnvHistoryResult)(nil),         // 42: cli.result.v1.EnvHistoryResult
-	(*EnvVersion)(nil),               // 43: cli.result.v1.EnvVersion
-	(*EnvSourceResult)(nil),          // 44: cli.result.v1.EnvSourceResult
-	(*EnvSourceLink)(nil),            // 45: cli.result.v1.EnvSourceLink
-	(*PermissionsResult)(nil),        // 46: cli.result.v1.PermissionsResult
-	(*PermissionGroup)(nil),          // 47: cli.result.v1.PermissionGroup
-	(*LoginResult)(nil),              // 48: cli.result.v1.LoginResult
-	(*LogoutResult)(nil),             // 49: cli.result.v1.LogoutResult
-	(*LinkResult)(nil),               // 50: cli.result.v1.LinkResult
-	(*ConsoleOrganization)(nil),      // 51: cli.result.v1.ConsoleOrganization
-	(*ConsoleProject)(nil),           // 52: cli.result.v1.ConsoleProject
-	(*UnlinkResult)(nil),             // 53: cli.result.v1.UnlinkResult
-	(*LockResult)(nil),               // 54: cli.result.v1.LockResult
-	(*PinnedExecutable)(nil),         // 55: cli.result.v1.PinnedExecutable
-	(*GenerateResult)(nil),           // 56: cli.result.v1.GenerateResult
-	(*InitResult)(nil),               // 57: cli.result.v1.InitResult
-	(*SchemaListResult)(nil),         // 58: cli.result.v1.SchemaListResult
-	(*SchemaResult)(nil),             // 59: cli.result.v1.SchemaResult
-	(*ListedCommand)(nil),            // 60: cli.result.v1.ListedCommand
-	(*SkillInstallResult)(nil),       // 61: cli.result.v1.SkillInstallResult
-	(*SkillTarget)(nil),              // 62: cli.result.v1.SkillTarget
-	(*ProjectListResult)(nil),        // 63: cli.result.v1.ProjectListResult
-	(*ProjectSummary)(nil),           // 64: cli.result.v1.ProjectSummary
-	(*ProjectShowResult)(nil),        // 65: cli.result.v1.ProjectShowResult
-	(*ProjectEnvironmentStatus)(nil), // 66: cli.result.v1.ProjectEnvironmentStatus
-	(*ProjectResourceGroup)(nil),     // 67: cli.result.v1.ProjectResourceGroup
-	(*ProjectSharedPart)(nil),        // 68: cli.result.v1.ProjectSharedPart
-	nil,                              // 69: cli.result.v1.PromotionSummary.ReleasesEntry
-	nil,                              // 70: cli.result.v1.PinnedExecutable.DigestsEntry
-	nil,                              // 71: cli.result.v1.ProjectEnvironmentStatus.ReleasesEntry
-	(v1.Tier)(0),                     // 72: common.environment.v1.Tier
-	(*v11.ResourceSet)(nil),          // 73: provider.cost.v1.ResourceSet
-	(*v11.Estimate)(nil),             // 74: provider.cost.v1.Estimate
-	(v1.Lifecycle)(0),                // 75: common.environment.v1.Lifecycle
-	(*structpb.Value)(nil),           // 76: google.protobuf.Value
-	(*v12.CloudOffer)(nil),           // 77: console.v1.CloudOffer
-	(*structpb.Struct)(nil),          // 78: google.protobuf.Struct
+	(*EnvPublishResult)(nil),         // 41: cli.result.v1.EnvPublishResult
+	(*EnvWrittenValue)(nil),          // 42: cli.result.v1.EnvWrittenValue
+	(*EnvUnpublishResult)(nil),       // 43: cli.result.v1.EnvUnpublishResult
+	(*EnvRefsResult)(nil),            // 44: cli.result.v1.EnvRefsResult
+	(*EnvHistoryResult)(nil),         // 45: cli.result.v1.EnvHistoryResult
+	(*EnvVersion)(nil),               // 46: cli.result.v1.EnvVersion
+	(*EnvSourceResult)(nil),          // 47: cli.result.v1.EnvSourceResult
+	(*EnvSourceLink)(nil),            // 48: cli.result.v1.EnvSourceLink
+	(*PermissionsResult)(nil),        // 49: cli.result.v1.PermissionsResult
+	(*PermissionGroup)(nil),          // 50: cli.result.v1.PermissionGroup
+	(*LoginResult)(nil),              // 51: cli.result.v1.LoginResult
+	(*LogoutResult)(nil),             // 52: cli.result.v1.LogoutResult
+	(*LinkResult)(nil),               // 53: cli.result.v1.LinkResult
+	(*ConsoleOrganization)(nil),      // 54: cli.result.v1.ConsoleOrganization
+	(*ConsoleProject)(nil),           // 55: cli.result.v1.ConsoleProject
+	(*UnlinkResult)(nil),             // 56: cli.result.v1.UnlinkResult
+	(*LockResult)(nil),               // 57: cli.result.v1.LockResult
+	(*PinnedExecutable)(nil),         // 58: cli.result.v1.PinnedExecutable
+	(*GenerateResult)(nil),           // 59: cli.result.v1.GenerateResult
+	(*InitResult)(nil),               // 60: cli.result.v1.InitResult
+	(*SchemaListResult)(nil),         // 61: cli.result.v1.SchemaListResult
+	(*SchemaResult)(nil),             // 62: cli.result.v1.SchemaResult
+	(*ListedCommand)(nil),            // 63: cli.result.v1.ListedCommand
+	(*SkillInstallResult)(nil),       // 64: cli.result.v1.SkillInstallResult
+	(*SkillTarget)(nil),              // 65: cli.result.v1.SkillTarget
+	(*ProjectListResult)(nil),        // 66: cli.result.v1.ProjectListResult
+	(*ProjectSummary)(nil),           // 67: cli.result.v1.ProjectSummary
+	(*ProjectShowResult)(nil),        // 68: cli.result.v1.ProjectShowResult
+	(*ProjectEnvironmentStatus)(nil), // 69: cli.result.v1.ProjectEnvironmentStatus
+	(*ProjectResourceGroup)(nil),     // 70: cli.result.v1.ProjectResourceGroup
+	(*ProjectSharedPart)(nil),        // 71: cli.result.v1.ProjectSharedPart
+	nil,                              // 72: cli.result.v1.PromotionSummary.ReleasesEntry
+	nil,                              // 73: cli.result.v1.PinnedExecutable.DigestsEntry
+	nil,                              // 74: cli.result.v1.ProjectEnvironmentStatus.ReleasesEntry
+	(v1.Tier)(0),                     // 75: common.environment.v1.Tier
+	(*v11.ResourceSet)(nil),          // 76: provider.cost.v1.ResourceSet
+	(*v11.Estimate)(nil),             // 77: provider.cost.v1.Estimate
+	(v1.Lifecycle)(0),                // 78: common.environment.v1.Lifecycle
+	(*structpb.Value)(nil),           // 79: google.protobuf.Value
+	(*v12.CloudOffer)(nil),           // 80: console.v1.CloudOffer
+	(*structpb.Struct)(nil),          // 81: google.protobuf.Struct
 }
 var file_cli_result_v1_result_proto_depIdxs = []int32{
 	9,  // 0: cli.result.v1.BindingListResult.bindings:type_name -> cli.result.v1.BindingSummary
 	9,  // 1: cli.result.v1.BindingGenerateResult.bindings:type_name -> cli.result.v1.BindingSummary
 	11, // 2: cli.result.v1.BootstrapStatusResult.tiers:type_name -> cli.result.v1.BootstrapTierStatus
-	72, // 3: cli.result.v1.BootstrapTierStatus.tier:type_name -> common.environment.v1.Tier
+	75, // 3: cli.result.v1.BootstrapTierStatus.tier:type_name -> common.environment.v1.Tier
 	12, // 4: cli.result.v1.BootstrapTierStatus.parts:type_name -> cli.result.v1.BootstrapPartStatus
 	13, // 5: cli.result.v1.BootstrapPartStatus.resources:type_name -> cli.result.v1.PhysicalResource
 	15, // 6: cli.result.v1.DomainStatusResult.hosts:type_name -> cli.result.v1.DomainHostStatus
 	16, // 7: cli.result.v1.DomainHostStatus.certificate:type_name -> cli.result.v1.Certificate
-	73, // 8: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
-	74, // 9: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
+	76, // 8: cli.result.v1.CostScanResult.resources:type_name -> provider.cost.v1.ResourceSet
+	77, // 9: cli.result.v1.CostScanResult.estimate:type_name -> provider.cost.v1.Estimate
 	19, // 10: cli.result.v1.PromotionListResult.promotions:type_name -> cli.result.v1.PromotionSummary
-	69, // 11: cli.result.v1.PromotionSummary.releases:type_name -> cli.result.v1.PromotionSummary.ReleasesEntry
+	72, // 11: cli.result.v1.PromotionSummary.releases:type_name -> cli.result.v1.PromotionSummary.ReleasesEntry
 	0,  // 12: cli.result.v1.PromotionSummary.state:type_name -> cli.result.v1.PromotionState
 	21, // 13: cli.result.v1.PreviewListResult.previews:type_name -> cli.result.v1.PreviewSummary
-	75, // 14: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
+	78, // 14: cli.result.v1.PreviewSummary.lifecycle:type_name -> common.environment.v1.Lifecycle
 	23, // 15: cli.result.v1.ProtectionResult.tiers:type_name -> cli.result.v1.TierProtection
-	72, // 16: cli.result.v1.TierProtection.tier:type_name -> common.environment.v1.Tier
+	75, // 16: cli.result.v1.TierProtection.tier:type_name -> common.environment.v1.Tier
 	28, // 17: cli.result.v1.TierProtection.edges:type_name -> cli.result.v1.EdgeResult
-	72, // 18: cli.result.v1.BypassSecretListResult.tier:type_name -> common.environment.v1.Tier
-	72, // 19: cli.result.v1.PasswordResult.tier:type_name -> common.environment.v1.Tier
+	75, // 18: cli.result.v1.BypassSecretListResult.tier:type_name -> common.environment.v1.Tier
+	75, // 19: cli.result.v1.PasswordResult.tier:type_name -> common.environment.v1.Tier
 	28, // 20: cli.result.v1.PasswordResult.edges:type_name -> cli.result.v1.EdgeResult
-	72, // 21: cli.result.v1.BypassSecretResult.tier:type_name -> common.environment.v1.Tier
+	75, // 21: cli.result.v1.BypassSecretResult.tier:type_name -> common.environment.v1.Tier
 	28, // 22: cli.result.v1.BypassSecretResult.edges:type_name -> cli.result.v1.EdgeResult
-	72, // 23: cli.result.v1.PublicationResult.tier:type_name -> common.environment.v1.Tier
+	75, // 23: cli.result.v1.PublicationResult.tier:type_name -> common.environment.v1.Tier
 	28, // 24: cli.result.v1.PublicationResult.edges:type_name -> cli.result.v1.EdgeResult
 	15, // 25: cli.result.v1.DomainListResult.hosts:type_name -> cli.result.v1.DomainHostStatus
 	16, // 26: cli.result.v1.PreviewDomainResult.certificate:type_name -> cli.result.v1.Certificate
@@ -5028,50 +5244,56 @@ var file_cli_result_v1_result_proto_depIdxs = []int32{
 	35, // 31: cli.result.v1.DoctorResult.sections:type_name -> cli.result.v1.DoctorSection
 	36, // 32: cli.result.v1.DoctorSection.checks:type_name -> cli.result.v1.DoctorCheck
 	2,  // 33: cli.result.v1.DoctorCheck.verdict:type_name -> cli.result.v1.DoctorVerdict
-	72, // 34: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
+	75, // 34: cli.result.v1.EnvListResult.tier:type_name -> common.environment.v1.Tier
 	39, // 35: cli.result.v1.EnvListResult.values:type_name -> cli.result.v1.EnvValueSummary
 	37, // 36: cli.result.v1.EnvValueSummary.coordinate:type_name -> cli.result.v1.EnvCoordinate
 	37, // 37: cli.result.v1.EnvValueSummary.target:type_name -> cli.result.v1.EnvCoordinate
-	72, // 38: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
+	75, // 38: cli.result.v1.EnvGetResult.tier:type_name -> common.environment.v1.Tier
 	37, // 39: cli.result.v1.EnvGetResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
 	37, // 40: cli.result.v1.EnvGetResult.target:type_name -> cli.result.v1.EnvCoordinate
-	72, // 41: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
-	37, // 42: cli.result.v1.EnvRefsResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	37, // 43: cli.result.v1.EnvRefsResult.references:type_name -> cli.result.v1.EnvCoordinate
-	72, // 44: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
-	37, // 45: cli.result.v1.EnvHistoryResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
-	43, // 46: cli.result.v1.EnvHistoryResult.versions:type_name -> cli.result.v1.EnvVersion
-	72, // 47: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
-	45, // 48: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
-	47, // 49: cli.result.v1.PermissionsResult.groups:type_name -> cli.result.v1.PermissionGroup
-	76, // 50: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
-	77, // 51: cli.result.v1.LoginResult.cloud:type_name -> console.v1.CloudOffer
-	51, // 52: cli.result.v1.LinkResult.organization:type_name -> cli.result.v1.ConsoleOrganization
-	52, // 53: cli.result.v1.LinkResult.project:type_name -> cli.result.v1.ConsoleProject
-	55, // 54: cli.result.v1.LockResult.providers:type_name -> cli.result.v1.PinnedExecutable
-	55, // 55: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
-	70, // 56: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
-	3,  // 57: cli.result.v1.InitResult.format:type_name -> cli.result.v1.ConfigFormat
-	60, // 58: cli.result.v1.SchemaListResult.commands:type_name -> cli.result.v1.ListedCommand
-	78, // 59: cli.result.v1.SchemaResult.schema:type_name -> google.protobuf.Struct
-	4,  // 60: cli.result.v1.ListedCommand.output:type_name -> cli.result.v1.CommandOutput
-	62, // 61: cli.result.v1.SkillInstallResult.targets:type_name -> cli.result.v1.SkillTarget
-	64, // 62: cli.result.v1.ProjectListResult.projects:type_name -> cli.result.v1.ProjectSummary
-	72, // 63: cli.result.v1.ProjectSummary.tiers:type_name -> common.environment.v1.Tier
-	66, // 64: cli.result.v1.ProjectShowResult.environments:type_name -> cli.result.v1.ProjectEnvironmentStatus
-	67, // 65: cli.result.v1.ProjectShowResult.resources:type_name -> cli.result.v1.ProjectResourceGroup
-	68, // 66: cli.result.v1.ProjectShowResult.shared:type_name -> cli.result.v1.ProjectSharedPart
-	72, // 67: cli.result.v1.ProjectEnvironmentStatus.tier:type_name -> common.environment.v1.Tier
-	71, // 68: cli.result.v1.ProjectEnvironmentStatus.releases:type_name -> cli.result.v1.ProjectEnvironmentStatus.ReleasesEntry
-	72, // 69: cli.result.v1.ProjectResourceGroup.tier:type_name -> common.environment.v1.Tier
-	13, // 70: cli.result.v1.ProjectResourceGroup.resources:type_name -> cli.result.v1.PhysicalResource
-	72, // 71: cli.result.v1.ProjectSharedPart.tier:type_name -> common.environment.v1.Tier
-	13, // 72: cli.result.v1.ProjectSharedPart.resources:type_name -> cli.result.v1.PhysicalResource
-	73, // [73:73] is the sub-list for method output_type
-	73, // [73:73] is the sub-list for method input_type
-	73, // [73:73] is the sub-list for extension type_name
-	73, // [73:73] is the sub-list for extension extendee
-	0,  // [0:73] is the sub-list for field type_name
+	75, // 41: cli.result.v1.EnvPublishResult.tier:type_name -> common.environment.v1.Tier
+	42, // 42: cli.result.v1.EnvPublishResult.written:type_name -> cli.result.v1.EnvWrittenValue
+	37, // 43: cli.result.v1.EnvPublishResult.removed:type_name -> cli.result.v1.EnvCoordinate
+	37, // 44: cli.result.v1.EnvWrittenValue.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	75, // 45: cli.result.v1.EnvUnpublishResult.tier:type_name -> common.environment.v1.Tier
+	37, // 46: cli.result.v1.EnvUnpublishResult.removed:type_name -> cli.result.v1.EnvCoordinate
+	75, // 47: cli.result.v1.EnvRefsResult.tier:type_name -> common.environment.v1.Tier
+	37, // 48: cli.result.v1.EnvRefsResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	37, // 49: cli.result.v1.EnvRefsResult.references:type_name -> cli.result.v1.EnvCoordinate
+	75, // 50: cli.result.v1.EnvHistoryResult.tier:type_name -> common.environment.v1.Tier
+	37, // 51: cli.result.v1.EnvHistoryResult.coordinate:type_name -> cli.result.v1.EnvCoordinate
+	46, // 52: cli.result.v1.EnvHistoryResult.versions:type_name -> cli.result.v1.EnvVersion
+	75, // 53: cli.result.v1.EnvSourceResult.tier:type_name -> common.environment.v1.Tier
+	48, // 54: cli.result.v1.EnvSourceResult.links:type_name -> cli.result.v1.EnvSourceLink
+	50, // 55: cli.result.v1.PermissionsResult.groups:type_name -> cli.result.v1.PermissionGroup
+	79, // 56: cli.result.v1.PermissionGroup.document:type_name -> google.protobuf.Value
+	80, // 57: cli.result.v1.LoginResult.cloud:type_name -> console.v1.CloudOffer
+	54, // 58: cli.result.v1.LinkResult.organization:type_name -> cli.result.v1.ConsoleOrganization
+	55, // 59: cli.result.v1.LinkResult.project:type_name -> cli.result.v1.ConsoleProject
+	58, // 60: cli.result.v1.LockResult.providers:type_name -> cli.result.v1.PinnedExecutable
+	58, // 61: cli.result.v1.LockResult.connectors:type_name -> cli.result.v1.PinnedExecutable
+	73, // 62: cli.result.v1.PinnedExecutable.digests:type_name -> cli.result.v1.PinnedExecutable.DigestsEntry
+	3,  // 63: cli.result.v1.InitResult.format:type_name -> cli.result.v1.ConfigFormat
+	63, // 64: cli.result.v1.SchemaListResult.commands:type_name -> cli.result.v1.ListedCommand
+	81, // 65: cli.result.v1.SchemaResult.schema:type_name -> google.protobuf.Struct
+	4,  // 66: cli.result.v1.ListedCommand.output:type_name -> cli.result.v1.CommandOutput
+	65, // 67: cli.result.v1.SkillInstallResult.targets:type_name -> cli.result.v1.SkillTarget
+	67, // 68: cli.result.v1.ProjectListResult.projects:type_name -> cli.result.v1.ProjectSummary
+	75, // 69: cli.result.v1.ProjectSummary.tiers:type_name -> common.environment.v1.Tier
+	69, // 70: cli.result.v1.ProjectShowResult.environments:type_name -> cli.result.v1.ProjectEnvironmentStatus
+	70, // 71: cli.result.v1.ProjectShowResult.resources:type_name -> cli.result.v1.ProjectResourceGroup
+	71, // 72: cli.result.v1.ProjectShowResult.shared:type_name -> cli.result.v1.ProjectSharedPart
+	75, // 73: cli.result.v1.ProjectEnvironmentStatus.tier:type_name -> common.environment.v1.Tier
+	74, // 74: cli.result.v1.ProjectEnvironmentStatus.releases:type_name -> cli.result.v1.ProjectEnvironmentStatus.ReleasesEntry
+	75, // 75: cli.result.v1.ProjectResourceGroup.tier:type_name -> common.environment.v1.Tier
+	13, // 76: cli.result.v1.ProjectResourceGroup.resources:type_name -> cli.result.v1.PhysicalResource
+	75, // 77: cli.result.v1.ProjectSharedPart.tier:type_name -> common.environment.v1.Tier
+	13, // 78: cli.result.v1.ProjectSharedPart.resources:type_name -> cli.result.v1.PhysicalResource
+	79, // [79:79] is the sub-list for method output_type
+	79, // [79:79] is the sub-list for method input_type
+	79, // [79:79] is the sub-list for extension type_name
+	79, // [79:79] is the sub-list for extension extendee
+	0,  // [0:79] is the sub-list for field type_name
 }
 
 func init() { file_cli_result_v1_result_proto_init() }
@@ -5082,14 +5304,14 @@ func file_cli_result_v1_result_proto_init() {
 	file_cli_result_v1_result_proto_msgTypes[7].OneofWrappers = []any{}
 	file_cli_result_v1_result_proto_msgTypes[34].OneofWrappers = []any{}
 	file_cli_result_v1_result_proto_msgTypes[35].OneofWrappers = []any{}
-	file_cli_result_v1_result_proto_msgTypes[52].OneofWrappers = []any{}
+	file_cli_result_v1_result_proto_msgTypes[55].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cli_result_v1_result_proto_rawDesc), len(file_cli_result_v1_result_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   67,
+			NumMessages:   70,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -372,7 +372,14 @@ func refuseEnvSourceOwned(ctx context.Context, store variablestore.Store, scope 
 	if err != nil {
 		return registrationError(err)
 	}
-	if !registered || slices.Contains(registration.Credentials(), at.Cell) {
+	if !registered {
+		return nil
+	}
+	return refuseRegisteredEnvSource(ctx, store, scope, registration, at, removing)
+}
+
+func refuseRegisteredEnvSource(ctx context.Context, store variablestore.Store, scope variablestore.Scope, registration envsource.Registration, at variablestore.Coordinate, removing bool) error {
+	if at.Environment != "" || slices.Contains(registration.Credentials(), at.Cell) {
 		return nil
 	}
 	owner := registration.Descriptor.ID()

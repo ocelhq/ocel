@@ -37,6 +37,10 @@
         "coordinate": {
           "$ref": "#/$defs/cli.result.v1.EnvCoordinate.jsonschema.json"
         },
+        "publisher": {
+          "default": "",
+          "type": "string"
+        },
         "revealed": {
           "default": false,
           "type": "boolean"

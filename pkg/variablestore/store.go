@@ -81,6 +81,13 @@ func (c storedValue) live() int64 {
 	return c.Version
 }
 
+func (c storedValue) liveMetadata(at Coordinate) Metadata {
+	if c.live() == 0 {
+		return Metadata{Coordinate: at}
+	}
+	return metadataOf(at, c)
+}
+
 func (s Store) now() int64 {
 	if s.Now == nil {
 		return time.Now().Unix()
@@ -92,16 +99,23 @@ func (s Store) Set(ctx context.Context, scope Scope, at Coordinate, plaintext st
 	return s.write(ctx, scope, at, plaintext, Provenance{}, expected)
 }
 
-func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext string, from Provenance, expected *int64) (Metadata, error) {
+func RefuseWrite(at Coordinate, current Metadata, plaintext string, from Provenance) error {
 	if len(plaintext) > MaxValueBytes {
-		return Metadata{}, fmt.Errorf("value for %s is too large: %d bytes, limit %d: %w", at.Key, len(plaintext), MaxValueBytes, ErrTooLarge)
+		return fmt.Errorf("value for %s is too large: %d bytes, limit %d: %w", at.Key, len(plaintext), MaxValueBytes, ErrTooLarge)
 	}
+	if current.Target != nil {
+		return fmt.Errorf("%s is a reference to %s, which is where that value is edited: %w", at, current.Target, ErrIsReference)
+	}
+	return refusePublisher(at, current.Provenance.Publisher, from)
+}
+
+func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext string, from Provenance, expected *int64) (Metadata, error) {
 	recorded, current, err := s.cellAt(ctx, scope, at)
 	if err != nil {
 		return Metadata{}, err
 	}
-	if current.Target != nil {
-		return Metadata{}, fmt.Errorf("%s is a reference to %s, which is where that value is edited: %w", at, current.Target, ErrIsReference)
+	if err := RefuseWrite(at, current.liveMetadata(at), plaintext, from); err != nil {
+		return Metadata{}, err
 	}
 	if from.isOlderThan(current.Provenance) {
 		return Metadata{}, ErrStaleVersion
@@ -119,6 +133,9 @@ func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext 
 }
 
 func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, recorded records.Entry, current storedValue, expected *int64, next storedValue) (Metadata, error) {
+	if err := refuseOtherPublisher(at, current, next.Provenance); err != nil {
+		return Metadata{}, err
+	}
 	if expected != nil && *expected != current.live() {
 		return Metadata{}, ErrStaleVersion
 	}
@@ -399,6 +416,9 @@ func (s Store) remove(ctx context.Context, scope Scope, at Coordinate, from Prov
 	}
 	if current.live() == 0 {
 		return false, nil
+	}
+	if err := refuseOtherPublisher(at, current, from); err != nil {
+		return false, err
 	}
 	if current.Target != nil {
 		if err := s.unindexReference(ctx, scope, at, current.Target); err != nil {

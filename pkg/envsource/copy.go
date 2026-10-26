@@ -3,6 +3,7 @@ package envsource
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strconv"
@@ -58,9 +59,12 @@ func CopyValues(ctx context.Context, store variablestore.Store, scope variablest
 		if written.Version > 0 {
 			result.recordVersion(at, variablestore.Version{Version: written.Version, CreatedAt: written.UpdatedAt, Size: written.Size})
 		}
+		var published *variablestore.PublishedError
 		switch {
 		case err == nil:
 			result.Written = append(result.Written, at)
+		case errors.As(err, &published):
+			result.refuse(at, fmt.Errorf("%w, so %s never writes it: stop publishing it there to read it from %s", err, envSource, envSource))
 		case errors.Is(err, variablestore.ErrStaleVersion):
 		case errors.Is(err, variablestore.ErrTooLarge), errors.Is(err, variablestore.ErrIsReference):
 			result.refuse(at, err)
@@ -71,7 +75,7 @@ func CopyValues(ctx context.Context, store variablestore.Store, scope variablest
 
 	for _, metadata := range listed {
 		at := metadata.Coordinate.Cell
-		if metadata.Coordinate.Environment != "" || metadata.Target != nil || !copied(at) {
+		if metadata.Coordinate.Environment != "" || metadata.Target != nil || metadata.Provenance.Publisher != "" || !copied(at) {
 			continue
 		}
 		if _, present := read[at]; present {

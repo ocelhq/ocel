@@ -1,0 +1,31 @@
+---
+title: "ocel env unpublish"
+description: "Remove the values one infrastructure program wrote, at the versions it wrote, read as JSON on stdin."
+---
+
+```bash
+ocel env unpublish [flags]
+```
+
+The input is a provider.variablestore.v1.PublishedVersions in protobuf JSON, each key with the version `ocel env publish --json` reported writing:
+
+```bash
+{"values": [{"key": "API_KEY", "version": "3"}]}
+```
+
+A value the publisher has written again since is left in place, so a program that moved the call publishing it keeps the values the new call wrote when the old one is removed.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--environment` | `string` |  | Use this named preview environment; requires `--preview` |
+| `--preview` | `bool` | `false` | Use preview values |
+| `--publisher` | `string` |  | The stable id of the program that published these values |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema env unpublish` prints.

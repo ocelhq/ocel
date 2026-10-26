@@ -1,0 +1,31 @@
+---
+title: "ocel env publish"
+description: "Publish the values one infrastructure program writes, read as JSON on stdin."
+---
+
+```bash
+ocel env publish [flags]
+```
+
+The input is a provider.variablestore.v1.PublishedValues in protobuf JSON, every value the publisher writes to this tier or preview environment:
+
+```bash
+{"values": [{"key": "API_KEY", "value": "…", "secret": true}]}
+```
+
+Each value is checked as `ocel env set` checks one: a secret value must be declared secret, and a plain value must not be. A value the publisher wrote before and no longer lists is removed, so publishing nothing removes everything it wrote. A value a publisher wrote is changed only by publishing again: `ocel env set` and `ocel env rm` refuse it.
+
+## Flags
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--environment` | `string` |  | Use this named preview environment; requires `--preview` |
+| `--preview` | `bool` | `false` | Use preview values |
+| `--publisher` | `string` |  | The stable id of the program publishing these values |
+
+Every command also takes the [global flags](/docs/cli#global-flags).
+
+## Behaviour
+
+- Changes state.
+- Prints data on stdout. Under `--json` it prints one result envelope, whose JSON Schema `ocel schema env publish` prints.

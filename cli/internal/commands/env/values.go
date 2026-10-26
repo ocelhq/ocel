@@ -160,6 +160,9 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 			return nil
 		}
 		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), terminal.EpochDate(m.GetUpdatedAt()))
+		if publisher := m.GetPublisher(); publisher != "" {
+			fmt.Fprintf(stdout, "Published by %s, the program to change it in.\n", publisher)
+		}
 		fmt.Fprintln(stdout, "Pass --reveal to print the value.")
 		return nil
 	})
@@ -228,6 +231,7 @@ func writeEnvGetJSON(stdout io.Writer, req *variablestorev1.GetValueRequest, res
 		UpdatedAt:  terminal.EpochRFC3339(m.GetUpdatedAt()),
 		Target:     newResultCoordinate(m.GetTarget()),
 		Revealed:   req.GetReveal(),
+		Publisher:  m.GetPublisher(),
 	}
 	if req.GetReveal() {
 		value := resp.GetValue()

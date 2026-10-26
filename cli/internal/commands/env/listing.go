@@ -69,6 +69,7 @@ func writeEnvListJSON(stdout io.Writer, req *variablestorev1.ListValuesRequest, 
 			UpdatedAt:   terminal.EpochRFC3339(v.GetUpdatedAt()),
 			EnvSource:   envSourceOrBuiltin(v),
 			Target:      newResultCoordinate(v.GetTarget()),
+			Publisher:   v.GetPublisher(),
 		})
 	}
 	return terminal.WriteResultJSON(stdout, result)
@@ -134,8 +135,11 @@ func valueRow(v *variablestorev1.ValueMetadata, lead string, descriptions map[st
 	}
 	size := fmt.Sprint(v.GetSize())
 	source := envSourceOrBuiltin(v)
-	if target := v.GetTarget(); target != nil {
-		size, source = "—", describeCoordinate(target)
+	switch {
+	case v.GetTarget() != nil:
+		size, source = "—", describeCoordinate(v.GetTarget())
+	case v.GetPublisher() != "":
+		source = v.GetPublisher()
 	}
 	return listingRow{lead: lead, cells: []string{
 		c.GetKey(), descriptions[c.GetKey()], folderOrRoot(c.GetFolder()), environment,

@@ -382,6 +382,8 @@ message EnvValueSummary {
   string env_source = 8;
 
   optional EnvCoordinate target = 9;
+
+  string publisher = 10;
 }
 
 message EnvGetResult {
@@ -400,6 +402,32 @@ message EnvGetResult {
   bool revealed = 7;
 
   optional string value = 8;
+
+  string publisher = 9;
+}
+
+message EnvPublishResult {
+  common.environment.v1.Tier tier = 1;
+
+  string publisher = 2;
+
+  repeated EnvWrittenValue written = 3;
+
+  repeated EnvCoordinate removed = 4;
+}
+
+message EnvWrittenValue {
+  EnvCoordinate coordinate = 1;
+
+  int64 version = 2;
+}
+
+message EnvUnpublishResult {
+  common.environment.v1.Tier tier = 1;
+
+  string publisher = 2;
+
+  repeated EnvCoordinate removed = 3;
 }
 
 message EnvRefsResult {

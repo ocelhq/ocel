@@ -13,6 +13,9 @@ type Provenance struct {
 	EnvSource string    `json:"envSource,omitempty"`
 	Version   string    `json:"envSourceVersion,omitempty"`
 	ReadAt    time.Time `json:"envSourceReadAt,omitzero"`
+
+	Publisher       string `json:"publisher,omitempty"`
+	PublishedSecret bool   `json:"publishedSecret,omitempty"`
 }
 
 func (p Provenance) isOlderThan(stored Provenance) bool {

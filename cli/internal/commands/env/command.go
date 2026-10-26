@@ -39,6 +39,8 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		newSetCommand(dependencies),
 		newGetCommand(dependencies),
 		newRemoveCommand(dependencies),
+		newPublishCommand(dependencies),
+		newUnpublishCommand(dependencies),
 		newRefCommand(dependencies),
 		newRefsCommand(dependencies),
 		newHistoryCommand(dependencies),
