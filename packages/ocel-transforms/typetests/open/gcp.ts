@@ -1,6 +1,6 @@
 import { bindings, defineTransform } from "@ocel/transforms";
 import type { LeafPaths } from "@ocel/transforms/gcp";
-import type { storage } from "@pulumi/gcp";
+import type { pubsub, storage } from "@pulumi/gcp";
 import type { Unwrap } from "@pulumi/pulumi";
 
 export const tuned = defineTransform({
@@ -155,6 +155,106 @@ export const ownedPersistence = defineTransform({
         // @ts-expect-error append-only persistence is ocel's promise for a store
         persistenceConfig: { mode: "RDB" },
       },
+    },
+  },
+});
+
+export const retainedTopic = defineTransform({
+  gcp: {
+    topic: {
+      topic: {
+        messageRetentionDuration: "86400s",
+        kmsKeyName: bindings.custom.keys.topicKey,
+        messageStoragePolicy: {
+          allowedPersistenceRegions: ["europe-west1"],
+          enforceInTransit: true,
+        },
+      },
+    },
+    task: { topic: { messageRetentionDuration: "3600s" } },
+  },
+});
+
+export const ownedTopicSchema = defineTransform({
+  gcp: {
+    topic: {
+      topic: {
+        // @ts-expect-error ocel attaches no schema, and a schema is never patched on
+        schemaSettings: { schema: "projects/acme/schemas/orders" },
+      },
+    },
+  },
+});
+
+export const ownedTopicName = defineTransform({
+  gcp: {
+    task: {
+      topic: {
+        // @ts-expect-error ocel names the topic itself
+        name: "mine",
+      },
+    },
+  },
+});
+
+export const realTopicPath: LeafPaths<Unwrap<pubsub.TopicArgs>> =
+  "messageStoragePolicy.enforceInTransit";
+
+export const retainedAcknowledged = defineTransform({
+  gcp: {
+    topic: { subscription: { retainAckedMessages: true, messageRetentionDuration: "86400s" } },
+  },
+});
+
+export const ownedPush = defineTransform({
+  gcp: {
+    task: {
+      subscription: {
+        // @ts-expect-error ocel pushes each message to its worker
+        pushConfig: { pushEndpoint: "https://example.com" },
+      },
+    },
+  },
+});
+
+export const deadLettered = defineTransform({
+  gcp: {
+    topic: {
+      subscription: {
+        // @ts-expect-error a message is redelivered until its run settles, never dead-lettered
+        deadLetterPolicy: { deadLetterTopic: "projects/acme/topics/dead" },
+      },
+    },
+  },
+});
+
+export const retriedJob = defineTransform({
+  gcp: {
+    task: {
+      job: {
+        description: "the nightly digest",
+        retryConfig: { retryCount: 3, minBackoffDuration: "10s", maxBackoffDuration: "300s" },
+      },
+    },
+  },
+});
+
+export const ownedSchedule = defineTransform({
+  gcp: {
+    task: {
+      job: {
+        // @ts-expect-error the cron comes from the task
+        schedule: "0 * * * *",
+      },
+    },
+  },
+});
+
+export const topicJob = defineTransform({
+  gcp: {
+    topic: {
+      // @ts-expect-error only a task fires on a cron
+      job: { description: "never fires" },
     },
   },
 });

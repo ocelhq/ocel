@@ -105,6 +105,12 @@ func (p *Topic) Provision(ctx context.Context, in resources.ProvisionRequest, pr
 	if err != nil {
 		return provider.Binding{}, err
 	}
+	if topology.Asked, err = p.askedOf(ctx, in, topic); err != nil {
+		return provider.Binding{}, err
+	}
+	if err := topology.RefuseInvalidPatches(); err != nil {
+		return provider.Binding{}, err
+	}
 	path := topics.TopicPath(c.Project(), name)
 	gcloud.EnsureProgress(progress).Say(fmt.Sprintf("Provisioning %s %s as Pub/Sub topic %s with %d consumer(s)", in.Resource.Type, topic.declared, path, len(topic.spec.Consumers)))
 	if previous, recorded, err := p.recordedTopic(ctx, in.Ref, in.Resource); err != nil {
@@ -140,6 +146,12 @@ func (p *Topic) Plan(ctx context.Context, in resources.ProvisionRequest, recorde
 	topic := declaredTopicOf(in.Resource)
 	topology := topologyOf(c, in.Ref, map[string]*provider.TopicSpec{topic.declared: topic.spec})
 	if _, err := nameTopic(topology.Names, topic); err != nil {
+		return "", "", err
+	}
+	if topology.Asked, err = p.askedOf(ctx, in, topic); err != nil {
+		return "", "", err
+	}
+	if err := topology.RefuseInvalidPatches(); err != nil {
 		return "", "", err
 	}
 	var previous map[string]*provider.TopicSpec
@@ -259,6 +271,7 @@ func (p *Topic) Component() component.Component {
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
 		Shape:         shapeTopics,
+		Transforms:    transformTargets(),
 		Parts:         []component.Part{component.NewPart(bootstrap.Topics)},
 		Accounts:      []bootstrap.Account{{Name: names.Names.PushAccount, Purpose: task.PushPurpose}},
 		Grants: func(ctx context.Context, app component.App) ([]grants.Grant, error) {
@@ -279,14 +292,19 @@ func shapeTopics(shape component.Shape, declared []provider.Resource) error {
 		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubTopicType, name, shape.Region, map[string]any{})
+		retained, err := shapeRetention(shape, resource)
+		if err != nil {
+			return err
+		}
+		shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubTopicType, name, shape.Region, retained.topic, retained.topicUnknown...)
 		for _, consumer := range topic.spec.Consumers {
 			subscription, err := scope.Subscription(topic.declared, consumer.Name)
 			if err != nil {
 				return err
 			}
-			shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubSubscriptionType, subscription, shape.Region,
-				map[string]any{"ack_deadline_seconds": int(PushCeiling.Seconds()), "enable_message_ordering": topic.spec.Ordered})
+			properties := map[string]any{"ack_deadline_seconds": int(PushCeiling.Seconds()), "enable_message_ordering": topic.spec.Ordered}
+			maps.Copy(properties, retained.subscription)
+			shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubSubscriptionType, subscription, shape.Region, properties, retained.subscriptionUnknown...)
 		}
 		if topic.spec.Cron != "" {
 			shape.Tree.Add(shape.Environment, shape.Vendor, cost.SchedulerJobType, name, shape.Region, map[string]any{"region": shape.Region, "schedule": topic.spec.Cron})

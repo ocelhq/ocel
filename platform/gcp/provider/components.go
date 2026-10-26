@@ -20,7 +20,9 @@ func (p *Provider) components() component.Registry {
 	}
 }
 
-func (p *Provider) topicHooks() *topic.Topic { return topic.New(p.openClients, p.KeyValues()) }
+func (p *Provider) topicHooks() *topic.Topic {
+	return topic.New(p.openClients, p.KeyValues())
+}
 
 func (p *Provider) realtimeHooks() *realtime.Realtime {
 	return realtime.New(p.openClients, p.KeyValues(), p.services(), p.pushBinary, p.containerEndpoint())

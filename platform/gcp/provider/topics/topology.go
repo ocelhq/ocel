@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	pubsub "google.golang.org/api/pubsub/v1"
@@ -15,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/policy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -35,6 +37,7 @@ type Topology struct {
 	Names  Names
 	Topics map[string]*provider.TopicSpec
 	Tags   TierTags
+	Asked  map[string]Asked
 }
 
 type Subscriptions struct {
@@ -80,7 +83,10 @@ func (t Topology) Ensure(ctx context.Context, clients *ports.Clients) error {
 		if err != nil {
 			return err
 		}
-		if err := ensureTopic(ctx, service, path, t.Tags); err != nil {
+		if err := t.ensureTopic(ctx, clients, service, name, path); err != nil {
+			return err
+		}
+		if err := t.patchSubscriptions(ctx, clients, service, name, topic); err != nil {
 			return err
 		}
 		if isScheduled(topic) {
@@ -99,6 +105,10 @@ func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error
 	}
 	for _, name := range slices.Sorted(maps.Keys(s.Topics)) {
 		topic := s.Topics[name]
+		asked, err := s.readAsked(ctx, clients, name)
+		if err != nil {
+			return err
+		}
 		for _, consumer := range topic.Consumers {
 			push, hosted := s.Pushes[consumer.Worker]
 			if !hosted {
@@ -113,7 +123,13 @@ func (s Subscriptions) Ensure(ctx context.Context, clients *ports.Clients) error
 				return err
 			}
 			desired.Tags = s.Tags.Inline
-			if err := ensureSubscription(ctx, service, path, desired, s.Tags); err != nil {
+			subscription, err := s.patchSubscription(ctx, clients, asked, name, consumer.Name, *desired)
+			if err != nil {
+				return err
+			}
+			if err := subscription.Apply(ctx, func() error {
+				return ensureSubscription(ctx, service, path, &subscription.Desired, s.Tags)
+			}); err != nil {
 				return err
 			}
 		}
@@ -147,18 +163,159 @@ func durationText(d time.Duration) string {
 	return strconv.FormatFloat(d.Seconds(), 'f', -1, 64) + "s"
 }
 
-func ensureTopic(ctx context.Context, service *pubsub.Service, path string, tags TierTags) error {
+func (t Topology) patchTopic(ctx context.Context, clients *ports.Clients, name string) (surface.RecordedPatch[pubsub.Topic, TopicUpdate], error) {
+	desired := pubsub.Topic{Tags: t.Tags.Inline}
+	asked, evaluated := t.Asked[name]
+	if !evaluated {
+		return unpatched[pubsub.Topic, TopicUpdate](desired), nil
+	}
+	return patch(ctx, clients.Records, t.Names.patchesKey(name), TopicSurface, asked, desired)
+}
+
+func (t Topology) ensureTopic(ctx context.Context, clients *ports.Clients, service *pubsub.Service, name, path string) error {
+	topic, err := t.patchTopic(ctx, clients, name)
+	if err != nil {
+		return err
+	}
+	return topic.Apply(ctx, func() error {
+		err := googleretry.Done(ctx, func() error {
+			_, err := service.Projects.Topics.Create(path, &topic.Desired).Context(ctx).Do()
+			return err
+		})
+		switch {
+		case err == nil:
+			return nil
+		case isAnswered(err, http.StatusConflict):
+			if err := t.Tags.Ensure(ctx, path); err != nil {
+				return err
+			}
+			return updateTopic(ctx, service, path, topic)
+		}
+		return fmt.Errorf("create Pub/Sub topic %s: %w", path, err)
+	})
+}
+
+func (s Subscriptions) readAsked(ctx context.Context, clients *ports.Clients, topic string) (*Asked, error) {
+	if clients.Records == nil {
+		return nil, nil
+	}
+	asked, err := readAskedSubscriptions(ctx, clients.Records, s.Names.askedSubscriptionsKey(topic))
+	return &asked, err
+}
+
+func (s Subscriptions) patchSubscription(ctx context.Context, clients *ports.Clients, asked *Asked, topic, consumer string, desired pubsub.Subscription) (surface.RecordedPatch[pubsub.Subscription, SubscriptionUpdate], error) {
+	if asked == nil {
+		return unpatched[pubsub.Subscription, SubscriptionUpdate](desired), nil
+	}
+	return patch(ctx, clients.Records, s.Names.subscriptionPatchesKey(topic, consumer), SubscriptionSurface, *asked, desired)
+}
+
+func (t Topology) patchSubscriptions(ctx context.Context, clients *ports.Clients, service *pubsub.Service, name string, topic *provider.TopicSpec) error {
+	asked, evaluated := t.Asked[name]
+	if !evaluated {
+		return nil
+	}
+	if err := writeAskedSubscriptions(ctx, clients.Records, t.Names.askedSubscriptionsKey(name), asked); err != nil {
+		return err
+	}
+	for _, consumer := range topic.Consumers {
+		path, err := t.Names.subscriptionPath(clients.Project, name, consumer.Name)
+		if err != nil {
+			return err
+		}
+		subscription, err := patch(ctx, clients.Records, t.Names.subscriptionPatchesKey(name, consumer.Name), SubscriptionSurface, asked, pubsub.Subscription{})
+		if err != nil {
+			return err
+		}
+		if subscription.IsEmpty() {
+			continue
+		}
+		current, err := readSubscription(ctx, service, path)
+		if err != nil {
+			return err
+		}
+		if current == nil {
+			continue
+		}
+		update, _, err := subscriptionDrift(subscription, current)
+		if err != nil {
+			return err
+		}
+		if err := subscription.Apply(ctx, func() error { return updateSubscription(ctx, service, path, update) }); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func readSubscription(ctx context.Context, service *pubsub.Service, path string) (*pubsub.Subscription, error) {
+	current, err := googleretry.Attempted(ctx, service.Projects.Subscriptions.Get(path).Context(ctx).Do)
+	if isAnswered(err, http.StatusNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read Pub/Sub subscription %s: %w", path, err)
+	}
+	return current, nil
+}
+
+func subscriptionDrift(subscription surface.RecordedPatch[pubsub.Subscription, SubscriptionUpdate], current *pubsub.Subscription) (SubscriptionUpdate, []string, error) {
+	update := SubscriptionUpdate{Subscription: pubsub.Subscription{Labels: maps.Clone(current.Labels)}}
+	differences, err := subscription.Drift(current, &update)
+	return update, differences, err
+}
+
+func updateSubscription(ctx context.Context, service *pubsub.Service, path string, update SubscriptionUpdate) error {
+	if len(update.Mask) == 0 {
+		return nil
+	}
 	err := googleretry.Done(ctx, func() error {
-		_, err := service.Projects.Topics.Create(path, &pubsub.Topic{Tags: tags.Inline}).Context(ctx).Do()
+		_, err := service.Projects.Subscriptions.Patch(path, &pubsub.UpdateSubscriptionRequest{Subscription: &update.Subscription, UpdateMask: strings.Join(update.Mask, ",")}).Context(ctx).Do()
 		return err
 	})
-	switch {
-	case err == nil:
-		return nil
-	case isAnswered(err, http.StatusConflict):
-		return tags.Ensure(ctx, path)
+	if err != nil {
+		return fmt.Errorf("update Pub/Sub subscription %s: %w", path, err)
 	}
-	return fmt.Errorf("create Pub/Sub topic %s: %w", path, err)
+	return nil
+}
+
+func readTopic(ctx context.Context, service *pubsub.Service, path string) (*pubsub.Topic, error) {
+	current, err := googleretry.Attempted(ctx, service.Projects.Topics.Get(path).Context(ctx).Do)
+	if isAnswered(err, http.StatusNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read Pub/Sub topic %s: %w", path, err)
+	}
+	return current, nil
+}
+
+func topicDrift(topic surface.RecordedPatch[pubsub.Topic, TopicUpdate], current *pubsub.Topic, path string) (TopicUpdate, []string, error) {
+	update := TopicUpdate{Topic: pubsub.Topic{Name: path, Labels: maps.Clone(current.Labels)}}
+	differences, err := topic.Drift(current, &update)
+	return update, differences, err
+}
+
+func updateTopic(ctx context.Context, service *pubsub.Service, path string, topic surface.RecordedPatch[pubsub.Topic, TopicUpdate]) error {
+	if topic.IsEmpty() {
+		return nil
+	}
+	current, err := readTopic(ctx, service, path)
+	if err != nil || current == nil {
+		return err
+	}
+	update, _, err := topicDrift(topic, current, path)
+	if err != nil || len(update.Mask) == 0 {
+		return err
+	}
+	err = googleretry.Done(ctx, func() error {
+		_, err := service.Projects.Topics.Patch(path, &pubsub.UpdateTopicRequest{Topic: &update.Topic, UpdateMask: strings.Join(update.Mask, ",")}).Context(ctx).Do()
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("update Pub/Sub topic %s: %w", path, err)
+	}
+	return nil
 }
 
 func ensureSubscription(ctx context.Context, service *pubsub.Service, path string, desired *pubsub.Subscription, tags TierTags) error {
@@ -261,6 +418,9 @@ func (t Topology) removeConsumers(ctx context.Context, clients *ports.Clients, t
 		}); err != nil {
 			return err
 		}
+		if err := forgetPatches(ctx, clients, t.Names.subscriptionPatchesKey(topic, consumer)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -329,6 +489,16 @@ func (t Topology) ReadDifferences(ctx context.Context, clients *ports.Clients, p
 	var differences []string
 	for _, name := range slices.Sorted(maps.Keys(t.Topics)) {
 		topic := t.Topics[name]
+		patchedTopic, err := t.readTopicDifferences(ctx, clients, service, name)
+		if err != nil {
+			return nil, err
+		}
+		differences = append(differences, patchedTopic...)
+		patchedSubscriptions, err := t.readSubscriptionDifferences(ctx, clients, service, name, topic)
+		if err != nil {
+			return nil, err
+		}
+		differences = append(differences, patchedSubscriptions...)
 		if before, declared := previous[name]; declared {
 			for _, consumer := range findDroppedConsumers(before, topic) {
 				path, err := t.Names.subscriptionPath(clients.Project, name, consumer)
@@ -353,14 +523,73 @@ func (t Topology) ReadDifferences(ctx context.Context, clients *ports.Clients, p
 			}
 		}
 		if isScheduled(topic) {
-			difference, err := t.readScheduleDifference(ctx, clients, name, topic)
+			scheduled, err := t.readScheduleDifferences(ctx, clients, name, topic)
 			if err != nil {
 				return nil, err
 			}
-			differences = appendDifference(differences, difference)
+			differences = append(differences, scheduled...)
 		}
 	}
 	return differences, nil
+}
+
+func (t Topology) readTopicDifferences(ctx context.Context, clients *ports.Clients, service *pubsub.Service, name string) ([]string, error) {
+	topic, err := t.patchTopic(ctx, clients, name)
+	if err != nil || topic.IsEmpty() {
+		return nil, err
+	}
+	path, err := t.Names.topicPath(clients.Project, name)
+	if err != nil {
+		return nil, err
+	}
+	current, err := readTopic(ctx, service, path)
+	if err != nil || current == nil {
+		return nil, err
+	}
+	_, differences, err := topicDrift(topic, current, path)
+	return prefixed("the Pub/Sub topic's ", differences), err
+}
+
+func (t Topology) readSubscriptionDifferences(ctx context.Context, clients *ports.Clients, service *pubsub.Service, name string, topic *provider.TopicSpec) ([]string, error) {
+	asked, evaluated := t.Asked[name]
+	if !evaluated {
+		return nil, nil
+	}
+	var differences []string
+	for _, consumer := range topic.Consumers {
+		path, err := t.Names.subscriptionPath(clients.Project, name, consumer.Name)
+		if err != nil {
+			return nil, err
+		}
+		subscription, err := patch(ctx, clients.Records, t.Names.subscriptionPatchesKey(name, consumer.Name), SubscriptionSurface, asked, pubsub.Subscription{})
+		if err != nil {
+			return nil, err
+		}
+		if subscription.IsEmpty() {
+			continue
+		}
+		current, err := readSubscription(ctx, service, path)
+		if err != nil {
+			return nil, err
+		}
+		if current == nil {
+			continue
+		}
+		_, drifted, err := subscriptionDrift(subscription, current)
+		if err != nil {
+			return nil, err
+		}
+		differences = append(differences, prefixed("consumer "+consumer.Name+"'s subscription's ", drifted)...)
+	}
+	return differences, nil
+}
+
+func prefixed(prefix string, differences []string) []string {
+	out := make([]string, len(differences))
+	for i, difference := range differences {
+		out[i] = prefix + difference
+	}
+	return out
 }
 
 func appendDifference(differences []string, difference string) []string {
@@ -402,6 +631,9 @@ func (t Topology) Remove(ctx context.Context, clients *ports.Clients) error {
 			_, err := service.Projects.Topics.Delete(topic).Context(ctx).Do()
 			return err
 		}); err != nil {
+			return err
+		}
+		if err := forgetPatches(ctx, clients, t.Names.patchesKey(name), t.Names.askedSubscriptionsKey(name)); err != nil {
 			return err
 		}
 	}

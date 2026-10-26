@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"strings"
 
 	cloudscheduler "google.golang.org/api/cloudscheduler/v1"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -74,25 +76,40 @@ func (t Topology) readJob(ctx context.Context, clients *ports.Clients, task stri
 	return job, nil
 }
 
-func (t Topology) readScheduleDifference(ctx context.Context, clients *ports.Clients, task string, spec *provider.TopicSpec) (string, error) {
-	current, err := t.readJob(ctx, clients, task, spec)
-	if err != nil {
-		return "", err
-	}
+func (t Topology) patchJob(ctx context.Context, clients *ports.Clients, task string, spec *provider.TopicSpec) (surface.RecordedPatch[cloudscheduler.Job, JobUpdate], error) {
 	desired, err := t.buildJob(clients, task, spec)
 	if err != nil {
-		return "", err
+		return surface.RecordedPatch[cloudscheduler.Job, JobUpdate]{}, err
 	}
+	asked, evaluated := t.Asked[task]
+	if !evaluated {
+		return unpatched[cloudscheduler.Job, JobUpdate](*desired), nil
+	}
+	return patch(ctx, clients.Records, t.Names.jobPatchesKey(task), JobSurface, asked, *desired)
+}
+
+func (t Topology) readScheduleDifferences(ctx context.Context, clients *ports.Clients, task string, spec *provider.TopicSpec) ([]string, error) {
+	current, err := t.readJob(ctx, clients, task, spec)
+	if err != nil {
+		return nil, err
+	}
+	job, err := t.patchJob(ctx, clients, task, spec)
+	if err != nil {
+		return nil, err
+	}
+	desired := &job.Desired
 	cron := spec.Cron
+	var differences []string
 	switch {
 	case current == nil:
-		return fmt.Sprintf("Cloud Scheduler job %s is created to fire at %q", desired.Name, cron), nil
+		return []string{fmt.Sprintf("Cloud Scheduler job %s is created to fire at %q", desired.Name, cron)}, nil
 	case current.Schedule != desired.Schedule:
-		return fmt.Sprintf("Cloud Scheduler job %s changes from firing at %q to %q", desired.Name, current.Schedule, desired.Schedule), nil
+		differences = append(differences, fmt.Sprintf("Cloud Scheduler job %s changes from firing at %q to %q", desired.Name, current.Schedule, desired.Schedule))
 	case !isSameTarget(current, desired):
-		return fmt.Sprintf("Cloud Scheduler job %s has its time zone and Pub/Sub target rewritten", desired.Name), nil
+		differences = append(differences, fmt.Sprintf("Cloud Scheduler job %s has its time zone and Pub/Sub target rewritten", desired.Name))
 	}
-	return "", nil
+	patchedDifferences, err := job.Drift(current, &JobUpdate{})
+	return append(differences, prefixed("the Cloud Scheduler job's ", patchedDifferences)...), err
 }
 
 func (t Topology) readDroppedScheduleDifference(ctx context.Context, clients *ports.Clients, task string, before *provider.TopicSpec) (string, error) {
@@ -108,25 +125,41 @@ func (t Topology) ensureSchedule(ctx context.Context, clients *ports.Clients, ta
 	if err != nil {
 		return err
 	}
-	desired, err := t.buildJob(clients, task, spec)
+	job, err := t.patchJob(ctx, clients, task, spec)
 	if err != nil {
 		return err
 	}
-	path := desired.Name
+	path := job.Desired.Name
 	parent := "projects/" + clients.Project + "/locations/" + clients.Region
-	err = googleretry.Done(ctx, func() error {
-		_, err := service.Projects.Locations.Jobs.Create(parent, desired).Context(ctx).Do()
-		return err
+	return job.Apply(ctx, func() error {
+		err := googleretry.Done(ctx, func() error {
+			_, err := service.Projects.Locations.Jobs.Create(parent, &job.Desired).Context(ctx).Do()
+			return err
+		})
+		if err == nil {
+			return nil
+		}
+		if !isAnswered(err, http.StatusConflict) {
+			return fmt.Errorf("create Cloud Scheduler job %s: %w", path, err)
+		}
+		return updateJob(ctx, service, path, job)
 	})
-	if err == nil {
-		return nil
+}
+
+func updateJob(ctx context.Context, service *cloudscheduler.Service, path string, job surface.RecordedPatch[cloudscheduler.Job, JobUpdate]) error {
+	update := JobUpdate{Job: job.Desired, Mask: []string{"schedule", "timeZone", "pubsubTarget"}}
+	update.Job.Name = ""
+	if !job.IsEmpty() {
+		current, err := googleretry.Attempted(ctx, service.Projects.Locations.Jobs.Get(path).Context(ctx).Do)
+		if err != nil {
+			return fmt.Errorf("read Cloud Scheduler job %s: %w", path, err)
+		}
+		if _, err := job.Drift(current, &update); err != nil {
+			return err
+		}
 	}
-	if !isAnswered(err, http.StatusConflict) {
-		return fmt.Errorf("create Cloud Scheduler job %s: %w", path, err)
-	}
-	desired.Name = ""
-	err = googleretry.Done(ctx, func() error {
-		_, err := service.Projects.Locations.Jobs.Patch(path, desired).UpdateMask("schedule,timeZone,pubsubTarget").Context(ctx).Do()
+	err := googleretry.Done(ctx, func() error {
+		_, err := service.Projects.Locations.Jobs.Patch(path, &update.Job).UpdateMask(strings.Join(update.Mask, ",")).Context(ctx).Do()
 		return err
 	})
 	if err != nil {
@@ -150,5 +183,5 @@ func (t Topology) removeSchedule(ctx context.Context, clients *ports.Clients, ta
 	}); err != nil && !isAnswered(err, http.StatusNotFound) {
 		return fmt.Errorf("delete Cloud Scheduler job %s: %w", path, err)
 	}
-	return nil
+	return forgetPatches(ctx, clients, t.Names.jobPatchesKey(task))
 }
