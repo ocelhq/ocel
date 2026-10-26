@@ -166,8 +166,8 @@ Binding, confirmed by the owner:
    path sits one step away, complete and working without anyone's permission. Beyond
    that, Ocel Cloud appears only where a reader of the engine meets it anyway (the list
    of targets, `ocel deploy` with no provider, its error codes), described as plainly
-   as AWS. No banners, upsells, or pricing on the open-source side; the shared top bar
-   is the standing doorway to ocelhq.com.
+   as AWS. No banners, upsells, or pricing on the open-source side, and no link to
+   ocelhq.com in the site bar: each site's bar serves its own product.
 6. **Agents are first-class, and the site shows it.** The skill, `--json` everywhere,
    stable error codes with docs URLs, a self-describing binary, `llms.txt` and `.md`
    pages are product, not footnotes (`content/docs/agents.mdx`).
