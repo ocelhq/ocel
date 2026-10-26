@@ -71,7 +71,9 @@ func hostnameStatus(provider *providerprocess.Provider, req *contractv1.Hostname
 const domainWaitFailures = 4
 
 func awaitDomainStatus(ctx context.Context, check *run.Span, slug string, read func(context.Context) (*contractv1.GetHostnameStatusResponse, error), wait bool, schedule domainWaitSchedule) (*contractv1.GetHostnameStatusResponse, error) {
+	checking := check.Child(slug, progress.Checking.Title("the production hostnames"))
 	resp, err := read(ctx)
+	checking.End(err)
 	if err != nil || !wait || resp.GetReady() {
 		return resp, err
 	}
