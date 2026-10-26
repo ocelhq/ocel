@@ -38,6 +38,7 @@ type output struct {
 	lastBatch time.Time
 	idle      *time.Timer
 	idleErr   error
+	caughtUp  func()
 }
 
 type outputMode struct {
@@ -99,6 +100,9 @@ func (o *output) printResponse(resp *contractv1.ReadLogsResponse) error {
 	case *contractv1.ReadLogsResponse_Notice:
 		if err := o.writeOpenGroup(); err != nil {
 			return err
+		}
+		if body.Notice.GetKind() == contractv1.LogNotice_KIND_CAUGHT_UP && o.caughtUp != nil {
+			o.caughtUp()
 		}
 		if o.tail && body.Notice.GetKind() == contractv1.LogNotice_KIND_CAUGHT_UP {
 			o.live = true

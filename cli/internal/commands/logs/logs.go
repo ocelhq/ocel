@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -122,9 +123,12 @@ func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []
 	mode.json = present.Format == terminal.FormatJSON
 	open := commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: query.request.GetEnvironment().GetTier(), Cloud: target.Cloud}
 	return dependencies.WithProvider(ctx, cfg, "ocel logs", open, func(ctx context.Context, p commands.ProviderRun) error {
-		p.Check.End(nil)
+		reading := p.Check.Child(cfg.Slug, progress.Reading.Title("the logs of "+cfg.Slug))
 		out := newOutput(stdout, present, mode, newNotices(stderr, dependencies.Presentation(stderr).Palette(), p.Check.Warn))
-		return query.read(ctx, p.Provider, out)
+		out.caughtUp = func() { p.Check.End(nil) }
+		err := query.read(ctx, p.Provider, out)
+		reading.End(err)
+		return err
 	})
 }
 

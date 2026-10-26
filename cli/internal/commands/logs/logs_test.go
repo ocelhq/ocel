@@ -959,6 +959,37 @@ func (r *tailRun) interrupt() error {
 	return r.finish()
 }
 
+func TestLogsNamesItsReadingUnderCheck(t *testing.T) {
+	project := deployedWithLogs(t)
+
+	got := read(t, project, terminal.FormatHuman, nil)
+
+	for line := range strings.Lines(got.stderr) {
+		if strings.Contains(line, "Read the logs of test-app") {
+			if !strings.Contains(line, "[check]") {
+				t.Errorf("the reading was reported as %q, want it under [check]", line)
+			}
+			return
+		}
+	}
+	t.Errorf("stderr = %q, want the reading of the logs reported", got.stderr)
+}
+
+func TestATailEndsItsReadingOnceTheHistoryIsDeliveredAndKeepsStreaming(t *testing.T) {
+	project := deployedWithLogs(t)
+	run := startTail(t, project, plainDependencies, nil)
+
+	run.waitFor(run.stdout, "api is listening")
+	run.waitFor(run.stderr, "Read the logs of test-app")
+	run.waitForTailOpened(project)
+	project.Provider.FakeLogs().Append("web-live", liveEntry("a live request"))
+	run.waitFor(run.stdout, "a live request")
+
+	if err := run.interrupt(); err != nil {
+		t.Fatalf("runLogs err = %v", err)
+	}
+}
+
 func TestLogsTailPrintsHistoryThenLiveEntries(t *testing.T) {
 	project := deployedWithLogs(t)
 	run := startTail(t, project, plainDependencies, nil)
