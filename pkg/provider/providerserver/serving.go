@@ -64,7 +64,7 @@ func AppServingFor(q AppServingInput) (AppServing, error) {
 	if err != nil {
 		return AppServing{}, err
 	}
-	if uses.Revalidation {
+	if uses.Revalidation && (present || q.Compute != provider.ComputeContainer) {
 		facts.ISR = &provider.ISRSpec{
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),
 		}
