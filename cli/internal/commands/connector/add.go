@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/connectorserver"
+	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -48,13 +49,18 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 	}
 	defer provider.Close()
 
+	provisioning := run.Phase(progressv1.Phase_PHASE_PROVISION)
+	adding := provisioning.Child(cfg.Slug, progress.Adding.Title("this target to the console"))
 	registered, err := opts.console.UpsertConnector(ctx, access, described.GetTargetFingerprint(), vendor)
+	adding.End(err)
 	if err != nil {
 		return fmt.Errorf("record this target in the console: %w", err)
 	}
 
 	platform := executables.Platform{GOOS: described.GetOs(), GOARCH: described.GetArch()}
+	loading := provisioning.Child(cfg.Slug, progress.Loading.Title(fmt.Sprintf("the connector built for %s/%s", platform.GOOS, platform.GOARCH)))
 	binary, err := executables.EnsureConnector(ctx, cfg.Dir, vendor, platform)
+	loading.End(err)
 	if err != nil {
 		return err
 	}
@@ -88,18 +94,19 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 			"the provider installed the connector and named no address, so the console has nothing to dial"))
 	}
 
+	addressing := provisioning.Child(cfg.Slug, progress.Updating.Title("the console with this connector's address"))
 	paired, err := opts.console.SetConnectorAddress(ctx, access, registered.GetId(), console.ConnectorAddress{
 		URL:       at.GetUrl(),
 		PublicKey: at.GetPublicKey(),
 		Compute:   at.GetCompute(),
 	})
+	addressing.End(err)
 	if err != nil {
 		return explainUnfinishedAdd(fmt.Errorf("tell the console where to dial this connector: %w", err))
 	}
 
-	granting := run.Phase(progressv1.Phase_PHASE_PROVISION)
-	granting.Say(grantsLine(opts.grants()))
-	granting.End(nil)
+	provisioning.Say(grantsLine(opts.grants()))
+	provisioning.End(nil)
 	run.Succeed(fmt.Sprintf("Installed the connector on %s, which the console dials at %s", paired.GetTarget(), at.GetUrl()))
 	return nil
 }
