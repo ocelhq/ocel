@@ -194,6 +194,36 @@ func TestWithProviderEndsADeclinedSetupAsARunThatChangedNothing(t *testing.T) {
 	}
 }
 
+func TestWithProviderNamesTheReadingOfTheConfigAfterASetupUnderCheck(t *testing.T) {
+	fixture := clitest.SetUpProject(t)
+	invocation := clitest.NewInvocation()
+	var rendered strings.Builder
+	clitest.AttachTerminalSink(invocation, &rendered)
+	runs := 0
+	invocation.Setups = prerequisite.Setups{prerequisite.Bootstrap: previewBootstrapSetup(fixture, t, &runs)}
+	cfg, err := invocation.LoadProject(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
+	policy := consent.Policy{Interactive: true, In: strings.NewReader("y\n"), Out: &strings.Builder{}}
+
+	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: environmentv1.Tier_TIER_PREVIEW, Policy: policy}, func(context.Context, commands.ProviderRun) error {
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WithProvider err = %v, want the preview bootstrap set up and the work run", err)
+	}
+	for line := range strings.Lines(rendered.String()) {
+		if strings.Contains(line, "Read the project's config again") {
+			if !strings.Contains(line, "[check]") {
+				t.Errorf("the reading was reported as %q, want it under [check], the phase it runs in", line)
+			}
+			return
+		}
+	}
+	t.Errorf("rendered %q, want the second reading of the config after the setup reported", rendered.String())
+}
+
 func TestEnsureTargetSetsUpAMissingConfigAndLoadsIt(t *testing.T) {
 	dir := t.TempDir()
 	invocation := clitest.NewInvocation()

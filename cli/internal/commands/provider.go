@@ -182,9 +182,11 @@ func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, comm
 	loaded := cfg
 	err = i.Setups.Ensure(ctx, opts.Policy, check, func(ctx context.Context) (err error) {
 		if provider != nil {
+			reading := check.Child(cfg.Slug, progress.Reading.Title("the project's config again"))
 			provider.Close()
 			provider = nil
 			reloaded, err := i.ResolveTarget(ctx, cfg.Dir)
+			reading.End(err)
 			if err != nil {
 				return err
 			}
