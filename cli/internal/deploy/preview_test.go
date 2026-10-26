@@ -434,6 +434,29 @@ func previewRemove(t *testing.T, fixture clitest.FakeProject, dependencies Depen
 	return stdout.String()
 }
 
+func TestRemovingAPreviewNamesTheReadingOfItUnderCheck(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	previewUp(t, fixture, previewDependencies("feature/login", ""), previewUpOptions{})
+
+	out := previewRemove(t, fixture, previewDependencies("feature/login", ""), previewRemoveOptions{})
+
+	assertReportedUnder(t, out, "Read preview "+previewKey(t, "feature/login")+" in ", "check")
+}
+
+func TestListingPreviewsNamesTheReadingOfThemUnderCheck(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	previewUp(t, fixture, previewDependencies("feature/login", ""), previewUpOptions{})
+	dependencies := newTestDependencies()
+
+	var stdout, stream bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stream)
+	if err := ListPreviews(context.Background(), dependencies, fixture.Root, &stdout); err != nil {
+		t.Fatalf("ListPreviews err = %v; stream=%s", err, stream.String())
+	}
+
+	assertReportedUnder(t, stream.String(), "Read the previews of "+clitest.FixtureSlug+" in ", "check")
+}
+
 func TestPreviewRemoveTearsDownThePreviewItsNameNames(t *testing.T) {
 	t.Run("an ephemeral preview for the current branch is destroyed without prompting", func(t *testing.T) {
 		fixture := setUpPreviewProject(t)
