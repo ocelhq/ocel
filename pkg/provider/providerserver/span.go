@@ -22,6 +22,7 @@ const (
 	SpanPromotion   = "promotion"
 	SpanConnector   = "connector"
 	SpanLease       = "lease"
+	SpanLeaseEnd    = "lease-end"
 )
 
 type SpanID [8]byte

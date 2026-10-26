@@ -37,19 +37,16 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		if err != nil {
 			return nil, err
 		}
+		spans := newSpanEvents(sender)
 		var run *deployRun
 		var hold *leaseHold
-		defer func() {
-			if hold != nil {
-				_ = hold.release(ctx)
-			}
-		}()
-		err = newSpanEvents(sender).run(checkingSpan(spec), func(env *spanRun) error {
+		defer func() { spans.releaseHold(ctx, hold, releasingSpan(spec)) }()
+		err = spans.run(checkingSpan(spec), func(env *spanRun) error {
 			return env.phase(func(progress progress.Log) error {
 				if hold, err = mode.claim(ctx, h, spec, req.GetLeaseToken()); err != nil {
 					return err
 				}
-				if run, err = h.openDeploy(ctx, req, spec, mode, sender); err != nil {
+				if run, err = h.openDeploy(ctx, req, spec, mode, spans); err != nil {
 					return err
 				}
 				run.hold = hold
@@ -136,7 +133,8 @@ func newDeploySpec(req *contractv1.DeployRequest) (provider.DeploySpec, error) {
 	return buildDeploySpec(req, promotionID)
 }
 
-func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest, spec provider.DeploySpec, mode deployMode, sender *eventStream) (*deployRun, error) {
+func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest, spec provider.DeploySpec, mode deployMode, spans *spanEvents) (*deployRun, error) {
+	sender := spans.sender
 	p, readiness, err := h.readiness(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
@@ -178,7 +176,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		options:      h.session.options(),
 		artifactRoot: outputRoot,
 		sender:       sender,
-		spanEvents:   newSpanEvents(sender),
+		spanEvents:   spans,
 		manifest:     req.GetManifest(),
 		spec:         spec,
 		managedBy:    h.session.managedBy(),
