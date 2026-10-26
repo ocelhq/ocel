@@ -121,6 +121,16 @@ func TestAPreviewBuildIsGivenTheAliasItsDeployIsServedOn(t *testing.T) {
 	}
 }
 
+func TestAPreviewDeployNamesTheReadingOfItsURLsUnderCheck(t *testing.T) {
+	fixture := setUpPreviewProject(t)
+	identity := previewKey(t, "feature/login")
+	dependencies := previewDependencies("feature/login", "")
+
+	out := previewUp(t, fixture, dependencies, previewUpOptions{})
+
+	assertReportedUnder(t, out, "Read the preview URLs of preview "+identity, "check")
+}
+
 func TestAPreviewDeployCarriesTheAliasItsBuildWasGivenAndNotTheOneThisRunMinted(t *testing.T) {
 	fixture := setUpPreviewProject(t)
 	addAppToFixtureConfig(t, fixture.Root)
