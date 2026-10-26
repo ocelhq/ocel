@@ -6,11 +6,15 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
-func (p ProviderRun) NewAttempt(ctx context.Context, kind consolev1.DeploymentKind, cfg *project.Project, env *environmentv1.Environment, prNumber string) *deployreport.Attempt {
+func (p ProviderRun) NewAttempt(ctx context.Context, parent *run.Span, kind consolev1.DeploymentKind, cfg *project.Project, env *environmentv1.Environment, prNumber string) *deployreport.Attempt {
+	reading := parent.Child(cfg.Slug, progress.Reading.Title("the target and the source checkout"))
+	defer reading.End(nil)
 	trigger, ci := deployreport.ReadTrigger(os.Getenv, prNumber)
 	return &deployreport.Attempt{
 		Kind:        kind,
