@@ -214,6 +214,7 @@ type edgeAccount struct {
 	entitlement *edge.CodeEntitlement
 
 	proxies      bool
+	fronts       bool
 	caches       bool
 	tagLimits    edge.CacheTagLimits
 	issues       bool
@@ -312,6 +313,18 @@ func (e *Edge) ProxiesRecords() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.proxies = true
+}
+
+func (e *Edge) FrontsOrigins() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.fronts = true
+}
+
+func (e *Edge) FrontsNoOrigin() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.fronts = false
 }
 
 func ClientCA(kind edge.Kind) string {
@@ -637,6 +650,7 @@ func (e *Edge) Facts() edge.Facts {
 		Supported:             edge.AllNeeds(),
 		RunsCode:              e.kind == KindRelay,
 		ProxiesRecords:        e.proxies,
+		FrontsOrigins:         e.fronts,
 		CachesResponses:       e.caches,
 		CacheTagLimits:        e.tagLimits,
 		CredentialScope:       "fake-account",

@@ -72,6 +72,9 @@ func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv
 	if err != nil {
 		return nil, err
 	}
+	if err := session.refuseRollbackAcrossFronting(current, target); err != nil {
+		return nil, err
+	}
 	promotionID, err := newPromotionID()
 	if err != nil {
 		return nil, err

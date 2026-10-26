@@ -49,13 +49,23 @@ func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	if err := p.refuseBootstrapBehind(ctx, accountID, names, environment.TierPreview, bootstrapCaller{worker: "the shared preview entry worker", retry: "run this again"}); err != nil {
+	behind, err := p.listWorkersBehind(ctx, accountID, names, environment.TierPreview)
+	if err != nil {
 		return "", err
+	}
+	if len(behind) > 0 {
+		if err := p.forgetStoreVersion(ctx, environment.TierPreview); err != nil {
+			return "", err
+		}
+		return "", p.refuseBootstrapBehind(behind, environment.TierPreview, bootstrapCaller{worker: "the shared preview entry worker", retry: "run this again"})
 	}
 	up := upload{
 		accountID:  accountID,
 		scriptName: program.name,
-		worker:     bindCodeLoader(program.worker),
+		worker:     withKeptObjects(bindCodeLoader(program.worker), p.keptBucketName(names, environment.TierPreview)),
+	}
+	if p.options.Cache {
+		up.worker = withVar(up.worker, cachesContainersBinding, "1")
 	}
 	if err := p.putWorkerScript(ctx, up, "shared preview entry worker"); err != nil {
 		return "", err

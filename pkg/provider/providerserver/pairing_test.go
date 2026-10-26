@@ -311,30 +311,25 @@ func TestAContainerAppsNeedsAreCheckedAgainstTheRouterItPromotesThrough(t *testi
 	}
 }
 
-func TestAProjectDeployedThroughARouterItsEdgeNowForwardsToIsRefusedBeforeItTouchesTheOldRouting(t *testing.T) {
+func TestARouterItsEdgeNowForwardsToTakesOverTheRoutingItKeptInsideTheEdgesStack(t *testing.T) {
 	client, p := mixedServed(t)
 	seedStack(t, p, environment.TierProduction, "shop", stackrecords.EdgeState{
 		Kind: fake.KindRelay,
-		Edge: edge.StackState{Slug: "shop", Tier: environment.TierProduction},
+		Edge: edge.StackState{Slug: "shop", Tier: environment.TierProduction, Bound: []string{adminHost}},
 		Routers: map[router.Kind]router.StackState{
 			fake.RouterDirect: {Slug: "shop", Tier: environment.TierProduction},
 		},
 		Apps: map[string]router.Kind{"admin": fake.RouterDirect},
 	})
 
-	result, _, err := deployStream(t, client, mixedRequest())
+	result, _ := deploy(t, client, mixedRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want the forwarded router to take over what it kept in the edge's stack", result.GetError())
+	}
 
-	message := result.GetError()
-	if err != nil {
-		message = err.Error()
-	}
-	if result.GetSuccess() || message == "" {
-		t.Fatal("Deploy() succeeded, want it refused: the router held this project's routing inside the edge's own stack, and the edge now forwards to it")
-	}
-	for _, want := range []string{"admin", string(fake.RouterDirect), "ocel projects destroy"} {
-		if !strings.Contains(message, want) {
-			t.Errorf("the refusal %q does not name %q", message, want)
-		}
+	state := readStack(t, p, environment.TierProduction, "shop")
+	if held := state.Routers[fake.RouterDirect].Edge; held.Slug != "shop" || !slices.Contains(held.Bound, adminHost) {
+		t.Errorf("the %s router holds %+v, want the stack it read from the edge's own, %s bound", fake.RouterDirect, held, adminHost)
 	}
 }
 

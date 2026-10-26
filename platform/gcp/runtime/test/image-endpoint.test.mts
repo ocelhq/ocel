@@ -10,7 +10,7 @@ import { solid } from "@framework/next-image-optimizer/test-support/images";
 import type { Invoke } from "@framework/node-runtime/host";
 import sharp from "sharp";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { newImageEndpointInvoke } from "../src/next/image-endpoint.mjs";
+import { newGcpImageEndpointInvoke } from "../src/next/image-endpoint.mjs";
 import { newCloudStorageBucket } from "./cloud-storage-bucket.mjs";
 import { type ServedBucket, serveBucket } from "./serve-bucket.mjs";
 
@@ -42,7 +42,7 @@ beforeAll(async () => {
     handedToNext.push(`${req.method} ${req.url}`);
     res.writeHead(200, { "content-type": "text/plain" }).end("next");
   };
-  const invoke = newImageEndpointInvoke(next, env);
+  const invoke = newGcpImageEndpointInvoke(next, env);
   server = http.createServer((req, res) => {
     void Promise.resolve(invoke(req, res, {} as never)).catch(() => res.destroy());
   });
@@ -144,11 +144,11 @@ test("the GCP service hands every other request to Next", async () => {
 test("the GCP service installs no image path where it holds no assets", () => {
   const next: Invoke = () => {};
 
-  expect(newImageEndpointInvoke(next, {})).toBe(next);
+  expect(newGcpImageEndpointInvoke(next, {})).toBe(next);
 });
 
 test("the GCP service installs no image path unless it is told an edge posts images to it", () => {
   const next: Invoke = () => {};
 
-  expect(newImageEndpointInvoke(next, { OCEL_EDGE_BUCKET: "ocel-prod-edge-k3x9q2" })).toBe(next);
+  expect(newGcpImageEndpointInvoke(next, { OCEL_EDGE_BUCKET: "ocel-prod-edge-k3x9q2" })).toBe(next);
 });

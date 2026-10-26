@@ -13,6 +13,7 @@
     "./dispatch-host": "./src/dispatch-host.mts",
     "./entrypoint": "./src/entrypoint.mts",
     "./host": "./src/host.mts",
+    "./image-endpoint": "./src/image-endpoint.mts",
     "./incremental-cache": "./src/incremental-cache.mts",
     "./instance-cache": "./src/instance-cache.mts",
     "./origin-tags": "./src/origin-tags.mts",

@@ -1,4 +1,5 @@
 import { type Bind, dispatchesAtOrigin, type Invoke } from "@framework/node-runtime/host";
+import type { PurgeTags } from "@framework/node-runtime/tag-records";
 import { isrVar } from "@platform/edge-contract/runtime-env";
 import type { CacheStore } from "./cache-store.mjs";
 import type { InstanceCache } from "./instance-cache.mjs";
@@ -9,6 +10,7 @@ export interface NextHost {
   newUseCacheStore?: () => Promise<UseCacheStore>;
   newDispatchInvoke?: (localOrigin: string) => Promise<Invoke>;
   newOriginInvoke?: (next: Invoke) => Promise<Invoke>;
+  edgePurge?: PurgeTags;
   cacheTagsPerObject?: number;
   functionDir?: string;
   instanceCache?: InstanceCache;

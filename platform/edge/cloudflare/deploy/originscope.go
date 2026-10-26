@@ -122,8 +122,10 @@ func parseOriginTag(tag string) (OriginScope, bool) {
 }
 
 type Origin struct {
-	Scope   func(context.Context) (OriginScope, error)
-	Records records.Store
+	Scope              func(context.Context) (OriginScope, error)
+	Records            records.Store
+	KeepsObjects       bool
+	ForgetStoreVersion func(context.Context, environment.Tier) error
 }
 
 type resolvedOrigin struct {

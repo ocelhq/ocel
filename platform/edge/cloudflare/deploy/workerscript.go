@@ -9,6 +9,7 @@ type workerScript struct {
 	LoaderBinding string
 	Assets        []workerAsset
 	Services      map[string]string
+	R2Buckets     map[string]string
 
 	CachedEntrypoints []string
 

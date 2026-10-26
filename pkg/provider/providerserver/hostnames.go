@@ -232,6 +232,7 @@ func (d *hostnames) bindOrigin(ctx context.Context, target ConfiguredHost, hostS
 	if hostState.Router, err = d.readTargetRouter(target); err != nil {
 		return err
 	}
+	hostState.Fronted = d.isFrontedRouter(hostState.Router)
 	if target.Pointer != "" {
 		hostState.Pointer = router.ResolvePointer(target.Pointer)
 	}

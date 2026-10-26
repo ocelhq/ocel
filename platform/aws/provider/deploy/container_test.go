@@ -3,6 +3,8 @@ package deploy
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -465,6 +467,37 @@ func TestANextContainerBuiltFromItsFunctionUploadsTheStaticFilesItsBuildLeftOutO
 
 	if !slices.ContainsFunc(objects.puts, func(key string) bool { return strings.HasSuffix(key, "/web.txt") }) {
 		t.Errorf("the release wrote %v, want the static file its tasks serve out of the edge bucket", objects.puts)
+	}
+}
+
+func TestANextContainerTheEdgesCodeDispatchesUploadsTheRouteTableAndEdgeBundleItsWorkerReads(t *testing.T) {
+	t.Parallel()
+
+	objects := &fakeArtifactStore{exists: map[string]bool{}}
+	stacks, _, _, spec := retainingContainers(t, nextContainerBuiltFromItsFunction(t, objects), func(cfg Config, spec provider.StackSpec) (Config, provider.StackSpec) {
+		cfg.EdgeAccessKeyID, cfg.EdgeSecretKey = "AKIAEDGE", "edge-secret"
+		bundlePath := filepath.Join(cfg.ArtifactRoot, "apps", "web", filepath.FromSlash(edge.AppBundleFile))
+		if err := os.MkdirAll(filepath.Dir(bundlePath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(bundlePath, []byte(`{"version":1}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		spec.App.Routing = nil
+		spec.App.EdgeRouteTable = edgeRouteTable(spec.App.StorageCoordinate.RouteTableKey("ab"))
+		return cfg, spec
+	})
+
+	result, err := stacks.Provision(context.Background(), spec, progress.Discard())
+	if err != nil {
+		t.Fatalf("Provision() = %v", err)
+	}
+
+	if result.RouteTableKey != spec.App.EdgeRouteTable.Location.Key || !slices.Contains(objects.puts, result.RouteTableKey) {
+		t.Errorf("RouteTableKey = %q with uploads %v, want the route table the worker dispatches the container by", result.RouteTableKey, objects.puts)
+	}
+	if want := appEdgeBundleKey(spec.App.StorageCoordinate); result.EdgeBundleKey != want || !slices.Contains(objects.puts, want) {
+		t.Errorf("EdgeBundleKey = %q with uploads %v, want %q: the worker runs the container's middleware from it", result.EdgeBundleKey, objects.puts, want)
 	}
 }
 

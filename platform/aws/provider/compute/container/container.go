@@ -97,6 +97,7 @@ type Definition struct {
 
 	AssetStack string
 	AssetSets  []site.AssetSet
+	Delivery   site.EdgeDelivery
 
 	tier             environment.Tier
 	priority         int
@@ -150,6 +151,10 @@ func (d *Definition) readServiceURL() string {
 
 func IsRoutedPublicly(spec provider.StackSpec) bool {
 	return spec.App != nil && spec.App.Router == alb.Kind
+}
+
+func IsFronted(spec provider.StackSpec) bool {
+	return IsRoutedPublicly(spec) && spec.Edge != nil && spec.Edge.Facts().FrontsOrigins
 }
 
 var fargateCPUArchitectures = map[string]string{
@@ -266,7 +271,7 @@ func NewDefinition(spec provider.StackSpec, at Target) (*Definition, error) {
 	cache := newNextCache(app, at)
 	if cache != nil {
 		maps.Copy(env, cache.Env())
-		if spec.Edge != nil && !IsRoutedPublicly(spec) {
+		if spec.Edge != nil && (!IsRoutedPublicly(spec) || IsFronted(spec)) {
 			maps.Copy(env, edge.NewCachingOriginEnv(spec.Edge.Facts(), stack.Release.String()))
 		}
 	}

@@ -63,6 +63,18 @@ func (r *deployRun) isEdgeRouted(app string) bool {
 	return r.appRouters[app] == r.edgeKind
 }
 
+func (r *deployRun) isFronted(app string) bool {
+	by, fronted := r.fronting[r.appRouters[app]]
+	return fronted && by != r.appRouters[app]
+}
+
+func (r *deployRun) readDispatchingRouter(app string) router.Router {
+	if by, fronted := r.fronting[r.appRouters[app]]; fronted {
+		return r.routers[by]
+	}
+	return r.readPairedRouter(app)
+}
+
 func (r *deployRun) listEdgeRoutedDomains() (domains, servedElsewhere []string, owners map[string]string) {
 	owners = r.domainApps()
 	for _, host := range r.hostnames() {
@@ -75,9 +87,23 @@ func (r *deployRun) listEdgeRoutedDomains() (domains, servedElsewhere []string, 
 		}
 		domains = append(domains, host)
 	}
-	maps.DeleteFunc(owners, func(_, app string) bool { return !r.isEdgeRouted(app) })
+	maps.DeleteFunc(owners, func(_, app string) bool { return !r.isEdgeRouted(app) && !r.isFronted(app) })
 	if len(owners) == 0 {
 		owners = nil
 	}
 	return domains, servedElsewhere, owners
+}
+
+func (r *deployRun) listFrontedHosts() []string {
+	var fronted []string
+	for slot, hosts := range r.listServedHostnames() {
+		if !r.isFronted(r.spec.Apps[slot].App) {
+			continue
+		}
+		for _, host := range hosts {
+			fronted = append(fronted, strings.ToLower(host))
+		}
+	}
+	slices.Sort(fronted)
+	return slices.Compact(fronted)
 }

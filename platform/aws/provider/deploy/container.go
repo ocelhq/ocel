@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 	"github.com/ocelhq/ocel/platform/aws/provider/site"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
@@ -54,6 +55,7 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if err != nil {
 		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, spec.Lease, progress))
 	}
+	result.EdgeBundleKey, result.RouteTableKey, result.Envelope = work.Delivery.BundleKey, work.Delivery.RouteTableKey, work.Delivery.Envelope
 	if err := transformed.refuseUnclaimed(); err != nil {
 		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, spec.Lease, progress))
 	}
@@ -72,11 +74,26 @@ func (r *release) readBuildAssets(spec provider.StackSpec, work *container.Defin
 	if !spec.App.IsBuiltFromFunction() {
 		return nil
 	}
-	sets, err := site.ReadBuildAssetSets(r.cfg.buckets(), r.cfg.ArtifactRoot, spec.App, work.Cache)
+	if spec.App.EdgeRouteTable == nil {
+		sets, err := site.ReadBuildAssetSets(r.cfg.buckets(), r.cfg.ArtifactRoot, spec.App, work.Cache)
+		if err != nil {
+			return err
+		}
+		work.AssetStack, work.AssetSets = spec.Ref.Name.String(), sets
+		return nil
+	}
+	bundle, err := variables.SealApp(r.cfg.variableStore(), spec.Ref.Project, spec.App.App, spec.App.Values)
 	if err != nil {
 		return err
 	}
-	work.AssetStack, work.AssetSets = spec.Ref.Name.String(), sets
+	if err := site.CheckEdgeVariables(r.cfg.ArtifactRoot, spec.App.App, spec.App.Values, bundle); err != nil {
+		return err
+	}
+	sets, delivery, err := site.ReadAssetSets(r.cfg.buckets(), r.cfg.ArtifactRoot, spec.App.StorageCoordinate, spec.App, bundle, work.Cache)
+	if err != nil {
+		return err
+	}
+	work.AssetStack, work.AssetSets, work.Delivery = spec.Ref.Name.String(), sets, delivery
 	return nil
 }
 

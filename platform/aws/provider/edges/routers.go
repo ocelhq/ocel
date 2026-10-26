@@ -41,7 +41,7 @@ func Pairings() []provider.Pairing {
 	return []provider.Pairing{
 		{Edge: apigateway.Kind, Router: router.Kind(apigateway.Kind), Computes: serverless},
 		{Edge: cloudflare.Kind, Router: router.Kind(cloudflare.Kind), Computes: serverless},
-		{Edge: cloudflare.Kind, Router: alb.Kind, Computes: []provider.Compute{provider.ComputeContainer}, Forwarded: true},
+		{Edge: cloudflare.Kind, Router: alb.Kind, Computes: []provider.Compute{provider.ComputeContainer}, Forwarded: true, FrontedBy: router.Kind(cloudflare.Kind)},
 		{Edge: cloudfront.Kind, Router: router.Kind(cloudfront.Kind), Computes: provider.Computes()},
 	}
 }

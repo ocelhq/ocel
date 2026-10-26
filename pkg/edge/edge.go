@@ -48,6 +48,7 @@ type Facts struct {
 	RunsCode              bool
 	ServesUnbound         bool
 	ProxiesRecords        bool
+	FrontsOrigins         bool
 	ProxiedRecordNote     string
 	ShieldsOrigin         bool
 	TunnelsToOrigin       bool

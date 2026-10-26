@@ -31,14 +31,21 @@ func TestTheEdgeReachesItsOriginThroughATunnelOnlyWhenItsOptionsAskForOne(t *tes
 	}
 }
 
+func TestOptionsDecodeCache(t *testing.T) {
+	decoded, err := DecodeOptions(provider.Options{"cache": true})
+	if err != nil || !decoded.Cache {
+		t.Fatalf("DecodeOptions(cache) = %+v, %v; want cache set", decoded, err)
+	}
+}
+
 func TestOptionsDecodeTunnelAndRefuseAKeyTheEdgeDoesNotTake(t *testing.T) {
 	decoded, err := DecodeOptions(provider.Options{"tunnel": true})
 	if err != nil || !decoded.Tunnel {
 		t.Fatalf("DecodeOptions(tunnel) = %+v, %v; want tunnel set", decoded, err)
 	}
-	_, err = DecodeOptions(provider.Options{"cache": true})
+	_, err = DecodeOptions(provider.Options{"shield": true})
 	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeUnknownOption || !strings.Contains(err.Error(), "edge.cloudflare.cache") {
-		t.Errorf("DecodeOptions(cache) error = %v, want an unknown-option refusal naming edge.cloudflare.cache", err)
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeUnknownOption || !strings.Contains(err.Error(), "edge.cloudflare.shield") {
+		t.Errorf("DecodeOptions(shield) error = %v, want an unknown-option refusal naming edge.cloudflare.shield", err)
 	}
 }

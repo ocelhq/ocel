@@ -20,6 +20,7 @@ type StackSpec struct {
 	Slug       string
 	Domains    []string
 	DomainApps map[string]string
+	Fronted    []string
 
 	ServedElsewhere []string
 	GlobalPreview   string

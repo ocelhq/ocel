@@ -27,9 +27,7 @@ const (
 	isrTagNamespaceEnvVar   = "OCEL_ISR_TAG_NAMESPACE"
 	storageEndpointEnvVar   = "OCEL_STORAGE_ENDPOINT"
 	TagDatabaseEnvVar       = "OCEL_TAG_DATABASE"
-	purgeSecretEnvVar       = "OCEL_PURGE_SECRET"
 	firestoreEndpointEnvVar = "OCEL_FIRESTORE_ENDPOINT"
-	imageEndpointEnvVar     = "OCEL_IMAGE_ENDPOINT"
 )
 
 var routeTableInImage = path.Join(images.FunctionImageRoot, edge.NextRouteTableFile)
@@ -81,7 +79,7 @@ func NewEnv(spec provider.StackSpec, fn provider.FunctionSpec, s run.Serving, ca
 	}
 	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.RootFunction {
 		if run.FactsOf(spec.Edge).RunsCode {
-			env[imageEndpointEnvVar] = "1"
+			env[edge.ImageEndpointVar] = "1"
 		} else {
 			maps.Copy(env, provider.NewOriginDispatchEnv())
 		}
@@ -103,7 +101,7 @@ func newNextCacheEnv(isr *provider.ISRSpec, cache nextCache) map[string]string {
 	env[isrTagNamespaceEnvVar] = isr.TagNamespace
 	env[TagDatabaseEnvVar] = cache.tagDatabase
 	if cache.purgeSecret != "" {
-		env[purgeSecretEnvVar] = cache.purgeSecret
+		env[edge.PurgeSecretVar] = cache.purgeSecret
 		if isr.PurgeURL != "" {
 			env[edge.PurgeURLVar] = isr.PurgeURL
 		}

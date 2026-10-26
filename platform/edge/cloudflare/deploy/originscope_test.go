@@ -145,7 +145,7 @@ func TestTearingOneOriginDownLeavesAnothersStanding(t *testing.T) {
 func TestEveryWorkerAnOriginUploadsCarriesItsOrigin(t *testing.T) {
 	t.Parallel()
 
-	planned, err := testNames.bootstrapWorkers(environment.TierPreview)
+	planned, err := testNames.bootstrapWorkers(environment.TierPreview, "")
 	if err != nil {
 		t.Fatal(err)
 	}

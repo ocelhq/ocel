@@ -15,20 +15,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 )
 
-func CheckContainerNeeds(t *testing.T, p provider.Provider, front edge.Kind, needs []edge.Need, allowDegraded ...string) (providerserver.AppNeedVerdict, error) {
+func CheckContainerNeeds(t *testing.T, p provider.Provider, front edge.Kind, options provider.Options, needs []edge.Need, allowDegraded ...string) (providerserver.AppNeedVerdict, error) {
 	t.Helper()
 
-	kind, paired := p.Facts().PairedRouter(front, provider.ComputeContainer)
-	if !paired {
-		t.Fatalf("%s pairs no router with a container", front)
-	}
-	routed, err := p.Routers().Open(kind)
-	if err != nil {
-		t.Fatalf("Routers().Open(%s) = %v", kind, err)
-	}
-	opened, err := p.Edges().Open(front, nil)
+	opened, err := p.Edges().Open(front, options)
 	if err != nil {
 		t.Fatalf("Edges().Open(%s) = %v", front, err)
+	}
+	routed, paired, err := providerserver.OpenDispatchingRouter(p, opened, provider.ComputeContainer)
+	if err != nil || !paired {
+		t.Fatalf("the router dispatching a container behind %s = %v, %v, want one", front, paired, err)
 	}
 	root := t.TempDir()
 	dir := buildoutput.AppRoot(root, "web")

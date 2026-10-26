@@ -13,15 +13,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runtime/baked"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
 
 func appEdgeBundleKey(c naming.Coordinate) string {
-	return c.BundleKey("bundle.json")
+	return c.BundleKey(edge.BundleObjectFile)
 }
 
 func appEdgeSealedKey(c naming.Coordinate) string {
-	return c.BundleKey(variables.EdgeSealedFile)
+	return c.BundleKey(baked.EdgeFile)
 }
 
 func readEdgeBundle(root, app string) ([]byte, bool, error) {

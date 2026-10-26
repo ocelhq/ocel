@@ -271,6 +271,42 @@ func TestConfigureStatesTheComputesWhoseAppsTheEdgesCodeDispatches(t *testing.T)
 	}
 }
 
+func TestConfigureStatesAComputeDispatchedWhereTheEdgeFrontsTheRouterItPairsWith(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		fronts bool
+		want   []string
+	}{
+		{"an edge that fronts its origins", true, []string{"serverless", "container"}},
+		{"an edge that forwards to them", false, []string{"serverless"}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			vendor := fake.NewProvider(fake.Options{})
+			relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+			relay.ProxiesRecords()
+			if testCase.fronts {
+				relay.FrontsOrigins()
+			}
+			server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
+				Version: "test",
+				New: func(context.Context, provider.Settings) (provider.Provider, error) {
+					return frontedByCompute{vendor}, nil
+				},
+			}))
+			t.Cleanup(server.Close)
+			client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+
+			configured, err := client.Configure(context.Background(), configureInWorkingDir(t))
+			if err != nil {
+				t.Fatalf("Configure() error = %v", err)
+			}
+			if got := configured.GetFacts().GetEdge().GetDispatchedComputes(); !slices.Equal(got, testCase.want) {
+				t.Errorf("Configure() dispatched computes = %v, want %v: the router fronting a container's own router dispatches it", got, testCase.want)
+			}
+		})
+	}
+}
+
 func TestConfigureRefusesAnEdgeTheProviderCannotOpen(t *testing.T) {
 	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
 		Version: "test",

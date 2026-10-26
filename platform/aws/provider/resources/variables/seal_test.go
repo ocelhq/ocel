@@ -12,10 +12,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/runtime/baked"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/variablestore"
-	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables/baked"
 )
 
 func TestRenderAppBundle(t *testing.T) {

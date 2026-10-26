@@ -400,6 +400,34 @@ func TestAContainerBuiltFromAFunctionForAnotherArchitectureIsRefused(t *testing.
 	}
 }
 
+func TestAContainerBuiltFromAFunctionIsDispatchedByTheEdgeFrontingItsOwnRouter(t *testing.T) {
+	for name, fronts := range map[string]bool{"an edge that fronts its origins": true, "an edge that forwards to them": false} {
+		t.Run(name, func(t *testing.T) {
+			stagedProject(t, "web", "admin")
+			builtRoutingApp(t, "web", buildoutput.Hosting{RouteTable: edge.RouteTableNext, RootFunction: "server"}, []byte(`{"routes":[]}`))
+			vendor := fake.NewProvider(fake.Options{})
+			relay := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay)
+			relay.ProxiesRecords()
+			if fronts {
+				relay.FrontsOrigins()
+			}
+			client := servedBy(t, frontedByCompute{vendor})
+			req := functionContainerDeployRequest(builtServerFunction())
+			req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+
+			if result, _ := deploy(t, client, req); !result.GetSuccess() {
+				t.Fatalf("Deploy() = %q", result.GetError())
+			}
+
+			specs := vendor.FakeStacks().Provisioned()
+			app := specs[len(specs)-1].App
+			if (app.EdgeRouteTable != nil) != fronts || (app.Routing != nil) == fronts {
+				t.Errorf("Routing = %+v and EdgeRouteTable = %+v behind %s, want the edge's code to dispatch the container only where it fronts its router", app.Routing, app.EdgeRouteTable, name)
+			}
+		})
+	}
+}
+
 func TestAContainerBuiltFromAFunctionDispatchesItsOwnPathsWhenItsEdgeForwardsIt(t *testing.T) {
 	for name, dispatches := range map[string]bool{"a router that dispatches": true, "a router that forwards": false} {
 		t.Run(name, func(t *testing.T) {

@@ -2,4 +2,6 @@ package edge
 
 const StaticAssetDir = "static"
 
-const AppBundleFile = "edge/bundle.json"
+const BundleObjectFile = "bundle.json"
+
+const AppBundleFile = "edge/" + BundleObjectFile

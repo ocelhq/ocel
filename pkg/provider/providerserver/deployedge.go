@@ -46,9 +46,11 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 	switch r.hostingMode() {
 	case hostingProduction:
 		spec.Domains, spec.ServedElsewhere, spec.DomainApps = r.listEdgeRoutedDomains()
+		spec.Fronted = r.listFrontedHosts()
 	case hostingGlobalPreview:
 		spec.PruneOnly = true
 		spec.GlobalPreview = r.globalPreview()
+		spec.Fronted = r.listFrontedHosts()
 	default:
 		if len(r.spec.Apps) == 0 {
 			spec.PruneOnly = true
@@ -56,6 +58,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		}
 		base = r.previewOn
 		spec.Domains = []string{edge.PreviewWildcard(base)}
+		spec.Fronted = r.listFrontedHosts()
 	}
 	program, err := edgeProgramFor(ctx, r.provider, r.front, edgeProgramScope{
 		tier:              r.spec.Tier,
@@ -75,6 +78,9 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 		return err
 	}
 	spec.Gate = gateForEdge(r.front, written, password)
+	if err := r.recordFronting(ctx); err != nil {
+		return err
+	}
 	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
 	if err != nil {
 		if disabled {

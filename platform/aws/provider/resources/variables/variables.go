@@ -2,9 +2,7 @@ package variables
 
 import (
 	"cmp"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -16,11 +14,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/runtime/baked"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
-	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables/baked"
 	livefile "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
 )
 
@@ -141,16 +139,12 @@ func Seal(store Store, slug, app string, sensitive map[string]string, keys []liv
 		return Bundle{}, fmt.Errorf("app %s declares sensitive variables, and this account names no key to encrypt their data key under in the function's environment; bootstrap the variables-key part first", app)
 	}
 
-	key := make([]byte, baked.KeyBytes)
-	if _, err := rand.Read(key); err != nil {
-		return Bundle{}, fmt.Errorf("generate a data key for %s's encrypted variables: %w", app, err)
-	}
-	ciphertext, err := baked.Seal(key, sensitive)
+	ciphertext, envelope, err := baked.SealUnderNewKey(sensitive)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("seal %s's encrypted variables: %w", app, err)
 	}
 	return Bundle{
-		Envelope:    base64.StdEncoding.EncodeToString(key),
+		Envelope:    envelope,
 		Ciphertext:  ciphertext,
 		Live:        manifest,
 		Referenced:  referenced,
@@ -301,13 +295,11 @@ func checkEdgeEnvBudget(app string, env map[string]string, ciphertext []byte) er
 	fmt.Fprintf(&b, "the environment for app %s at the edge is %d bytes, over the %d-byte limit:\n", app, total, FunctionEnvBudgetBytes)
 	writeEnvBudgetEntries(&b, env, keys)
 	if len(ciphertext) > 0 {
-		fmt.Fprintf(&b, "\n  %s  %d bytes", EdgeSealedFile, len(ciphertext))
+		fmt.Fprintf(&b, "\n  %s  %d bytes", baked.EdgeFile, len(ciphertext))
 	}
 	b.WriteString("\n\nDrop a variable or shorten a value: the edge fits plaintext and `sensitive` variables into one budget.")
 	return fmt.Errorf("%s", b.String())
 }
-
-const EdgeSealedFile = "sealed.bin"
 
 func SealApp(store Store, project, app string, values provider.AppValues) (Bundle, error) {
 	declared := make([]live.Binding, 0, len(values.Bindings))

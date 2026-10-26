@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"slices"
@@ -16,7 +17,7 @@ import (
 
 func installBootstrap(t *testing.T, m *cfMock, tier environment.Tier) {
 	t.Helper()
-	planned, err := testNames.bootstrapWorkers(tier)
+	planned, err := testNames.bootstrapWorkers(tier, "")
 	if err != nil {
 		t.Fatalf("bootstrapWorkers: %v", err)
 	}
@@ -59,7 +60,7 @@ func refusedNotReady(t *testing.T, err error) refusal.Refusal {
 
 func bootstrapScriptName(t *testing.T, tier environment.Tier) string {
 	t.Helper()
-	planned, err := testNames.bootstrapWorkers(tier)
+	planned, err := testNames.bootstrapWorkers(tier, "")
 	if err != nil {
 		t.Fatalf("bootstrapWorkers: %v", err)
 	}
@@ -235,5 +236,34 @@ func TestTheBootstrapRefusalNamesTheCallerAndWhatToRerun(t *testing.T) {
 				t.Errorf("refusal %q does not contain %q", refused.Error(), tc.want)
 			}
 		})
+	}
+}
+
+func TestADeployOntoAStoreAnOriginInstalledThatIsBehindIsRefusedWithDeployingAgainAsTheFix(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	seedBootstrapBundle(t, "store-v1")
+	m := &cfMock{zoneID: "zone1", zoneName: "app.com", putBodies: map[string]putBody{}, scriptSettings: map[string]map[string]any{}, scriptSecrets: map[string][]string{}}
+	installKeptBootstrap(t, m, environment.TierProduction)
+	seedBootstrapBundle(t, "store-v2")
+	store := fakeStoreServer(t, "")
+	p := m.provider(t)
+	p.KeepsObjects = true
+	var forgotten []environment.Tier
+	p.ForgetStoreVersion = func(_ context.Context, tier environment.Tier) error {
+		forgotten = append(forgotten, tier)
+		return nil
+	}
+
+	_, err := p.Reconcile(t.Context(), productionEntrySpec(store.URL), edge.StackState{})
+
+	refused := refusedNotReady(t, err)
+	if want := "\nDeploy again to install this build's"; !strings.HasSuffix(refused.Error(), want) {
+		t.Errorf("refusal %q does not end %q", refused.Error(), want)
+	}
+	if strings.Contains(refused.Error(), "bootstrap") {
+		t.Errorf("refusal %q names bootstrap, which installs no store for this origin", refused.Error())
+	}
+	if !slices.Equal(forgotten, []environment.Tier{environment.TierProduction}) {
+		t.Errorf("forgot the store version of %v, want production's, so the next deploy installs it", forgotten)
 	}
 }

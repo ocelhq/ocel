@@ -7,11 +7,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	vps "github.com/ocelhq/ocel/platform/vps/provider"
 )
 
 func nextAppBuiltFromItsFunction(t *testing.T) provider.StackSpec {
@@ -28,31 +29,51 @@ func nextAppBuiltFromItsFunction(t *testing.T) provider.StackSpec {
 	return spec
 }
 
-func TestANextContainerBuiltFromItsFunctionServesItsPathsOffItsOwnDisk(t *testing.T) {
+func TestANextContainerBuiltFromItsFunctionOnABoxNothingFrontsIsRefused(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	started, err := over(machine).ProvisionContainers(context.Background(), nextAppBuiltFromItsFunction(t), progress.Discard())
-	if err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
+	_, err := over(machine).ProvisionContainers(context.Background(), nextAppBuiltFromItsFunction(t), progress.Discard())
+	if err == nil || !strings.Contains(err.Error(), "rebuild it") {
+		t.Fatalf("ProvisionContainers() = %v, want a refusal to rebuild it: on a box nothing dispatches, next start serves a Next app", err)
 	}
+	for _, command := range machine.ran {
+		if strings.Contains(command, "docker run") {
+			t.Errorf("the box ran %q, want nothing started for a container no worker serves", command)
+		}
+	}
+}
 
-	file := envFileWritten(t, machine, environment.TierProduction, started[0].Physical)
-	for _, want := range []string{
-		edge.OriginDispatchVar + "=1",
-		edge.OriginSignedVar + "=1",
-		"OCEL_NEXT_ROUTE_TABLE=/ocel/app/" + edge.NextRouteTableFile,
-		"OCEL_BUILD_ID=" + buildID,
-		"OCEL_ROUTER_KIND=switchboard",
-		"OCEL_STORAGE_COORDINATE=shop/prod/web/r0a1b2c3d",
+func TestANextContainerCloudflareFrontsIsToldTheWorkerKeepsWhatItTagsAndWhereARevalidationPurgesIt(t *testing.T) {
+	t.Parallel()
+
+	spec := nextAppBuiltFromItsFunction(t)
+	spec.Edge = cloudflare.New("ocel", cloudflare.Origin{}, cloudflare.Options{Cache: true})
+	spec.App.ISR.PurgeURL = "https://shop.acct.workers.dev/purge"
+
+	env := vps.NewFrontedEnv(spec, "s3cret")
+
+	for name, want := range map[string]string{
+		edge.EdgeCacheVar:         string(edge.EdgeCacheMarked),
+		edge.CacheTagPurgeVar:     "1",
+		edge.ReleaseTokenVar:      spec.Ref.Name.Release.String(),
+		edge.PurgeURLVar:          "https://shop.acct.workers.dev/purge",
+		edge.PurgeSecretVar:       "s3cret",
+		"OCEL_STORAGE_COORDINATE": "shop/prod/web/r0a1b2c3d",
 	} {
-		if !strings.Contains(file, want) {
-			t.Errorf("the env file reads %q, want %s: the Next runtime in the function's image dispatches its paths off the box", file, want)
+		if env[name] != want {
+			t.Errorf("%s = %q, want %q: the container tags what the worker keeps and purges it on revalidation", name, env[name], want)
 		}
 	}
-	for _, unwanted := range []string{"OCEL_EDGE_BUCKET", "OCEL_CACHE_BUCKET", "OCEL_TAG_DATABASE", "OCEL_ISR="} {
-		if strings.Contains(file, unwanted) {
-			t.Errorf("the env file reads %q, want no %s: a box has no bucket and no tag database, and Next keeps its own cache in the container", file, unwanted)
-		}
+}
+
+func TestANextContainerCloudflareFrontsAnswersTheImagesTheWorkerPostsToIt(t *testing.T) {
+	t.Parallel()
+
+	spec := nextAppBuiltFromItsFunction(t)
+	spec.Edge = cloudflare.New("ocel", cloudflare.Origin{}, cloudflare.Options{Cache: true})
+
+	if env := vps.NewFrontedEnv(spec, ""); env[edge.ImageEndpointVar] != "1" {
+		t.Errorf("%s = %q, want 1: the worker posts /_next/image to the container's image path", edge.ImageEndpointVar, env[edge.ImageEndpointVar])
 	}
 }

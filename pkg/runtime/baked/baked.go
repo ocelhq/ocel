@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -12,6 +13,8 @@ import (
 
 const (
 	FilePath = buildoutput.StateDir + "/variables.enc"
+
+	EdgeFile = "sealed.bin"
 
 	EnvelopeVar = "OCEL_VARIABLES_ENVELOPE"
 
@@ -33,6 +36,17 @@ func Seal(key []byte, values map[string]string) ([]byte, error) {
 		return nil, fmt.Errorf("generate baked variable nonce: %w", err)
 	}
 	return gcm.Seal(nonce, nonce, payload, nil), nil
+}
+
+func SealUnderNewKey(values map[string]string) (sealed []byte, envelope string, err error) {
+	key := make([]byte, KeyBytes)
+	if _, err := rand.Read(key); err != nil {
+		return nil, "", fmt.Errorf("generate a data key for baked variables: %w", err)
+	}
+	if sealed, err = Seal(key, values); err != nil {
+		return nil, "", err
+	}
+	return sealed, base64.StdEncoding.EncodeToString(key), nil
 }
 
 func Open(key, sealed []byte) (map[string]string, error) {

@@ -69,12 +69,15 @@ type bootstrapWorker struct {
 	what       string
 }
 
-func (n originNames) bootstrapWorkers(tier environment.Tier) ([]bootstrapWorker, error) {
+func (n originNames) bootstrapWorkers(tier environment.Tier, objects string) ([]bootstrapWorker, error) {
 	storeScript, err := n.storeScript(tier)
 	if err != nil {
 		return nil, err
 	}
 	storeWorker := workerScript{Main: mainModule(releasesStoreBundle), Tags: []string{n.origin.scriptTag()}}
+	if objects != "" {
+		storeWorker.R2Buckets = map[string]string{storeObjectsBinding: objects}
+	}
 
 	return []bootstrapWorker{
 		{
@@ -87,10 +90,17 @@ func (n originNames) bootstrapWorkers(tier environment.Tier) ([]bootstrapWorker,
 }
 
 func (p *cloudflare) ensureWorker(ctx context.Context, accountID string, state workerState) (edge.ReleasesStore, error) {
+	return p.ensureWorkerWith(ctx, accountID, state, "")
+}
+
+func (p *cloudflare) ensureWorkerWith(ctx context.Context, accountID string, state workerState, credential string) (edge.ReleasesStore, error) {
 	b := state.bootstrapWorker
 	up := upload{accountID: accountID, scriptName: b.scriptName, worker: b.worker}
 	var cred string
 	if !state.secretPresent {
+		cred = credential
+	}
+	if !state.secretPresent && cred == "" {
 		minted, err := mintSecret()
 		if err != nil {
 			return edge.ReleasesStore{}, fmt.Errorf("mint bootstrap credential: %w", err)

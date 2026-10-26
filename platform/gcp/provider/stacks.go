@@ -60,12 +60,19 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 	if err != nil {
 		return provider.StackResult{}, err
 	}
+	bundle, err := s.p.objects().PutEdgeBundle(ctx, spec, runProgress)
+	if err != nil {
+		return provider.StackResult{}, err
+	}
 	result, err := s.Stacks.Provision(ctx, spec, runProgress)
 	if err != nil {
 		return result, err
 	}
 	s.p.recordAppEdge(spec, edgePatches)
 	result.RouteTableKey = routeTableKey
+	if bundle.Key != "" {
+		result.EdgeBundleKey, result.Envelope = bundle.Key, bundle.Envelope
+	}
 	result.PurgeSecret = facts.PurgeSecret
 	if facts.OriginSecret.Present() {
 		result.OriginSecretFingerprint = edge.OriginSecretFingerprint(facts.OriginSecret.Current)

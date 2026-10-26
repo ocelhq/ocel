@@ -29,7 +29,14 @@ func (e edges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error)
 		if err != nil {
 			return nil, err
 		}
-		return boxProxy{Proxy: cloudflare.NewProxy(namespace.String(), e.provider.cloudflareOrigin(), decoded), box: e.provider.box()}, nil
+		proxy := cloudflare.NewProxy(namespace.String(), e.provider.cloudflareOrigin(), decoded)
+		if decoded.Cache {
+			kept := e.provider.cloudflareOrigin()
+			kept.KeepsObjects = true
+			kept.ForgetStoreVersion = e.provider.forgetFrontingStoreVersion
+			return boxFront{Edge: cloudflare.New(namespace.String(), kept, decoded), proxy: proxy}, nil
+		}
+		return boxProxy{Proxy: proxy, box: e.provider.box()}, nil
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"edge %q is not supported: leave `provider.vps.edge` out, and the proxy on the box answers the project's hostnames, or name %s to front it", kind, cloudflare.Kind)
@@ -101,4 +108,17 @@ func (p *Provider) findTunnelHooks(kind edge.Kind) (*edge.TunnelHooks, error) {
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"the %s edge opens no tunnel and names no connector for this box to run\nRemove `tunnel` from the %s edge's options", kind, kind)
+}
+
+type boxFront struct {
+	edge.Edge
+	proxy *cloudflare.Proxy
+}
+
+func (x boxFront) Hooks() edge.Hooks {
+	hooks := x.Edge.Hooks()
+	reach := x.proxy.Hooks()
+	hooks.Tunnels = reach.Tunnels
+	hooks.OriginCertificates = reach.OriginCertificates
+	return hooks
 }

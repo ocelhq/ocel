@@ -19,8 +19,20 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
+func readPairingFacts(p provider.Provider, front edge.Edge) provider.Facts {
+	facts := p.Facts()
+	if front.Facts().FrontsOrigins {
+		facts.Pairings = facts.ListFrontingPairings(front.Kind())
+	}
+	return facts
+}
+
 func findEdgeRouter(p provider.Provider, front edge.Kind) (router.Kind, error) {
-	kind, found := p.Facts().FindEdgeRouter(front)
+	return findPairedEdgeRouter(p.Facts(), front)
+}
+
+func findPairedEdgeRouter(facts provider.Facts, front edge.Kind) (router.Kind, error) {
+	kind, found := facts.FindEdgeRouter(front)
 	if !found {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this provider serves no project through %s", describeFront(front))
@@ -51,31 +63,55 @@ type pairedRouter struct {
 }
 
 func openSharedStack(p provider.Provider, front edge.Edge, tier environment.Tier, slug string) (*sharedStack, error) {
-	edgeKind, err := findEdgeRouter(p, front.Kind())
+	facts := readPairingFacts(p, front)
+	edgeKind, err := findPairedEdgeRouter(facts, front.Kind())
 	if err != nil {
 		return nil, err
 	}
 	s := &sharedStack{
-		front:    front,
-		edgeKind: edgeKind,
-		routers:  map[router.Kind]pairedRouter{},
-		states:   map[router.Kind]router.StackState{},
-		ledger:   openProjectLedger(p, tier, slug),
+		front:     front,
+		edgeKind:  edgeKind,
+		routers:   map[router.Kind]pairedRouter{},
+		states:    map[router.Kind]router.StackState{},
+		forwarded: map[router.Kind]bool{},
+		fronting:  listFrontingRouters(p.Facts(), front),
+		ledger:    openProjectLedger(p, tier, slug),
 
 		containerReleases: p.Hooks().ContainerReleases,
 	}
-	for _, kind := range p.Facts().ListPairedRouters(front.Kind()) {
+	for _, kind := range facts.ListPairedRouters(front.Kind()) {
 		opened, err := p.Routers().Open(kind)
 		if err != nil {
 			return nil, err
 		}
-		if p.Facts().IsForwarded(front.Kind(), kind) {
+		if facts.IsForwarded(front.Kind(), kind) {
 			s.routers[kind] = s.pairForwarded(kind, opened)
+			s.forwarded[kind] = true
 			continue
 		}
 		s.routers[kind] = s.pairOwn(opened)
 	}
 	return s, nil
+}
+
+func listFrontingRouters(facts provider.Facts, front edge.Edge) map[router.Kind]router.Kind {
+	if !front.Facts().FrontsOrigins {
+		return nil
+	}
+	fronting := map[router.Kind]router.Kind{}
+	for _, kind := range facts.ListPairedRouters(front.Kind()) {
+		if by, fronted := facts.FindFrontingRouter(front.Kind(), kind); fronted {
+			fronting[kind] = by
+		}
+	}
+	return fronting
+}
+
+func (s *sharedStack) listAppRouters(kind router.Kind) []router.Kind {
+	if by, fronted := s.fronting[kind]; fronted && by != kind {
+		return []router.Kind{kind, by}
+	}
+	return []router.Kind{kind}
 }
 
 func (s *sharedStack) pairOwn(opened router.Router) pairedRouter {
@@ -118,13 +154,15 @@ func (s *sharedStack) pairForwarded(kind router.Kind, opened router.Router) pair
 }
 
 type sharedStack struct {
-	front    edge.Edge
-	edgeKind router.Kind
-	routers  map[router.Kind]pairedRouter
-	ledger   projectLedger
-	mu       sync.Mutex
-	current  edge.EdgeStack
-	states   map[router.Kind]router.StackState
+	front     edge.Edge
+	edgeKind  router.Kind
+	routers   map[router.Kind]pairedRouter
+	forwarded map[router.Kind]bool
+	fronting  map[router.Kind]router.Kind
+	ledger    projectLedger
+	mu        sync.Mutex
+	current   edge.EdgeStack
+	states    map[router.Kind]router.StackState
 
 	containerReleases *provider.ContainerReleaseHooks
 }
@@ -162,7 +200,17 @@ func (s *sharedStack) findRouterOrigin(kind router.Kind) (*router.OriginHooks, e
 func (s *sharedStack) restoreRouterStates(recorded stackrecords.EdgeState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	maps.Copy(s.states, recorded.Routers)
+	for kind, state := range recorded.Routers {
+		if s.forwarded[kind] && state.Slug != "" && state.Edge.Slug == "" {
+			state = router.NewStackState(recorded.Edge)
+		}
+		s.states[kind] = state
+	}
+}
+
+func (s *sharedStack) isFrontedRouter(kind router.Kind) bool {
+	by, fronted := s.fronting[kind]
+	return fronted && by != kind
 }
 
 func (s *sharedStack) listRouterKinds() []router.Kind {
@@ -208,15 +256,11 @@ func (s *sharedStack) readSlowestPropagation(kinds []router.Kind) (router.Propag
 }
 
 func (s *sharedStack) promoteApps(ctx context.Context, req promoteRequest, routedBy func(app string) (router.Kind, error), progress progress.Log) ([]ledger.RecordedPromotion, error) {
-	byRouter := map[router.Kind][]string{}
-	for _, app := range slices.Sorted(maps.Keys(req.promotion.Releases)) {
-		kind, err := routedBy(app)
-		if err != nil {
-			return nil, err
-		}
-		byRouter[kind] = append(byRouter[kind], app)
+	byRouter, err := s.groupAppsByRouter(req.promotion.Releases, routedBy)
+	if err != nil {
+		return nil, err
 	}
-	superseded := groupHostsByRouter(req.superseded, slices.Collect(maps.Keys(byRouter)), routedBy)
+	superseded := s.groupHostsByRouter(req.superseded, slices.Collect(maps.Keys(byRouter)), routedBy)
 	routers := make([]appRouter, 0, len(byRouter))
 	kinds := slices.Sorted(maps.Keys(byRouter))
 	for _, kind := range kinds {
@@ -235,6 +279,20 @@ func (s *sharedStack) promoteApps(ctx context.Context, req promoteRequest, route
 	}
 	s.purgePromotedHostnames(ctx, req.pointer, progress)
 	return dropped, nil
+}
+
+func (s *sharedStack) groupAppsByRouter(releases map[string]string, routedBy func(app string) (router.Kind, error)) (map[router.Kind][]string, error) {
+	byRouter := map[router.Kind][]string{}
+	for _, app := range slices.Sorted(maps.Keys(releases)) {
+		kind, err := routedBy(app)
+		if err != nil {
+			return nil, err
+		}
+		for _, routed := range s.listAppRouters(kind) {
+			byRouter[routed] = append(byRouter[routed], app)
+		}
+	}
+	return byRouter, nil
 }
 
 func (s *sharedStack) purgePromotedHostnames(ctx context.Context, pointer string, progress progress.Log) {
@@ -260,12 +318,16 @@ func listAppHosts(hosts []edge.PreviewHost, apps []string) []edge.PreviewHost {
 	return kept
 }
 
-func groupHostsByRouter(hosts []edge.PreviewHost, kinds []router.Kind, routedBy func(app string) (router.Kind, error)) map[router.Kind][]edge.PreviewHost {
+func (s *sharedStack) groupHostsByRouter(hosts []edge.PreviewHost, kinds []router.Kind, routedBy func(app string) (router.Kind, error)) map[router.Kind][]edge.PreviewHost {
 	grouped := map[router.Kind][]edge.PreviewHost{}
 	for _, host := range hosts {
 		kind, err := routedBy(host.App)
 		if err == nil && slices.Contains(kinds, kind) {
-			grouped[kind] = append(grouped[kind], host)
+			for _, routed := range s.listAppRouters(kind) {
+				if slices.Contains(kinds, routed) {
+					grouped[routed] = append(grouped[routed], host)
+				}
+			}
 			continue
 		}
 		for _, kind := range kinds {
@@ -279,13 +341,9 @@ func (s *sharedStack) serveDeployment(ctx context.Context, pointer string, promo
 	if len(promotion.Hosts) == 0 {
 		return nil
 	}
-	byRouter := map[router.Kind][]string{}
-	for _, app := range slices.Sorted(maps.Keys(promotion.Releases)) {
-		kind, err := routedBy(app)
-		if err != nil {
-			return err
-		}
-		byRouter[kind] = append(byRouter[kind], app)
+	byRouter, err := s.groupAppsByRouter(promotion.Releases, routedBy)
+	if err != nil {
+		return err
 	}
 	deployment := router.FormatDeploymentPointer(pointer, promotion.PromotionID)
 	stillKept := newStillKept(s.ledger, pointer, promotion.PromotionID)
@@ -388,20 +446,4 @@ func (s *sharedStack) destroy(ctx context.Context) error {
 		return err
 	}
 	return s.ledger.Destroy(ctx)
-}
-
-func refuseRoutersRecordedBeforeTheyWereForwarded(p provider.Provider, front edge.Kind, recorded stackrecords.EdgeState) error {
-	facts := p.Facts()
-	for _, app := range slices.Sorted(maps.Keys(recorded.Apps)) {
-		kind := recorded.Apps[app]
-		state := recorded.Routers[kind]
-		if !facts.IsForwarded(front, kind) || state.Slug == "" || state.Edge.Slug != "" {
-			continue
-		}
-		return refusal.Refuse(refusal.CodeInvalid,
-			"app %s was deployed through the %s router, which kept its routing inside %s's own stack, and %s now forwards to it instead: "+
-				"deploying now would leave that routing behind. Take this project's deployments down with `ocel projects destroy` using the release that made them, then deploy again",
-			app, kind, describeFront(front), describeFront(front))
-	}
-	return nil
 }

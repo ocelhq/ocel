@@ -1,5 +1,8 @@
 export const nextIncrementalCacheModule = "next/dist/server/lib/incremental-cache/index.js";
 
+export const nextFileSystemCacheModule =
+  "next/dist/server/lib/incremental-cache/file-system-cache.js";
+
 export interface RevalidateWindow {
   revalidate: number;
   expire?: number;

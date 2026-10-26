@@ -1,6 +1,9 @@
 package edge
 
-const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
+const (
+	ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
+	ImageEndpointVar     = "OCEL_IMAGE_ENDPOINT"
+)
 
 const StaticRulesVar = "OCEL_STATIC_RULES"
 
@@ -12,7 +15,10 @@ const (
 	EdgeCacheControlHeaderVar = "OCEL_EDGE_CACHE_CONTROL_HEADER"
 )
 
-const PurgeURLVar = "OCEL_PURGE_URL"
+const (
+	PurgeURLVar    = "OCEL_PURGE_URL"
+	PurgeSecretVar = "OCEL_PURGE_SECRET"
+)
 
 const (
 	OriginSecretVar         = "OCEL_ORIGIN_SECRET"

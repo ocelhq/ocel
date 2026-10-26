@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/liveness"
@@ -15,11 +16,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/component"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -50,12 +51,14 @@ type Provider struct {
 	ssh        *ssh.Box
 	resources  *container.Containers
 	keyValues  records.Store
-	cipher     *boxstore.Cipher
+	cipher     seal.Cipher
 
-	transform transform.Pass
-	resolve   Lookup
-	reaches   Reach
-	now       func() time.Time
+	transform     transform.Pass
+	resolve       Lookup
+	reaches       Reach
+	now           func() time.Time
+	installStore  func(ctx context.Context, tier environment.Tier, credential string) (edge.ReleasesStore, error)
+	tearDownStore func(ctx context.Context, tier environment.Tier) error
 
 	stores bucket.Stores
 	queues topic.QueueDatabases
@@ -105,7 +108,7 @@ func (p *Provider) Facts() provider.Facts {
 		Edges:    slices.Clone(supportedEdges),
 		Pairings: []provider.Pairing{
 			{Edge: edge.None, Router: boxapi.SwitchboardRouter, Computes: []provider.Compute{provider.ComputeContainer}},
-			{Edge: cloudflare.Kind, Router: boxapi.SwitchboardRouter, Computes: []provider.Compute{provider.ComputeContainer}},
+			{Edge: cloudflare.Kind, Router: boxapi.SwitchboardRouter, Computes: []provider.Compute{provider.ComputeContainer}, FrontedBy: router.Kind(cloudflare.Kind)},
 		},
 		DNSKinds:                 []provider.DNSKind{dnsCloudflare},
 		RendersTransforms:        true,
@@ -118,12 +121,14 @@ func (p *Provider) Facts() provider.Facts {
 func (p *Provider) Hooks() provider.Hooks {
 	return provider.Hooks{
 		Preflight:          &provider.PreflightHooks{Plan: p.PlanPreflight, Apply: p.ApplyPreflight},
+		ProgramEdge:        p.ProgramEdge,
 		OpenRegistryImages: p.OpenRegistryImages,
 		OpenDirectImages:   p.OpenDirectImages,
 		CheckBucket:        s3store.Check,
 		CheckHost:          p.CheckHost,
 		BindingAccess:      &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
 		Retirement:         &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
+		ProjectRemoval:     &provider.ProjectRemovalHooks{Plan: p.PlanProjectRemoval, Remove: p.RemoveProject},
 
 		ListProjectResources: p.ListProjectResources,
 	}
@@ -152,11 +157,11 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	if err != nil {
 		return nil, err
 	}
-	return fronted{elevating: box, front: front}, nil
+	return fronted{elevating: box, front: front, forget: p.forgetFronting}, nil
 }
 
 func (p *Provider) Stacks() provider.Stacks {
-	return resources.NewHookStacks(p.keyValues, p.resourceHooks())
+	return stacks{Stacks: resources.NewHookStacks(p.keyValues, p.resourceHooks()), p: p}
 }
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return resources.NoArtifacts{} }

@@ -1,9 +1,6 @@
-import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import { Readable } from "node:stream";
 import type { ObjectStore } from "@framework/next-image-optimizer/store";
-import type { AssetBucket, AssetObject } from "@framework/next-router/assets";
 import {
   objectKey,
   type StorageCoordinate,
@@ -35,21 +32,6 @@ async function statFile(file: string) {
     if (isMissing(error)) return undefined;
     throw error;
   }
-}
-
-export function newDiskAssetBucket(buildDir: string, storage: StorageCoordinate): AssetBucket {
-  const dir = join(buildDir, staticDir);
-  return {
-    async get(key: string): Promise<AssetObject | null> {
-      const file = resolveAsset(dir, storage, key);
-      const info = file && (await statFile(file));
-      if (!file || !info) return null;
-      return {
-        body: Readable.toWeb(createReadStream(file)) as ReadableStream,
-        httpEtag: `"${info.size.toString(16)}-${Math.trunc(info.mtimeMs).toString(16)}"`,
-      };
-    },
-  };
 }
 
 export function newDiskObjectStore(buildDir: string, storage: StorageCoordinate): ObjectStore {

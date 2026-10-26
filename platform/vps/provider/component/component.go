@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
-	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
+	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/vps/provider/release"
 	"github.com/ocelhq/ocel/platform/vps/provider/resources/container"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
@@ -31,6 +31,6 @@ type Box struct {
 	Apps       *release.Containers
 	Routing    *routing.Table
 	KeyValues  records.Store
-	Cipher     *boxstore.Cipher
+	Cipher     seal.Cipher
 	Transform  transform.Pass
 }
