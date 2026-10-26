@@ -1,6 +1,6 @@
 import { bindings, defineTransform } from "@ocel/transforms";
 import type { LeafPaths } from "@ocel/transforms/gcp";
-import type { pubsub, storage } from "@pulumi/gcp";
+import type { cloudrunv2, pubsub, storage } from "@pulumi/gcp";
 import type { Unwrap } from "@pulumi/pulumi";
 
 export const tuned = defineTransform({
@@ -258,3 +258,79 @@ export const topicJob = defineTransform({
     },
   },
 });
+
+export const tunedService = defineTransform({
+  gcp: {
+    function: {
+      service: {
+        template: {
+          containers: [
+            {
+              resources: {
+                limits: { cpu: "4", memory: "16Gi", "nvidia.com/gpu": "1" },
+                cpuIdle: false,
+                startupCpuBoost: true,
+              },
+            },
+          ],
+          scaling: { minInstanceCount: 1, maxInstanceCount: 10 },
+          maxInstanceRequestConcurrency: 20,
+          executionEnvironment: "EXECUTION_ENVIRONMENT_GEN2",
+          sessionAffinity: true,
+          timeout: "900s",
+          nodeSelector: { accelerator: "nvidia-l4" },
+          encryptionKey: bindings.custom.keys.serviceKey,
+          vpcAccess: {
+            egress: "ALL_TRAFFIC",
+            networkInterfaces: [{ network: "apps", subnetwork: "apps-eu", tags: ["nat"] }],
+          },
+        },
+        binaryAuthorization: { useDefault: true },
+      },
+    },
+  },
+});
+
+export const ownedImage = defineTransform({
+  gcp: {
+    container: {
+      service: {
+        template: {
+          containers: [
+            {
+              // @ts-expect-error ocel runs the image the deploy built
+              image: "nginx",
+            },
+          ],
+        },
+      },
+    },
+  },
+});
+
+export const ownedIngress = defineTransform({
+  gcp: {
+    container: {
+      service: {
+        // @ts-expect-error ocel sets the ingress the edge needs
+        ingress: "INGRESS_TRAFFIC_ALL",
+      },
+    },
+  },
+});
+
+export const workerTimeout = defineTransform({
+  gcp: {
+    worker: {
+      service: {
+        template: {
+          // @ts-expect-error a worker's timeout is the push deadline ocel keeps
+          timeout: "60s",
+        },
+      },
+    },
+  },
+});
+
+export const realServicePath: LeafPaths<Unwrap<cloudrunv2.ServiceArgs>> =
+  "template.containers.resources.limits.nvidia.com/gpu";

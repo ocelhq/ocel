@@ -1,102 +1,60 @@
 package gcp
 
 import (
-	"context"
-	"errors"
-	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
-func TestAContainerWhoseAppIsBilledPerRequestIdlesItsCPUBetweenRequests(t *testing.T) {
-	server := &googletest.Run{}
-	p := providerServing(server, t)
-	p.options.Apps = map[string]AppOptions{"web": {Billing: run.BillingRequest}}
-
-	if _, err := p.ProvisionContainers(context.Background(), productionSpec(), nil); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
+func idlesCPU(patched bool) *patching {
+	if !patched {
+		return &patching{}
 	}
-	if !server.Created[0].Template.Containers[0].Resources.CpuIdle {
-		t.Error("a container whose app sets billing request keeps its CPU between requests, want it idle: the option overrides a container's instance billing")
+	return servicePatched(map[string]any{"template": map[string]any{"containers": []any{
+		map[string]any{"resources": map[string]any{"cpuIdle": true}},
+	}}})
+}
+
+func TestAContainerKeepsItsCPUBetweenRequestsUnlessItsPatchIdlesIt(t *testing.T) {
+	for _, patched := range []bool{false, true} {
+		server := &googletest.Run{}
+		p := servingTransformed(t, server, idlesCPU(patched))
+
+		if err := provisionTransformedContainers(t, p, containerStackDeclaring(environment.TierProduction, "production", provider.AppValues{})); err != nil {
+			t.Fatalf("ProvisionContainers() = %v", err)
+		}
+		if got := server.Created[0].Template.Containers[0].Resources.CpuIdle; got != patched {
+			t.Errorf("a container whose patch sets cpuIdle %v idles its CPU %v, want %v: a container is billed per instance unless its patch says otherwise", patched, got, patched)
+		}
 	}
 }
 
-func TestANextFunctionWhoseAppIsBilledPerRequestIdlesItsCPUBetweenRequests(t *testing.T) {
-	server := &googletest.Run{}
-	p := providerServing(server, t)
-	p.options.Apps = map[string]AppOptions{"web": {Billing: run.BillingRequest}}
+func TestANextFunctionKeepsItsCPUBetweenRequestsUnlessItsPatchIdlesIt(t *testing.T) {
+	for _, patched := range []bool{false, true} {
+		server := &googletest.Run{}
+		p := servingTransformed(t, server, idlesCPU(patched))
 
-	if _, err := p.ProvisionFunctions(context.Background(), nextSpec(), nil); err != nil {
-		t.Fatalf("ProvisionFunctions() = %v", err)
-	}
-	if !server.Created[0].Template.Containers[0].Resources.CpuIdle {
-		t.Error("a Next function whose app sets billing request keeps its CPU between requests, want it idle: the option wins over the Next default")
+		if err := provisionTransformedFunctions(t, p, nextSpec()); err != nil {
+			t.Fatalf("ProvisionFunctions() = %v", err)
+		}
+		if got := server.Created[0].Template.Containers[0].Resources.CpuIdle; got != patched {
+			t.Errorf("a Next function whose patch sets cpuIdle %v idles its CPU %v, want %v: after() and background refreshes need the CPU kept unless the patch gives it up", patched, got, patched)
+		}
 	}
 }
 
-func TestANodeFunctionWhoseAppIsBilledPerInstanceKeepsItsCPUBetweenRequests(t *testing.T) {
+func TestANodeFunctionIdlesItsCPUBetweenRequestsUnlessItsPatchKeepsIt(t *testing.T) {
 	server := &googletest.Run{}
-	p := providerServing(server, t)
-	p.options.Apps = map[string]AppOptions{"web": {Billing: run.BillingInstance}}
+	p := servingTransformed(t, server, servicePatched(map[string]any{"template": map[string]any{"containers": []any{
+		map[string]any{"resources": map[string]any{"cpuIdle": false}},
+	}}}))
 
-	if _, err := p.ProvisionFunctions(context.Background(), functionSpec(productionSpec(), "nodejs"), nil); err != nil {
+	if err := provisionTransformedFunctions(t, p, functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{})); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 	if server.Created[0].Template.Containers[0].Resources.CpuIdle {
-		t.Error("a node function whose app sets billing instance idles its CPU between requests, want it kept")
-	}
-}
-
-func TestADeployWhoseOptionsSetBillingForNoAppOfTheProjectIsRefusedBeforeAnythingIsRead(t *testing.T) {
-	ctx := context.Background()
-	for name, preflight := range map[string]func(*Provider, provider.DeployPreflight) error{
-		"plan": func(p *Provider, pre provider.DeployPreflight) error {
-			_, err := p.PlanPreflight(ctx, pre)
-			return err
-		},
-		"apply": func(p *Provider, pre provider.DeployPreflight) error { return p.ApplyPreflight(ctx, pre) },
-	} {
-		t.Run(name, func(t *testing.T) {
-			p := failingOnAnyCall(t)
-			p.options.Apps = map[string]AppOptions{"wbe": {Billing: run.BillingRequest}}
-
-			var refused refusal.Refusal
-			err := preflight(p, shippingNext(false))
-			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-				t.Fatalf("%s = %v, want an invalid refusal: a misspelt app would otherwise fall back to its default billing unseen", name, err)
-			}
-			if !strings.Contains(refused.Message, `"apps.wbe"`) || !strings.Contains(refused.Message, "web") {
-				t.Errorf("%s refused with %q, want it to name the option apps.wbe and the app web the project has", name, refused.Message)
-			}
-		})
-	}
-}
-
-func TestADeployWhoseOptionsSetBillingForItsOwnAppIsAdmitted(t *testing.T) {
-	p := pushing(t, servingOnlyEnabledAPIs(t))
-	recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys, bootstrap.EdgeBucket, bootstrap.CacheBucket)
-	p.options.Apps = map[string]AppOptions{"web": {Billing: run.BillingRequest}}
-
-	if err := p.ApplyPreflight(context.Background(), shippingNext(false)); err != nil {
-		t.Errorf("ApplyPreflight() = %v, want a deploy setting billing for its app web admitted", err)
-	}
-}
-
-func TestAnAppsBillingLeavesAnotherAppsServicesOnTheirDefault(t *testing.T) {
-	server := &googletest.Run{}
-	p := providerServing(server, t)
-	p.options.Apps = map[string]AppOptions{"jobs": {Billing: run.BillingRequest}}
-
-	if _, err := p.ProvisionContainers(context.Background(), productionSpec(), nil); err != nil {
-		t.Fatalf("ProvisionContainers() = %v", err)
-	}
-	if server.Created[0].Template.Containers[0].Resources.CpuIdle {
-		t.Error("the web container idles its CPU because jobs sets billing request, want web kept on a container's instance billing")
+		t.Error("a node function whose patch sets cpuIdle false idles its CPU between requests, want it kept")
 	}
 }

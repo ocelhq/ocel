@@ -77,9 +77,6 @@ func NewProvider(options Options) (*Provider, error) {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"option %q names no region, and a project spans them all: name the one this deploy runs in", "region")
 	}
-	if err := options.refuseUnknownBilling(); err != nil {
-		return nil, err
-	}
 	endpoint, err := emulatorEndpoint()
 	if err != nil {
 		return nil, err

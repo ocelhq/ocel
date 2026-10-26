@@ -21,9 +21,6 @@ const (
 )
 
 func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
-	if err := p.options.refuseUnknownApps(pre.Deploy.Apps); err != nil {
-		return provider.Plan{}, err
-	}
 	parts, err := p.partsUsedBy(pre)
 	if err != nil {
 		return provider.Plan{}, err
@@ -55,9 +52,6 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 }
 
 func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPreflight) error {
-	if err := p.options.refuseUnknownApps(pre.Deploy.Apps); err != nil {
-		return err
-	}
 	parts, err := p.partsUsedBy(pre)
 	if err != nil {
 		return err

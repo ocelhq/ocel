@@ -85,6 +85,71 @@ describe("the gcp branch", () => {
     },
   );
 
+  it("hands the provider the Cloud Run service patch of the app a gate picks", () => {
+    const modules = [
+      module(
+        "./run.transform.ts",
+        defineTransform([
+          {
+            if: (ctx) => ctx.app === "web",
+            gcp: {
+              function: {
+                service: {
+                  template: {
+                    containers: [
+                      {
+                        resources: { limits: { cpu: "2", "nvidia.com/gpu": "1" }, cpuIdle: false },
+                      },
+                    ],
+                    timeout: "900s",
+                  },
+                },
+              },
+            },
+          },
+        ]),
+      ),
+    ];
+    const asked: EvaluateRequest = {
+      ...request(),
+      resources: [
+        { type: "function", name: "fn--web--index", app: "web" },
+        { type: "function", name: "fn--api--index", app: "api" },
+      ],
+    };
+
+    const evaluated = evaluate(asked, modules).resources;
+
+    expect(evaluated[0]?.patches).toEqual({
+      service: {
+        template: {
+          containers: [
+            { resources: { limits: { cpu: "2", "nvidia.com/gpu": "1" }, cpuIdle: false } },
+          ],
+          timeout: "900s",
+        },
+      },
+    });
+    expect(evaluated[1]?.patches).toEqual({});
+  });
+
+  it("refuses a worker's timeout, which ocel keeps as the push deadline", () => {
+    const modules = [
+      module(
+        "./worker.transform.ts",
+        defineTransform({
+          gcp: { worker: { service: { template: { timeout: "60s" } } as never } },
+        }),
+      ),
+    ];
+    const asked: EvaluateRequest = {
+      ...request(),
+      resources: [{ type: "worker", name: "media", app: "web" }],
+    };
+
+    expect(() => evaluate(asked, modules)).toThrow(/gcp\.worker\.service\.template\.timeout/);
+  });
+
   it("refuses a field ocel sets itself, by name", () => {
     const modules = [
       module(

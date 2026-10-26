@@ -48,6 +48,10 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 		return nil, err
 	}
 	named := c.Names
+	patches, err := p.ReadAppPatches(ctx, c.Project(), spec)
+	if err != nil {
+		return nil, err
+	}
 	tasks, declared, err := p.Topics.Tasks(ctx, c, spec)
 	if err != nil {
 		return nil, err
@@ -112,17 +116,21 @@ func (p Functions) Provision(ctx context.Context, spec provider.StackSpec, progr
 			Account:          account,
 			Compute:          provider.ComputeServerless,
 			Public:           true,
-			Billing:          p.ResolveBilling(app.App, provider.ComputeServerless, next.Serves(app)),
+			Billing:          run.DefaultBilling(provider.ComputeServerless, next.Serves(app)),
 			Ingress:          run.IngressFor(run.FactsOf(spec.Edge)),
 			Memory:           fn.Memory,
 			Instances:        instances,
 			Egress:           p.EgressFor(named, spec),
 			Tag:              p.RevisionTag(spec),
 			Labels:           labels,
+			Patch:            patches.For(release.TransformFunction, fn.Name).Apply,
 			OpensOnPromotion: !run.FactsOf(spec.Edge).RunsCode,
 		}
 		if next.Serves(app) {
 			served = next.FillServingDefaults(served)
+			if served.Memory, err = release.ReadMemory(served); err != nil {
+				return nil, err
+			}
 			buckets, err := c.TierBuckets(ctx, spec.Ref.Tier, naming.StorageEdge, naming.StorageCache)
 			if err != nil {
 				return nil, err

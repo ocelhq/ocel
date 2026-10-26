@@ -18,6 +18,7 @@ const transformProvider = "gcp"
 type Allowed map[string][]string
 
 type resourceKey struct {
+	app  string
 	kind string
 	name string
 }
@@ -64,7 +65,7 @@ func evaluate(ctx context.Context, pass transform.Pass, req transform.Request, a
 		}
 	}
 	for i, result := range results {
-		evaluated.results[resourceKey{kind: req.Resources[i].Type, name: req.Resources[i].Name}] = result
+		evaluated.results[resourceKey{app: req.Resources[i].App, kind: req.Resources[i].Type, name: req.Resources[i].Name}] = result
 	}
 	return evaluated, nil
 }
@@ -86,7 +87,11 @@ func refuseUnreachable(resource transform.Resource, result transform.Result, all
 }
 
 func (e Evaluated) For(kind, name string) transform.Result {
-	return e.results[resourceKey{kind: kind, name: name}]
+	return e.ForApp("", kind, name)
+}
+
+func (e Evaluated) ForApp(app, kind, name string) transform.Result {
+	return e.results[resourceKey{app: app, kind: kind, name: name}]
 }
 
 type evaluatedKey struct{}
@@ -113,13 +118,6 @@ func RefuseUnevaluated(ctx context.Context, ref provider.StackRef, resource prov
 		return fmt.Errorf("the transforms for %s were not evaluated before %s %s was reached", ref.Name, resource.Type, resource.Name)
 	}
 	return nil
-}
-
-func SplitOutputs(patch map[string]any) (map[string]any, []string) {
-	var unknown []string
-	known := splitOutputs("", patch, &unknown)
-	slices.Sort(unknown)
-	return known, unknown
 }
 
 func (s Surface[D, U]) SplitOutputs(patch map[string]any) (map[string]any, []string) {
@@ -159,27 +157,6 @@ func without(patch map[string]any, keys []string) map[string]any {
 		delete(trimmed, keys[0])
 	}
 	return trimmed
-}
-
-func splitOutputs(prefix string, patch map[string]any, unknown *[]string) map[string]any {
-	known := make(map[string]any, len(patch))
-	for key, value := range patch {
-		path := key
-		if prefix != "" {
-			path = prefix + "." + key
-		}
-		nested, isObject := value.(map[string]any)
-		list, isList := value.([]any)
-		switch {
-		case transform.IsOutput(value) || isList && holdsOutput(list):
-			*unknown = append(*unknown, path)
-		case isObject:
-			known[key] = splitOutputs(path, nested, unknown)
-		default:
-			known[key] = value
-		}
-	}
-	return known
 }
 
 func holdsOutput(value any) bool {

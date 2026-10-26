@@ -2,9 +2,11 @@ package gcp
 
 import (
 	"context"
+	"maps"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 )
 
@@ -26,10 +28,18 @@ func (p *Provider) evaluateTransforms(ctx context.Context, spec provider.StackSp
 	var candidates []transform.Resource
 	if spec.App == nil {
 		candidates = registry.TransformCandidates(spec.Resources)
+	} else {
+		candidates = release.TransformCandidates(spec)
 	}
-	evaluated, err := surface.EvaluateStack(ctx, p.transforms, spec, candidates, registry.Transformed())
+	evaluated, err := surface.EvaluateStack(ctx, p.transforms, spec, candidates, p.transformed())
 	if err != nil {
 		return ctx, err
 	}
 	return surface.WithEvaluated(ctx, spec.Ref, evaluated), nil
+}
+
+func (p *Provider) transformed() map[string]surface.Allowed {
+	allowed := p.components().Transformed()
+	maps.Copy(allowed, release.Transformed())
+	return allowed
 }

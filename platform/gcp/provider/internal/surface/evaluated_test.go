@@ -63,30 +63,30 @@ func TestWhatTheTransformsCameToReachesTheStackTheyWereEvaluatedFor(t *testing.T
 }
 
 func TestABindingOutputLeftUnresolvedIsSplitFromWhatIsKnown(t *testing.T) {
-	known, unknown := surface.SplitOutputs(map[string]any{
-		"storageClass": map[string]any{"$ocelOutput": map[string]any{"type": "custom", "name": "a", "property": "b"}},
-		"versioning":   map[string]any{"enabled": true},
+	known, unknown := diskSurface.SplitOutputs(map[string]any{
+		"type": map[string]any{"$ocelOutput": map[string]any{"type": "custom", "name": "a", "property": "b"}},
+		"size": float64(50),
 	})
-	if _, kept := known["storageClass"]; kept || known["versioning"].(map[string]any)["enabled"] != true {
-		t.Errorf("known = %v, want the written-down versioning alone", known)
+	if _, kept := known["type"]; kept || known["size"] != float64(50) {
+		t.Errorf("known = %v, want the written-down size alone", known)
 	}
-	if !slices.Equal(unknown, []string{"storageClass"}) {
+	if !slices.Equal(unknown, []string{"type"}) {
 		t.Errorf("unknown = %v, want the path a binding output fills", unknown)
 	}
 }
 
-func TestAListHoldingAnUnresolvedBindingOutputIsSplitWhole(t *testing.T) {
-	known, unknown := surface.SplitOutputs(map[string]any{
-		"lifecycleRules": []any{map[string]any{
-			"action":    map[string]any{"type": "SetStorageClass", "storageClass": map[string]any{"$ocelOutput": map[string]any{"type": "custom", "name": "a", "property": "b"}}},
-			"condition": map[string]any{"age": 30},
+func TestAPathABindingOutputReachesAnyLeafOfIsSplitWhole(t *testing.T) {
+	known, unknown := diskSurface.SplitOutputs(map[string]any{
+		"rules": []any{map[string]any{
+			"port":     map[string]any{"$ocelOutput": map[string]any{"type": "custom", "name": "a", "property": "b"}},
+			"protocol": "tcp",
 		}},
-		"labels": []any{"web"},
+		"size": float64(50),
 	})
-	if _, kept := known["lifecycleRules"]; kept || known["labels"] == nil {
-		t.Errorf("known = %v, want the written-down list alone", known)
+	if _, kept := known["rules"]; kept || known["size"] != float64(50) {
+		t.Errorf("known = %v, want the written-down size alone", known)
 	}
-	if !slices.Equal(unknown, []string{"lifecycleRules"}) {
-		t.Errorf("unknown = %v, want the list a binding output sits in", unknown)
+	if !slices.Equal(unknown, []string{"rules"}) {
+		t.Errorf("unknown = %v, want the whole path a binding output sits in", unknown)
 	}
 }

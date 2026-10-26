@@ -50,8 +50,7 @@ func leafPathsOf(prefix string, value any) []string {
 }
 
 func TestATransformPatchesExactlyThePathsTheProviderTranslates(t *testing.T) {
-	registry := (&Provider{}).components()
-	allowed := registry.Transformed()
+	allowed := (&Provider{}).transformed()
 	root := transformtest.Root(t, map[string]string{"conformance.transform.ts": conformanceModule})
 
 	req := surface.Request(environment.TierProduction, "prod", nil)

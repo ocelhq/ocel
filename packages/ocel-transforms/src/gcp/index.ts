@@ -1,4 +1,4 @@
-import type { cloudscheduler, memorystore, pubsub, sql, storage } from "@pulumi/gcp";
+import type { cloudrunv2, cloudscheduler, memorystore, pubsub, sql, storage } from "@pulumi/gcp";
 import type { Unwrap } from "@pulumi/pulumi";
 import type { Patch } from "../patch.js";
 
@@ -65,6 +65,24 @@ export interface GcpResourceArgs {
      */
     job: cloudscheduler.JobArgs;
   };
+  /**
+   * The Cloud Run service behind each function of a serverless app. Patches
+   * to `template.containers` apply to the one container ocel runs.
+   */
+  function: {
+    service: cloudrunv2.ServiceArgs;
+  };
+  /** The Cloud Run service a container app runs as, patched as a function's is. */
+  container: {
+    service: cloudrunv2.ServiceArgs;
+  };
+  /**
+   * The Cloud Run service behind each worker. Its timeout stays the push
+   * deadline ocel keeps, so `template.timeout` is not patched here.
+   */
+  worker: {
+    service: cloudrunv2.ServiceArgs;
+  };
 }
 
 /** The ocel resource types the GCP provider renders patchable resources for. */
@@ -99,6 +117,29 @@ const topicPaths = [
 ] as const;
 
 const subscriptionPaths = ["messageRetentionDuration", "retainAckedMessages"] as const;
+const workerServicePaths = [
+  "binaryAuthorization.breakglassJustification",
+  "binaryAuthorization.policy",
+  "binaryAuthorization.useDefault",
+  "template.containers.resources.cpuIdle",
+  "template.containers.resources.limits.cpu",
+  "template.containers.resources.limits.memory",
+  "template.containers.resources.limits.nvidia.com/gpu",
+  "template.containers.resources.startupCpuBoost",
+  "template.encryptionKey",
+  "template.executionEnvironment",
+  "template.maxInstanceRequestConcurrency",
+  "template.nodeSelector.accelerator",
+  "template.scaling.maxInstanceCount",
+  "template.scaling.minInstanceCount",
+  "template.sessionAffinity",
+  "template.vpcAccess.egress",
+  "template.vpcAccess.networkInterfaces.network",
+  "template.vpcAccess.networkInterfaces.subnetwork",
+  "template.vpcAccess.networkInterfaces.tags",
+] as const;
+
+const appServicePaths = [...workerServicePaths, "template.timeout"] as const;
 
 /**
  * The paths a rule may set under `gcp`, the only ones ocel translates into
@@ -192,6 +233,9 @@ export const gcpAllowedPaths = {
       "retryConfig.retryCount",
     ],
   },
+  function: { service: appServicePaths },
+  container: { service: appServicePaths },
+  worker: { service: workerServicePaths },
 } as const satisfies AllowedPathNames;
 
 type GcpAllowed = typeof gcpAllowedPaths;
@@ -204,9 +248,11 @@ type Rest<P extends string, K extends string> = P extends `${K}.${infer R}` ? R 
 
 type PickPaths<T, P extends string> = T extends readonly (infer E)[]
   ? PickPaths<E, P>[]
-  : {
-      [K in keyof T & Head<P>]?: K extends P ? T[K] : PickPaths<NonNullable<T[K]>, Rest<P, K>>;
-    };
+  : string extends keyof T
+    ? { [K in P]?: T[string] }
+    : {
+        [K in keyof T & Head<P>]?: K extends P ? T[K] : PickPaths<NonNullable<T[K]>, Rest<P, K>>;
+      };
 
 /**
  * What a rule may patch under `gcp`: the args `@pulumi/gcp` takes for the

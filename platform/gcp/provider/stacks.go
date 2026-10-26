@@ -22,6 +22,11 @@ func (s stacks) Plan(ctx context.Context, spec provider.StackSpec, runProgress p
 	if ctx, err = s.p.evaluateTransforms(ctx, spec); err != nil {
 		return provider.Plan{}, err
 	}
+	if spec.App != nil {
+		if err := s.p.release().RefuseAppPatches(ctx, spec); err != nil {
+			return provider.Plan{}, err
+		}
+	}
 	return s.Stacks.Plan(ctx, spec, runProgress)
 }
 

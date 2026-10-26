@@ -148,49 +148,6 @@ func TestShapeDescribesAProductionDeployServedDirect(t *testing.T) {
 	}
 }
 
-func TestShapePricesEachAppsServicesByTheBillingItsOptionsChoose(t *testing.T) {
-	client, _ := costServedWith(t, gcp.Options{Project: "acme-prod", Region: "europe-west1", Apps: map[string]gcp.AppOptions{
-		"web": {Billing: "instance"},
-		"api": {Billing: "request"},
-	}})
-
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
-		Manifest:    shopManifest(),
-		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
-	})
-	if err != nil {
-		t.Fatalf("Shape() = %v", err)
-	}
-	want := map[string]bool{"project:shop/environment:prod/app:web": false, "project:shop/environment:prod/app:api": true}
-	for _, r := range set.GetResources() {
-		idles, priced := want[r.GetScope()]
-		if r.GetType() != "google_cloud_run_v2_service" || !priced {
-			continue
-		}
-		delete(want, r.GetScope())
-		template := r.GetProperties().AsMap()["template"].(map[string]any)
-		resources := template["containers"].([]any)[0].(map[string]any)["resources"].(map[string]any)
-		if resources["cpu_idle"] != idles {
-			t.Errorf("%s is priced with cpu_idle %v, want %v: the app's billing option decides how its service is billed", r.GetName(), resources["cpu_idle"], idles)
-		}
-	}
-	if len(want) != 0 {
-		t.Errorf("Shape() priced no service for %v", want)
-	}
-}
-
-func TestShapeRefusesBillingSetForNoAppOfTheProject(t *testing.T) {
-	client, _ := costServedWith(t, gcp.Options{Project: "acme-prod", Region: "europe-west1", Apps: map[string]gcp.AppOptions{"wbe": {Billing: "request"}}})
-
-	_, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
-		Manifest:    shopManifest(),
-		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
-	})
-	if err == nil || !strings.Contains(err.Error(), `"apps.wbe"`) {
-		t.Errorf("Shape() = %v, want a refusal naming apps.wbe: a cost priced on a misspelt app's default billing is wrong unseen", err)
-	}
-}
-
 func TestShapeOfADeclaredBucketIsOneStorageBucketInTheEnvironmentThatDeclaresIt(t *testing.T) {
 	client, _ := costServed(t)
 

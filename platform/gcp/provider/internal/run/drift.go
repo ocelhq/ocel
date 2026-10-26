@@ -7,6 +7,7 @@ import (
 	"maps"
 	"math/big"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +43,12 @@ type servingPrint struct {
 	Networks             [][2]string
 	Containers           int
 	Tier                 string
+	StartupCPUBoost      bool       `json:",omitempty"`
+	SessionAffinity      bool       `json:",omitempty"`
+	Accelerator          string     `json:",omitempty"`
+	EncryptionKey        string     `json:",omitempty"`
+	BinaryAuthorization  []string   `json:",omitempty"`
+	NetworkTags          [][]string `json:",omitempty"`
 }
 
 func Drifted(current, desired *run.GoogleCloudRunV2Service) bool {
@@ -91,11 +98,19 @@ func printOf(service *run.GoogleCloudRunV2Service) servingPrint {
 		IAPEnabled:         service.IapEnabled,
 		Audiences:          slices.Clone(service.CustomAudiences),
 	}
+	if authorization := service.BinaryAuthorization; authorization != nil {
+		p.BinaryAuthorization = []string{strconv.FormatBool(authorization.UseDefault), authorization.Policy, authorization.BreakglassJustification}
+	}
 	template := service.Template
 	if template == nil {
 		return p
 	}
 	p.ServiceAccount = template.ServiceAccount
+	p.SessionAffinity = template.SessionAffinity
+	p.EncryptionKey = template.EncryptionKey
+	if template.NodeSelector != nil {
+		p.Accelerator = template.NodeSelector.Accelerator
+	}
 	p.Tier = template.Labels[names.TierLabel]
 	p.Timeout = durationOf(template.Timeout)
 	p.ExecutionEnvironment = template.ExecutionEnvironment
@@ -116,6 +131,9 @@ func printOf(service *run.GoogleCloudRunV2Service) servingPrint {
 		p.Egress = template.VpcAccess.Egress
 		for _, network := range template.VpcAccess.NetworkInterfaces {
 			p.Networks = append(p.Networks, [2]string{RevisionName(network.Network), RevisionName(network.Subnetwork)})
+			if len(network.Tags) > 0 {
+				p.NetworkTags = append(p.NetworkTags, slices.Clone(network.Tags))
+			}
 		}
 	}
 	p.Containers = len(template.Containers)
@@ -132,6 +150,7 @@ func printOf(service *run.GoogleCloudRunV2Service) servingPrint {
 	}
 	if container.Resources != nil {
 		p.CPUIdle = container.Resources.CpuIdle
+		p.StartupCPUBoost = container.Resources.StartupCpuBoost
 		p.Limits = map[string]string{}
 		for _, name := range slices.Sorted(maps.Keys(container.Resources.Limits)) {
 			p.Limits[name] = quantityOf(container.Resources.Limits[name])
@@ -179,4 +198,21 @@ func quantityOf(written string) string {
 		return unreadable + written
 	}
 	return amount.Mul(amount, scale).RatString()
+}
+
+func IsQuantity(written string) bool {
+	return written != "" && !strings.HasPrefix(quantityOf(written), unreadable)
+}
+
+func MemoryMB(written string) int {
+	bytes, ok := new(big.Rat).SetString(quantityOf(written))
+	if !ok {
+		return 0
+	}
+	mebibytes := new(big.Rat).Quo(bytes, new(big.Rat).SetInt64(1<<20))
+	whole := new(big.Int).Quo(mebibytes.Num(), mebibytes.Denom())
+	if new(big.Rat).SetInt(whole).Cmp(mebibytes) < 0 {
+		whole.Add(whole, big.NewInt(1))
+	}
+	return int(whole.Int64())
 }
