@@ -6,11 +6,13 @@ export interface Env {
   OCEL_APP?: string;
   OCEL_SERVES_WORKERS_DEV?: string;
   OCEL_DOMAIN_APPS?: string;
+  OCEL_CACHES_CONTAINERS?: string;
   OCEL_PREVIEW?: string;
   OCEL_PREVIEW_GLOBAL?: string;
   OCEL_PREVIEW_BASE_DOMAIN?: string;
   OCEL_PREVIEW_KEY?: string;
   OCEL_ORIGIN: string;
+  OCEL_OBJECTS?: R2Bucket;
   OCEL_ENVELOPE_KEY?: string;
   OCEL_PURGE_BUDGET?: string;
   LOADER: WorkerLoader;

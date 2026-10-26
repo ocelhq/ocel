@@ -61,6 +61,10 @@ export class ReleasesStore extends DurableObject<Env> {
     return store.readServedRecord(this.storage, storageCoordinate);
   }
 
+  async listOtherAppReleases(storageCoordinate: string): Promise<string[]> {
+    return store.listOtherAppReleases(this.storage, storageCoordinate);
+  }
+
   async readVersionStamp(): Promise<string | undefined> {
     return store.readVersionStamp(this.storage);
   }

@@ -13,6 +13,7 @@ export interface ReleaseRecord {
   physical?: string;
   revisions?: Record<string, string>;
   origin?: string;
+  fronted?: boolean;
   healthPath?: string;
   healthPathDiscovered?: boolean;
   routeTable?: RouteTableLocation;

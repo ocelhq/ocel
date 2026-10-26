@@ -259,3 +259,59 @@ describe("the origin's images", () => {
     expect(openOrigin({ OCEL_ORIGIN: awsOrigin() }).images).toBeUndefined();
   });
 });
+
+describe("an origin reached through the hostname each release was asked for", () => {
+  const env = {
+    OCEL_ORIGIN: JSON.stringify({ reach: { kind: "fronted" }, throttle: { status: 429 } }),
+  };
+
+  it("asks every release unsigned, presenting no secret", async () => {
+    const wire = capturing();
+    await withGlobalFetch(wire.fetch, () =>
+      openOrigin(env).fetchFor({})("https://shop.example.com/", {
+        headers: { authorization: "Bearer visitor" },
+      }),
+    );
+
+    expect(wire.calls).toHaveLength(1);
+    expect(wire.calls[0].headers.get("authorization")).toBe("Bearer visitor");
+    expect(wire.calls[0].headers.has("x-ocel-origin-secret")).toBe(false);
+  });
+});
+
+describe("the objects the edge keeps for its origin", () => {
+  const key = "assets/p1/prod/web/r9a0c0e00/_next/static/app.js";
+
+  function keptBucket(objects: Record<string, string>): R2Bucket {
+    return {
+      get: async (wanted: string) => {
+        const body = objects[wanted];
+        if (body === undefined) return null;
+        return { body: new Blob([body]).stream(), httpEtag: '"e1"' };
+      },
+    } as unknown as R2Bucket;
+  }
+
+  const env = (objects: Record<string, string>) => ({
+    OCEL_ORIGIN: JSON.stringify({ reach: { kind: "fronted" }, throttle: { status: 429 } }),
+    OCEL_OBJECTS: keptBucket(objects),
+  });
+
+  it("are read from the bucket the worker is bound to", async () => {
+    const read = await openOrigin(env({ [key]: "chunk" })).objects?.readObject(key);
+
+    expect(read?.status).toBe(200);
+    expect(await read?.text()).toBe("chunk");
+    expect(read?.headers.get("etag")).toBe('"e1"');
+  });
+
+  it("answer 404 for a key the bucket holds nothing at", async () => {
+    const read = await openOrigin(env({})).objects?.readObject(key);
+
+    expect(read?.status).toBe(404);
+  });
+
+  it("hold no page entries, which the origin keeps on its own disk", () => {
+    expect(openOrigin(env({})).entries).toBeUndefined();
+  });
+});

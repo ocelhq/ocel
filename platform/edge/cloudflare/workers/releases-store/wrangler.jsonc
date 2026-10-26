@@ -11,6 +11,12 @@
   "vars": {
     "BOOTSTRAP_SECRET": "dev-secret"
   },
+  "r2_buckets": [
+    {
+      "binding": "OBJECTS",
+      "bucket_name": "ocel-objects"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {

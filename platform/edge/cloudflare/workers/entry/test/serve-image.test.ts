@@ -39,14 +39,18 @@ const record = {
   edge: {},
 };
 
-function serveWith(over: { served?: boolean; env?: Partial<Env> } = {}): Serve {
+function serveWith(
+  over: { served?: boolean; env?: Partial<Env>; record?: Record<string, unknown> } = {},
+): Serve {
   const ctx = Object.assign(createExecutionContext(), { props: RENDER_PROPS });
   return new Serve(
     ctx as never,
     {
       RELEASES: {
         readServedRecord: async () =>
-          over.served === false ? { kind: "not-served" } : { kind: "record", record },
+          over.served === false
+            ? { kind: "not-served" }
+            : { kind: "record", record: { ...record, ...over.record } },
       },
       OCEL_ORIGIN: awsOrigin(),
       ...over.env,
@@ -189,6 +193,20 @@ describe("Serve optimizing an image", () => {
 
     expect(response.status).toBe(200);
     expect(optimizer.calls[0].url).toBe(ENV_OPTIMIZER);
+  });
+
+  it("signs its call to the bootstrap's optimizer for a release reached through its hostname", async () => {
+    const optimizer = optimizerAnswering(() => webp());
+
+    const response = await withGlobalFetch(optimizer.fetch, () =>
+      serveWith({
+        env: { OCEL_ORIGIN: awsOrigin({ optimizerUrl: ENV_OPTIMIZER }) },
+        record: { fronted: true },
+      }).fetch(imageRequest(ENV_OPTIMIZER)),
+    );
+
+    expect(response.status).toBe(200);
+    expect(optimizer.calls[0].headers.get("authorization")).toMatch(/^AWS4-HMAC-SHA256 /);
   });
 
   it("refuses an optimizer that is neither the bootstrap's nor one of the release's functions", async () => {

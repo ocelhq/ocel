@@ -16,6 +16,8 @@ export const routeTableVar = "OCEL_NEXT_ROUTE_TABLE";
 
 export const buildIdVar = "OCEL_BUILD_ID";
 
+export const imageEndpointVar = "OCEL_IMAGE_ENDPOINT";
+
 export function readStorageCoordinate(
   env: Readonly<Record<string, string | undefined>>,
 ): StorageCoordinate | undefined {

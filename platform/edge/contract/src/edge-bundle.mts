@@ -1,5 +1,7 @@
 export const edgeBundleVersion = 3;
 
+export const EDGE_BUNDLE_OBJECT_FILE = "bundle.json";
+
 export interface EdgeBundleEntry {
   chunks: string[];
   handlerExport: string;

@@ -74,6 +74,28 @@ function setup(
 }
 
 describe("a request a cached route names", () => {
+  it("reaches the origin uncached when it asks to upgrade the connection", async () => {
+    const { serve, calls, forwarded } = setup();
+
+    await serve(
+      new Request("https://shop.example.com/blog/a", { headers: { upgrade: "websocket" } }),
+    );
+
+    expect(calls).toHaveLength(0);
+    expect(forwarded).toHaveLength(1);
+  });
+
+  it("reaches the origin uncached when it accepts an event stream", async () => {
+    const { serve, calls, forwarded } = setup();
+
+    await serve(
+      new Request("https://shop.example.com/about", { headers: { accept: "text/event-stream" } }),
+    );
+
+    expect(calls).toHaveLength(0);
+    expect(forwarded).toHaveLength(1);
+  });
+
   it("is answered by Serve under the app's own function URL, never by a direct fetch", async () => {
     const { serve, calls, forwarded } = setup();
 

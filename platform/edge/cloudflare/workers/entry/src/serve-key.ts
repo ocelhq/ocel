@@ -203,6 +203,22 @@ export function buildServeRequest(url: string, visitor?: Request): Request {
   return new Request(url, { method: "GET", headers, redirect: "manual" });
 }
 
+const EVENT_STREAM = "text/event-stream";
+
+const LIVENESS_PROBE_PATH = "/.well-known/ocel-edge";
+
+export function isCacheableAtTheEdge(request: Request): boolean {
+  const url = new URL(request.url);
+  return (
+    isRead(request) &&
+    url.protocol === "https:" &&
+    url.pathname !== LIVENESS_PROBE_PATH &&
+    !request.headers.has("authorization") &&
+    !request.headers.has("upgrade") &&
+    !(request.headers.get("accept") ?? "").toLowerCase().includes(EVENT_STREAM)
+  );
+}
+
 export function isRead(request: Request): boolean {
   return request.method === "GET" || request.method === "HEAD";
 }

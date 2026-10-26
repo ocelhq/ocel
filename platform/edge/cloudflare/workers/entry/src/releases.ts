@@ -35,6 +35,7 @@ export interface ReleasesBinding {
     knownRelease?: string;
   }): Promise<PointerRecordResult>;
   readGate(args: { slug: string }): Promise<string | undefined>;
+  listOtherAppReleases(args: { slug: string; storageCoordinate: string }): Promise<string[]>;
 }
 
 export interface ReleaseLookup {

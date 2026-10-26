@@ -401,6 +401,30 @@ describe("the image origin of a routed deployment", () => {
     expect(fetched).toEqual(["https://r1-x.o.example.com/_ocel/image"]);
   });
 
+  it("asks the optimizer through the origin's own reach for a release reached through its hostname", async () => {
+    const fronted: string[] = [];
+    const reachedOwn: string[] = [];
+    const optimizerUrl = "https://opt.lambda-url.eu-west-2.on.aws/";
+    const serve = servedNextRelease({
+      table: { rootFunction: "bundle-0", images, assetHashes: { "/a.png": "a-hash" } },
+      record: { functionUrls: { "bundle-0": entryUrl }, fronted: true },
+      serve: fakeServing(
+        () => new Response(null, { status: 503, headers: { [SERVE_REFUSED_HEADER]: "1" } }),
+      ).serving.serve,
+      base: {
+        images: { optimizerUrl },
+        originFetchFor: () => reached(fronted),
+        imageFetchFor: () => reached(reachedOwn),
+      },
+    });
+
+    const response = await serve(imageRequest());
+
+    expect(response.status).toBe(200);
+    expect(reachedOwn).toEqual([optimizerUrl]);
+    expect(fronted).toEqual([]);
+  });
+
   it("keeps an image origin the host binds", async () => {
     const optimizer = async () => new Response("optimizer", { status: 200 });
     const serve = imageRelease({ imageOrigin: optimizer });

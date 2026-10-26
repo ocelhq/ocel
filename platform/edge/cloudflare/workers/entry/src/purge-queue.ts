@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { stampTag } from "@platform/edge-contract/cache-tags";
 import type { PurgeMode } from "@platform/edge-contract/purge";
 import { parseStorageCoordinate } from "@platform/edge-contract/storage-key";
 import type { Env } from "./env";
@@ -7,6 +8,7 @@ import { readPurgeBudget } from "./purge-budget";
 import { newSqliteBacklogStore } from "./purge-sqlite-store";
 import {
   newSqliteTagTimes,
+  type RecordedRelease,
   type ReleaseScope,
   type TagTimes,
   type TagTimesStore,
@@ -45,9 +47,16 @@ export function newServePort(serve: ServePurgeFactory): PurgePort {
   };
 }
 
+function restampTags(tags: readonly RaisedTag[], from: string, to: string): RaisedTag[] {
+  const own = stampTag(from, "");
+  return tags.flatMap(({ tag, raisedAt }) =>
+    tag.startsWith(own) ? [{ tag: stampTag(to, tag.slice(own.length)), raisedAt }] : [],
+  );
+}
+
 export class PurgeQueue extends DurableObject<Env> {
   serve: PurgePort;
-  releases: Pick<ReleasesBinding, "readServedRecord">;
+  releases: Pick<ReleasesBinding, "readServedRecord" | "listOtherAppReleases">;
   private readonly backlog: PurgeBacklog;
   private readonly times: TagTimesStore;
   private failedFlushes = 0;
@@ -73,12 +82,36 @@ export class PurgeQueue extends DurableObject<Env> {
         `ocel: ${scope.storageCoordinate} is not the storage coordinate of a release`,
       );
     }
+    const others = await this.listOtherReleases(scope);
     this.ctx.storage.transactionSync(() => {
       this.times.record({ ...scope, release }, mode, tags);
       this.backlog.raise(mode, tags);
+      for (const other of others) {
+        const restamped = restampTags(tags, release, other.release);
+        if (restamped.length === 0) continue;
+        this.times.record(other, mode, restamped);
+        this.backlog.raise(mode, restamped);
+      }
     });
     await this.armAlarm(await this.flushBacklog());
     if (this.readDueChecks(1).length > 0) await this.armAlarm(Date.now());
+  }
+
+  private async listOtherReleases(scope: ReleaseScope): Promise<RecordedRelease[]> {
+    let coordinates: string[];
+    try {
+      coordinates = await this.releases.listOtherAppReleases(scope);
+    } catch (error) {
+      console.error(
+        `ocel: cannot list the other releases of ${scope.storageCoordinate}; a rollback to one may serve what this purge names`,
+        error,
+      );
+      return [];
+    }
+    return coordinates.flatMap((storageCoordinate) => {
+      const release = parseStorageCoordinate(storageCoordinate)?.release;
+      return release === undefined ? [] : [{ slug: scope.slug, storageCoordinate, release }];
+    });
   }
 
   async readTimes(tags: string[]): Promise<TagTimes> {

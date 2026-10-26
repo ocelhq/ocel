@@ -25,6 +25,7 @@ import {
 } from "./gate";
 import { workersCacheImage } from "./image";
 import { nodeOrigin } from "./node";
+import { readFrontedOrigin } from "./origin/fronted";
 import { openOrigin, type ReachedRecord } from "./origin/reach";
 import { findPreviewTarget } from "./preview";
 import {
@@ -61,11 +62,13 @@ function hostRequestInit(request: Request): HostRequestExtras {
 
 export type ResolveBase = Pick<RouteDeps, "fetch" | "imageOrigin" | "isOriginThrottle"> & {
   originFetchFor?: (record: ReachedRecord) => typeof fetch;
+  imageFetchFor?: (record: ReachedRecord) => typeof fetch;
   images?: OriginImages;
   serving: ServingPorts;
   assetStore: Omit<AssetStoreDeps, "storage">;
   routeTableStore?: EdgeObjectStore;
   edgeRuntime: EdgeRuntime;
+  cachesContainers?: boolean;
 };
 
 export type ServeFetch = (request: Request) => Promise<Response>;
@@ -97,7 +100,22 @@ function serveOrigin(
   const forward = nodeOrigin({ app, urls, originFetch: base.originFetchFor?.(record) });
   const serving = newReleaseServing(base.serving, record, storage, releases, app);
   if (urls.length !== 1) return forward;
-  return serveNodeOrigin({ serving, app, origin: urls[0], routes, forward });
+  const cachesUnrouted =
+    (base.cachesContainers === true || record.fronted === true) && isPlainContainer(record);
+  return serveNodeOrigin({ serving, app, origin: urls[0], routes, forward, cachesUnrouted });
+}
+
+function isPlainContainer(record: StoredRecord): boolean {
+  return record.origin !== undefined && Object.keys(record.functionUrls).length === 0;
+}
+
+function readServedAt(record: StoredRecord, host: string): StoredRecord {
+  if (!record.fronted) return record;
+  const origin = readFrontedOrigin(host);
+  const functionUrls = Object.fromEntries(
+    Object.keys(record.functionUrls).map((route) => [route, origin]),
+  );
+  return { ...record, origin, functionUrls };
 }
 
 function serveRelease(
@@ -126,7 +144,8 @@ async function resolveServedRelease(
   const resolution = await resolveRelease(releases);
   if (resolution.kind === "not-found") return deploymentNotFoundResponse();
   if (resolution.kind === "unavailable") return unavailableResponse();
-  const { record, storage } = resolution;
+  const { storage } = resolution;
+  const record = readServedAt(resolution.record, releases.host);
   if (!record.routeTable) return { kind: "origin", record, storage };
 
   const { key } = record.routeTable;
@@ -208,12 +227,12 @@ function routedDeps(
   const serving = newReleaseServing(base.serving, record, storage, releases, app);
   const optimizerUrl = readImageOptimizerUrl(base.images, rootUrl);
   const originFetch = base.originFetchFor?.(record);
+  const imageFetch = base.imageFetchFor?.(record) ?? originFetch ?? base.fetch ?? fetch;
   return {
     fetch: base.fetch,
     originFetch,
     hostRequestInit,
-    imageOrigin:
-      base.imageOrigin ?? functionUrlImageOrigin(optimizerUrl, originFetch ?? base.fetch ?? fetch),
+    imageOrigin: base.imageOrigin ?? functionUrlImageOrigin(optimizerUrl, imageFetch),
     maxImageRequestBytes: base.images?.maxRequestBytes,
     imageCache: optimizerUrl ? workersCacheImage({ serving, app, optimizerUrl }) : undefined,
     prerender: servePrerender({ serving, app }),
@@ -325,6 +344,7 @@ export default {
     const serveRequest = await resolveServe(releases, {
       fetch,
       originFetchFor: origin.fetchFor,
+      imageFetchFor: origin.imageFetchFor,
       isOriginThrottle: origin.isThrottle,
       images: origin.images,
       routeTableStore: objects,
@@ -339,6 +359,7 @@ export default {
         waitUntil: (promise) => ctx.waitUntil(promise),
       },
       edgeRuntime: { loader: env.LOADER, envelopeKey: env.OCEL_ENVELOPE_KEY },
+      cachesContainers: env.OCEL_CACHES_CONTAINERS === "1",
     });
     if (serveRequest instanceof Response) return withGateHeaders(serveRequest, gateHeaders);
 
