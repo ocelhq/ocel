@@ -250,12 +250,16 @@ func (b *buildSteps) takeLoose() []byte {
 	return taken
 }
 
+func (b *buildSteps) open(subject string, title progress.Title) *run.Span {
+	_, _ = b.shared.Write(b.takeLoose())
+	return b.phase.Child(subject, title)
+}
+
 func (b *buildSteps) log() build.Log {
 	return build.Log{
 		Shared: b,
 		AppLog: func(app string) (io.Writer, func(error)) {
-			_, _ = b.shared.Write(b.takeLoose())
-			child := b.phase.Child(app, progress.Building.Title("app "+app))
+			child := b.open(app, progress.Building.Title("app "+app))
 			return child.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), func(err error) {
 				if err != nil {
 					b.mu.Lock()
