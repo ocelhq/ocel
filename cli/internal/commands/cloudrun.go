@@ -68,7 +68,9 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 
 	check := running.Phase(progressv1.Phase_PHASE_CHECK)
 	account := NewConsoleAccount(t.Cloud.ConsoleURL, t.Cloud.Credentials.AccessToken)
+	loading := check.Child(hostOf(t.Cloud.ConsoleURL), progress.Loading.Title("your organizations"))
 	org, err := pickCloudOrganization(ctx, account, cfg.Dir)
+	loading.End(err)
 	if err != nil {
 		check.End(err)
 		return err
@@ -335,7 +337,9 @@ func uploadSource(ctx context.Context, phase *run.Span, cfg *project.Project, up
 	if projectPath == "." {
 		projectPath = ""
 	}
+	committing := phase.Child(cfg.Slug, progress.Title{Started: "Committing the source to Ocel Cloud", Ended: "Committed the source to Ocel Cloud"})
 	sourceID, err = uploader.Commit(ctx, archive.Manifest)
+	committing.End(err)
 	return sourceID, filepath.ToSlash(projectPath), err
 }
 
@@ -403,7 +407,10 @@ func findOrCreateProject(ctx context.Context, check *run.Span, account ConsoleAc
 		projects, err := account.ListProjects(ctx, org)
 		return FindProject(projects, slug), err
 	}
-	if found, err := find(); err != nil || found != nil {
+	loading := check.Child(slug, progress.Loading.Title("the projects in "+org.Name))
+	found, err := find()
+	loading.End(err)
+	if err != nil || found != nil {
 		return found, err
 	}
 	creating := check.Child(slug, progress.Creating.Title("the project in "+org.Name))

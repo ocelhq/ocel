@@ -74,9 +74,11 @@ func TestTheFirstOcelCloudRunLinksAConsoleProjectUploadsTheSourceAndRunsAJob(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, _, _ := strings.Cut(strings.TrimSpace(out), "\n")
+	_, afterOrganizations, _ := strings.Cut(out, "Loaded your organizations")
+	_, afterLoading, _ := strings.Cut(afterOrganizations, "\n")
+	first, _, _ := strings.Cut(strings.TrimSpace(afterLoading), "\n")
 	if !strings.Contains(first, "shop") {
-		t.Fatalf("first line = %q, want the identity of the run", first)
+		t.Fatalf("first line after the organizations = %q, want the identity of the run", first)
 	}
 	if !strings.Contains(out, "Ocel Cloud") || !strings.Contains(out, "Acme Inc") || !strings.Contains(out, "127.0.0.1") {
 		t.Fatalf("output = %q, want the target named: Ocel Cloud, the organization and the console", out)
@@ -117,6 +119,36 @@ func TestTheFirstOcelCloudRunLinksAConsoleProjectUploadsTheSourceAndRunsAJob(t *
 	}
 	if !strings.Contains(again, "already holds every file") {
 		t.Fatalf("second run = %q, want nothing uploaded again", again)
+	}
+}
+
+func TestTheFirstOcelCloudRunNamesItsReadsOfTheConsoleAndTheCommitOfItsSource(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	root := writeShop(t)
+	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED}}
+
+	out, err := runOnCloud(t, invocation, root, "ocel deploy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, named := range []struct{ phase, ended string }{
+		{"check", "Loaded your organizations"},
+		{"check", "Loaded the projects in Acme Inc"},
+		{"build", "Committed the source to Ocel Cloud"},
+	} {
+		line := ""
+		for candidate := range strings.Lines(out) {
+			if strings.Contains(candidate, named.ended) {
+				line = candidate
+				break
+			}
+		}
+		switch {
+		case line == "":
+			t.Errorf("output = %q, want %q reported", out, named.ended)
+		case !strings.Contains(line, "["+named.phase+"]"):
+			t.Errorf("%q was reported as %q, want it under [%s]", named.ended, line, named.phase)
+		}
 	}
 }
 
