@@ -247,6 +247,18 @@ func (b Engine) partsApplyMakes(ctx context.Context, req provider.BootstrapReque
 	if len(b.fronted(req.Parts)) > 0 {
 		parts = append(parts, frontedParts...)
 	}
+	for _, each := range b.Removable {
+		if each.Deployed == nil && each.Work == nil || slices.Contains(removing, each.Name) {
+			continue
+		}
+		_, recorded, err := b.readPart(ctx, req.Tier, each.Name)
+		if err != nil {
+			return nil, err
+		}
+		if recorded {
+			parts = append(parts, each.Name)
+		}
+	}
 	return parts, nil
 }
 

@@ -203,18 +203,58 @@ func TestABootstrapWhoseCredentialMayNotSwitchServicesOnIsRefusedOnceBeforeItRea
 	}
 }
 
-func TestAPartAddedOnFirstUseSwitchesOnTheServicesItNeedsBeforeItMakesAnything(t *testing.T) {
+func TestAPartMadeOutsideAnyPlanWhileItsServiceIsOffIsRefusedAndSwitchesNothingOn(t *testing.T) {
 	t.Parallel()
 	server := googletest.GrantedIAM()
 	server.ServicesOff = []string{"cloudkms.googleapis.com", "cloudscheduler.googleapis.com"}
 	b := bootstrappingOver(t, server)
 
-	if err := b.EnsurePart(t.Context(), environment.TierProduction, "shop", bootstrap.Keys.For(b, environment.TierProduction)); err != nil {
-		t.Fatalf("EnsurePart(keys) = %v", err)
+	err := b.EnsurePart(t.Context(), environment.TierProduction, "shop", bootstrap.Keys.For(b, environment.TierProduction))
+
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(refused.Message, "gcloud services enable cloudkms.googleapis.com --project acme-prod") {
+		t.Errorf("EnsurePart(keys) = %v, want a %s refusal naming the command that switches cloudkms.googleapis.com on", err, refusal.CodeNotReady)
+	}
+	if got := server.EnabledIDs(); len(got) > 0 {
+		t.Errorf("adding the keys part switched on %v, want nothing switched on that no plan listed", got)
+	}
+}
+
+func TestAPartMadeWithTheChecksSkippedReadsNoServiceState(t *testing.T) {
+	t.Parallel()
+	server := googletest.GrantedIAM()
+	server.ServicesOff = []string{"cloudkms.googleapis.com"}
+	b := bootstrappingOver(t, server)
+	b.SkipChecks = true
+
+	err := b.EnsurePart(t.Context(), environment.TierProduction, "shop", bootstrap.Keys.For(b, environment.TierProduction))
+
+	var refused refusal.Refusal
+	if err == nil || errors.As(err, &refused) {
+		t.Errorf("EnsurePart(keys) with the checks skipped = %v, want Google's own error from Cloud KMS", err)
+	}
+	if server.BatchGets > 0 || server.Gets > 0 || len(server.EnabledIDs()) > 0 {
+		t.Errorf("read the services %d times and switched on %v, want neither: OCEL_SKIP_CHECKS skips every service read", server.BatchGets+server.Gets, server.EnabledIDs())
+	}
+}
+
+func TestABootstrapPlanListsTheServicesOfEveryPartItMayRepair(t *testing.T) {
+	t.Parallel()
+	f := &freshProject{usage: &googletest.ServiceUsage{EveryServiceOff: true}}
+	b := openingFreshProject(t, f)
+	tier := environment.TierProduction
+	recorded := stackrecords.BootstrapPart{WrittenBy: "an earlier build", Digest: "an earlier digest", AddedBy: "shop"}
+	if err := stackrecords.MarkBootstrapPartReady(t.Context(), b.Records, tier, bootstrap.TopicsPart, recorded); err != nil {
+		t.Fatal(err)
 	}
 
-	if got := server.EnabledIDs(); !slices.Equal(got, []string{"cloudkms.googleapis.com"}) {
-		t.Errorf("adding the keys part switched on %v, want only cloudkms.googleapis.com", got)
+	plan, err := b.Plan(t.Context(), provider.BootstrapRequest{Tier: tier})
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+
+	if got, want := switchedOnInPlan(plan), append(slices.Clone(bootstrap.BootstrapAPIs), "pubsub.googleapis.com", "cloudtasks.googleapis.com"); !slices.Equal(got, want) {
+		t.Errorf("the plan switches on %v, want %v: applying it repairs the topics part, which runs on them", got, want)
 	}
 }
 

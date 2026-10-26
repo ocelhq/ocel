@@ -169,6 +169,19 @@ func (b Engine) SwitchOnServices(ctx context.Context, tier environment.Tier, par
 	return b.refuseRunRegionUnserved(ctx)
 }
 
+func (b Engine) RefuseServicesOff(ctx context.Context, apis []string) error {
+	if b.SkipChecks {
+		return nil
+	}
+	off, err := b.ListServicesOff(ctx, apis)
+	if err != nil || len(off) == 0 {
+		return err
+	}
+	project := b.Clients.Project()
+	return refusal.Refuse(refusal.CodeNotReady, "project %s has %s switched off.\nRun `gcloud services enable %s --project %s`, then try again",
+		project, strings.Join(off, ", "), strings.Join(off, " "), project)
+}
+
 func (b Engine) IsOff(api string) bool { return b.ServiceStates.IsOff(api) }
 
 func (b Engine) PlanSwitchOn(switching []string) []provider.ChangeGroup {
