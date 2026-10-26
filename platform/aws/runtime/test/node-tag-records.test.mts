@@ -102,5 +102,5 @@ test("keeps a bounded number of writes in flight however many tags one request r
   );
 
   expect(most).toBeGreaterThan(1);
-  expect(most).toBeLessThanOrEqual(16);
+  expect(most).toBeLessThanOrEqual(8);
 });
