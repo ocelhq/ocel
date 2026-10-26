@@ -28,14 +28,17 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
+	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 )
 
 func bastionNames() names.Names { return names.New(provider.Namespace("ocel"), "acme-prod") }
 
+var ownRange = netip.MustParsePrefix(network.SubnetRange)
+
 func desiredBastion(t *testing.T, tier environment.Tier) *runv2.GoogleCloudRunV2Service {
 	t.Helper()
 	b := Bastion{clients: &gcloud.Clients{Names: bastionNames(), Region: "europe-west1"}}
-	desired, err := run.ServiceOf(b.serving(tier, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-bastion:abc"))
+	desired, err := run.ServiceOf(b.serving(tier, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-bastion:abc", ownRange))
 	if err != nil {
 		t.Fatalf("serviceOf() = %v", err)
 	}
@@ -103,6 +106,19 @@ func TestTheBastionRunsAsItsOwnAccountAndForwardsToPostgresAndValkeyOnItsTiersSu
 	}
 	if got := googletest.EnvOf(desired.Template.Containers[0])[relay.AllowedEnv]; got != "10.240.0.0/20:5432,10.240.0.0/20:6379" {
 		t.Errorf("%s = %q, want the Postgres and Valkey ports on the subnetwork the tier's Private Service Connect endpoints take their addresses from", relay.AllowedEnv, got)
+	}
+}
+
+func TestTheBastionForwardsIntoTheRangeItsTiersSubnetworkHolds(t *testing.T) {
+	t.Parallel()
+	b := Bastion{clients: &gcloud.Clients{Names: bastionNames(), Region: "europe-west1"}}
+	desired, err := run.ServiceOf(b.serving(environment.TierProduction, "europe-west1-docker.pkg.dev/acme-prod/ocel-acme-prod-production/ocel-bastion:abc", netip.MustParsePrefix("10.96.0.0/20")))
+	if err != nil {
+		t.Fatalf("serviceOf() = %v", err)
+	}
+
+	if got := googletest.EnvOf(desired.Template.Containers[0])[relay.AllowedEnv]; got != "10.96.0.0/20:5432,10.96.0.0/20:6379" {
+		t.Errorf("%s = %q, want the ports on the range a transform gave the subnetwork", relay.AllowedEnv, got)
 	}
 }
 
@@ -179,7 +195,7 @@ func newBastionHarness(t *testing.T, relayAllows ...string) *bastionHarness {
 
 func (h *bastionHarness) forward(t *testing.T, targets ...string) []*relay.Forward {
 	t.Helper()
-	forwards, err := h.b.ForwardPorts(context.Background(), environment.TierProduction, targets, nil, nil)
+	forwards, err := h.b.ForwardPorts(context.Background(), environment.TierProduction, ownRange, targets, nil, nil)
 	if err != nil {
 		t.Fatalf("forwardPorts(%v) = %v", targets, err)
 	}
@@ -240,7 +256,7 @@ func TestTheFirstForwardSaysItMakesTheBastionAndLaterOnesSayNothing(t *testing.T
 	first, later := &fake.Log{}, &fake.Log{}
 
 	for _, said := range []*fake.Log{first, later} {
-		forwards, err := h.b.ForwardPorts(context.Background(), environment.TierProduction, []string{target}, said, nil)
+		forwards, err := h.b.ForwardPorts(context.Background(), environment.TierProduction, ownRange, []string{target}, said, nil)
 		if err != nil {
 			t.Fatalf("forwardPorts() = %v", err)
 		}
@@ -366,7 +382,7 @@ func TestAForwardWhoseBastionIsGoneReportsThatItFailedAndWhy(t *testing.T) {
 	target := echoTarget(t)
 	h := newBastionHarness(t, target)
 	failed := make(chan error, 1)
-	forwards, err := h.b.ForwardPorts(context.Background(), environment.TierProduction, []string{target}, nil, func(err error) { failed <- err })
+	forwards, err := h.b.ForwardPorts(context.Background(), environment.TierProduction, ownRange, []string{target}, nil, func(err error) { failed <- err })
 	if err != nil {
 		t.Fatalf("forwardPorts() = %v", err)
 	}
@@ -397,7 +413,7 @@ func TestAUsersOwnLoginIsRefusedBeforeAnythingIsCreated(t *testing.T) {
 	h := newBastionHarness(t, target)
 	h.proveErr = errTestUserLogin
 
-	_, err := h.b.ForwardPorts(context.Background(), environment.TierProduction, []string{target}, nil, nil)
+	_, err := h.b.ForwardPorts(context.Background(), environment.TierProduction, ownRange, []string{target}, nil, nil)
 
 	if err == nil || !strings.Contains(err.Error(), errTestUserLogin.Error()) {
 		t.Fatalf("forwardPorts() = %v, want the message the identity proof gave", err)
@@ -412,7 +428,7 @@ func TestAForwardTheBastionCannotOpenStopsTheOnesAlreadyOpenedAndLeavesTheBuildW
 	reachable, unreachable := echoTarget(t), echoTarget(t)
 	h := newBastionHarness(t, reachable)
 
-	forwards, err := h.b.ForwardPorts(context.Background(), environment.TierProduction, []string{reachable, unreachable}, nil, nil)
+	forwards, err := h.b.ForwardPorts(context.Background(), environment.TierProduction, ownRange, []string{reachable, unreachable}, nil, nil)
 
 	if err == nil || len(forwards) != 0 {
 		t.Fatalf("forwardPorts() = %v, %v, want a refusal and no forward", forwards, err)

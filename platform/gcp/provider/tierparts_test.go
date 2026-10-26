@@ -100,7 +100,7 @@ func TestAPlainDeployOfOneHTTPAppAddsNoPartAndPlansNothing(t *testing.T) {
 	p := pushing(t, servingOnlyEnabledAPIs(t))
 	pre := deployingApps(environment.TierProduction, shippingApp("api", buildoutput.FrameworkGo))
 
-	parts, err := p.partsUsedBy(pre)
+	parts, err := p.partsUsedBy(context.Background(), pre)
 	if err != nil || len(parts) != 0 {
 		t.Errorf("partsUsedBy() of one HTTP app = %v, %v, want no part: it needs no realtime, topics, tasks, env source, key, cache or edge bucket", parts, err)
 	}
@@ -172,7 +172,7 @@ func TestADeployAddsThePartsWhatItDeclaresAndShipsNeedOnFirstUse(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := pushing(t, "").partsUsedBy(tc.pre)
+			got, err := pushing(t, "").partsUsedBy(context.Background(), tc.pre)
 			slices.Sort(got)
 			slices.Sort(tc.want)
 			if err != nil || !slices.Equal(got, tc.want) {
@@ -188,14 +188,14 @@ func TestADeployBehindAnEdgeThatServesFromTheTierAddsTheEdgeBucketAndTheKeys(t *
 	for _, front := range []edge.Kind{alb.Kind, cloudflare.Kind} {
 		pre := deployingApps(environment.TierProduction, shippingApp("api", buildoutput.FrameworkGo))
 		pre.Edge = front
-		got, err := pushing(t, "").partsUsedBy(pre)
+		got, err := pushing(t, "").partsUsedBy(context.Background(), pre)
 		if err != nil || !slices.Contains(got, bootstrap.EdgeBucketPart) || !slices.Contains(got, bootstrap.KeysPart) {
 			t.Errorf("partsUsedBy() behind %s = %v, %v, want the edge bucket the edge serves from and the keys its records are sealed under", front, got, err)
 		}
 	}
 	pre := deployingApps(environment.TierProduction, shippingApp("api", buildoutput.FrameworkGo))
 	pre.Edge = alb.Kind
-	got, _ := pushing(t, "").partsUsedBy(pre)
+	got, _ := pushing(t, "").partsUsedBy(context.Background(), pre)
 	if edgeAt, albAt := slices.Index(got, bootstrap.EdgeBucketPart), slices.Index(got, albpart.PartName); albAt < 0 || edgeAt > albAt {
 		t.Errorf("partsUsedBy() behind the alb = %v, want the edge bucket named before the load balancer that serves from it", got)
 	}
@@ -226,7 +226,7 @@ func TestADeployDeclaringAResourcePlansTheKeysItsPublishedBindingIsSealedUnder(t
 		Resources: []provider.Resource{{Name: "uploads", Type: provider.BindingBucket}},
 	}
 	p, server := sealingWithNoKeys(t)
-	parts, err := p.partsUsedBy(pre)
+	parts, err := p.partsUsedBy(context.Background(), pre)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func usedPart(t *testing.T, b bootstrap.Engine, tier environment.Tier, part stri
 func TestAPartADeployAddedIsKeptWhileAProjectUsesItAndRetiresWithItsLastUser(t *testing.T) {
 	ctx := context.Background()
 	tier := environment.TierProduction
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts()})
+	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts(network.Patches{})})
 	usedPart(t, b, tier, bootstrap.RealtimePart, "shop")
 
 	var refused refusal.Refusal
@@ -290,7 +290,7 @@ func TestAPartADeployAddedIsKeptWhileAProjectUsesItAndRetiresWithItsLastUser(t *
 func TestTheKeysAreKeptWhileAnyProjectOfTheTierIsRecorded(t *testing.T) {
 	ctx := context.Background()
 	tier := environment.TierProduction
-	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts()})
+	b := composed(bootstrap.Engine{Clients: &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1"}, Records: fake.NewKeyValues(), Removable: tierParts(network.Patches{})})
 	usedPart(t, b, tier, bootstrap.KeysPart)
 	if _, err := b.Records.Write(ctx, records.Entry{Key: stackrecords.ProjectKey(tier, "docs"), Value: []byte(`{}`)}); err != nil {
 		t.Fatal(err)

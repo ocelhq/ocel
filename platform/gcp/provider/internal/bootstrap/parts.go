@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -24,20 +25,21 @@ const (
 )
 
 type Part struct {
-	Name        string
-	Summary     string
-	Content     string
-	APIs        []string
-	Retires     bool
-	Resources   []provider.PhysicalResource
-	Shape       []pricing.Shaped
-	Removals    []provider.Change
-	Make        func(ctx context.Context) error
-	Replace     func(ctx context.Context) error
-	Claim       func(ctx context.Context, project string) error
-	Users       func(ctx context.Context) ([]string, error)
-	RefuseInUse func(ctx context.Context, removal PartRemoval) error
-	Remove      func(ctx context.Context) error
+	Name         string
+	Summary      string
+	Content      string
+	UpdateReason string
+	APIs         []string
+	Retires      bool
+	Resources    []provider.PhysicalResource
+	Shape        []pricing.Shaped
+	Removals     []provider.Change
+	Make         func(ctx context.Context) error
+	Replace      func(ctx context.Context) error
+	Claim        func(ctx context.Context, project string) error
+	Users        func(ctx context.Context) ([]string, error)
+	RefuseInUse  func(ctx context.Context, removal PartRemoval) error
+	Remove       func(ctx context.Context) error
 }
 
 func (p Part) Digest() string {
@@ -113,7 +115,7 @@ func (b Engine) planPart(ctx context.Context, tier environment.Tier, want Part) 
 	case present && recorded.State != stackrecords.PartReady:
 		group.Reason = reasonPartClaimed
 	case present:
-		group.Action, group.Reason, change = provider.ActionUpdate, reasonPartBehind, provider.ActionUpdate
+		group.Action, group.Reason, change = provider.ActionUpdate, cmp.Or(want.UpdateReason, reasonPartBehind), provider.ActionUpdate
 	}
 	for _, resource := range want.Resources {
 		group.Changes = append(group.Changes, provider.Change{Kind: resource.Kind, Name: resource.ID, Action: change})

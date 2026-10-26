@@ -84,6 +84,8 @@ func (s *networkServer) serve(t *testing.T) http.HandlerFunc {
 			s.readPolicy(w, path.Base(path.Dir(at)))
 		case strings.HasSuffix(at, "/setIamPolicy"):
 			s.writePolicy(w, r, path.Base(path.Dir(at)))
+		case strings.HasSuffix(at, "/setPrivateIpGoogleAccess"):
+			s.setPrivateAccess(w, r, path.Base(path.Dir(at)))
 		case strings.Contains(at, "/serviceConnectionPolicies"):
 			s.policy(w, r, name)
 		case strings.Contains(at, "/subnetworks"):
@@ -147,8 +149,32 @@ func (s *networkServer) subnet(w http.ResponseWriter, r *http.Request, name stri
 		if created == nil {
 			return
 		}
+		created.Fingerprint = "fp-1"
 		s.subnets[created.Name] = created
 		s.writes = append(s.writes, "create subnetwork "+created.Name)
+		googletest.WriteBody(w, &compute.Operation{Name: "op-subnet", Status: gcloud.OperationDone})
+	case http.MethodPatch:
+		held := s.subnets[name]
+		said := googletest.ReadBody[map[string]json.RawMessage](w, r)
+		if said == nil {
+			return
+		}
+		var fingerprint string
+		_ = json.Unmarshal((*said)["fingerprint"], &fingerprint)
+		if held == nil || fingerprint != held.Fingerprint {
+			http.Error(w, "the fingerprint is not the subnetwork's", http.StatusPreconditionFailed)
+			return
+		}
+		if logs, sent := (*said)["logConfig"]; sent {
+			held.LogConfig = &compute.SubnetworkLogConfig{}
+			_ = json.Unmarshal(logs, held.LogConfig)
+		}
+		if ranges, sent := (*said)["secondaryIpRanges"]; sent {
+			held.SecondaryIpRanges = nil
+			_ = json.Unmarshal(ranges, &held.SecondaryIpRanges)
+		}
+		held.Fingerprint += "+"
+		s.writes = append(s.writes, "update subnetwork "+name)
 		googletest.WriteBody(w, &compute.Operation{Name: "op-subnet", Status: gcloud.OperationDone})
 	case http.MethodDelete:
 		if s.subnets[name] == nil {
@@ -161,8 +187,42 @@ func (s *networkServer) subnet(w http.ResponseWriter, r *http.Request, name stri
 	}
 }
 
+func (s *networkServer) setPrivateAccess(w http.ResponseWriter, r *http.Request, name string) {
+	sent := googletest.ReadBody[compute.SubnetworksSetPrivateIpGoogleAccessRequest](w, r)
+	if sent == nil {
+		return
+	}
+	s.subnets[name].PrivateIpGoogleAccess = sent.PrivateIpGoogleAccess
+	s.subnets[name].Fingerprint += "+"
+	s.writes = append(s.writes, "set private Google access on "+name)
+	googletest.WriteBody(w, &compute.Operation{Name: "op-subnet", Status: gcloud.OperationDone})
+}
+
 func (s *networkServer) policy(w http.ResponseWriter, r *http.Request, name string) {
 	switch r.Method {
+	case http.MethodPatch:
+		held := s.policies[name]
+		sent := googletest.ReadBody[networkconnectivity.ServiceConnectionPolicy](w, r)
+		if sent == nil {
+			return
+		}
+		mask := r.URL.Query().Get("updateMask")
+		for _, field := range strings.Split(mask, ",") {
+			switch field {
+			case "pscConfig.limit":
+				if held.PscConfig == nil {
+					held.PscConfig = &networkconnectivity.PscConfig{}
+				}
+				held.PscConfig.Limit = sent.PscConfig.Limit
+			case "labels":
+				held.Labels = sent.Labels
+			default:
+				http.Error(w, "the mask names "+field+", which no policy field is", http.StatusBadRequest)
+				return
+			}
+		}
+		s.writes = append(s.writes, "update policy "+name+" "+mask)
+		googletest.WriteBody(w, map[string]any{"name": "projects/acme-prod/locations/europe-west1/operations/op-policy", "done": true})
 	case http.MethodGet:
 		if found := s.policies[name]; found != nil {
 			googletest.WriteBody(w, found)
@@ -223,7 +283,7 @@ func (s *networkServer) installedWithout(policy string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.networks["ocel-prod-network"] = &compute.Network{Name: "ocel-prod-network"}
-	s.subnets["ocel-prod-network"] = &compute.Subnetwork{Name: "ocel-prod-network", IpCidrRange: network.SubnetRange}
+	s.subnets["ocel-prod-network"] = &compute.Subnetwork{Name: "ocel-prod-network", IpCidrRange: network.SubnetRange, Fingerprint: "fp-1"}
 	s.policies["ocel-prod-network-memorystore"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: network.MemorystoreServiceClass}
 	s.policies["ocel-prod-network-cloudsql"] = &networkconnectivity.ServiceConnectionPolicy{ServiceClass: network.CloudSQLServiceClass}
 	delete(s.policies, policy)

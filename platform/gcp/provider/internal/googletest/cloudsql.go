@@ -253,6 +253,16 @@ func (s *CloudSQL) Holding(name string, labels map[string]string) {
 	s.Instances[name] = &sqladmin.DatabaseInstance{Name: name, State: "RUNNABLE", Settings: &sqladmin.Settings{UserLabels: labels}}
 }
 
+func (s *CloudSQL) HoldingOn(name string, labels map[string]string, network string) {
+	s.Holding(name, labels)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Instances[name].Settings.IpConfiguration = &sqladmin.IpConfiguration{PscConfig: &sqladmin.PscConfig{
+		PscEnabled:         true,
+		PscAutoConnections: []*sqladmin.PscAutoConnectionConfig{{ConsumerNetwork: network, ConsumerProject: Project, IpAddress: DatabaseAddress}},
+	}}
+}
+
 func (s *CloudSQL) Filters() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
