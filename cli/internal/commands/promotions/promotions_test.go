@@ -347,6 +347,26 @@ func TestListingPromotionsAsJSONSaysWhoItActsAsInTheCheckPhaseAndKeepsItsEnvelop
 	}
 }
 
+func TestListingPromotionsNamesItsReadingOfTheHistoryUnderCheck(t *testing.T) {
+	project := promotedTwice(t)
+	invocation := clitest.NewInvocation()
+
+	var stream, stdout bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stream)
+	if err := runPromotionsList(context.Background(), invocation, project.Root, &stdout, &stream); err != nil {
+		t.Fatalf("runPromotionsList err = %v; stream=%s", err, stream.String())
+	}
+	for line := range strings.Lines(stream.String()) {
+		if strings.Contains(line, "Read the promotion history of production") {
+			if !strings.Contains(line, "[check]") {
+				t.Errorf("the reading was reported as %q, want it under [check]", line)
+			}
+			return
+		}
+	}
+	t.Errorf("stream = %q, want the reading of the promotion history reported", stream.String())
+}
+
 func TestPruningReportsWhatItReclaimedThroughTheRunsEvents(t *testing.T) {
 	project := promotedThrice(t)
 	invocation := clitest.NewInvocation()

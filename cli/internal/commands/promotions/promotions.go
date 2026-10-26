@@ -118,15 +118,8 @@ func promotionState(entry *contractv1.PromotionHistoryEntry) resultv1.PromotionS
 func listPromotions(ctx context.Context, invocation commands.Invocation, target commands.Target) (promotions []*contractv1.PromotionHistoryEntry, err error) {
 	cfg := target.Project
 	err = invocation.WithProvider(ctx, cfg, "ocel promotions ls", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION, Cloud: target.Cloud}, func(ctx context.Context, p commands.ProviderRun) error {
-		p.Check.End(nil)
-		return p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
-			listed, err := client.ListPromotions(ctx, &contractv1.ListPromotionsRequest{
-				Slug: cfg.Slug,
-				Edge: cfg.EdgeSelection(),
-			})
-			promotions = listed.GetPromotions()
-			return err
-		})
+		promotions, err = promotionHistory(ctx, p.Check, p.Provider, cfg)
+		return err
 	})
 	return promotions, err
 }
