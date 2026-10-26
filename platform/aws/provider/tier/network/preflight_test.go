@@ -89,11 +89,11 @@ func TestARegionWithFewerThanTwoReachableZonesIsRefused(t *testing.T) {
 	}
 }
 
-func placing(configured string) Placement {
-	return Placement{Region: "us-east-1", AccountID: testAccount, Namespace: "ocel", Tier: "production", Configured: configured}
+func placing(cidr string) Placement {
+	return Placement{Region: "us-east-1", AccountID: testAccount, Namespace: "ocel", Tier: "production", CIDR: cidr}
 }
 
-func TestANetworkWhoseConfiguredBlockOverlapsAVPCAlreadyInTheRegionIsRefusedNamingItAndTheOption(t *testing.T) {
+func TestANetworkWhosePatchedBlockOverlapsAVPCAlreadyInTheRegionIsRefusedNamingItAndThePatch(t *testing.T) {
 	t.Parallel()
 
 	region := &fakeRegion{quota: 5, vpcs: []ec2types.Vpc{vpc("vpc-default", "172.31.0.0/16"), vpc("vpc-theirs", "192.168.0.0/16", "10.20.128.0/17")}}
@@ -102,17 +102,17 @@ func TestANetworkWhoseConfiguredBlockOverlapsAVPCAlreadyInTheRegionIsRefusedNami
 	if !errors.As(err, &refused) {
 		t.Fatalf("Place() = %v, want a refusal", err)
 	}
-	for _, named := range []string{"vpc-theirs", "10.20.128.0/17", "network.production.cidr"} {
+	for _, named := range []string{"vpc-theirs", "10.20.128.0/17", "vpc.cidrBlock"} {
 		if !strings.Contains(refused.Message, named) {
 			t.Errorf("refusal %q does not name %q", refused.Message, named)
 		}
 	}
 	if layout, err := Place(context.Background(), region, region, placing("10.30.0.0/16")); err != nil || layout.CIDR != "10.30.0.0/16" {
-		t.Errorf("Place() = %+v, %v, want the configured block clear of every VPC taken", layout, err)
+		t.Errorf("Place() = %+v, %v, want the patched block clear of every VPC taken", layout, err)
 	}
 }
 
-func TestANetworkWithNoConfiguredBlockTakesTheFirstDefaultBlockNoOtherVPCOverlaps(t *testing.T) {
+func TestANetworkWithNoPatchedBlockTakesTheFirstDefaultBlockNoOtherVPCOverlaps(t *testing.T) {
 	t.Parallel()
 
 	candidates := DefaultCIDRs("ocel", "production")
@@ -132,14 +132,14 @@ func TestANetworkWithNoConfiguredBlockTakesTheFirstDefaultBlockNoOtherVPCOverlap
 	}
 }
 
-func TestANetworkWithNoConfiguredBlockIsRefusedNamingTheOptionWhenEveryDefaultBlockIsHeld(t *testing.T) {
+func TestANetworkWithNoPatchedBlockIsRefusedNamingThePatchWhenEveryDefaultBlockIsHeld(t *testing.T) {
 	t.Parallel()
 
 	region := &fakeRegion{quota: 5, vpcs: []ec2types.Vpc{vpc("vpc-everything", "10.0.0.0/8")}}
 	_, err := Place(context.Background(), region, region, placing(""))
 	var refused refusal.Refusal
-	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "network.production.cidr") {
-		t.Fatalf("Place() = %v, want a refusal naming the option that sets a block", err)
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "vpc.cidrBlock") {
+		t.Fatalf("Place() = %v, want a refusal naming the patch that sets a block", err)
 	}
 }
 

@@ -90,16 +90,21 @@ func stackTags(namespace string, tier environment.Tier) map[string]string {
 	return tags
 }
 
+type Patches struct {
+	component.Patches
+	CIDR string
+}
+
 type Stacks struct {
 	Open            func(context.Context, provider.StackRef) (sharedstack.Owner, error)
-	Patches         func(context.Context, environment.Tier) (component.Patches, error)
+	Patches         func(context.Context, environment.Tier) (Patches, error)
 	PartsByConsumer map[string]string
 	lock            sync.Mutex
 }
 
-func (s *Stacks) patchesFor(ctx context.Context, tier environment.Tier) (component.Patches, error) {
+func (s *Stacks) patchesFor(ctx context.Context, tier environment.Tier) (Patches, error) {
 	if s.Patches == nil {
-		return component.Patches{}, nil
+		return Patches{}, nil
 	}
 	return s.Patches(ctx, tier)
 }
@@ -141,10 +146,10 @@ func (s *Stacks) Claim(ctx context.Context, consumer provider.StackRef, progress
 }
 
 func (s *Stacks) ClaimWithoutRepatch(ctx context.Context, consumer provider.StackRef, progress progress.Log) (Network, error) {
-	return s.claimWith(ctx, consumer, component.Patches{}, progress)
+	return s.claimWith(ctx, consumer, Patches{}, progress)
 }
 
-func (s *Stacks) claimWith(ctx context.Context, consumer provider.StackRef, patches component.Patches, progress progress.Log) (Network, error) {
+func (s *Stacks) claimWith(ctx context.Context, consumer provider.StackRef, patches Patches, progress progress.Log) (Network, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	tier := consumer.Tier
@@ -152,8 +157,8 @@ func (s *Stacks) claimWith(ctx context.Context, consumer provider.StackRef, patc
 	if err != nil {
 		return Network{}, err
 	}
-	if owner.NetworkCIDR != "" {
-		if _, err := NewLayout(owner.NetworkCIDR); err != nil {
+	if patches.CIDR != "" {
+		if _, err := NewLayout(patches.CIDR); err != nil {
 			return Network{}, err
 		}
 	}
@@ -162,7 +167,7 @@ func (s *Stacks) claimWith(ctx context.Context, consumer provider.StackRef, patc
 		return Network{}, err
 	}
 	if present {
-		if err := refuseNewBlock(tier, current, owner.NetworkCIDR); err != nil {
+		if err := refuseNewBlock(tier, current, patches.CIDR); err != nil {
 			return Network{}, err
 		}
 		if err := Shared.Claim(ctx, owner, consumer); err != nil {
@@ -171,18 +176,18 @@ func (s *Stacks) claimWith(ctx context.Context, consumer provider.StackRef, patc
 		if patches.IsEmpty() || patches.Digest == current.PatchDigest {
 			return current, nil
 		}
-		return s.repatch(ctx, owner, tier, current, patches, progress)
+		return s.repatch(ctx, owner, tier, current, patches.Patches, progress)
 	}
 	zones, err := PickZones(ctx, owner.EC2)
 	if err != nil {
 		return Network{}, err
 	}
 	layout, err := Place(ctx, owner.EC2, owner.Quotas, Placement{
-		Region:     owner.Region,
-		AccountID:  owner.AccountID,
-		Namespace:  owner.Namespace,
-		Tier:       tier,
-		Configured: owner.NetworkCIDR,
+		Region:    owner.Region,
+		AccountID: owner.AccountID,
+		Namespace: owner.Namespace,
+		Tier:      tier,
+		CIDR:      patches.CIDR,
 	})
 	if err != nil {
 		return Network{}, err
@@ -194,7 +199,7 @@ func (s *Stacks) claimWith(ctx context.Context, consumer provider.StackRef, patc
 	var raised Network
 	err = Shared.Raise(ctx, owner, tier, consumer.Project, func() ([]provider.PhysicalResource, error) {
 		var err error
-		if raised, err = provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, layout, zones, patches), progress); err != nil {
+		if raised, err = provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, layout, zones, patches.Patches), progress); err != nil {
 			return nil, err
 		}
 		return listResources(owner.Namespace, tier, raised), nil
@@ -216,14 +221,33 @@ func (s *Stacks) repatch(ctx context.Context, owner sharedstack.Owner, tier envi
 	return provision(ctx, owner, StackRef(tier), NewProgram(owner.Namespace, tier, owner.Region, layout, current.Zones, patches), progress)
 }
 
+func (s *Stacks) PlanRaise(ctx context.Context, namespace string, tier environment.Tier) (provider.ChangeGroup, error) {
+	patches, err := s.patchesFor(ctx, tier)
+	if err != nil {
+		return provider.ChangeGroup{}, err
+	}
+	if patches.CIDR != "" {
+		if _, err := NewLayout(patches.CIDR); err != nil {
+			return provider.ChangeGroup{}, err
+		}
+	}
+	return newChangeGroup(namespace, tier), nil
+}
+
 func (s *Stacks) PlanRepatch(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
 	current, present, err := s.Read(ctx, tier)
 	if err != nil || !present {
 		return nil, err
 	}
 	patches, err := s.patchesFor(ctx, tier)
-	if err != nil || patches.IsEmpty() || patches.Digest == current.PatchDigest {
+	if err != nil {
 		return nil, err
+	}
+	if err := refuseNewBlock(tier, current, patches.CIDR); err != nil {
+		return nil, err
+	}
+	if patches.IsEmpty() || patches.Digest == current.PatchDigest {
+		return nil, nil
 	}
 	return &provider.ChangeGroup{
 		Kind:   provider.StackGroupKind,
@@ -235,14 +259,14 @@ func (s *Stacks) PlanRepatch(ctx context.Context, tier environment.Tier) (*provi
 	}, nil
 }
 
-func refuseNewBlock(tier environment.Tier, current Network, configured string) error {
-	if configured == "" || configured == current.CIDR {
+func refuseNewBlock(tier environment.Tier, current Network, patched string) error {
+	if patched == "" || patched == current.CIDR {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"the %s tier's network was created with %s, and `network.%s.cidr` now asks for %s; a VPC's block cannot change without replacing the VPC and everything in it. "+
+		"the %s tier's network was created with %s, and a transform's `vpc.cidrBlock` now asks for %s; a VPC's block cannot change without replacing the VPC and everything in it. "+
 			"Set it back to %s, or remove everything in the tier's network and `%s --remove %s` first",
-		tier, current.CIDR, tier, configured, current.CIDR, provider.BootstrapCommand(tier), Part)
+		tier, current.CIDR, patched, current.CIDR, provider.BootstrapCommand(tier), Part)
 }
 
 func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackRef, program component.Program, progress progress.Log) (Network, error) {
@@ -386,7 +410,7 @@ func Shape(tier environment.Tier) []pricing.Shaped {
 	return shaped
 }
 
-func NewChangeGroup(namespace string, tier environment.Tier) provider.ChangeGroup {
+func newChangeGroup(namespace string, tier environment.Tier) provider.ChangeGroup {
 	return provider.ChangeGroup{
 		Kind:    provider.StackGroupKind,
 		Name:    StackRef(tier).Name.String(),

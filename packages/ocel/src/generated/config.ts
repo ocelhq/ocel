@@ -353,8 +353,6 @@ export interface AwsProviderOptions {
   certificates?: Record<string, string>;
   /** How ocel logs --tail reads this account's logs. */
   logs?: AwsLogOptions;
-  /** The VPC ocel creates for each tier, which its container apps, VPC-attached functions, databases and caches run in. */
-  network?: AwsNetworkOptions;
   /** The AWS region to deploy into, such as us-east-1. Left off, read from AWS_REGION, AWS_DEFAULT_REGION or the profile. */
   region?:
     | "af-south-1"
@@ -412,20 +410,6 @@ export interface AwsBytecodeOptions {
 export interface AwsLogOptions {
   /** Tail logs through CloudWatch Live Tail instead of polling. Billed per session-minute past the free tier. */
   liveTail?: boolean;
-}
-
-/** The VPC ocel creates for each tier, which its container apps, VPC-attached functions, databases and caches run in. */
-export interface AwsNetworkOptions {
-  /** The preview tier's VPC. */
-  preview?: AwsTierNetworkOptions;
-  /** The production tier's VPC. */
-  production?: AwsTierNetworkOptions;
-}
-
-/** The preview tier's VPC. */
-export interface AwsTierNetworkOptions {
-  /** The private IPv4 block of the tier's VPC, a /16 to a /24 inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16. Left off, the first /16 from 10.16.0.0 to 10.255.0.0 no VPC in the region overlaps, tried from one picked from the namespace. Fixed once the VPC exists. */
-  cidr?: string;
 }
 
 /** The edge in front of the origin, named alone or keyed with its options. Left off, CloudFront on AWS and none elsewhere. */

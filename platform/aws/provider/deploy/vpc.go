@@ -15,7 +15,11 @@ func (r *release) planNetwork(ctx context.Context, tier environment.Tier) ([]pro
 		return nil, err
 	}
 	if !present {
-		return []provider.ChangeGroup{network.NewChangeGroup(r.cfg.Namespace, tier)}, nil
+		raised, err := r.network.PlanRaise(ctx, r.cfg.Namespace, tier)
+		if err != nil {
+			return nil, err
+		}
+		return []provider.ChangeGroup{raised}, nil
 	}
 	repatched, err := r.network.PlanRepatch(ctx, tier)
 	if err != nil || repatched == nil {

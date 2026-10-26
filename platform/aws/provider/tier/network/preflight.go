@@ -56,11 +56,11 @@ func PickZones(ctx context.Context, api ZonesAPI) ([]string, error) {
 }
 
 type Placement struct {
-	Region     string
-	AccountID  string
-	Namespace  string
-	Tier       environment.Tier
-	Configured string
+	Region    string
+	AccountID string
+	Namespace string
+	Tier      environment.Tier
+	CIDR      string
 }
 
 type heldBlock struct {
@@ -123,17 +123,17 @@ func (o otherVPCs) overlapping(ours netip.Prefix) (heldBlock, bool) {
 }
 
 func (o otherVPCs) pick(at Placement) (string, error) {
-	if at.Configured != "" {
-		configured, err := netip.ParsePrefix(at.Configured)
+	if at.CIDR != "" {
+		block, err := netip.ParsePrefix(at.CIDR)
 		if err != nil {
-			return "", fmt.Errorf("read the network's block %q: %w", at.Configured, err)
+			return "", fmt.Errorf("read the network's block %q: %w", at.CIDR, err)
 		}
-		if held, overlaps := o.overlapping(configured); overlaps {
+		if held, overlaps := o.overlapping(block); overlaps {
 			return "", refusal.Refuse(refusal.CodeInvalid,
-				"the %s tier's network would take %s, and %s in %s already holds %s: set `network.%s.cidr` in the provider options to a private block clear of it",
-				at.Tier, at.Configured, held.vpc, at.Region, held.block, at.Tier)
+				"the %s tier's network would take %s, and %s in %s already holds %s: set the network's `vpc.cidrBlock` in a transform to a private block clear of it",
+				at.Tier, at.CIDR, held.vpc, at.Region, held.block)
 		}
-		return at.Configured, nil
+		return at.CIDR, nil
 	}
 	candidates := DefaultCIDRs(at.Namespace, at.Tier)
 	for _, candidate := range candidates {
@@ -142,8 +142,8 @@ func (o otherVPCs) pick(at Placement) (string, error) {
 		}
 	}
 	return "", refusal.Refuse(refusal.CodeInvalid,
-		"every one of the %d blocks the %s tier's network defaults to overlaps a VPC already in %s: set `network.%s.cidr` in the provider options to a private block clear of them",
-		len(candidates), at.Tier, at.Region, at.Tier)
+		"every one of the %d blocks the %s tier's network defaults to overlaps a VPC already in %s: set the network's `vpc.cidrBlock` in a transform to a private block clear of them",
+		len(candidates), at.Tier, at.Region)
 }
 
 func isNetworkOf(vpc ec2types.Vpc, namespace string, tier environment.Tier) bool {

@@ -251,7 +251,7 @@ func TestTheNetworksChangeGroupListsEveryResourceItsRaiseCreates(t *testing.T) {
 		}
 		cloud.mu.Unlock()
 		var planned []string
-		for _, change := range NewChangeGroup("acme", tier).Changes {
+		for _, change := range newChangeGroup("acme", tier).Changes {
 			if change.Action != provider.ActionCreate {
 				t.Errorf("the %s network's group plans %s %s as %s, want it created", tier, change.Kind, change.Name, change.Action)
 			}

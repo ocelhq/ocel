@@ -50,7 +50,7 @@ func runNetworkWith(t *testing.T, tier environment.Tier, pass transform.Pass) (*
 			t.Fatalf("run: %v", err)
 		}
 	}
-	run(network.NewProgram("ocel", tier, "us-east-1", layout, []string{"use1-az1", "use1-az2"}, patches.network).Run)
+	run(network.NewProgram("ocel", tier, "us-east-1", layout, []string{"use1-az1", "use1-az2"}, patches.network.Patches).Run)
 	run(functionnetwork.NewProgram("ocel", tier, network.Pending, patches.functionNetwork).Run)
 	return rec, patches
 }
@@ -101,6 +101,46 @@ func TestATransformPatchesTheTiersNetworkAndEveryZoneOfASubnetKindItNames(t *tes
 	}
 	if !claimed(network.ResourceNames(testNamespace, environment.TierProduction)["vpc"][0], "enableNetworkAddressUsageMetrics") {
 		t.Error("the VPC is not patched")
+	}
+}
+
+func TestATransformSetsTheBlockOfTheTiersNetworkWhichOcelCarvesItsSubnetsFrom(t *testing.T) {
+	t.Parallel()
+
+	pass := &fixedPass{result: transform.Result{Patches: transform.Patches{"vpc": {"cidrBlock": "172.20.0.0/16"}}}}
+	patches, err := evaluateTierPatches(context.Background(), pass, testNamespace, environment.TierProduction)
+	if err != nil {
+		t.Fatalf("evaluateTierPatches() = %v", err)
+	}
+	if patches.network.CIDR != "172.20.0.0/16" {
+		t.Errorf("the network's block = %q, want the one the transform sets", patches.network.CIDR)
+	}
+	if !patches.network.IsEmpty() {
+		t.Errorf("patches = %+v, want no patch left: ocel places the VPC on the block and carves its subnets from it itself", patches.network)
+	}
+}
+
+func TestABlockForTheTiersNetworkThatIsNotAStringIsRefusedByName(t *testing.T) {
+	t.Parallel()
+
+	pass := &fixedPass{result: transform.Result{Patches: transform.Patches{"vpc": {"cidrBlock": float64(16)}}}}
+	_, err := evaluateTierPatches(context.Background(), pass, testNamespace, environment.TierProduction)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "vpc.cidrBlock") {
+		t.Fatalf("evaluateTierPatches() = %v, want a refusal naming vpc.cidrBlock", err)
+	}
+}
+
+func TestABlockOcelCannotCarveTheTiersNetworkFromIsRefusedWhenItIsEvaluated(t *testing.T) {
+	t.Parallel()
+
+	for _, block := range []string{"10.0.0.0/8", "100.64.0.0/16", "10.64.0.1/16", "a block"} {
+		pass := &fixedPass{result: transform.Result{Patches: transform.Patches{"vpc": {"cidrBlock": block}}}}
+		_, err := evaluateTierPatches(context.Background(), pass, testNamespace, environment.TierProduction)
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || !strings.Contains(refused.Message, "vpc.cidrBlock") || !strings.Contains(refused.Message, block) {
+			t.Errorf("evaluateTierPatches(%s) = %v, want a refusal naming vpc.cidrBlock and the block", block, err)
+		}
 	}
 }
 

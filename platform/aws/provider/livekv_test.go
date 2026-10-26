@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
@@ -78,6 +79,18 @@ func (a liveAccount) commandStore(t *testing.T, binding provider.Binding, token 
 
 const liveNetworkCIDR = "10.199.0.0/16"
 
+type liveNetworkBlock struct{}
+
+func (liveNetworkBlock) Evaluate(_ context.Context, req transform.Request) ([]transform.Result, error) {
+	results := make([]transform.Result, len(req.Resources))
+	for i, resource := range req.Resources {
+		if resource.Type == "network" {
+			results[i] = transform.Result{Patches: transform.Patches{"vpc": {"cidrBlock": liveNetworkCIDR}}}
+		}
+	}
+	return results, nil
+}
+
 func TestLiveAKVStoreAnswersItsTokenAloneAndItsTokenGoesWithIt(t *testing.T) {
 	a := live(t)
 	ctx := context.Background()
@@ -95,7 +108,7 @@ func TestLiveAKVStoreAnswersItsTokenAloneAndItsTokenGoesWithIt(t *testing.T) {
 			Region:         liveRegion,
 			Network:        ec2.NewFromConfig(a.aws),
 			Quotas:         servicequotas.NewFromConfig(a.aws),
-			NetworkCIDR:    liveNetworkCIDR,
+			Transform:      liveNetworkBlock{},
 			KeyValues:      store,
 			BackendURL:     "file://" + state,
 			Passphrase:     "live-suite",
