@@ -129,6 +129,13 @@ export const ownedRolePolicies = defineTransform({
   },
 });
 
+export const grantedFromIaC = defineTransform({
+  aws: {
+    function: { role: { managedPolicyArns: [bindings.custom.grants.policyArn] } },
+    container: { role: { managedPolicyArns: [bindings.custom.grants.policyArn] } },
+  },
+});
+
 export const networkWrittenDown = defineTransform({
   aws: {
     network: {

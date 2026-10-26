@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsiam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -68,7 +69,18 @@ func NewAppRole(ctx *pulumi.Context, r AppRole) (*awsiam.Role, []pulumi.Resource
 		return nil, nil, err
 	}
 	granted := make([]pulumi.Resource, 0, len(r.Managed)+len(r.Policies))
+	attachedAs := map[string]string{}
 	for _, policyARN := range r.Managed {
+		name := r.Name.Attachment(policyARN)
+		if earlier, taken := attachedAs[name]; taken {
+			if earlier == policyARN {
+				continue
+			}
+			return nil, nil, refusal.Refuse(refusal.CodeInvalid,
+				"the role %s attaches both %s and %s, and ocel names an attachment after its policy's name, so the two collide; attach one of them",
+				r.Name.Pulumi, earlier, policyARN)
+		}
+		attachedAs[name] = policyARN
 		attached, err := AttachManagedPolicy(ctx, r.Name, role, policyARN)
 		if err != nil {
 			return nil, nil, err

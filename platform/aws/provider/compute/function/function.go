@@ -187,6 +187,7 @@ type ExecutionRole struct {
 	Dispatch  *DispatchHost
 
 	BindingPolicies []iam.BindingPolicy
+	ManagedPolicies []string
 
 	TasksPolicy string
 
@@ -202,6 +203,7 @@ func NewRole(ctx *pulumi.Context, coord naming.Coordinate, r ExecutionRole) (*aw
 	if r.VPCAccess {
 		managed = append(managed, iam.LambdaVPCAccessPolicyARN)
 	}
+	managed = append(managed, r.ManagedPolicies...)
 	documents := map[string]pulumi.StringInput{}
 	if r.Cache != nil {
 		document, err := r.Cache.Policy()

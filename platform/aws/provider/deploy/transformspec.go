@@ -28,7 +28,7 @@ func NodePass(root string, modules []string) transform.NodePass {
 	}
 }
 
-func transformStackSpec(ctx context.Context, namespace string, pass transform.Pass, registry component.Registry, spec provider.StackSpec) (*transformPatches, error) {
+func transformStackSpec(ctx context.Context, namespace, account string, pass transform.Pass, registry component.Registry, spec provider.StackSpec) (*transformPatches, error) {
 	if pass == nil {
 		return nil, nil
 	}
@@ -91,7 +91,23 @@ func transformStackSpec(ctx context.Context, namespace string, pass transform.Pa
 	if err := resolveSpecOutputs(ctx, spec, candidates, results); err != nil {
 		return nil, err
 	}
-	return indexPatches(candidates, results)
+	managed := map[resourceKey][]string{}
+	for i, candidate := range candidates {
+		patches, arns, err := takeManagedPolicies(candidate.key, results[i].Patches, account)
+		if err != nil {
+			return nil, err
+		}
+		results[i].Patches = patches
+		if len(arns) > 0 {
+			managed[candidate.key] = arns
+		}
+	}
+	indexed, err := indexPatches(candidates, results)
+	if err != nil {
+		return nil, err
+	}
+	indexed.managed = managed
+	return indexed, nil
 }
 
 func functionCandidate(namespace, project string, stack naming.StackName, name string) (transformCandidate, error) {

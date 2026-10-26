@@ -637,6 +637,41 @@ func TestACredentialReachesTheAppFunctionsAndRolesOfOnlyItsOwnTier(t *testing.T)
 	}
 }
 
+func TestACredentialAttachesToAnAppRoleOnlyTheServiceRolesAndItsOwnAccountsPolicies(t *testing.T) {
+	const account = "111122223333"
+	for _, tier := range bothTiers {
+		role := "arn:aws:iam::" + account + ":role" + defaultNamespace.AppRolePathFor(tier) + "ocel-app-shop-prod-web-role-a1b2c3"
+		attaching := func(policy string) requestContext {
+			return appResourceOf(tier, requestContext{
+				"aws:PrincipalAccount":    account,
+				"iam:PermissionsBoundary": "arn:aws:iam::" + account + ":policy/" + defaultNamespace.AppBoundaryNameFor(tier),
+				"iam:PolicyARN":           policy,
+			})
+		}
+		for purpose, document := range credentialsOfTier(t, tier) {
+			for _, policy := range []string{
+				iam.LambdaBasicExecutionPolicyARN,
+				"arn:aws:iam::" + account + ":policy/reports-read",
+				"arn:aws:iam::" + account + ":policy/team/reports-read",
+			} {
+				for _, action := range []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"} {
+					if !allows(t, document, action, role, attaching(policy)) {
+						t.Errorf("the %s %s credential cannot %s %s on its app role, a policy a transform may attach", tier, purpose, action, policy)
+					}
+				}
+			}
+			for _, policy := range []string{
+				"arn:aws:iam::aws:policy/AdministratorAccess",
+				"arn:aws:iam::444455556666:policy/reports-read",
+			} {
+				if allows(t, document, "iam:AttachRolePolicy", role, attaching(policy)) {
+					t.Errorf("the %s %s credential can attach %s to its app role, which is neither a service role nor its own account's", tier, purpose, policy)
+				}
+			}
+		}
+	}
+}
+
 func TestACredentialPassesTheBastionTaskRoleOfOnlyItsOwnTierToECS(t *testing.T) {
 	toTasks := requestContext{"iam:PassedToService": iam.ECSTasksPrincipal}
 	roleOf := func(tier environment.Tier) string {

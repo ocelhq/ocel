@@ -216,6 +216,7 @@ func (w *ContainerStack) taskRole(ctx *pulumi.Context) (*awsiam.Role, []pulumi.R
 		Boundary:    w.web.Boundary,
 		Path:        w.web.RolePath,
 		Tags:        w.web.Tags,
+		Managed:     w.web.ManagedPolicies,
 		Policies:    documents,
 	})
 }

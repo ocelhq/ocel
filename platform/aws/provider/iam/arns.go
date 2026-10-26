@@ -2,6 +2,8 @@ package iam
 
 const CallerAccount = "${aws:PrincipalAccount}"
 
+const CallerAccountPolicyARNs = "arn:aws:iam::" + CallerAccount + ":policy/*"
+
 const (
 	AnyKeyARN = "arn:aws:kms:*:*:key/*"
 

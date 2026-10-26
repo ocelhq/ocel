@@ -26,11 +26,10 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	transformed, err := transformStackSpec(ctx, r.cfg.Namespace, r.cfg.Transform, r.registry, spec)
+	transformed, err := r.transformContainer(ctx, spec, work)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	work.TransformTags = transformed.TagsFor(transformTypeContainer, work.App)
 	if err := spec.Images.PushMissing(ctx, progress); err != nil {
 		return provider.StackResult{}, err
 	}
@@ -140,11 +139,10 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 		return provider.Plan{}, err
 	}
 	work.Infra = infra
-	transformed, err := transformStackSpec(ctx, r.cfg.Namespace, r.cfg.Transform, r.registry, spec)
+	transformed, err := r.transformContainer(ctx, spec, work)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	work.TransformTags = transformed.TagsFor(transformTypeContainer, work.App)
 	if err := work.PlaceRule(ctx, r.cfg.Rules); err != nil {
 		return provider.Plan{}, err
 	}
@@ -166,6 +164,16 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 	}
 	previewed.Groups = append(previewed.Groups, workerGroups...)
 	return previewed, nil
+}
+
+func (r *release) transformContainer(ctx context.Context, spec provider.StackSpec, work *container.Definition) (*transformPatches, error) {
+	transformed, err := transformStackSpec(ctx, r.cfg.Namespace, r.cfg.AccountID, r.cfg.Transform, r.registry, spec)
+	if err != nil {
+		return nil, err
+	}
+	work.TransformTags = transformed.TagsFor(transformTypeContainer, work.App)
+	work.ManagedPolicies = transformed.managedPoliciesOf(transformTypeContainer, work.App)
+	return transformed, nil
 }
 
 func (r *release) containerProgram(spec provider.StackSpec, work *container.Definition, transformed *transformPatches) component.Program {

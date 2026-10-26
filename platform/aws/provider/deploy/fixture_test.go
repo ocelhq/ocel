@@ -284,7 +284,10 @@ func functionEnvOf(t *testing.T, rec *inputRecorder, name string) map[string]str
 	return env
 }
 
-const testNamespace = "ocel"
+const (
+	testNamespace = "ocel"
+	testAccount   = "123456789012"
+)
 
 func workerService(project, env, app, worker string) string {
 	name, err := container.WorkerServiceName(testNamespace, project, env, app, worker)

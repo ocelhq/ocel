@@ -58,6 +58,7 @@ func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	cfg := Config{
 		Namespace:         testNamespace,
 		Region:            "us-east-1",
+		AccountID:         testAccount,
 		AppBoundaryARN:    "arn:aws:iam::123456789012:policy/ocel-app-boundary",
 		AppRolePath:       componenttest.AppRolePath,
 		OriginSecret:      fixtureSecret,
@@ -148,7 +149,7 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingClaimsIsRefused(t *te
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	transformed, err := transformStackSpec(context.Background(), testNamespace, cfg.Transform, awsresources.Registry(awsresources.Clients{}), spec)
+	transformed, err := transformStackSpec(context.Background(), testNamespace, testAccount, cfg.Transform, awsresources.Registry(awsresources.Clients{}), spec)
 	if err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
@@ -170,7 +171,7 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingClaimsIsRefused(t *te
 	}
 
 	pass.out = []transform.Patches{{"role": {"description": "patched"}}}
-	if transformed, err = transformStackSpec(context.Background(), testNamespace, cfg.Transform, awsresources.Registry(awsresources.Clients{}), spec); err != nil {
+	if transformed, err = transformStackSpec(context.Background(), testNamespace, testAccount, cfg.Transform, awsresources.Registry(awsresources.Clients{}), spec); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
 	work.TransformTags = transformed.TagsFor(transformTypeContainer, work.App)

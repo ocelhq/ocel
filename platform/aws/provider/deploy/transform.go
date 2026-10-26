@@ -37,6 +37,7 @@ type transformPatches struct {
 	tags     map[resourceKey]map[string]string
 	vpcBound map[string]bool
 	surfaces map[resourceKey]map[string]bool
+	managed  map[resourceKey][]string
 
 	mu      sync.Mutex
 	claimed map[component.ResourceRef]bool

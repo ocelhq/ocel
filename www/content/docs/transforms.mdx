@@ -75,7 +75,54 @@ A container app's `task`, `service`, `targetGroup` and `rule` are its Fargate ta
 service and the target group and listener rule that route its requests. What ocel fills from the
 build or the tier's network is not on the type: the container definitions, roles, network
 configuration, cluster and desired count, and the target group's and rule's routing. Its `role`
-is the task role, which a container app has once it reaches a binding, a task or a live variable.
+is the task role,
+which a container app has once it reaches a binding, a task or a live variable, or once a transform
+attaches a policy to it.
+
+## An app's role
+
+On AWS, `role.managedPolicyArns` under `function` or `container` attaches policies to the role
+the app's code runs as, next to the ones ocel attaches. It never replaces them. Your IaC makes the
+resource the app needs and an `aws.iam.Policy` that reaches it, and publishes the policy's ARN
+with `bind.custom`:
+
+```ts title="pulumi/index.ts"
+import * as aws from "@pulumi/aws";
+import { bind } from "@ocel/pulumi";
+
+const reports = new aws.s3.Bucket("reports");
+const readReports = new aws.iam.Policy("read-reports", {
+  policy: aws.iam.getPolicyDocumentOutput({
+    statements: [{ actions: ["s3:GetObject"], resources: [reports.arn.apply((arn) => `${arn}/*`)] }],
+  }).json,
+});
+
+bind.custom("reports", { policyArn: readReports.arn });
+```
+
+The transform attaches it:
+
+```ts title="transforms/reports.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform(({ bindings }) => ({
+  aws: {
+    function: { role: { managedPolicyArns: [bindings.custom.reports.policyArn] } },
+  },
+}));
+```
+
+- The policy must be a customer-managed policy of the deploy's own account
+  (`arn:aws:iam::<account>:policy/…`) or one of `AWSLambdaBasicExecutionRole`,
+  `AWSLambdaVPCAccessExecutionRole` and `AmazonECSTaskExecutionRolePolicy`: that is all the deploy
+  credential may attach. The plan refuses any other ARN, naming the prefix to put the policy under.
+- Every app role sits under the tier's app boundary, the permissions boundary `ocel bootstrap`
+  makes, so an attached policy grants only what the boundary also allows. No IAM, STS, Parameter
+  Store or Secrets Manager call gets through.
+- The functions of an app share one role, so it carries every ARN any of their patches lists. The
+  app's workers run its code, and carry the same policies.
+- Two ARNs whose policies have the same name are refused: each attachment is named after its
+  policy.
 
 ## The network
 

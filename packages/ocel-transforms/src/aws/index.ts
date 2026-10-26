@@ -12,18 +12,35 @@ export interface AwsResourceArgs {
     url: lambda.FunctionUrlArgs;
     urlPermission: lambda.PermissionArgs;
     logGroup: cloudwatch.LogGroupArgs;
+    /**
+     * The role the app's code runs as. Its `managedPolicyArns` attach to it
+     * beside the policies ocel attaches, never in their place. Each is a
+     * customer-managed policy of the account the app deploys to
+     * (`arn:aws:iam::<account>:policy/…`) or one of the AWS service-role
+     * policies `AWSLambdaBasicExecutionRole`, `AWSLambdaVPCAccessExecutionRole`
+     * and `AmazonECSTaskExecutionRolePolicy`; the deploy refuses any other.
+     */
     role: iam.RoleArgs;
   };
   /**
    * A container app: its Fargate task and service, the target group and
    * listener rule that route the app's requests to it, and the task role, which
-   * exists once the app reaches a binding, a task or a live variable.
+   * exists once the app reaches a binding, a task or a live variable, or a rule
+   * attaches a managed policy to `role`.
    */
   container: {
     task: ecs.TaskDefinitionArgs;
     service: ecs.ServiceArgs;
     targetGroup: lb.TargetGroupArgs;
     rule: lb.ListenerRuleArgs;
+    /**
+     * The role the app's code runs as. Its `managedPolicyArns` attach to it
+     * beside the policies ocel attaches, never in their place. Each is a
+     * customer-managed policy of the account the app deploys to
+     * (`arn:aws:iam::<account>:policy/…`) or one of the AWS service-role
+     * policies `AWSLambdaBasicExecutionRole`, `AWSLambdaVPCAccessExecutionRole`
+     * and `AmazonECSTaskExecutionRolePolicy`; the deploy refuses any other.
+     */
     role: iam.RoleArgs;
   };
   bucket: {
@@ -123,7 +140,6 @@ export const awsOwnedFields = {
     role: [
       "assumeRolePolicy",
       "inlinePolicies",
-      "managedPolicyArns",
       "name",
       "namePrefix",
       "permissionsBoundary",
@@ -157,7 +173,6 @@ export const awsOwnedFields = {
     role: [
       "assumeRolePolicy",
       "inlinePolicies",
-      "managedPolicyArns",
       "name",
       "namePrefix",
       "permissionsBoundary",
