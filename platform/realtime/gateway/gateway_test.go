@@ -852,6 +852,29 @@ func TestAWildcardSubscriptionOnANamespaceReceivesAPublishBelowIt(t *testing.T) 
 	}
 }
 
+func TestAChannelOfSixSegmentsIsSubscribedAndPublishedAndOneOfSevenIsRefused(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	c := h.connect()
+	channel := "/app/tenant/a/b/c/d"
+	if got := c.subscribe("s-1", channel, h.mint(token.Subscribe, channel)); got["type"] != "subscribe_success" {
+		t.Fatalf("subscribe to %s answered %v, want subscribe_success", channel, got)
+	}
+	resp, sent := h.serverPublish(channel, "shipped")
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("publish on %s answered %s, want 204", channel, resp.Status)
+	}
+	if got := c.read(); got["type"] != "data" || got["event"] != sent {
+		t.Fatalf("subscriber got %v, want a data frame carrying %s", got, sent)
+	}
+
+	tooDeep := channel + "/e"
+	if got := c.subscribe("s-2", tooDeep, h.mint(token.Subscribe, tooDeep)); got["type"] != "subscribe_error" {
+		t.Errorf("subscribe to %s answered %v, want subscribe_error", tooDeep, got)
+	}
+}
+
 func TestAServerPublishAcceptsTheBearerSchemeInAnyCase(t *testing.T) {
 	t.Parallel()
 

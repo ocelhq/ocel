@@ -7,7 +7,7 @@ import (
 
 var channelSegment = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$`)
 
-const maxChannelSegments = 5
+const maxChannelSegments = 6
 
 func readPublishNamespace(channel string) (string, bool) {
 	segments, isRooted := splitChannel(channel)
