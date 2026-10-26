@@ -79,16 +79,19 @@ func NewEnv(spec provider.StackSpec, fn provider.FunctionSpec, s run.Serving, ca
 	if app.Router != "" {
 		env[processenv.RouterKindEnvVar] = string(app.Router)
 	}
-	if routing := app.Routing; routing != nil && resolveRouteID(fn) == routing.RootFunction {
-		if run.FactsOf(spec.Edge).RunsCode {
+	servesRoot := false
+	switch routing := app.Routing; {
+	case run.FactsOf(spec.Edge).RunsCode:
+		if servesRoot = app.RootFunction != "" && fn.Name == app.RootFunction; servesRoot {
 			env[imageEndpointEnvVar] = "1"
-		} else {
-			maps.Copy(env, provider.NewOriginDispatchEnv())
 		}
+	case routing != nil && resolveRouteID(fn) == routing.RootFunction:
+		servesRoot = true
+		maps.Copy(env, provider.NewOriginDispatchEnv())
 		maps.Copy(env, provider.NewRouteTableEnv(app, routeTableInImage))
-		if cache.storageEndpoint != "" {
-			env[storageEndpointEnvVar] = cache.storageEndpoint
-		}
+	}
+	if servesRoot && cache.storageEndpoint != "" {
+		env[storageEndpointEnvVar] = cache.storageEndpoint
 	}
 	maps.Copy(env, newNextCacheEnv(app.ISR, cache))
 	return env
