@@ -352,14 +352,14 @@ func TestTheHandlerGrantsAPublicSubscribeToAnyone(t *testing.T) {
 
 func TestTheHandlerHandsTheBrowserTheChannelTheRuntimeMintedEachSubscribeFor(t *testing.T) {
 	runtime, _ := serveFakeRuntime(t, "app")
-	runtime.mapChannels(func(channel string) string { return "/apps/h-1" + strings.TrimPrefix(channel, "/app") })
+	runtime.mapChannels(func(channel string) string { return "/ns/t-1" + strings.TrimPrefix(channel, "/app") })
 	handler := declareHandlerResource(newHandlerRules()).Handler()
 
 	answer := readAnswer(t, post(handler, `{"connect":true,"ops":[
 		{"op":"subscribe","pattern":"status","params":{}},
-		{"op":"subscribe","pattern":"projects/:projectId/deploys/:deployId","params":{"projectId":"p-1"}}]}`, map[string]string{"X-User": "u1"}))
+		{"op":"subscribe","pattern":"rooms/:roomId","params":{"roomId":"room-1"}}]}`, map[string]string{"X-User": "u1"}))
 
-	if len(answer.Grants) != 2 || answer.Grants[0].Wire != "/apps/h-1/status" || answer.Grants[1].Wire != "/apps/h-1/projects/p-1/deploys/*" {
+	if len(answer.Grants) != 2 || answer.Grants[0].Wire != "/ns/t-1/status" || answer.Grants[1].Wire != "/ns/t-1/rooms/room-1" {
 		t.Errorf("grants = %+v, want each on the channel the runtime minted it for", answer.Grants)
 	}
 	if answer.Grants[0].Token != fakeToken(realtimev1.Operation_OPERATION_SUBSCRIBE, "/app/status") {

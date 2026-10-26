@@ -228,27 +228,20 @@ def test_the_handler_grants_a_public_subscribe_to_anyone(runtime):
 def test_the_handler_hands_the_browser_the_channel_the_runtime_minted_each_subscribe_for(
     runtime,
 ):
-    runtime.map_channel = lambda channel: "/apps/h-1" + channel.removeprefix("/app")
+    runtime.map_channel = lambda channel: "/ns/t-1" + channel.removeprefix("/app")
     res = answer(
         declare_app(Rules()).asgi(),
         {
             "connect": True,
             "ops": [
                 {"op": "subscribe", "pattern": "status", "params": {}},
-                {
-                    "op": "subscribe",
-                    "pattern": "projects/:project_id/deploys/:deploy_id",
-                    "params": {"project_id": "p-1"},
-                },
+                {"op": "subscribe", "pattern": "rooms/:room_id", "params": {"room_id": "room-1"}},
             ],
         },
         {"x-user": "u1"},
     )
 
-    assert [g["wire"] for g in res["grants"]] == [
-        "/apps/h-1/status",
-        "/apps/h-1/projects/p-1/deploys/*",
-    ]
+    assert [g["wire"] for g in res["grants"]] == ["/ns/t-1/status", "/ns/t-1/rooms/room-1"]
     assert res["grants"][0]["token"] == fake_token(Operation.SUBSCRIBE, "/app/status")
 
 

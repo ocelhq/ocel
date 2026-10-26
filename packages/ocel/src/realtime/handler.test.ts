@@ -134,7 +134,7 @@ describe("the realtime handler on AppSync Events", () => {
   });
 
   it("hands the browser the channel the runtime minted each subscribe for", async () => {
-    runtime.mapChannel = (channel) => `/apps/h-1${channel.slice("/app".length)}`;
+    runtime.mapChannel = (channel) => `/ns/t-1${channel.slice("/app".length)}`;
 
     const res = await answer(
       await POST(
@@ -143,11 +143,7 @@ describe("the realtime handler on AppSync Events", () => {
             connect: true,
             ops: [
               { op: "subscribe", pattern: "status", params: {} },
-              {
-                op: "subscribe",
-                pattern: "projects/:projectId/deploys/:deployId",
-                params: { projectId: "p-1" },
-              },
+              { op: "subscribe", pattern: "rooms/:roomId", params: { roomId: "room-1" } },
             ],
           },
           { "x-user": "u1" },
@@ -156,8 +152,8 @@ describe("the realtime handler on AppSync Events", () => {
     );
 
     expect(res.grants).toEqual([
-      { i: 0, wire: "/apps/h-1/status", token: expect.any(String) },
-      { i: 1, wire: "/apps/h-1/projects/p-1/deploys/*", token: expect.any(String) },
+      { i: 0, wire: "/ns/t-1/status", token: expect.any(String) },
+      { i: 1, wire: "/ns/t-1/rooms/room-1", token: expect.any(String) },
     ]);
     expect(readClaims(res.grants[0]?.token ?? "").ocel.ch).toBe("/app/status");
   });

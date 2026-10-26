@@ -221,21 +221,21 @@ async fn the_handler_grants_a_public_subscribe_to_anyone() {
 #[tokio::test]
 async fn the_handler_hands_the_browser_the_channel_the_runtime_minted_each_subscribe_for() {
     let (runtime, _env) = serve().await;
-    runtime.map_channels(|channel| format!("/apps/h-1{}", channel.strip_prefix("/app").unwrap()));
+    runtime.map_channels(|channel| format!("/ns/t-1{}", channel.strip_prefix("/app").unwrap()));
     let rt = build(Arc::default());
 
     let res = post(
         &rt,
         json!({ "connect": true, "ops": [
             { "op": "subscribe", "pattern": "status", "params": {} },
-            { "op": "subscribe", "pattern": "projects/:project_id/deploys/:deploy_id", "params": { "project_id": "p-1" } },
+            { "op": "subscribe", "pattern": "rooms/:room_id", "params": { "room_id": "room-1" } },
         ] }),
         &[("x-user", "u1")],
     )
     .await;
 
-    assert_eq!(res["grants"][0]["wire"], "/apps/h-1/status");
-    assert_eq!(res["grants"][1]["wire"], "/apps/h-1/projects/p-1/deploys/*");
+    assert_eq!(res["grants"][0]["wire"], "/ns/t-1/status");
+    assert_eq!(res["grants"][1]["wire"], "/ns/t-1/rooms/room-1");
     assert_eq!(
         res["grants"][0]["token"],
         fake_token("subscribe", "/app/status")
