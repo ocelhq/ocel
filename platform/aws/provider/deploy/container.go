@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -22,13 +23,20 @@ func runsContainer(spec provider.StackSpec) bool {
 }
 
 func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
-	work, err := container.NewDefinition(spec, r.cfg.containerTarget())
+	work, err := container.NewDefinition(spec, r.cfg.containerTarget(r.isrCache(spec)))
 	if err != nil {
 		return provider.StackResult{}, err
 	}
 	transformed, err := r.transformContainer(ctx, spec, work)
 	if err != nil {
 		return provider.StackResult{}, err
+	}
+	if err := r.readBuildAssets(spec, work); err != nil {
+		return provider.StackResult{}, err
+	}
+	if len(work.AssetSets) > 0 {
+		r.pending.Add(work.AssetStack, work.AssetSets, progress)
+		defer r.pending.Drop(work.AssetStack, work.AssetSets)
 	}
 	if err := spec.Images.PushMissing(ctx, progress); err != nil {
 		return provider.StackResult{}, err
@@ -58,6 +66,18 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 		return provider.StackResult{}, err
 	}
 	return result, nil
+}
+
+func (r *release) readBuildAssets(spec provider.StackSpec, work *container.Definition) error {
+	if !spec.App.IsBuiltFromFunction() {
+		return nil
+	}
+	sets, err := site.ReadBuildAssetSets(r.cfg.buckets(), r.cfg.ArtifactRoot, spec.App, work.Cache)
+	if err != nil {
+		return err
+	}
+	work.AssetStack, work.AssetSets = spec.Ref.Name.String(), sets
+	return nil
 }
 
 func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, work *container.Definition, transformed *transformPatches, progress progress.Log) (provider.StackResult, error) {
@@ -134,11 +154,14 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 		}
 		return provider.Plan{Groups: groups}, nil
 	}
-	work, err := container.NewDefinition(spec, r.cfg.containerTarget())
+	work, err := container.NewDefinition(spec, r.cfg.containerTarget(r.isrCache(spec)))
 	if err != nil {
 		return provider.Plan{}, err
 	}
 	work.Infra = infra
+	if err := r.readBuildAssets(spec, work); err != nil {
+		return provider.Plan{}, err
+	}
 	transformed, err := r.transformContainer(ctx, spec, work)
 	if err != nil {
 		return provider.Plan{}, err

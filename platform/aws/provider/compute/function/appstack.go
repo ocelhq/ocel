@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/dispatchpolicy"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 	"github.com/ocelhq/ocel/platform/aws/provider/site"
@@ -122,7 +123,7 @@ func (a AppStack) grantInvoke(ctx *pulumi.Context, arns []pulumi.StringInput) er
 		for _, arn := range resolved[1:] {
 			siblings = append(siblings, fmt.Sprint(arn))
 		}
-		return renderDispatchInvokePolicy(siblings, account, optimizer)
+		return dispatchpolicy.RenderInvoke(siblings, account, optimizer)
 	}).(pulumi.StringOutput)
 
 	role, err := component.RoleName(a.Namespace, component.AppRoleCoordinate(a.Project, a.Stack))

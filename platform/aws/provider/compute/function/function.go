@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/dispatchpolicy"
 	"github.com/ocelhq/ocel/platform/aws/provider/functionurl"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -46,17 +47,13 @@ const (
 
 	MaxBytes = 200 << 20
 
-	tagImageOptimizer = "image-optimizer"
-
 	invokeModeStream = "RESPONSE_STREAM"
 
 	OutputKeyURL = "url"
 
 	OutputKeyName = "functionName"
 
-	isrCachePolicy      = "isr-cache"
 	bytecodeCachePolicy = "bytecode-cache"
-	assetReadPolicyName = "asset-read"
 	dispatchPolicyName  = "dispatch-invoke"
 
 	urlPart = "url"
@@ -98,55 +95,6 @@ func bytecodePolicy(c Bytecode) (string, error) {
 	out, err := json.Marshal(doc)
 	if err != nil {
 		return "", fmt.Errorf("render bytecode policy: %w", err)
-	}
-	return string(out), nil
-}
-
-func assetReadPolicy(h *DispatchHost) (string, error) {
-	doc := map[string]any{
-		"Version": "2012-10-17",
-		"Statement": []any{
-			map[string]any{
-				"Effect":   "Allow",
-				"Action":   []string{"s3:GetObject"},
-				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s*", h.EdgeBucket, h.StorageCoordinate.StoragePrefix(naming.ObjectAssets)),
-			},
-		},
-	}
-	out, err := json.Marshal(doc)
-	if err != nil {
-		return "", fmt.Errorf("render asset read policy: %w", err)
-	}
-	return string(out), nil
-}
-
-func renderDispatchInvokePolicy(siblings []string, account string, optimizer bool) (string, error) {
-	statements := []any{}
-	if len(siblings) > 0 {
-		statements = append(statements, map[string]any{
-			"Effect":   "Allow",
-			"Action":   functionurl.InvokerActions(),
-			"Resource": siblings,
-		})
-	}
-	if optimizer {
-		statements = append(statements, map[string]any{
-			"Effect":   "Allow",
-			"Action":   functionurl.InvokerActions(),
-			"Resource": fmt.Sprintf("arn:aws:lambda:*:%s:function:*", account),
-			"Condition": map[string]any{
-				"StringEquals": map[string]any{
-					"aws:ResourceTag/" + component.TagComponent: tagImageOptimizer,
-				},
-			},
-		})
-	}
-	if len(statements) == 0 {
-		return "", nil
-	}
-	out, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": statements})
-	if err != nil {
-		return "", fmt.Errorf("render dispatch invoke policy: %w", err)
 	}
 	return string(out), nil
 }
@@ -211,7 +159,7 @@ func NewRole(ctx *pulumi.Context, coord naming.Coordinate, r ExecutionRole) (*aw
 		if err != nil {
 			return nil, nil, err
 		}
-		documents[isrCachePolicy] = pulumi.String(document)
+		documents[component.ISRCachePolicyName] = pulumi.String(document)
 	}
 	if r.Bytecode != nil {
 		document, err := bytecodePolicy(*r.Bytecode)
@@ -221,11 +169,11 @@ func NewRole(ctx *pulumi.Context, coord naming.Coordinate, r ExecutionRole) (*aw
 		documents[bytecodeCachePolicy] = pulumi.String(document)
 	}
 	if r.Dispatch != nil && r.Dispatch.EdgeBucket != "" {
-		document, err := assetReadPolicy(r.Dispatch)
+		document, err := dispatchpolicy.RenderAssetRead(r.Dispatch.EdgeBucket, r.Dispatch.StorageCoordinate)
 		if err != nil {
 			return nil, nil, err
 		}
-		documents[assetReadPolicyName] = pulumi.String(document)
+		documents[dispatchpolicy.AssetReadName] = pulumi.String(document)
 	}
 	for _, binding := range r.BindingPolicies {
 		documents[component.BindingPolicyName(binding.Binding)] = pulumi.String(binding.Policy)

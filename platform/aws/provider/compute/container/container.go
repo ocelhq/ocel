@@ -34,6 +34,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 	livefile "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
+	"github.com/ocelhq/ocel/platform/aws/provider/site"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 )
 
@@ -91,18 +92,23 @@ type Definition struct {
 	Policies        []iam.BindingPolicy
 	ManagedPolicies []string
 	Variables       variables.Reader
+	Cache           *site.ISR
 	Infra           containers.Infrastructure
 
-	tier        environment.Tier
-	priority    int
-	healthPath  string
-	secrets     []string
-	tasksPolicy string
-	namespace   string
-	service     naming.Coordinate
-	role        naming.Coordinate
-	public      bool
-	workerApp   bool
+	AssetStack string
+	AssetSets  []site.AssetSet
+
+	tier             environment.Tier
+	priority         int
+	healthPath       string
+	secrets          []string
+	tasksPolicy      string
+	functionPolicies map[string]string
+	namespace        string
+	service          naming.Coordinate
+	role             naming.Coordinate
+	public           bool
+	workerApp        bool
 }
 
 type Target struct {
@@ -117,6 +123,9 @@ type Target struct {
 	AppRolePath          string
 	OriginSecret         string
 	PreviousOriginSecret string
+	ISR                  *site.ISR
+	Buckets              naming.Buckets
+	ImageOptimizerURL    string
 }
 
 func (d *Definition) Priority() int { return d.priority }
@@ -254,6 +263,20 @@ func NewDefinition(spec provider.StackSpec, at Target) (*Definition, error) {
 			return nil, err
 		}
 	}
+	cache := newNextCache(app, at)
+	if cache != nil {
+		maps.Copy(env, cache.Env())
+		if spec.Edge != nil && !IsRoutedPublicly(spec) {
+			maps.Copy(env, edge.NewCachingOriginEnv(spec.Edge.Facts(), stack.Release.String()))
+		}
+	}
+	var functionPolicies map[string]string
+	if app.IsBuiltFromFunction() {
+		maps.Copy(env, newFunctionEnv(app, at))
+		if functionPolicies, err = newFunctionPolicies(app, at); err != nil {
+			return nil, err
+		}
+	}
 	reader := variables.Reader{KeyARN: at.Variables.KeyARN}
 	if bundle.HasLive() {
 		reader.TableARN = at.VariablesTableARN
@@ -262,27 +285,36 @@ func NewDefinition(spec provider.StackSpec, at Target) (*Definition, error) {
 		reader.Tier = string(at.Tier)
 	}
 	return &Definition{
-		App:         app.App,
-		Arch:        app.Arch,
-		Image:       app.Image,
-		healthPath:  healthPath,
-		Instances:   app.Instances,
-		Env:         env,
-		Tags:        spec.Tags,
-		Boundary:    at.AppBoundaryARN,
-		RolePath:    at.AppRolePath,
-		Region:      at.Region,
-		tier:        at.Tier,
-		secrets:     presentedSecrets(at.OriginSecret, at.PreviousOriginSecret),
-		Policies:    policies,
-		tasksPolicy: tasksPolicyDoc,
-		namespace:   at.Namespace,
-		Variables:   reader,
-		service:     serviceCoordinate(project, stack),
-		role:        component.AppRoleCoordinate(project, stack),
-		public:      IsRoutedPublicly(spec),
-		workerApp:   provider.IsWorkerApp(app.App, app.Workers),
+		App:              app.App,
+		Arch:             app.Arch,
+		Image:            app.Image,
+		healthPath:       healthPath,
+		Instances:        app.Instances,
+		Env:              env,
+		Tags:             spec.Tags,
+		Boundary:         at.AppBoundaryARN,
+		RolePath:         at.AppRolePath,
+		Region:           at.Region,
+		tier:             at.Tier,
+		secrets:          presentedSecrets(at.OriginSecret, at.PreviousOriginSecret),
+		Policies:         policies,
+		tasksPolicy:      tasksPolicyDoc,
+		functionPolicies: functionPolicies,
+		namespace:        at.Namespace,
+		Variables:        reader,
+		Cache:            cache,
+		service:          serviceCoordinate(project, stack),
+		role:             component.AppRoleCoordinate(project, stack),
+		public:           IsRoutedPublicly(spec),
+		workerApp:        provider.IsWorkerApp(app.App, app.Workers),
 	}, nil
+}
+
+func newNextCache(app *provider.AppSpec, at Target) *site.ISR {
+	if !app.IsBuiltFromFunction() {
+		return nil
+	}
+	return at.ISR
 }
 
 func liveOnly(values provider.AppValues) provider.AppValues {
@@ -380,7 +412,7 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 
 	var taskRole pulumi.StringPtrInput
 	var before []pulumi.Resource
-	if len(d.Policies) > 0 || len(d.ManagedPolicies) > 0 || d.tasksPolicy != "" || d.readsLive() {
+	if len(d.Policies) > 0 || len(d.ManagedPolicies) > 0 || d.tasksPolicy != "" || d.readsLive() || d.Cache != nil || len(d.functionPolicies) > 0 {
 		role, granted, err := d.taskRole(ctx, names.Role)
 		if err != nil {
 			return err
@@ -388,6 +420,11 @@ func (d *Definition) Declare(ctx *pulumi.Context) error {
 		taskRole = role.Arn
 		before = granted
 	}
+	pushed, err := site.DeclareAssetSets(ctx, d.AssetStack, d.AssetSets)
+	if err != nil {
+		return err
+	}
+	before = append(before, pushed...)
 
 	definition, err := d.definition(physical)
 	if err != nil {
@@ -570,6 +607,16 @@ func (d *Definition) taskRole(ctx *pulumi.Context, name component.Name) (*awsiam
 	if d.tasksPolicy != "" {
 		documents[component.TasksPolicyName] = pulumi.String(d.tasksPolicy)
 	}
+	if d.Cache != nil {
+		document, err := d.Cache.Policy()
+		if err != nil {
+			return nil, nil, err
+		}
+		documents[component.ISRCachePolicyName] = pulumi.String(document)
+	}
+	for name, document := range d.functionPolicies {
+		documents[name] = pulumi.String(document)
+	}
 	if d.readsLive() {
 		document, err := variables.ReadPolicy(d.Variables)
 		if err != nil {
@@ -605,10 +652,14 @@ func (d *Definition) Decode(outputs auto.OutputMap) (provider.StackResult, error
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	return provider.StackResult{Containers: []provider.AppContainer{{
+	result := provider.StackResult{Containers: []provider.AppContainer{{
 		Name:     d.App,
 		Physical: physical,
 		URL:      url,
 		Image:    d.Image,
-	}}}, nil
+	}}}
+	if d.Cache != nil {
+		result.PurgeSecret = d.Cache.PurgeSecret
+	}
+	return result, nil
 }

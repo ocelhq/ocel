@@ -15,6 +15,7 @@ import (
 const (
 	TasksPolicyName     = "tasks"
 	VariablesPolicyName = "variables-read"
+	ISRCachePolicyName  = "isr-cache"
 	bindingPolicyWord   = "binding"
 )
 

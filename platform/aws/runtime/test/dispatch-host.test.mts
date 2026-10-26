@@ -6,7 +6,7 @@ import { type DispatchHost, dispatchRequest } from "@framework/next-runtime/disp
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { s3AssetBucket } from "../src/next/dispatch-assets.mjs";
 import { awsDispatchAccess } from "../src/next/dispatch-host.mjs";
-import { isLoopback, siblingOriginFetch } from "../src/next/dispatch-signing.mjs";
+import { envCredentials, isLoopback, signedOriginFetch } from "../src/next/dispatch-signing.mjs";
 
 const LOCAL_BUNDLE = "local-bundle";
 const SIBLING_BUNDLE = "other-bundle";
@@ -76,7 +76,7 @@ function host(): DispatchHost {
     functionUrls: { [SIBLING_BUNDLE]: SIBLING_URL },
     storage: { project: "p1", env: "prod", app: "web", release: "r0a1b2c3d" },
     appBuildId: "d1",
-    originFetch: siblingOriginFetch(credentials, "us-east-1", capturing),
+    originFetch: signedOriginFetch(envCredentials(credentials), "us-east-1", capturing),
   };
 }
 
@@ -240,7 +240,7 @@ test("a sibling call signs with the credentials the sandbox has now", async () =
     return new Response("sibling");
   }) as unknown as typeof fetch;
 
-  const originFetch = siblingOriginFetch(rotating, "us-east-1", doFetch);
+  const originFetch = signedOriginFetch(envCredentials(rotating), "us-east-1", doFetch);
   await originFetch(`${SIBLING_URL}/sibling`);
 
   rotating.AWS_SESSION_TOKEN = "rotated";
@@ -251,7 +251,7 @@ test("a sibling call signs with the credentials the sandbox has now", async () =
 });
 
 test("a sibling call with no credentials fails loudly", async () => {
-  const originFetch = siblingOriginFetch({}, "us-east-1");
+  const originFetch = signedOriginFetch(envCredentials({}), "us-east-1");
 
   await expect(originFetch(`${SIBLING_URL}/sibling`)).rejects.toThrow(/credentials/);
 });

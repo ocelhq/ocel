@@ -6,6 +6,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/refusal"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
@@ -26,10 +27,27 @@ func (p containerRuntime) Binary(_ context.Context, arch string) ([]byte, error)
 	return payload.Bytes, nil
 }
 
-func (p containerRuntime) FunctionBase(_ context.Context, framework buildoutput.Framework) (v1.Image, error) {
-	return nil, refusal.Refuse(refusal.CodeNotReady, "this provider ships no base a container built from a %s function runs on", framework.Name)
+func (p containerRuntime) FunctionBase(ctx context.Context, framework buildoutput.Framework) (v1.Image, error) {
+	if err := refuseContainerFramework(framework); err != nil {
+		return nil, err
+	}
+	goarch, err := container.Arch(framework.Name, framework.Arch)
+	if err != nil {
+		return nil, err
+	}
+	return images.PullNodeBase(ctx, goarch)
 }
 
 func (p containerRuntime) FunctionFiles(_ context.Context, framework buildoutput.Framework) (map[string][]byte, error) {
-	return nil, refusal.Refuse(refusal.CodeNotReady, "this provider ships no runtime a container built from a %s function boots through", framework.Name)
+	if err := refuseContainerFramework(framework); err != nil {
+		return nil, err
+	}
+	return payloads.NextContainerRuntime(), nil
+}
+
+func refuseContainerFramework(framework buildoutput.Framework) error {
+	if framework.Name == buildoutput.FrameworkNext {
+		return nil
+	}
+	return refusal.Refuse(refusal.CodeInvalid, "a container is built from a Next function alone here, and this one is %s: use a Dockerfile", framework.Name)
 }

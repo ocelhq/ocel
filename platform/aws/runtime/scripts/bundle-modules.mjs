@@ -11,9 +11,13 @@ const distNode = join(dist, "node");
 
 const nodeEntrypoint = join(distNode, "entrypoint.mjs");
 
+const containerEntrypoint = join(dist, "container", "next", "entrypoint.mjs");
+
 const bundledModules = ["cache-store", "dispatch-host", "tag-snapshot-store", "use-cache-store"];
 
 const bundledInternals = ["dispatch-assets", "dispatch-signing", "required-env"];
+
+const containerModules = ["container-entrypoint", "container-next-host", "function-container-host"];
 
 const bundledCacheModules = ["sdk-clients", "tag-index"];
 
@@ -25,6 +29,13 @@ const cjsInterop = [
   "const ocelFilename = ocelFileURLToPath(import.meta.url);",
   "const ocelDirnameOf = ocelDirname(ocelFilename);",
 ].join("\n");
+
+const selfContained = {
+  format: "esm",
+  minify: true,
+  banner: cjsInterop,
+  define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
+};
 
 async function bundle(entry, outfile, options) {
   const result = await Bun.build({
@@ -45,12 +56,7 @@ execFileSync("tsc", ["--outDir", dist], { cwd: pkgDir, stdio: "inherit" });
 
 await Promise.all(
   bundledModules.map((name) =>
-    bundle(join(pkgDir, `src/next/${name}.mts`), join(distNext, `${name}.mjs`), {
-      format: "esm",
-      minify: true,
-      banner: cjsInterop,
-      define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
-    }),
+    bundle(join(pkgDir, `src/next/${name}.mts`), join(distNext, `${name}.mjs`), selfContained),
   ),
 );
 
@@ -58,8 +64,17 @@ await bundle(join(pkgDir, "src/node/entrypoint.mts"), nodeEntrypoint, {
   format: "esm",
 });
 
+await bundle(join(pkgDir, "src/next/container-entrypoint.mts"), containerEntrypoint, {
+  format: "esm",
+  minify: true,
+  banner: cjsInterop,
+  define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
+});
+
 await Promise.all([
-  ...bundledInternals.map((name) => rm(join(distNext, `${name}.mjs`), { force: true })),
+  ...[...bundledInternals, ...containerModules].map((name) =>
+    rm(join(distNext, `${name}.mjs`), { force: true }),
+  ),
   ...bundledCacheModules.map((name) => rm(join(dist, "cache", `${name}.mjs`), { force: true })),
   rm(join(distNode, "tag-records.mjs"), { force: true }),
 ]);
@@ -81,6 +96,7 @@ const looseImports = {
 const bundledOutputs = new Set([
   ...bundledModules.map((name) => join(distNext, `${name}.mjs`)),
   nodeEntrypoint,
+  containerEntrypoint,
 ]);
 const loose = (await readdir(dist, { recursive: true, withFileTypes: true }))
   .filter((entry) => entry.isFile() && entry.name.endsWith(".mjs"))
