@@ -57,13 +57,13 @@ func (d *deployRun) forwardPorts(ctx context.Context, steps *buildSteps, c colle
 	case refused && code == refusal.CodeNotReady:
 		notReady, err = err, nil
 	}
+	if notReady != nil {
+		forwarding.EndPartial(portforward.DescribeRefused("The build", declared, notReady))
+		return nil, nil
+	}
 	forwarding.End(err)
 	if err != nil {
 		return nil, err
-	}
-	if notReady != nil {
-		steps.phase.Say(portforward.DescribeRefused("The build", declared, notReady))
-		return nil, nil
 	}
 	unforwarded := forwards.Unforwarded()
 	if len(preBuildUses) > 0 && len(unforwarded) > 0 {

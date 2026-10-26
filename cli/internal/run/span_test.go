@@ -71,6 +71,24 @@ func TestASpanThatSucceedsEndsTitledWithWhatItDidAndOneThatFailsWithNoTitle(t *t
 	}
 }
 
+func TestASpanEndedPartiallyIsAnOKWarningTitledWithWhatItGotDone(t *testing.T) {
+	sink := &recording{}
+	run, _ := begin(t, sink)
+	build := run.Phase(progressv1.Phase_PHASE_BUILD)
+
+	build.Child("web", progress.Forwarding.Title("ports to main")).EndPartial("The build goes without the bindings of main")
+
+	for _, ev := range sink.received() {
+		if ended := ev.GetOperation().GetEnded(); ended != nil && ev.GetOperation().GetSubject() == "web" {
+			if ended.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK || ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_WARN || ended.GetTitle() != "The build goes without the bindings of main" {
+				t.Fatalf("the span ended %v at %v titled %q, want an OK warning titled with what it got done", ended.GetStatus(), ev.GetOperation().GetLevel(), ended.GetTitle())
+			}
+			return
+		}
+	}
+	t.Fatal("the span never ended")
+}
+
 func TestEndReportsTheErrorOnTheEndedEventAndTheDurationFromItsStart(t *testing.T) {
 	sink := &recording{}
 	run, clock := begin(t, sink)
