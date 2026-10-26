@@ -1536,6 +1536,32 @@ test("regroups a route's prerender outputs into one cache entry", async () => {
   expect(typeof entry.lastModified).toBe("number");
 });
 
+test("seeds a route under /index at the key the cache handler reads it by", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const appDir = join(projectDir, ".next/server/app");
+  await mkdir(join(appDir, "index"), { recursive: true });
+  await writeFile(join(appDir, "index/foo.html"), "<html>index foo</html>");
+  args.outputs.prerenders.push({
+    pathname: "/index/foo",
+    id: "/index/foo",
+    type: "PRERENDER",
+    parentOutputId: "/",
+    groupId: 3,
+    fallback: {
+      filePath: join(appDir, "index/foo.html"),
+      initialRevalidate: false,
+      initialHeaders: { "content-type": "text/html; charset=utf-8" },
+    },
+    config: { allowQuery: [] },
+  } as never);
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const entry = await readCacheEntry(projectDir, "index/index/foo");
+  expect(entry.value.html).toBe("<html>index foo</html>");
+});
+
 test("copies a pages route's data twin onto its cache entry", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const pagesDir = join(projectDir, ".next/server/pages");
