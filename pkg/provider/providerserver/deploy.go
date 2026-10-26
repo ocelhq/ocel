@@ -37,19 +37,32 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		if err != nil {
 			return nil, err
 		}
-		hold, err := mode.claim(ctx, h, spec, req.GetLeaseToken())
-		if err != nil {
+		var run *deployRun
+		var hold *leaseHold
+		defer func() {
+			if hold != nil {
+				_ = hold.release(ctx)
+			}
+		}()
+		err = newSpanEvents(sender).run(checkingSpan(spec), func(env *spanRun) error {
+			return env.phase(func(progress progress.Log) error {
+				if hold, err = mode.claim(ctx, h, spec, req.GetLeaseToken()); err != nil {
+					return err
+				}
+				if run, err = h.openDeploy(ctx, req, spec, mode, sender); err != nil {
+					return err
+				}
+				run.hold = hold
+				return run.prepare(hold.context(ctx), progress)
+			})
+		})
+		if run == nil {
 			return nil, err
 		}
-		if hold != nil {
-			defer func() { _ = hold.release(ctx) }()
+		var result *progressv1.OperationEvent
+		if err == nil {
+			result, err = run.execute(ctx)
 		}
-		run, err := h.openDeploy(ctx, req, spec, mode, sender)
-		if err != nil {
-			return nil, err
-		}
-		run.hold = hold
-		result, err := run.execute(ctx)
 		return result, hold.explain(mode.finish(ctx, run, err))
 	})
 }
@@ -219,13 +232,6 @@ func (r *deployRun) reportFailure(result *progressv1.OperationResult) {
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
 	leased := r.hold.context(ctx)
-	if err := r.spanEvents.run(r.spans.Environment, func(env *spanRun) error {
-		return env.phase(func(progress progress.Log) error {
-			return r.prepare(leased, progress)
-		})
-	}); err != nil {
-		return nil, err
-	}
 	if err := r.spanEvents.run(r.spans.Edge, func(u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
 			return r.mode.edge(leased, r, progress)
@@ -241,7 +247,7 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 		r.mode.reclaim(ctx, r)
 		return nil, err
 	}
-	if err := r.hold.confirm(ctx); err != nil {
+	if err := r.confirmHold(ctx); err != nil {
 		r.mode.reclaim(ctx, r)
 		return nil, err
 	}
@@ -250,6 +256,15 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 		r.mode.reclaim(ctx, r)
 	}
 	return result, err
+}
+
+func (r *deployRun) confirmHold(ctx context.Context) error {
+	if r.hold == nil {
+		return nil
+	}
+	return r.spanEvents.run(r.spans.Lease, func(u *spanRun) error {
+		return u.phase(func(progress.Log) error { return r.hold.confirm(ctx) })
+	})
 }
 
 func (r *deployRun) ref(stack naming.StackName) provider.StackRef {

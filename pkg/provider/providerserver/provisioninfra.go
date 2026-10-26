@@ -32,20 +32,42 @@ func (h *handlers) ProvisionInfra(ctx context.Context, req *contractv1.Provision
 		if err != nil {
 			return nil, err
 		}
-		hold, err := h.takeEnvironment(ctx, spec, req.GetLeaseToken())
-		if err != nil {
+		var hold *leaseHold
+		var run *deployRun
+		var undeclared []*contractv1.ManifestResource
+		err = newSpanEvents(sender).run(checkingSpan(spec), func(env *spanRun) error {
+			return env.phase(func(progress progress.Log) error {
+				if hold, err = h.takeEnvironment(ctx, spec, req.GetLeaseToken()); err != nil {
+					return err
+				}
+				leased := hold.context(ctx)
+				if run, err = h.openInfraRun(leased, req, spec, sender); err != nil {
+					return err
+				}
+				if undeclared, err = run.readCurrentInfra(leased); err != nil {
+					return err
+				}
+				return run.prepareInfra(leased, progress, undeclared)
+			})
+		})
+		if hold == nil {
 			return nil, err
 		}
-		result, err := h.executeInfraRun(hold.context(ctx), req, spec, sender)
+		if err == nil {
+			err = run.reconcileInfra(hold.context(ctx), undeclared)
+		}
 		if err != nil && !hold.held {
 			_ = hold.release(ctx)
 		}
 		hold.end()
-		return result, hold.explain(err)
+		if err != nil {
+			return nil, hold.explain(err)
+		}
+		return okResult(), nil
 	})
 }
 
-func (h *handlers) executeInfraRun(ctx context.Context, req *contractv1.ProvisionInfraRequest, spec provider.DeploySpec, sender *eventStream) (*progressv1.OperationEvent, error) {
+func (h *handlers) openInfraRun(ctx context.Context, req *contractv1.ProvisionInfraRequest, spec provider.DeploySpec, sender *eventStream) (*deployRun, error) {
 	deploy := &contractv1.DeployRequest{
 		Manifest:       req.GetManifest(),
 		Environment:    req.GetEnvironment(),
@@ -58,11 +80,7 @@ func (h *handlers) executeInfraRun(ctx context.Context, req *contractv1.Provisio
 	if err != nil {
 		return nil, err
 	}
-	run, err := h.openDeploy(ctx, deploy, spec, mode, sender)
-	if err != nil {
-		return nil, err
-	}
-	return run.executeInfra(ctx)
+	return h.openDeploy(ctx, deploy, spec, mode, sender)
 }
 
 func refuseInfraRequest(req *contractv1.ProvisionInfraRequest) error {
@@ -93,24 +111,6 @@ func refuseInfraProvisionedDeploy(req *contractv1.DeployRequest) error {
 			"this deploy says its infra was provisioned but sends no lease token, and only the deploy whose lease token provisioned that infra may deploy over it")
 	}
 	return nil
-}
-
-func (r *deployRun) executeInfra(ctx context.Context) (*progressv1.OperationEvent, error) {
-	undeclared, err := r.readCurrentInfra(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := r.spanEvents.run(r.spans.Environment, func(env *spanRun) error {
-		return env.phase(func(progress progress.Log) error {
-			return r.prepareInfra(ctx, progress, undeclared)
-		})
-	}); err != nil {
-		return nil, err
-	}
-	if err := r.reconcileInfra(ctx, undeclared); err != nil {
-		return nil, err
-	}
-	return okResult(), nil
 }
 
 func (r *deployRun) prepareInfra(ctx context.Context, progress progress.Log, undeclared []*contractv1.ManifestResource) error {

@@ -12,12 +12,12 @@ import (
 )
 
 type deploySpans struct {
-	Environment Span
-	Infra       Span
-	Apps        map[string]Span
-	Edge        Span
-	Hostnames   Span
-	Promotion   Span
+	Infra     Span
+	Apps      map[string]Span
+	Edge      Span
+	Hostnames Span
+	Lease     Span
+	Promotion Span
 }
 
 func (r *deployRun) newSpans() deploySpans {
@@ -26,12 +26,12 @@ func (r *deployRun) newSpans() deploySpans {
 	verbs := r.mode.verbs()
 	routes, infra, app, onto := verbs.routes, verbs.infra, verbs.app, verbs.onto
 	s := deploySpans{
-		Environment: RootSpan(SpanEnvironment, env,
-			progress.Checking.Title("the bootstrap, domains and bindings for "+r.spec.Slug), progressv1.Phase_PHASE_PROVISION),
 		Infra: RootSpan(r.spec.Infra.String(), env, infra.Title(r.describeInfra()), progressv1.Phase_PHASE_PROVISION),
 		Edge:  RootSpan(SpanEdge, kind, routes.Title(fmt.Sprintf("the routes for %s in %s", r.spec.Slug, where)), progressv1.Phase_PHASE_PROVISION),
 		Hostnames: RootSpan(SpanHostnames, kind,
 			progress.Attaching.Title(namedList("production hostname", "production hostnames", r.hostnames())), progressv1.Phase_PHASE_PROVISION),
+		Lease: RootSpan(SpanLease, env,
+			progress.Checking.Title("that no other deploy to "+where+" is running"), progressv1.Phase_PHASE_PROVISION),
 		Promotion: RootSpan(SpanPromotion, env,
 			progress.Switching.Title("traffic to promotion "+r.spec.PromotionID), progressv1.Phase_PHASE_PROMOTE),
 		Apps: make(map[string]Span, len(r.spec.Apps)),
@@ -41,6 +41,11 @@ func (r *deployRun) newSpans() deploySpans {
 			app.Title(fmt.Sprintf("the %s %s %s", appNoun(entry), onto, where)), progressv1.Phase_PHASE_DEPLOY)
 	}
 	return s
+}
+
+func checkingSpan(spec provider.DeploySpec) Span {
+	return RootSpan(SpanEnvironment, environmentSubject(spec.Tier, spec.Env),
+		progress.Checking.Title("the bootstrap, domains and bindings for "+spec.Slug), progressv1.Phase_PHASE_PROVISION)
 }
 
 func (r *deployRun) describeInfra() string {
