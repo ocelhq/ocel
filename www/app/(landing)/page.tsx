@@ -249,7 +249,7 @@ export default async function Home() {
   return (
     <TargetProvider>
       <div className="min-h-screen bg-background">
-        <SiteBar current="engine" />
+        <SiteBar />
         <main>
           <section className="relative overflow-hidden pt-10 pb-16 md:pt-14 md:pb-24">
             <div aria-hidden className="paper-grid absolute inset-0" />

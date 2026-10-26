@@ -17,7 +17,7 @@ export function Lockup() {
       <span className="font-(family-name:--font-archivo) text-[23.6px] font-extrabold lowercase leading-none tracking-[-0.04em] text-(--ink)">
         ocel
       </span>
-      <span className="ms-[9px] bg-(--warn) px-1 py-[3px] font-mono text-[0.625rem] font-semibold uppercase leading-none tracking-[0.14em] text-(--paper)">
+      <span className="ms-1.5 border border-(--ink) px-[5px] pt-[4px] pb-[3px] font-mono text-[0.6875rem] font-medium uppercase leading-none tracking-[0.14em] text-(--ink)">
         Alpha
       </span>
     </span>
