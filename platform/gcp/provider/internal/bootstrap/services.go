@@ -2,15 +2,17 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/googleapis/gax-go/v2/apierror"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/serviceusage/v1"
-	"google.golang.org/grpc/codes"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -28,6 +30,8 @@ const (
 	servicesPerSwitch = 20
 	billingConsole    = "https://console.cloud.google.com/billing/linkedaccount?project="
 	reasonSwitchedOff = "switched off"
+	billingNotFound   = "UREQ_PROJECT_BILLING_NOT_FOUND"
+	errorInfoType     = "type.googleapis.com/google.rpc.ErrorInfo"
 
 	KindServiceUsage Kind = "serviceusage:service"
 )
@@ -233,7 +237,7 @@ func (b Engine) switchOn(ctx context.Context, off []string, progress progress.Lo
 		doing := "switching on " + strings.Join(batch, ", ") + " in project " + b.Clients.Project()
 		started, err := googleretry.Attempted(ctx, service.Services.BatchEnable(parent, &serviceusage.BatchEnableServicesRequest{ServiceIds: batch}).Context(ctx).Do)
 		if err != nil {
-			if refused := b.refuseUnbilled(err.Error(), googleretry.AnsweredCode(err) == http.StatusBadRequest); refused != nil {
+			if refused := b.refuseUnbilled(answeredReason(err) == billingNotFound); refused != nil {
 				return refused
 			}
 			return fmt.Errorf("%s: %w", doing, err)
@@ -248,7 +252,7 @@ func (b Engine) switchOn(ctx context.Context, off []string, progress progress.Lo
 			return err
 		}
 		if finished.Error != nil {
-			if refused := b.refuseUnbilled(finished.Error.Message, finished.Error.Code == int64(codes.FailedPrecondition)); refused != nil {
+			if refused := b.refuseUnbilled(slices.ContainsFunc(finished.Error.Details, isBillingNotFound)); refused != nil {
 				return refused
 			}
 			return fmt.Errorf("%s: %s", doing, finished.Error.Message)
@@ -261,8 +265,27 @@ func (b Engine) switchOn(ctx context.Context, off []string, progress progress.Lo
 	return nil
 }
 
-func (b Engine) refuseUnbilled(message string, precondition bool) error {
-	if !precondition || !strings.Contains(strings.ToLower(message), "billing") {
+func answeredReason(err error) string {
+	var parsed *apierror.APIError
+	if !errors.As(err, &parsed) {
+		parsed, _ = apierror.ParseError(err, false)
+	}
+	if parsed == nil {
+		return ""
+	}
+	return parsed.Reason()
+}
+
+func isBillingNotFound(detail googleapi.RawMessage) bool {
+	var info struct {
+		Type   string `json:"@type"`
+		Reason string `json:"reason"`
+	}
+	return json.Unmarshal(detail, &info) == nil && info.Type == errorInfoType && info.Reason == billingNotFound
+}
+
+func (b Engine) refuseUnbilled(unbilled bool) error {
+	if !unbilled {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,

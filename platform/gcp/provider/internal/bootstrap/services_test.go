@@ -202,3 +202,17 @@ func TestACredentialThatMayNotWaitOnASwitchOnIsRefusedBeforeItSwitchesAnythingOn
 		t.Errorf("switched on %v, want nothing", usage.Enabled)
 	}
 }
+
+func TestAPreconditionGoogleGivesNoBillingReasonForIsNotReadAsAMissingBillingAccount(t *testing.T) {
+	t.Parallel()
+
+	usage := &googletest.ServiceUsage{ServicesOff: []string{"run.googleapis.com"}, Precondition: "the billing of this project is being migrated"}
+	b, _ := switchingOn(t, usage)
+
+	err := b.SwitchOnServices(t.Context(), []string{"run.googleapis.com"}, nil)
+
+	var refused refusal.Refusal
+	if err == nil || errors.As(err, &refused) {
+		t.Errorf("SwitchOnServices() = %v, want Google's own error: only the UREQ_PROJECT_BILLING_NOT_FOUND reason says no billing account is linked", err)
+	}
+}

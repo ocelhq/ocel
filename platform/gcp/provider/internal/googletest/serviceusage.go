@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/serviceusage/v1"
 )
 
@@ -18,6 +19,7 @@ type ServiceUsage struct {
 	ServicesOff    []string
 	Unbilled       bool
 	UnbilledAtOnce bool
+	Precondition   string
 	Pending        int
 	Propagating    int
 
@@ -130,13 +132,22 @@ func (s *ServiceUsage) batchEnable(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.UnbilledAtOnce {
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":{"code":400,"status":"FAILED_PRECONDITION","message":"` + unbilled(asked.ServiceIds) + `"}}`))
+		_, _ = w.Write([]byte(`{"error":{"code":400,"status":"FAILED_PRECONDITION","message":"` + unbilled(asked.ServiceIds) + `","details":[` + billingNotFound + `]}}`))
+		return
+	}
+	if s.Precondition != "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":400,"status":"FAILED_PRECONDITION","message":"` + s.Precondition + `"}}`))
 		return
 	}
 	s.operations++
 	name := "operations/acf." + strconv.Itoa(s.operations)
 	if s.Unbilled {
-		WriteBody(w, &serviceusage.Operation{Name: name, Done: true, Error: &serviceusage.Status{Code: 9, Message: unbilled(asked.ServiceIds)}})
+		WriteBody(w, &serviceusage.Operation{Name: name, Done: true, Error: &serviceusage.Status{
+			Code:    9,
+			Message: unbilled(asked.ServiceIds),
+			Details: []googleapi.RawMessage{googleapi.RawMessage(billingNotFound)},
+		}})
 		return
 	}
 	s.Enabled = append(s.Enabled, asked.ServiceIds)
@@ -144,6 +155,8 @@ func (s *ServiceUsage) batchEnable(w http.ResponseWriter, r *http.Request) {
 	s.pendingPoll = s.Pending
 	WriteBody(w, &serviceusage.Operation{Name: name, Done: s.Pending == 0})
 }
+
+const billingNotFound = `{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"UREQ_PROJECT_BILLING_NOT_FOUND","domain":"serviceusage.googleapis.com"}`
 
 func unbilled(ids []string) string {
 	return "Billing account for project '" + ProjectNumber + "' is not found. Billing must be enabled for activation of service(s) '" +
