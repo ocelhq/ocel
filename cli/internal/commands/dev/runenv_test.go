@@ -156,6 +156,21 @@ func TestRunInADeployedEnvironmentGivesTheCommandItsBindingsThroughTheLiveDirAnd
 	}
 }
 
+func TestRunInADeployedEnvironmentNamesTheClosingOfItsForwardsAfterTheCommand(t *testing.T) {
+	fixture := setUpDeployedProject(t)
+	forwardingPorts(t, fixture)
+	deployProject(t, fixture, clitest.NewInvocation())
+
+	got, err := runInEnvironment(t, fixture, clitest.NewInvocation(), "--env", "production", "--", "sh", "-c", "echo the command ran")
+	if err != nil {
+		t.Fatalf("ocel run err = %v; out=%s", err, got)
+	}
+	_, after, ran := strings.Cut(got, "the command ran")
+	if !ran || !strings.Contains(after, "Closed the forwarded ports") {
+		t.Errorf("out = %q, want the closing of the forwards named after the command's output", got)
+	}
+}
+
 func TestRunInADeployedEnvironmentHidesWhatTheBindingsKeepSecretInTheCommandsOutput(t *testing.T) {
 	fixture := setUpDeployedProject(t)
 	forwardingPorts(t, fixture)

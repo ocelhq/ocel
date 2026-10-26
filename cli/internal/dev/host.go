@@ -46,8 +46,13 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 	return &host{server: server, resources: resources, address: address, close: func() {
 		stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), docker.StopsWithin)
 		defer cancel()
-		if err := resources.Close(stopping); err != nil {
-			opts.session().Warn(fmt.Sprintf("Stopping the dev resources failed: %v", err))
+		if len(server.ResourceKinds()) == 0 {
+			if err := resources.Close(stopping); err != nil {
+				opts.session().Warn(fmt.Sprintf("Stopping the dev resources failed: %v", err))
+			}
+		} else {
+			span := opts.session().Child("", stoppingResourcesTitle)
+			span.End(resources.Close(stopping))
 		}
 		_ = httpServer.Close()
 	}}, nil

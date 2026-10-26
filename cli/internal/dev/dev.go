@@ -24,6 +24,9 @@ var (
 	environmentTitle = progress.Title{Started: "Resolving the app's environment", Ended: "Resolved the app's environment"}
 	changeTitle      = progress.Title{Started: "Re-resolving the app's environment after a change", Ended: "Re-resolved the app's environment after a change"}
 	leaderTitle      = progress.Title{Started: "Connecting to the running `ocel dev`", Ended: "Connected to the running `ocel dev`"}
+
+	stoppingResourcesTitle = progress.Title{Started: "Stopping the dev resources", Ended: "Stopped the dev resources"}
+	closingForwardsTitle   = progress.Title{Started: "Closing the forwarded ports", Ended: "Closed the forwarded ports"}
 )
 
 type Options struct {

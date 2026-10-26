@@ -1074,6 +1074,39 @@ func waitForOutput(t *testing.T, buf *syncBuffer, want string) {
 	t.Fatalf("output = %q, never contained %q", buf.String(), want)
 }
 
+func TestDevNamesTheStoppingOfTheResourcesItStarted(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	t.Run("a run that declared a resource names stopping it", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { releaseLeader(root) })
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
+
+		var stdout, stderr syncBuffer
+		if err := runDev(context.Background(), devDeps(), false, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDev err = %v; stderr=%s", err, stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "Stopped the dev resources") {
+			t.Errorf("stderr = %q, want the stopping of the dev resources named", stderr.String())
+		}
+	})
+
+	t.Run("a run that declared nothing has nothing to stop", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { releaseLeader(root) })
+
+		var stdout, stderr syncBuffer
+		if err := runDev(context.Background(), devDeps(), false, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDev err = %v; stderr=%s", err, stderr.String())
+		}
+		if strings.Contains(stderr.String(), "dev resources") {
+			t.Errorf("stderr = %q, want no line about dev resources for a run that declared none", stderr.String())
+		}
+	})
+}
+
 func TestDevReportsThroughItsRun(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
