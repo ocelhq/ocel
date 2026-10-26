@@ -54,6 +54,13 @@ func mintOriginSecret(t *testing.T, p *Provider, tier environment.Tier, kind edg
 
 func behindTheWorker(spec provider.StackSpec) provider.StackSpec {
 	spec.Edge = codeRunningFront{kind: cloudflareKind, runsCode: true, shields: true}
+	if spec.App != nil && spec.App.Routing != nil {
+		app := *spec.App
+		app.RootFunction = app.Routing.RootFunction
+		app.EdgeRouteTable = &provider.EdgeRouteTable{Table: app.Routing.RouteTable.Table}
+		app.Routing = nil
+		spec.App = &app
+	}
 	return spec
 }
 
