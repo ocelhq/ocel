@@ -4,9 +4,13 @@ package app.realtime.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/app/realtime/v1;realtimev1";
 
 import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 service RealtimeService {
   rpc Publish(PublishRequest) returns (PublishResponse);
+
+  rpc Mint(MintRequest) returns (MintResponse);
 }
 
 message PublishRequest {
@@ -24,3 +28,51 @@ message PublishRequest {
 }
 
 message PublishResponse {}
+
+message MintRequest {
+  option (buf.validate.message).cel = {
+    id: "realtime.mint.subscribe_channels"
+    message: "a resource mints a subscribe token only for a channel under its own name"
+    expression: "this.subscribe_channels.all(channel, channel.startsWith('/' + this.realtime + '/'))"
+  };
+  option (buf.validate.message).cel = {
+    id: "realtime.mint.tokens"
+    message: "a mint asks for a connect token, a subscribe token or both"
+    expression: "this.connect || size(this.subscribe_channels) > 0"
+  };
+
+  string realtime = 1 [(buf.validate.field).string.pattern = "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,48}[A-Za-z0-9])?$"];
+
+  string subject = 2 [(buf.validate.field).string = {min_len: 1, max_bytes: 1024}];
+
+  google.protobuf.Duration ttl = 3 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).duration = {
+      gte: {seconds: 10}
+      lte: {seconds: 300}
+    }
+  ];
+
+  bool connect = 4;
+
+  repeated string subscribe_channels = 5 [(buf.validate.field).repeated = {
+    max_items: 50
+    items: {
+      string: {min_len: 1, max_bytes: 512}
+    }
+  }];
+}
+
+message SubscribeToken {
+  string token = 1;
+
+  string channel = 2;
+}
+
+message MintResponse {
+  string connect_token = 1;
+
+  repeated SubscribeToken subscribe_tokens = 2;
+
+  google.protobuf.Timestamp expires_at = 3;
+}

@@ -1145,7 +1145,6 @@ name = "ocel-sdk"
 version = "0.0.2"
 dependencies = [
  "axum",
- "base64",
  "boon",
  "buffa",
  "buffa-types",

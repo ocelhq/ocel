@@ -1,34 +1,39 @@
 #![allow(dead_code)]
 
 use crate::runtime::{runtime, Runtime};
-use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
-use base64::Engine;
 use bytes::Bytes;
-use ocel::proto::app::realtime::v1::{PublishRequest, PublishResponse};
+use ocel::proto::app::realtime::v1::{
+    MintRequest, MintResponse, PublishRequest, PublishResponse, SubscribeToken,
+};
 use serde_json::Value;
+
+pub const MINTED_EXPIRES_AT: i64 = 1_790_000_030;
 
 pub fn read_fixture() -> Value {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../proto/common/bindings/v1/fixtures/realtime.json"
     );
-    serde_json::from_str(&std::fs::read_to_string(path).expect("the realtime binding fixture"))
-        .expect("the fixture is JSON")
+    let mut fixture: Value =
+        serde_json::from_str(&std::fs::read_to_string(path).expect("the realtime binding fixture"))
+            .expect("the fixture is JSON");
+    let properties = fixture["realtime"]
+        .as_object_mut()
+        .expect("realtime properties");
+    properties.remove("signingKey");
+    properties.remove("verifyKey");
+    fixture
 }
 
-pub fn read_claims(token: &str) -> Value {
-    let parts: Vec<&str> = token.split('.').collect();
-    assert_eq!(parts.len(), 3, "token {token} is no JWT");
-    let verify_key = STANDARD
-        .decode(read_fixture()["realtime"]["verifyKey"].as_str().unwrap())
-        .unwrap();
-    ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, verify_key)
-        .verify(
-            format!("{}.{}", parts[0], parts[1]).as_bytes(),
-            &URL_SAFE_NO_PAD.decode(parts[2]).unwrap(),
-        )
-        .expect("the token verifies against the fixture's verify key");
-    serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[1]).unwrap()).unwrap()
+pub fn fake_token(operation: &str, channel: &str) -> String {
+    format!("token {operation} {channel}")
+}
+
+pub struct Mint<'a> {
+    pub subject: &'a str,
+    pub ttl_seconds: i64,
+    pub connect: bool,
+    pub subscribe_channels: &'a [&'a str],
 }
 
 pub struct Published {
@@ -44,7 +49,75 @@ impl FakeRuntime {
     pub fn serve() -> Self {
         let runtime = runtime();
         runtime.answer("Publish", PublishResponse::default());
-        Self { runtime }
+        let fake = Self { runtime };
+        fake.answer_mint(|channel| channel.to_string());
+        fake
+    }
+
+    pub fn map_channels(&self, map: fn(&str) -> String) {
+        self.answer_mint(map);
+    }
+
+    fn answer_mint(&self, map: fn(&str) -> String) {
+        self.runtime
+            .answer_with("Mint", move |request: MintRequest| MintResponse {
+                connect_token: if request.connect {
+                    fake_token("connect", &format!("/{}", request.realtime))
+                } else {
+                    String::new()
+                },
+                subscribe_tokens: request
+                    .subscribe_channels
+                    .iter()
+                    .map(|channel| SubscribeToken {
+                        token: fake_token("subscribe", channel),
+                        channel: map(channel),
+                        ..Default::default()
+                    })
+                    .collect(),
+                expires_at: buffa_types::google::protobuf::Timestamp {
+                    seconds: MINTED_EXPIRES_AT,
+                    ..Default::default()
+                }
+                .into(),
+                ..Default::default()
+            });
+    }
+
+    pub fn mint_only(&self, minted: MintResponse) {
+        self.runtime.answer("Mint", minted);
+    }
+
+    pub fn refuse_mint(&self, said: &str) {
+        self.runtime
+            .refuse("Mint", 400, "failed_precondition", said);
+    }
+
+    pub fn mints(&self) -> Vec<MintRequest> {
+        self.runtime
+            .calls()
+            .iter()
+            .filter(|call| call.path == "/app.realtime.v1.RealtimeService/Mint")
+            .map(|call| call.decode())
+            .collect()
+    }
+
+    pub fn assert_minted(&self, expected: Mint) {
+        let mints = self.mints();
+        assert_eq!(
+            mints.len(),
+            1,
+            "the runtime was asked to mint once for the whole batch"
+        );
+        let mint = &mints[0];
+        assert_eq!(mint.realtime, "app");
+        assert_eq!(mint.subject, expected.subject);
+        assert_eq!(
+            mint.ttl.as_option().map(|ttl| ttl.seconds),
+            Some(expected.ttl_seconds)
+        );
+        assert_eq!(mint.connect, expected.connect);
+        assert_eq!(mint.subscribe_channels, expected.subscribe_channels);
     }
 
     pub fn binding(&self) -> String {

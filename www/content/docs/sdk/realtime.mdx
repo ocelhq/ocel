@@ -3,7 +3,7 @@ title: Realtime
 description: Typed channels that browsers subscribe to and your server publishes on.
 ---
 
-A realtime resource is a set of channel patterns. Your app's handler authorizes each subscribe and publish and signs a short-lived token; the transport only checks the token.
+A realtime resource is a set of channel patterns. Your app's handler authorizes each subscribe and publish, and the Ocel runtime mints a short-lived token for what it allows; the transport only checks the token.
 
 <Tabs groupId="lang" persist items={["TypeScript", "Go", "Python", "Rust"]}>
 
@@ -186,7 +186,7 @@ For a Go, Python or Rust backend, run [`ocel generate`](/docs/cli/generate) and 
 
 Rules run on subscribe and on every reconnect, not on events to an open subscription. The browser client reconnects on its own and re-authorizes every live subscription in one request.
 
-A socket is opened with a connect token the handler mints, valid for the resource's `tokenTtl` (60 seconds unless set, between 10 and 300). The Ocel gateway holds one socket per connect token, closes a socket when its connect token expires, and the client then reconnects with a fresh one, so a socket cycles once per token lifetime and an event published during the reconnect can be missed. The gateway also pings every socket every 30 seconds and drops one that has not answered 10 seconds later, and, unless given another cap, holds at most 1000 sockets. AppSync checks the connect token only when the socket opens and closes a socket after 24 hours.
+The handler asks the runtime for every token a request needs in one call. Each subscribe grant names the channel its token is for, which the target may place under a prefix of its own, and the browser client subscribes to it as named. A socket is opened with a connect token from the handler, valid for the resource's `tokenTtl` (60 seconds unless set, between 10 and 300). The Ocel gateway holds one socket per connect token, closes a socket when its connect token expires, and the client then reconnects with a fresh one, so a socket cycles once per token lifetime and an event published during the reconnect can be missed. The gateway also pings every socket every 30 seconds and drops one that has not answered 10 seconds later, and, unless given another cap, holds at most 1000 sockets. AppSync checks the connect token only when the socket opens and closes a socket after 24 hours.
 
 ## On AWS
 

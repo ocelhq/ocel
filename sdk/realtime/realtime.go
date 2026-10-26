@@ -41,8 +41,8 @@ func (o option) applyRealtime(s *settings) { o(s) }
 // Authorize identifies the caller of the realtime handler from its request,
 // with whatever auth the app already uses. It answers nil for nobody; an error or a
 // panic fails the whole request with 500. Its answer is the Auth of every rule, which
-// a rule's context names as A, and the auth's "id" field as JSON, when a string or a
-// number, is the sub of every token minted for the caller.
+// a rule's context names as A, and the auth's "id" field as JSON, when a string of 1 to
+// 1024 bytes or a number, is the sub of every token minted for the caller.
 func Authorize[A any](authorize func(*http.Request) (*A, error)) Option {
 	return option(func(s *settings) {
 		s.authType = reflect.TypeFor[A]()
@@ -56,7 +56,7 @@ func Authorize[A any](authorize func(*http.Request) (*A, error)) Option {
 	})
 }
 
-// TokenTTL is how long each token the handler mints lives, 10s to 5m in whole
+// TokenTTL is how long each token the handler hands out lives, 10s to 5m in whole
 // seconds; without it, 60s.
 func TokenTTL(ttl time.Duration) Option {
 	return option(func(s *settings) { s.ttl = ttl })

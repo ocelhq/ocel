@@ -18,7 +18,6 @@ from ocel._callables import call_function
 from ocel._declare import declare, find_caller_source, is_discovering
 from ocel._error import OcelError
 from ocel._payload import Codec
-from ocel._realtime_token import MintedToken, TokenOperation, mint_token
 from ocel._realtime_wire import (
     CHANNEL_SEGMENT,
     SEGMENT_RULE,
@@ -31,7 +30,12 @@ from ocel.gen.app.realtime.v1.realtime_connect import (
     RealtimeServiceClient,
     RealtimeServiceClientSync,
 )
-from ocel.gen.app.realtime.v1.realtime_pb import PublishRequest
+from ocel.gen.app.realtime.v1.realtime_pb import (
+    MintRequest,
+    MintResponse,
+    PublishRequest,
+    SubscribeToken,
+)
 from ocel.gen.app.resources.v1.resources_pb import (
     DeclareRequest,
     RealtimeChannel,
@@ -131,6 +135,9 @@ type WSGIApplication = Callable[[dict[str, object], StartResponse], Iterable[byt
 """A WSGI application, as :meth:`Realtime.wsgi` returns it."""
 
 
+_MAX_SUBJECT_BYTES = 1024
+
+
 def _read_subject(auth: object) -> str:
     if auth is None:
         return "anonymous"
@@ -138,8 +145,10 @@ def _read_subject(auth: object) -> str:
         identity = cast(Mapping[str, object], auth).get("id")
     else:
         identity = cast(object, getattr(auth, "id", None))
-    if isinstance(identity, str) or (isinstance(identity, int) and not isinstance(identity, bool)):
+    if isinstance(identity, int) and not isinstance(identity, bool):
         return str(identity)
+    if isinstance(identity, str) and 0 < len(identity.encode()) <= _MAX_SUBJECT_BYTES:
+        return identity
     return "anonymous"
 
 
@@ -247,6 +256,21 @@ class _Response:
             headers["Content-Type"] = "application/json"
         headers["Content-Length"] = str(len(content))
         return self.status, list(headers.items()), content
+
+
+@dataclass(frozen=True)
+class _MintedTokens:
+    connect_token: str
+    subscribe_tokens: list[SubscribeToken]
+    expires_at_seconds: int
+
+
+@dataclass(frozen=True)
+class _BatchOp[A]:
+    channel: Channel[A]
+    params: dict[str, str]
+    publish_rule: Rule[A] | None
+    body: object
 
 
 def _build_error_response(
@@ -426,21 +450,30 @@ class Realtime[A]:
             raise refuse_unprovisioned(f'realtime("{self.name}")', access)
         return read_realtime_binding(self.name)
 
-    def _mint_token(
-        self,
-        properties: RealtimeProperties,
-        subject: str,
-        operation: TokenOperation,
-        channel: str,
-    ) -> MintedToken:
-        return mint_token(
-            properties.signing_key,
-            namespace=self.name,
-            audience=properties.host,
+    async def _mint_tokens_async(
+        self, subject: str, connect: bool, subscribe_channels: list[str]
+    ) -> _MintedTokens:
+        request = MintRequest(
+            realtime=self.name,
             subject=subject,
-            operation=operation,
-            channel=channel,
-            ttl_seconds=self._ttl_seconds,
+            ttl=Duration.from_seconds(self._ttl_seconds),
+            connect=connect,
+            subscribe_channels=subscribe_channels,
+        )
+        minted: MintResponse = await self._runtime.call_async(
+            "handler", lambda client: client.mint(request)
+        )
+        if len(minted.subscribe_tokens) != len(subscribe_channels):
+            raise RuntimeError(
+                f'realtime "{self.name}": the runtime minted {len(minted.subscribe_tokens)} '
+                f"subscribe tokens for {len(subscribe_channels)} channels"
+            )
+        if connect and not minted.connect_token:
+            raise RuntimeError(f'realtime "{self.name}": the runtime minted no connect token')
+        if minted.expires_at is None:
+            raise RuntimeError(f'realtime "{self.name}": the runtime minted tokens with no expiry')
+        return _MintedTokens(
+            minted.connect_token, list(minted.subscribe_tokens), minted.expires_at.seconds
         )
 
     def _build_request(self, channel: str, envelope: bytes) -> PublishRequest:
@@ -454,13 +487,7 @@ class Realtime[A]:
         request = self._build_request(channel, envelope)
         await self._runtime.call_async(access, lambda client: client.publish(request))
 
-    async def _serve_op(
-        self,
-        properties: RealtimeProperties,
-        request: RealtimeRequest,
-        auth: A | None,
-        op: object,
-    ) -> dict[str, object]:
+    def _read_op(self, op: object) -> dict[str, object] | _BatchOp[A]:
         fields = _read_object(op)
         if (
             fields is None
@@ -475,22 +502,19 @@ class Realtime[A]:
         channel = self._channels.get(pattern) if isinstance(pattern, str) else None
         if channel is None:
             return _deny("unknown-pattern")
-        rule = channel._publish
-        if operation == "publish" and rule is None:
+        if operation == "publish" and channel._publish is None:
             return _deny("no-publish-rule")
         given = fields.get("params")
         asked = {} if given is None else _read_object(given)
         if asked is None or not all(isinstance(value, str) for value in asked.values()):
             return _deny("invalid-params")
         params = cast(dict[str, str], asked)
-        if operation == "subscribe" or rule is None:
-            return await self._serve_subscribe(properties, request, auth, channel, params)
-        body = fields.get("body", _MISSING_BODY)
-        return await self._serve_publish(request, auth, channel, rule, params, body)
+        if operation == "subscribe":
+            return _BatchOp(channel, params, None, None)
+        return _BatchOp(channel, params, channel._publish, fields.get("body", _MISSING_BODY))
 
     async def _serve_subscribe(
         self,
-        properties: RealtimeProperties,
         request: RealtimeRequest,
         auth: A | None,
         channel: Channel[A],
@@ -506,8 +530,7 @@ class Realtime[A]:
             denied = await _run_rule(channel._subscribe, RuleContext(auth, dict(params), request))
             if denied is not None:
                 return _deny(denied)
-        token = self._mint_token(properties, _read_subject(auth), "subscribe", wire)["token"]
-        return {"wire": wire, "token": token}
+        return {"wire": wire}
 
     async def _serve_publish(
         self,
@@ -543,34 +566,47 @@ class Realtime[A]:
         if self._authorize is not None:
             auth = await call_function(self._authorize, request)
 
-        async def serve(i: int, op: object) -> tuple[int, dict[str, object]]:
-            return i, await self._serve_op(properties, request, auth, op)
-
-        publishes = [(i, op) for i, op in enumerate(ops) if _is_publish(op)]
-        published = {i for i, _ in publishes}
-
-        async def serve_publishes_in_order() -> list[tuple[int, dict[str, object]]]:
-            return [await serve(i, op) for i, op in publishes]
-
+        outcomes: dict[int, dict[str, object]] = {}
+        subscribes: dict[int, asyncio.Task[dict[str, object]]] = {}
+        publishes: list[tuple[int, _BatchOp[A], Rule[A]]] = []
         async with asyncio.TaskGroup() as group:
-            others = [
-                group.create_task(serve(i, op)) for i, op in enumerate(ops) if i not in published
-            ]
-            chain = group.create_task(serve_publishes_in_order())
-        outcomes = sorted(
-            [*(task.result() for task in others), *chain.result()], key=lambda pair: pair[0]
-        )
+            for i, op in enumerate(ops):
+                read = self._read_op(op)
+                if isinstance(read, dict):
+                    outcomes[i] = read
+                elif read.publish_rule is None:
+                    subscribes[i] = group.create_task(
+                        self._serve_subscribe(request, auth, read.channel, read.params)
+                    )
+                else:
+                    publishes.append((i, read, read.publish_rule))
+        outcomes.update((i, task.result()) for i, task in subscribes.items())
+        granted = [outcomes[i] for i in subscribes if "wire" in outcomes[i]]
 
         answer: dict[str, object] = {
             "url": _resolve_socket_url(properties.url, request),
             "host": properties.host,
         }
-        if connect:
-            answer["connect"] = self._mint_token(
-                properties, _read_subject(auth), "connect", f"/{self.name}"
+        if connect or granted:
+            minted = await self._mint_tokens_async(
+                _read_subject(auth), connect, [cast(str, grant["wire"]) for grant in granted]
             )
-        answer["grants"] = [{"i": i, **outcome} for i, outcome in outcomes if "wire" in outcome]
-        answer["denied"] = [{"i": i, **outcome} for i, outcome in outcomes if "code" in outcome]
+            if connect:
+                answer["connect"] = {
+                    "token": minted.connect_token,
+                    "expiresAt": minted.expires_at_seconds,
+                }
+            for grant, token in zip(granted, minted.subscribe_tokens, strict=True):
+                grant["wire"], grant["token"] = token.channel, token.token
+
+        for i, publish, rule in publishes:
+            outcomes[i] = await self._serve_publish(
+                request, auth, publish.channel, rule, publish.params, publish.body
+            )
+
+        ordered = sorted(outcomes.items())
+        answer["grants"] = [{"i": i, **outcome} for i, outcome in ordered if "wire" in outcome]
+        answer["denied"] = [{"i": i, **outcome} for i, outcome in ordered if "code" in outcome]
         return answer
 
     async def _serve(self, request: RealtimeRequest, allowed_origins: Iterable[str]) -> _Response:
@@ -622,11 +658,14 @@ class Realtime[A]:
         """An ASGI application serving the resource to browsers, mounted at any path: one
         batched POST of ``{ connect?, ops: [{ op, pattern, params?, body? }] }``, at most 50
         ops, answered with the socket url and the host its authorization names, a connect token
-        when asked, a grant with a
-        token for each op its rule allows and a denial with a code for each it does not. It
-        takes POST with application/json alone, serves its own origin and those in
-        ``allowed_origins`` (the only ones it sends CORS headers to), answers
-        ``Cache-Control: no-store``, and never sets a cookie."""
+        when asked, a grant for each op its rule allows, carrying a token for a subscribe, and
+        a denial with a code for each it does not. The runtime the app runs on mints every
+        token, in one call per request that needs one, made before any publish is relayed, so
+        a request it cannot mint for publishes nothing; it names the channel each subscribe
+        grant is for, which the browser subscribes to as given. It takes POST with
+        application/json alone, serves its own origin and those in ``allowed_origins`` (the only
+        ones it sends CORS headers to), answers ``Cache-Control: no-store``, and never sets a
+        cookie."""
         origins = tuple(allowed_origins)
 
         async def app(
@@ -720,11 +759,6 @@ _STATUS_PHRASES = {
 }
 
 
-def _is_publish(op: object) -> bool:
-    fields = _read_object(op)
-    return fields is not None and fields.get("op") == "publish"
-
-
 async def _run_rule[A](
     rule: Rule[A], context: RuleContext[A]
 ) -> Literal["forbidden", "rule-error"] | None:
@@ -757,11 +791,10 @@ def realtime[A](
     declared, served and published through. ``authorize`` identifies the caller of the
     handler from its :class:`RealtimeRequest`, with whatever auth the app already uses, sync
     or async, and returns ``None`` for nobody; its result is ``ctx.auth`` in every rule, and
-    its ``id`` key or attribute, when a string or integer, is the ``sub`` of every token
-    minted for the caller. A resource with a subscribe or publish rule needs ``authorize``.
-    ``token_ttl`` is how long each token lives, 10 to 300 seconds.
-
-    Minting tokens needs the ``ocel[realtime]`` extra."""
+    its ``id`` key or attribute, when a string of 1 to 1024 bytes or an integer, is the
+    ``sub`` of every token minted for the caller. A resource with a subscribe or publish
+    rule needs ``authorize``.
+    ``token_ttl`` is how long each token lives, 10 to 300 seconds."""
     seconds = token_ttl.total_seconds() if isinstance(token_ttl, timedelta) else token_ttl
     if not CHANNEL_SEGMENT.fullmatch(name):
         raise ValueError(

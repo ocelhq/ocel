@@ -10,6 +10,30 @@ pub const TOKEN: &str = "opensesame";
 
 type Encode = Box<dyn Fn(bool) -> Vec<u8> + Send>;
 
+type Reply = Box<dyn Fn(&[u8], bool) -> Vec<u8> + Send>;
+
+fn decode_body<T>(body: &[u8], json: bool) -> T
+where
+    T: Message + serde::de::DeserializeOwned,
+{
+    if json {
+        return serde_json::from_slice(body).expect("a request in json");
+    }
+    buffa::DecodeOptions::new()
+        .decode_from_slice(body)
+        .expect("a request in binary proto")
+}
+
+fn encode_body<M>(message: &M, json: bool) -> Vec<u8>
+where
+    M: Message + serde::Serialize,
+{
+    match json {
+        true => serde_json::to_vec(message).expect("a response in json"),
+        false => message.encode_to_vec(),
+    }
+}
+
 pub struct Call {
     pub path: String,
     pub authorization: Option<String>,
@@ -22,17 +46,13 @@ impl Call {
     where
         T: Message + serde::de::DeserializeOwned,
     {
-        if self.json {
-            return serde_json::from_slice(&self.body).expect("a request in json");
-        }
-        buffa::DecodeOptions::new()
-            .decode_from_slice(&self.body)
-            .expect("a request in binary proto")
+        decode_body(&self.body, self.json)
     }
 }
 
 enum Answer {
     Message(Encode),
+    Reply(Reply),
     Refusal(u16, String, String),
 }
 
@@ -55,9 +75,19 @@ impl Runtime {
     {
         self.shared.answers.lock().expect("the answers").insert(
             method.to_string(),
-            Answer::Message(Box::new(move |json| match json {
-                true => serde_json::to_vec(&message).expect("a response in json"),
-                false => message.encode_to_vec(),
+            Answer::Message(Box::new(move |json| encode_body(&message, json))),
+        );
+    }
+
+    pub fn answer_with<Q, M>(&self, method: &str, reply: impl Fn(Q) -> M + Send + 'static)
+    where
+        Q: Message + serde::de::DeserializeOwned,
+        M: Message + serde::Serialize,
+    {
+        self.shared.answers.lock().expect("the answers").insert(
+            method.to_string(),
+            Answer::Reply(Box::new(move |body, json| {
+                encode_body(&reply(decode_body(body, json)), json)
             })),
         );
     }
@@ -149,6 +179,7 @@ fn serve(stream: TcpStream, shared: &Shared) {
         }
         let json = content_type.ends_with("json");
         let method = path.rsplit('/').next().unwrap_or_default().to_string();
+        let request = body.clone();
         shared.calls.lock().expect("the calls").push(Call {
             path,
             authorization,
@@ -158,6 +189,7 @@ fn serve(stream: TcpStream, shared: &Shared) {
         let (status, kind, response) =
             match shared.answers.lock().expect("the answers").get(&method) {
                 Some(Answer::Message(encode)) => (200, content_type.clone(), encode(json)),
+                Some(Answer::Reply(reply)) => (200, content_type.clone(), reply(&request, json)),
                 Some(Answer::Refusal(status, code, message)) => (
                     *status,
                     "application/json".to_string(),

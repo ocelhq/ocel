@@ -35,11 +35,14 @@ const (
 const (
 	// RealtimeServicePublishProcedure is the fully-qualified name of the RealtimeService's Publish RPC.
 	RealtimeServicePublishProcedure = "/app.realtime.v1.RealtimeService/Publish"
+	// RealtimeServiceMintProcedure is the fully-qualified name of the RealtimeService's Mint RPC.
+	RealtimeServiceMintProcedure = "/app.realtime.v1.RealtimeService/Mint"
 )
 
 // RealtimeServiceClient is a client for the app.realtime.v1.RealtimeService service.
 type RealtimeServiceClient interface {
 	Publish(context.Context, *v1.PublishRequest) (*v1.PublishResponse, error)
+	Mint(context.Context, *v1.MintRequest) (*v1.MintResponse, error)
 }
 
 // NewRealtimeServiceClient constructs a client for the app.realtime.v1.RealtimeService service. By
@@ -59,12 +62,19 @@ func NewRealtimeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(realtimeServiceMethods.ByName("Publish")),
 			connect.WithClientOptions(opts...),
 		),
+		mint: connect.NewClient[v1.MintRequest, v1.MintResponse](
+			httpClient,
+			baseURL+RealtimeServiceMintProcedure,
+			connect.WithSchema(realtimeServiceMethods.ByName("Mint")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // realtimeServiceClient implements RealtimeServiceClient.
 type realtimeServiceClient struct {
 	publish *connect.Client[v1.PublishRequest, v1.PublishResponse]
+	mint    *connect.Client[v1.MintRequest, v1.MintResponse]
 }
 
 // Publish calls app.realtime.v1.RealtimeService.Publish.
@@ -76,9 +86,19 @@ func (c *realtimeServiceClient) Publish(ctx context.Context, req *v1.PublishRequ
 	return nil, err
 }
 
+// Mint calls app.realtime.v1.RealtimeService.Mint.
+func (c *realtimeServiceClient) Mint(ctx context.Context, req *v1.MintRequest) (*v1.MintResponse, error) {
+	response, err := c.mint.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // RealtimeServiceHandler is an implementation of the app.realtime.v1.RealtimeService service.
 type RealtimeServiceHandler interface {
 	Publish(context.Context, *v1.PublishRequest) (*v1.PublishResponse, error)
+	Mint(context.Context, *v1.MintRequest) (*v1.MintResponse, error)
 }
 
 // NewRealtimeServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -94,10 +114,18 @@ func NewRealtimeServiceHandler(svc RealtimeServiceHandler, opts ...connect.Handl
 		connect.WithSchema(realtimeServiceMethods.ByName("Publish")),
 		connect.WithHandlerOptions(opts...),
 	)
+	realtimeServiceMintHandler := connect.NewUnaryHandlerSimple(
+		RealtimeServiceMintProcedure,
+		svc.Mint,
+		connect.WithSchema(realtimeServiceMethods.ByName("Mint")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/app.realtime.v1.RealtimeService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RealtimeServicePublishProcedure:
 			realtimeServicePublishHandler.ServeHTTP(w, r)
+		case RealtimeServiceMintProcedure:
+			realtimeServiceMintHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -109,4 +137,8 @@ type UnimplementedRealtimeServiceHandler struct{}
 
 func (UnimplementedRealtimeServiceHandler) Publish(context.Context, *v1.PublishRequest) (*v1.PublishResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.realtime.v1.RealtimeService.Publish is not implemented"))
+}
+
+func (UnimplementedRealtimeServiceHandler) Mint(context.Context, *v1.MintRequest) (*v1.MintResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.realtime.v1.RealtimeService.Mint is not implemented"))
 }

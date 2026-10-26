@@ -69,12 +69,14 @@ type handler struct {
 
 // Handler serves the resource to browsers, mounted at any path: one batched POST of
 // { connect?, ops: [{ op, pattern, params, body? }] }, at most 50 ops, answered with
-// the socket url and the host its authorization names, a connect token when asked, a grant with a token for each op
-// its rule allows and a denial with a code for each it does not. A browser publish runs
-// the channel's publish rule and is published from the server, one publish at a time
-// in the order the batch lists them. It takes POST with application/json alone, serves
-// its own origin and those in [AllowedOrigins], answers Cache-Control:
-// no-store, and never sets a cookie.
+// the socket url and the host its authorization names, a connect token when asked, a
+// grant with a token for each op its rule allows and a denial with a code for each it
+// does not. The runtime the app runs on mints every token, in one call per request, and
+// names the channel each subscribe grant is for, which the browser subscribes to as
+// given. A browser publish runs the channel's publish rule and is published from the
+// server, one publish at a time in the order the batch lists them. It takes POST with
+// application/json alone, serves its own origin and those in [AllowedOrigins], answers
+// Cache-Control: no-store, and never sets a cookie.
 func (d *Realtime) Handler(opts ...HandlerOption) http.Handler {
 	h := &handler{realtime: d}
 	for _, opt := range opts {
@@ -389,41 +391,41 @@ func (d *Realtime) readOp(raw json.RawMessage) (realtimeOp, denialCode) {
 
 func (c *call) answerBatch(batch realtimeBatch) (realtimeAnswer, error) {
 	answer := realtimeAnswer{URL: resolveSocketURL(c.binding.GetUrl(), c.request), Host: c.binding.GetHost(), Grants: []grant{}, Denied: []denial{}}
-	if batch.connect {
-		token, err := c.realtime.mintToken(c.binding, c.subject, realtimeConnect, "/"+c.realtime.name)
-		if err != nil {
-			return realtimeAnswer{}, err
-		}
-		answer.Connect = &token
-	}
-
 	outcomes := make([]realtimeOutcome, len(batch.ops))
-	var publishes []int
 	ops := make([]realtimeOp, len(batch.ops))
+	var subscribes, publishes []int
 	var evaluations sync.WaitGroup
 	for i, raw := range batch.ops {
 		op, denial := c.realtime.readOp(raw)
+		ops[i] = op
 		switch {
 		case denial != "":
 			outcomes[i] = realtimeOutcome{denial: denial}
 		case op.operation == realtimePublish:
-			ops[i] = op
 			publishes = append(publishes, i)
 		default:
+			subscribes = append(subscribes, i)
 			evaluations.Go(func() { outcomes[i] = runOpCatchingPanic(func() realtimeOutcome { return c.subscribe(op) }) })
 		}
 	}
-	evaluations.Go(func() {
-		for _, i := range publishes {
-			outcomes[i] = runOpCatchingPanic(func() realtimeOutcome { return c.publish(ops[i]) })
-		}
-	})
 	evaluations.Wait()
+	for _, i := range subscribes {
+		if err := outcomes[i].err; err != nil {
+			return realtimeAnswer{}, err
+		}
+	}
+	if err := c.mintTokens(batch.connect, &answer, outcomes, subscribes); err != nil {
+		return realtimeAnswer{}, err
+	}
+	for _, i := range publishes {
+		outcomes[i] = runOpCatchingPanic(func() realtimeOutcome { return c.publish(ops[i]) })
+		if err := outcomes[i].err; err != nil {
+			return realtimeAnswer{}, err
+		}
+	}
 
 	for i, outcome := range outcomes {
 		switch {
-		case outcome.err != nil:
-			return realtimeAnswer{}, outcome.err
 		case outcome.grant != nil:
 			outcome.grant.Index = i
 			answer.Grants = append(answer.Grants, *outcome.grant)
@@ -432,6 +434,32 @@ func (c *call) answerBatch(batch realtimeBatch) (realtimeAnswer, error) {
 		}
 	}
 	return answer, nil
+}
+
+func (c *call) mintTokens(isConnect bool, answer *realtimeAnswer, outcomes []realtimeOutcome, subscribes []int) error {
+	var granted []*grant
+	var channels []string
+	for _, i := range subscribes {
+		if subscribe := outcomes[i].grant; subscribe != nil {
+			granted = append(granted, subscribe)
+			channels = append(channels, subscribe.Wire)
+		}
+	}
+	if !isConnect && len(granted) == 0 {
+		return nil
+	}
+	minted, err := c.realtime.mintTokens(c.request.Context(), c.subject, isConnect, channels)
+	if err != nil {
+		return err
+	}
+	if isConnect {
+		answer.Connect = &mintedToken{Token: minted.GetConnectToken(), ExpiresAt: minted.GetExpiresAt().GetSeconds()}
+	}
+	for i, subscribe := range granted {
+		token := minted.GetSubscribeTokens()[i]
+		subscribe.Wire, subscribe.Token = token.GetChannel(), token.GetToken()
+	}
+	return nil
 }
 
 func runOpCatchingPanic(evaluate func() realtimeOutcome) (outcome realtimeOutcome) {
@@ -463,11 +491,7 @@ func (c *call) subscribe(op realtimeOp) realtimeOutcome {
 			return realtimeOutcome{denial: denied}
 		}
 	}
-	token, err := c.realtime.mintToken(c.binding, c.subject, realtimeSubscribe, wire)
-	if err != nil {
-		return realtimeOutcome{err: err}
-	}
-	return realtimeOutcome{grant: &grant{Wire: wire, Token: token.Token}}
+	return realtimeOutcome{grant: &grant{Wire: wire}}
 }
 
 func (c *call) publish(op realtimeOp) realtimeOutcome {
@@ -503,6 +527,8 @@ func (c *call) publish(op realtimeOp) realtimeOutcome {
 	return realtimeOutcome{grant: &grant{Wire: wire}}
 }
 
+const maxSubjectBytes = 1024
+
 func readSubject(auth any) string {
 	if auth == nil {
 		return "anonymous"
@@ -519,6 +545,9 @@ func readSubject(auth any) string {
 	}
 	var id string
 	if json.Unmarshal(identified.ID, &id) == nil {
+		if id == "" || len(id) > maxSubjectBytes {
+			return "anonymous"
+		}
 		return id
 	}
 	var number json.Number

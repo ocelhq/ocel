@@ -14,7 +14,7 @@ from connectrpc.errors import ConnectError
 from connectrpc.method import IdempotencyLevel, MethodInfo
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, Endpoint, EndpointSync
 
-from .realtime_pb import PublishRequest, PublishResponse
+from .realtime_pb import MintRequest, MintResponse, PublishRequest, PublishResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -27,6 +27,9 @@ if TYPE_CHECKING:
 
 class RealtimeService(Protocol):
     async def publish(self, request: PublishRequest, ctx: RequestContext[PublishRequest, PublishResponse]) -> PublishResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def mint(self, request: MintRequest, ctx: RequestContext[MintRequest, MintResponse]) -> MintResponse:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
 
@@ -52,6 +55,16 @@ class RealtimeServiceASGIApplication(ConnectASGIApplication[RealtimeService]):
                         idempotency_level=IdempotencyLevel.UNKNOWN,
                     ),
                     function=svc.publish,
+                ),
+                "/app.realtime.v1.RealtimeService/Mint": Endpoint.unary(
+                    method=MethodInfo(
+                        name="Mint",
+                        service_name="app.realtime.v1.RealtimeService",
+                        input=MintRequest,
+                        output=MintResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.mint,
                 ),
             },
             interceptors=interceptors,
@@ -87,8 +100,31 @@ class RealtimeServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
         )
 
+    async def mint(
+        self,
+        request: MintRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> MintResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Mint",
+                service_name="app.realtime.v1.RealtimeService",
+                input=MintRequest,
+                output=MintResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
 class RealtimeServiceSync(Protocol):
     def publish(self, request: PublishRequest, ctx: RequestContext[PublishRequest, PublishResponse]) -> PublishResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def mint(self, request: MintRequest, ctx: RequestContext[MintRequest, MintResponse]) -> MintResponse:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
 
@@ -112,6 +148,16 @@ class RealtimeServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.UNKNOWN,
                     ),
                     function=service.publish,
+                ),
+                "/app.realtime.v1.RealtimeService/Mint": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="Mint",
+                        service_name="app.realtime.v1.RealtimeService",
+                        input=MintRequest,
+                        output=MintResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.mint,
                 ),
             },
             interceptors=interceptors,
@@ -141,6 +187,25 @@ class RealtimeServiceClientSync(ConnectClientSync):
                 service_name="app.realtime.v1.RealtimeService",
                 input=PublishRequest,
                 output=PublishResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def mint(
+        self,
+        request: MintRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> MintResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Mint",
+                service_name="app.realtime.v1.RealtimeService",
+                input=MintRequest,
+                output=MintResponse,
                 idempotency_level=IdempotencyLevel.UNKNOWN,
             ),
             headers=headers,

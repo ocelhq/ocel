@@ -6,7 +6,7 @@ import {
   type RealtimeRuntime,
   readRuntime,
 } from "./realtime.js";
-import { mintToken, type Token } from "./token.js";
+import type { Token } from "./token.js";
 import { encodeWireChannel, type WireRefusal } from "./wire.js";
 
 /** How a realtime handler serves browsers. */
@@ -57,8 +57,9 @@ type Outcome = { grant: Grant } | { denied: Denial };
 
 /**
  * What the realtime handler answers a batch with: the socket URL and the host its
- * authorization names, a connect token when the batch asked to connect, and for each operation, by its index `i`, either a
- * grant carrying its wire channel (and a subscribe token for a subscribe) or a denial.
+ * authorization names, a connect token when the batch asked to connect, and for each
+ * operation, by its index `i`, either a grant carrying its wire channel (and, for a
+ * subscribe, the token the ocel runtime minted and the channel it minted it for) or a denial.
  */
 export interface RealtimeBatchAnswer {
   url: string;
@@ -74,7 +75,6 @@ interface BatchRequest {
   request: Request;
   auth: unknown;
   subject: string;
-  properties: ReturnType<RealtimeRuntime["properties"]>;
 }
 
 function respond(status: number, body: unknown, headers: Record<string, string> = {}): Response {
@@ -137,9 +137,13 @@ function judgeOrigin(request: Request, allowedOrigins: readonly string[]): Origi
     : { allowed: false };
 }
 
+const maxSubjectBytes = 1024;
+
 function readSubject(auth: unknown): string {
   const id = (auth as { id?: unknown } | null | undefined)?.id;
-  return typeof id === "string" || typeof id === "number" ? String(id) : "anonymous";
+  if (typeof id === "number") return String(id);
+  if (typeof id !== "string" || id === "") return "anonymous";
+  return new TextEncoder().encode(id).length > maxSubjectBytes ? "anonymous" : id;
 }
 
 async function readBoundedText(request: Request): Promise<string | undefined> {
@@ -239,8 +243,7 @@ async function evaluateSubscribe(
     const verdict = await runRule(() => rule({ auth: batch.auth, params, request }));
     if (verdict !== "allowed") return { denied: { i, code: verdict } };
   }
-  const { token } = mintToken(batch.properties, batch.runtime, batch.subject, "subscribe", wire);
-  return { grant: { i, wire, token } };
+  return { grant: { i, wire } };
 }
 
 async function evaluatePublish(
@@ -274,16 +277,47 @@ function isOperationNamed(value: unknown, name: OperationName): boolean {
   return isPlainObject(value) && value.op === name;
 }
 
-function evaluateOperations(batch: BatchRequest, operations: unknown[]): Promise<Outcome[]> {
-  let publishing: Promise<unknown> = Promise.resolve();
-  return Promise.all(
-    operations.map((value, i) => {
-      if (!isOperationNamed(value, "publish")) return evaluateOperation(batch, value, i);
-      const outcome = publishing.then(() => evaluateOperation(batch, value, i));
-      publishing = outcome.catch(() => undefined);
-      return outcome;
-    }),
+async function mintTokens(
+  batch: BatchRequest,
+  connect: boolean,
+  subscribes: Grant[],
+): Promise<Token | undefined> {
+  if (!connect && subscribes.length === 0) return undefined;
+  const minted = await batch.runtime.mint(
+    "handler",
+    batch.subject,
+    connect,
+    subscribes.map((grant) => grant.wire),
   );
+  subscribes.forEach((grant, j) => {
+    const { token, channel } = minted.subscribeTokens[j]!;
+    grant.wire = channel;
+    grant.token = token;
+  });
+  return minted.connectToken === undefined
+    ? undefined
+    : { token: minted.connectToken, expiresAt: minted.expiresAt };
+}
+
+async function serveOperations(
+  batch: BatchRequest,
+  connect: boolean,
+  operations: unknown[],
+): Promise<{ connect: Token | undefined; outcomes: Outcome[] }> {
+  const evaluated = await Promise.all(
+    operations.map((value, i) =>
+      isOperationNamed(value, "publish") ? undefined : evaluateOperation(batch, value, i),
+    ),
+  );
+  const subscribes = evaluated.flatMap((outcome) =>
+    outcome && "grant" in outcome ? [outcome.grant] : [],
+  );
+  const connectToken = await mintTokens(batch, connect, subscribes);
+  const outcomes: Outcome[] = [];
+  for (const [i, value] of operations.entries()) {
+    outcomes.push(evaluated[i] ?? (await evaluateOperation(batch, value, i)));
+  }
+  return { connect: connectToken, outcomes };
 }
 
 async function serveBatch(
@@ -327,13 +361,9 @@ async function serveBatch(
     request,
     auth,
     subject: readSubject(auth),
-    properties,
   };
 
-  const connect = parsed.connect
-    ? mintToken(properties, runtime, batch.subject, "connect", `/${runtime.name}`)
-    : undefined;
-  const outcomes = await evaluateOperations(batch, parsed.operations);
+  const { connect, outcomes } = await serveOperations(batch, parsed.connect, parsed.operations);
   const answer: RealtimeBatchAnswer = {
     url: resolveSocketURL(properties.url, request),
     host: properties.host,

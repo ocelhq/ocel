@@ -10,21 +10,8 @@ export interface WireVector {
   error?: string;
 }
 
-export interface MintVector {
-  name: string;
-  header: Record<string, unknown>;
-  claims: Record<string, unknown>;
-  token: string;
-}
-
 export interface RealtimeVectors {
   wire: WireVector[];
-  tokens: {
-    signingKey: string;
-    verifyKey: string;
-    now: number;
-    mint: MintVector[];
-  };
 }
 
 function findRepoRoot() {
