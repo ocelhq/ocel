@@ -3,7 +3,14 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { custom, customProvider, postgres, postgresProvider } from "./resource.js";
+import {
+  custom,
+  customProvider,
+  postgres,
+  postgresProvider,
+  variables,
+  variablesProvider,
+} from "./resource.js";
 
 vi.mock("node:child_process", () => {
   const spawnSync = vi.fn();
@@ -27,24 +34,37 @@ const properties = {
 interface Built {
   name: string;
   props: Record<string, unknown>;
+  opts: Record<string, unknown> | undefined;
 }
 
 const built: Built[] = [];
 
 class FakeResource {
-  constructor(_provider: unknown, name: string, props: Record<string, unknown>) {
-    built.push({ name, props });
+  constructor(
+    _provider: unknown,
+    name: string,
+    props: Record<string, unknown>,
+    opts?: Record<string, unknown>,
+  ) {
+    built.push({ name, props, opts });
   }
 }
 
+const secretValues = new Set<unknown>();
+
 beforeEach(() => {
   built.length = 0;
+  secretValues.clear();
   run.mockReturnValue({ status: 0, stderr: "" } as never);
   vi.stubEnv("OCEL_CLI", ocelCLI);
   Object.assign(globalThis, {
     $util: {
       getStack: () => "production",
       getProject: () => "shop",
+      createUrn: (name: string, type: string, parent: { urn: string }) =>
+        `${parent.urn}$${type}::${name}`,
+      output: (value: unknown) => value,
+      isSecret: async (value: unknown) => secretValues.has(value),
       dynamic: { Resource: FakeResource },
     },
     $cli: { paths: { root } },
@@ -68,6 +88,11 @@ function latest(): Built {
   const one = built[built.length - 1];
   if (!one) throw new Error("no dynamic resource was built");
   return one;
+}
+
+function written(...keys: string[]): string {
+  const values = keys.map((key) => ({ coordinate: { key }, version: "1" }));
+  return `${JSON.stringify({ ok: true, data: { written: values } })}\n`;
 }
 
 function argv() {
@@ -96,6 +121,41 @@ describe("declaring a postgres binding", () => {
     expect(declare({ project: "/repo/other" }).props).toMatchObject({
       project: "../other",
       directory: "/repo/other",
+    });
+  });
+
+  it("owns the binding by the urn it has under the parent it hangs from", () => {
+    const parent = {
+      urn: "urn:pulumi:production::shop::pulumi:pulumi:Stack$aws:rds/instance:Instance::db",
+    };
+
+    const one = declare({ parent });
+
+    expect(one.opts).toMatchObject({ parent });
+    expect(one.props.owner).toBe(
+      "urn:pulumi:production::shop::pulumi:pulumi:Stack$aws:rds/instance:Instance::db$pulumi-nodejs:dynamic:Resource::ocel-binding-orders",
+    );
+  });
+
+  it("resolves a grant's resource from an output before it publishes", async () => {
+    const resourceArn = "arn:aws:rds-db:us-east-1:111122223333:dbuser:cluster-abc/operator";
+    postgres("orders", {
+      ...properties,
+      grants: [{ actions: ["rds-db:connect"], resources: [Promise.resolve(resourceArn)] }],
+    });
+    const one = latest();
+    const grants = one.props.grants as { actions: string[]; resources: Promise<string>[] }[];
+    const resolved = {
+      ...one.props,
+      grants: await Promise.all(
+        grants.map(async (grant) => ({ ...grant, resources: await Promise.all(grant.resources) })),
+      ),
+    };
+
+    await postgresProvider.create(resolved as never);
+
+    expect(JSON.parse(String(argv().options?.input))).toMatchObject({
+      grants: [{ actions: ["rds-db:connect"], resources: [resourceArn] }],
     });
   });
 
@@ -139,6 +199,7 @@ describe("publishing a postgres binding", () => {
       "set",
       "--owner",
       "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders",
+      "--json",
     ]);
     expect(options).toMatchObject({ cwd: root });
     expect(JSON.parse(String(options?.input))).toEqual({
@@ -304,7 +365,7 @@ describe("removing a postgres binding", () => {
 
     await postgresProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual(["bindings", "rm", "orders"]);
+    expect(argv().args).toEqual(["bindings", "rm", "orders", "--json"]);
     expect(argv().options).toMatchObject({ cwd: root });
   });
 
@@ -359,6 +420,7 @@ describe("declaring a custom binding", () => {
       "set",
       "--owner",
       "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-network",
+      "--json",
     ]);
     expect(JSON.parse(String(options?.input))).toEqual({
       binding: { name: "network", custom: network, source: "sst" },
@@ -391,6 +453,182 @@ describe("declaring a custom binding", () => {
 
     await customProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual(["bindings", "rm", "network"]);
+    expect(argv().args).toEqual(["bindings", "rm", "network", "--json"]);
+  });
+});
+
+describe("publishing variables", () => {
+  const stack = {};
+
+  const publisher = "urn:pulumi:production::shop";
+
+  beforeEach(() => {
+    run.mockReturnValue({
+      status: 0,
+      stdout: written("API_KEY", "DATABASE_URL"),
+      stderr: "",
+    } as never);
+  });
+
+  const apiKey = "k3y";
+
+  function declareVariables(
+    values: Parameters<typeof variables>[0] = {
+      API_KEY: apiKey,
+      DATABASE_URL: "postgres://db.internal:5432/app",
+    },
+    opts?: Parameters<typeof variables>[1],
+  ): Built {
+    secretValues.add(apiKey);
+    variables(values, opts);
+    return latest();
+  }
+
+  async function inputs(one: Built) {
+    return { ...one.props, secrets: await one.props.secrets } as never;
+  }
+
+  it("builds one resource per coordinate, publishing as the program it runs in", async () => {
+    const one = declareVariables();
+
+    expect(one.name).toBe("ocel-variables-production");
+    expect(await inputs(one)).toMatchObject({
+      tier: "production",
+      directory: root,
+      publisher,
+      values: { API_KEY: apiKey, DATABASE_URL: "postgres://db.internal:5432/app" },
+      secrets: ["API_KEY"],
+    });
+  });
+
+  it("publishes as the program wherever the call hangs, so moving the call keeps its values its own", async () => {
+    const parent = {
+      urn: "urn:pulumi:production::shop::pulumi:pulumi:Stack$my:component:Api::api",
+    };
+
+    expect((await inputs(declareVariables(undefined, { parent }))).publisher).toBe(publisher);
+  });
+
+  it("refuses a second call for one coordinate, which would remove what the first published", () => {
+    Object.assign(globalThis.$util as object, { runtime: { getStackResource: () => stack } });
+    declareVariables();
+
+    expect(() => declareVariables()).toThrow(/bind.variables is called twice for production/);
+  });
+
+  it("names the resource for a preview environment after it", () => {
+    expect(declareVariables(undefined, { tier: "preview", environment: "pr-12" }).name).toBe(
+      "ocel-variables-preview-pr-12",
+    );
+  });
+
+  it("keeps its digest secret, since a digest of a secret is a guess at it", () => {
+    expect(declareVariables().opts).toMatchObject({ additionalSecretOutputs: ["digest"] });
+  });
+
+  it("refuses to publish when SST supplies no way to tell a secret output", () => {
+    Reflect.deleteProperty(globalThis.$util as object, "isSecret");
+
+    expect(() => declareVariables()).toThrow(/\$util.isSecret/);
+    expect(built).toHaveLength(0);
+  });
+
+  it("runs ocel env publish in the project as this resource, marking the secret output", async () => {
+    const created = await variablesProvider.create(await inputs(declareVariables()));
+
+    const { command, args, options } = argv();
+    expect(command).toBe(ocelCLI);
+    expect(args).toEqual(["env", "publish", "--publisher", publisher, "--json"]);
+    expect(options).toMatchObject({ cwd: root });
+    expect(JSON.parse(String(options?.input))).toEqual({
+      values: [
+        { key: "API_KEY", value: apiKey, secret: true },
+        { key: "DATABASE_URL", value: "postgres://db.internal:5432/app" },
+      ],
+    });
+    expect(created.id).toBe("variables/production");
+    expect(created.outs).toMatchObject({ versions: { API_KEY: "1", DATABASE_URL: "1" } });
+    expect(JSON.stringify(created.outs)).not.toContain(apiKey);
+  });
+
+  it("names the preview environment it publishes into", async () => {
+    await variablesProvider.create(
+      await inputs(declareVariables(undefined, { tier: "preview", environment: "pr-12" })),
+    );
+
+    expect(argv().args.slice(-3)).toEqual(["--preview", "--environment", "pr-12"]);
+  });
+
+  it("publishes the whole set again when a value changes, which drops a name it stopped listing", async () => {
+    const olds = (await variablesProvider.create(await inputs(declareVariables()))).outs;
+    const news = await inputs(declareVariables({ API_KEY: apiKey }));
+    run.mockClear();
+
+    expect(await variablesProvider.diff("id", olds, news)).toMatchObject({
+      changes: true,
+      replaces: [],
+    });
+    await variablesProvider.update("id", olds, news);
+
+    expect(JSON.parse(String(argv().options?.input))).toEqual({
+      values: [{ key: "API_KEY", value: apiKey, secret: true }],
+    });
+  });
+
+  it("reports no change when nothing changed", async () => {
+    const olds = (await variablesProvider.create(await inputs(declareVariables()))).outs;
+
+    expect(
+      await variablesProvider.diff("id", olds, await inputs(declareVariables())),
+    ).toMatchObject({ changes: false, replaces: [] });
+  });
+
+  it("reports a change rather than throwing while a value is still unknown", async () => {
+    const olds = (await variablesProvider.create(await inputs(declareVariables()))).outs;
+
+    expect(
+      await variablesProvider.diff(
+        "id",
+        olds,
+        await inputs(declareVariables({ API_KEY: undefined })),
+      ),
+    ).toMatchObject({ changes: true, replaces: [] });
+  });
+
+  it("replaces when the coordinate it publishes to changed", async () => {
+    const olds = (await variablesProvider.create(await inputs(declareVariables()))).outs;
+
+    const diff = await variablesProvider.diff(
+      "id",
+      olds,
+      await inputs(declareVariables(undefined, { tier: "preview" })),
+    );
+
+    expect(diff.replaces).toContain("tier");
+    expect(diff.deleteBeforeReplace).toBe(true);
+  });
+
+  it("refuses a publish whose result names no version for a value it wrote", async () => {
+    run.mockReturnValue({ status: 0, stdout: written("API_KEY"), stderr: "" } as never);
+
+    await expect(variablesProvider.create(await inputs(declareVariables()))).rejects.toThrow(
+      /DATABASE_URL/,
+    );
+  });
+
+  it("removes, when it is deleted, only the values still at the versions it wrote", async () => {
+    const created = await variablesProvider.create(await inputs(declareVariables()));
+    run.mockClear();
+
+    await variablesProvider.delete("id", created.outs);
+
+    expect(argv().args).toEqual(["env", "unpublish", "--publisher", publisher, "--json"]);
+    expect(argv().options).toMatchObject({ cwd: root });
+    expect(JSON.parse(String(argv().options?.input))).toEqual({
+      values: [
+        { key: "API_KEY", version: "1" },
+        { key: "DATABASE_URL", version: "1" },
+      ],
+    });
   });
 });

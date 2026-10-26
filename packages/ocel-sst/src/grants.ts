@@ -1,7 +1,20 @@
+import type { Input } from "./input.js";
+
 /** A provider-native permission a deploy gives the apps bound to a binding, published beside its properties. */
 export interface Grant {
   actions: string[];
   resources: string[];
+  label?: string;
+}
+
+/**
+ * A grant as it is written in an SST app, where the resource a permission
+ * names is an output of the resource being bound and is resolved before the
+ * record is published.
+ */
+export interface GrantInput {
+  actions: string[];
+  resources: Input<string>[];
   label?: string;
 }
 

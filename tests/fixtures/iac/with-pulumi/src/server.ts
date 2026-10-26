@@ -32,6 +32,13 @@ app.get("/api/binding", (_req, res) => {
   });
 });
 
+app.get("/api/variables", (_req, res) => {
+  res.json({
+    databasePort: env.DATABASE_PORT,
+    apiKeyIsPublished: env.API_KEY.startsWith("ak-"),
+  });
+});
+
 app.get("/api/binding/query", async (_req, res) => {
   await orders.query("select 1");
   res.json({ ok: true });

@@ -20,6 +20,7 @@ import {
   preBuildPrerenderChecks,
   prerenderBucketChecks,
   prerenderChecks,
+  publishedVariablesCheck,
   realtimeChecks,
   staticChecks,
   svelteKitChecks,
@@ -78,7 +79,12 @@ const SVELTEKIT_CHECKS = [
   ...nodeRuntimeChecks,
   ...svelteKitChecks,
 ];
-const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
+const BINDING_CHECKS = [
+  ...healthChecks,
+  ...staticChecks,
+  ...bindingChecks,
+  publishedVariablesCheck,
+];
 const REALTIME_CHECKS = [...healthChecks, ...realtimeChecks];
 const WIRE_CHECKS = tasksWireChecks({ task: "verbatim", topic: "notices", consumer: "notice-log" });
 const SDK_GO_CHECKS = [

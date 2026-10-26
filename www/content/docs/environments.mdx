@@ -111,6 +111,44 @@ Every value is encrypted in ocel's store. The class decides where it may go from
   secret should fail loudly. A page prerendered from a secret keeps the old value until the next
   deploy.
 
+### Values your infrastructure publishes
+
+A value your own infrastructure makes, such as an API key or a URL, can be published straight
+into a tier's store by the program that makes it, with `bind.variables` from
+[`@ocel/pulumi`](https://www.npmjs.com/package/@ocel/pulumi) or
+[`@ocel/sst`](https://www.npmjs.com/package/@ocel/sst):
+
+```ts title="infra/index.ts"
+import * as random from "@pulumi/random";
+import { bind } from "@ocel/pulumi";
+
+const apiKey = new random.RandomPassword("api-key", { length: 32, special: false });
+
+bind.variables({ API_KEY: apiKey.result });
+```
+
+The app declares `API_KEY` as it declares any variable, and reads it the same way. Each
+`pulumi up` or `sst deploy` runs [`ocel env publish`](/docs/cli/env/publish) with every value
+the call lists:
+
+- A key is checked as `ocel env set` checks one: a key no app declares is refused, and so is one
+  declared only in a folder, since a published value is set at the project root.
+- A value given as a secret output, such as a Pulumi `secret` or an `sst.Secret`'s `value`, is
+  published as a secret and must be declared `secret`; a `plain` or `sensitive` variable would
+  carry it into the release. A variable declared `secret` must be published as a secret, since the
+  program's state keeps any other value unencrypted. `ocel deploy` checks the pairing again, in
+  case the declaration changed after the program last ran.
+- The store records the program that published each value: `urn:pulumi:<stack>::<project>` for
+  a Pulumi program, `urn:pulumi:<stage>::<app>` for an SST app. `ocel env ls` shows the
+  publisher as its source, and `ocel env get` names it.
+- Only the publisher changes its values: `ocel env set` and `ocel env rm` refuse them, naming the
+  publisher, since its next run would write over a hand edit. Change the value in the program.
+- Each run publishes the whole set again, so a key the call stops listing is removed. Removing
+  the call removes only the values it wrote and no call has written since, so moving the call
+  under a component, or out of one, keeps them.
+- One call publishes for one tier, or one preview environment, and works before the project's
+  first deploy. A second call in the program for the same tier or environment is refused.
+
 ### Variables in config
 
 `{ "$env": "NAME" }` in [your config](/docs/configuration#bindings) is a variable too, set the

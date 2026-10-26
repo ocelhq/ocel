@@ -1,10 +1,21 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { createUrn, dynamic, type Input, type Resource } from "@pulumi/pulumi";
-import { checkTarget, runBindings, type Target } from "./cli.js";
+import {
+  createUrn,
+  dynamic,
+  getProject,
+  getStack,
+  type Input,
+  isSecret,
+  output,
+  type Resource,
+  runtime,
+} from "@pulumi/pulumi";
+import { checkTarget, runOcel, type Target } from "./cli.js";
 import { publishedCustom } from "./custom.js";
 import type { GrantInput } from "./grants.js";
 import { type DescribedPostgres, publishedPostgres } from "./postgres.js";
+import { publishedValues, publishedVersions, writtenVersions } from "./variables.js";
 
 /**
  * A postgres resource described from what a Pulumi resource exposes.
@@ -82,8 +93,8 @@ function bindingProvider<I extends BindingInputs>(
   });
 
   const set = (inputs: I) =>
-    runBindings(
-      ["set", "--owner", inputs.owner],
+    runOcel(
+      ["bindings", "set", "--owner", inputs.owner],
       inputs,
       inputs.directory,
       `${JSON.stringify(recordFor(inputs))}\n`,
@@ -110,7 +121,7 @@ function bindingProvider<I extends BindingInputs>(
     },
 
     async delete(_id: string, props: BindingState) {
-      runBindings(["rm", props.name], props, path.resolve(process.cwd(), props.project));
+      runOcel(["bindings", "rm", props.name], props, path.resolve(process.cwd(), props.project));
     },
   };
 }
@@ -164,14 +175,164 @@ export function custom(name: string, properties: CustomProperties, opts?: BindOp
   declare(customProvider, name, opts, { properties });
 }
 
+/**
+ * The variables a program publishes, by the name an app declares each under:
+ * text as it is, and a number, boolean, list or object as JSON. Each value is
+ * an `Input`, resolved before it is published.
+ */
+export type VariableValues = Record<string, Input<unknown>>;
+
+interface VariablesInputs extends Target {
+  directory: string;
+  publisher: string;
+  values: Record<string, unknown>;
+  secrets: string[];
+}
+
+interface VariablesState extends Target {
+  publisher: string;
+  versions: Record<string, string>;
+  digest: string;
+}
+
+const publishedRecord = (inputs: VariablesInputs) => publishedValues(inputs.values, inputs.secrets);
+
+const variablesDigest = (inputs: VariablesInputs) =>
+  crypto
+    .createHash("sha256")
+    .update(JSON.stringify(publishedRecord(inputs)))
+    .digest("hex");
+
+const publishVariables = (inputs: VariablesInputs): VariablesState => {
+  const record = publishedRecord(inputs);
+  const result = runOcel(
+    ["env", "publish", "--publisher", inputs.publisher],
+    inputs,
+    inputs.directory,
+    `${JSON.stringify(record)}\n`,
+  );
+  return {
+    publisher: inputs.publisher,
+    project: inputs.project,
+    tier: inputs.tier,
+    environment: inputs.environment,
+    versions: writtenVersions(record, result),
+    digest: variablesDigest(inputs),
+  };
+};
+
+const variablesIdentity = ["publisher", "project", "tier", "environment"] as const;
+
+export const variablesProvider = {
+  async create(inputs: VariablesInputs) {
+    return {
+      id: ["variables", inputs.tier, inputs.environment].filter(Boolean).join("/"),
+      outs: publishVariables(inputs),
+    };
+  },
+
+  async diff(_id: string, olds: VariablesState, news: VariablesInputs) {
+    const replaces = variablesIdentity.filter((field) => olds[field] !== news[field]);
+    const resolved = Object.values(news.values).every((value) => value !== undefined);
+    return {
+      changes: replaces.length > 0 || !resolved || olds.digest !== variablesDigest(news),
+      replaces,
+      deleteBeforeReplace: replaces.length > 0,
+    };
+  },
+
+  async update(_id: string, _olds: VariablesState, news: VariablesInputs) {
+    return { outs: publishVariables(news) };
+  },
+
+  async delete(_id: string, props: VariablesState) {
+    runOcel(
+      ["env", "unpublish", "--publisher", props.publisher],
+      props,
+      path.resolve(process.cwd(), props.project),
+      `${JSON.stringify(publishedVersions(props.versions))}\n`,
+    );
+  },
+};
+
+/**
+ * Publishes values from your own infrastructure as variables an app reads
+ * through `ocel/env`, as a side effect of this update.
+ *
+ * Each key is the name an app declares — `bind.variables({ API_KEY: key.result })`
+ * here, `defineEnv({ API_KEY: { class: "secret" } })` in the app — and the
+ * declaration is checked as `ocel env set` checks it. A value given as a secret
+ * output, such as `config.requireSecret(…)` or `pulumi.secret(…)`, is published
+ * as a secret and must be declared `secret`; any other value must not be.
+ *
+ * The values belong to this program, by its stack and project, wherever the call
+ * hangs: `ocel env set` and `ocel env rm` refuse them, the next update rewrites
+ * them, a name the call stops listing is removed, and removing the call removes
+ * the values it wrote unless another call has written them since. Call it once
+ * per coordinate; a second call for one is refused. `tier`
+ * defaults to production, `environment` names one preview environment, and
+ * `project` is the directory containing `ocel.json`, which is the directory
+ * Pulumi runs the program from unless it is given.
+ */
+export function variables(values: VariableValues, opts?: BindOptions): void {
+  const { target, directory } = targetFor(opts);
+  refuseSecondCall(`bind.variables is called twice for ${describeTarget(target)}`, target);
+  const logical = ["ocel-variables", target.tier, target.environment].filter(Boolean).join("-");
+  new VariablesResource(
+    variablesProvider,
+    logical,
+    {
+      ...target,
+      directory,
+      publisher: programID(),
+      values,
+      secrets: secretKeys(values),
+    },
+    { parent: opts?.parent, additionalSecretOutputs: ["digest"] },
+  );
+}
+
+async function secretKeys(values: VariableValues): Promise<string[]> {
+  const marked = await Promise.all(
+    Object.entries(values).map(async ([key, value]) =>
+      (await isSecret(output(value))) ? key : undefined,
+    ),
+  );
+  return marked.filter((key) => key !== undefined).sort();
+}
+
+class VariablesResource extends dynamic.Resource {}
+
+function programID(): string {
+  return `urn:pulumi:${getStack()}::${getProject()}`;
+}
+
+const calls = new WeakMap<object, Set<string>>();
+
+function refuseSecondCall(refusal: string, target: Target, name = ""): void {
+  const stack = runtime.getStackResource();
+  if (!stack) {
+    return;
+  }
+  const made = calls.get(stack) ?? new Set<string>();
+  calls.set(stack, made);
+  const call = JSON.stringify([target.project, target.tier, target.environment ?? "", name]);
+  if (made.has(call)) {
+    throw new Error(
+      `${refusal}: every call publishes as this program, so the second would replace what the first published. Make one call for it`,
+    );
+  }
+  made.add(call);
+}
+
+function describeTarget(target: Target): string {
+  const at = target.environment ? `${target.tier} environment ${target.environment}` : target.tier;
+  return `${at} of ocel project ${target.project}`;
+}
+
 const dynamicType = "pulumi-nodejs:dynamic:Resource";
 
-function declare(
-  provider: dynamic.ResourceProvider,
-  name: string,
-  opts: BindOptions | undefined,
-  described: object,
-): void {
+function targetFor(opts: BindOptions | undefined): { target: Target; directory: string } {
   const directory = path.resolve(opts?.project ?? process.cwd());
   const target: Target = {
     project: path.relative(process.cwd(), directory) || ".",
@@ -179,6 +340,16 @@ function declare(
     environment: opts?.environment,
   };
   checkTarget(target);
+  return { target, directory };
+}
+
+function declare(
+  provider: dynamic.ResourceProvider,
+  name: string,
+  opts: BindOptions | undefined,
+  described: object,
+): void {
+  const { target, directory } = targetFor(opts);
 
   const logical = `ocel-binding-${name}`;
   new BindingResource(

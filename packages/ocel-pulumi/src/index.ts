@@ -1,4 +1,4 @@
-import { custom, postgres } from "./resource.js";
+import { custom, postgres, variables } from "./resource.js";
 
 export type { CustomBinding } from "./custom.js";
 export type { Grant, GrantInput } from "./grants.js";
@@ -8,7 +8,9 @@ export type {
   BindOptions,
   CustomProperties,
   DescribedPostgresResource,
+  VariableValues,
 } from "./resource.js";
+export type { PublishedValue, PublishedValues } from "./variables.js";
 
 /**
  * The ocel bindings this Pulumi program publishes, one call per binding.
@@ -25,5 +27,8 @@ export type {
  * `custom` is the exception an app never sees: it publishes values ocel neither
  * types nor delivers, read only by a transform module through
  * `bindings.custom.<name>.<property>`.
+ *
+ * `variables` publishes values straight into ocel's variable store, where an
+ * app reads each as the variable it declares through `ocel/env`.
  */
-export const bind = { postgres, custom };
+export const bind = { postgres, custom, variables };

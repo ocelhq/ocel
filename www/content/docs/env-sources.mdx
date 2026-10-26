@@ -68,6 +68,11 @@ values, and ocel keeps a copy it refreshes.
 - A value the tier held before switching, and the source lacks, is removed at the first sync.
   The deploy then names it as missing until you set it in the source.
 - Credentials, and values that [reference](/docs/cli/env) another project's, stay ocel's own.
+- A value your infrastructure [published](/docs/environments#values-your-infrastructure-publishes)
+  stays its publisher's. A sync never writes over it, and reports the key refused until the
+  publisher stops publishing it, and the removal at the first sync leaves it alone. Publishing a
+  tier-wide value into a tier a source owns is refused, naming the source; a value for one
+  preview environment may still be published.
 - A value set for one preview stays ocel's own and overrides the source for that preview:
 
 ```bash

@@ -1,7 +1,8 @@
 # @ocel/sst
 
 Publish resources your SST app provisions as ocel bindings, so an ocel app can reach
-them by name.
+them by name, and the values it makes as ocel variables, so an app reads them as the
+variables it declares.
 
 ## Install
 
@@ -91,6 +92,7 @@ the apps bound to `orders`, and an app is handed the postgres fields alone.
 | `tier`        | `"production"`       | The ocel tier the binding is published to.                     |
 | `environment` | none                 | One preview environment; `tier: "preview"` only. Left off, the binding serves every preview that names it under `bindings`. |
 | `project`     | the SST config root  | The directory containing `ocel.config.ts` or `ocel.json`.                      |
+| `parent`      | none                 | The resource in the SST app this binding hangs under.        |
 
 One call is one resource. Remove the call and the published binding goes with it.
 A name belongs to whoever published it, so two stacks publishing `orders` into
@@ -131,6 +133,54 @@ is the same as for `bind.postgres`.
 
 No app reads a custom binding, so it takes no `grants`: nothing would attach them.
 Naming one in `bindings` is refused for the same reason.
+
+## `bind.variables(values, opts?)`
+
+Publishes values your SST app makes straight into ocel's variable store, where an app
+reads each as an ordinary declared variable:
+
+```ts
+const apiKey = new sst.Secret("ApiKey");
+const orders = new sst.aws.Postgres("Orders", { vpc });
+
+bind.variables({
+  API_KEY: apiKey.value,
+  DATABASE_URL: $interpolate`postgres://${orders.host}:${orders.port}/${orders.database}`,
+});
+```
+
+The app declares them as it declares any variable:
+
+```ts
+import { defineEnv } from "ocel/env";
+
+export const env = defineEnv({
+  API_KEY: { class: "secret" },
+  DATABASE_URL: { class: "plain" },
+});
+```
+
+Each key is a variable an app in the project declares, checked as `ocel env set` checks one:
+a key nothing declares is refused at `sst deploy`. Text is stored as it is; a number,
+boolean, list or object is stored as JSON.
+
+A value given as a secret output — an `sst.Secret`'s `value` above, or `$util.secret(…)` —
+is published as a secret, found with `$util.isSecret`, and the app must declare it
+`secret`: a `plain` or `sensitive` variable would carry it into the release. A value that
+is not a secret output must not be declared `secret`, since the stack's state keeps it
+unencrypted; wrap it in `$util.secret(…)` to publish it as one. `ocel deploy` checks the
+pairing again, in case the declaration changed after `sst deploy`.
+
+The values belong to the app and stage that published them: `ocel env ls` shows
+`urn:pulumi:<stage>::<app>` as their source, and `ocel env set` and `ocel env rm` refuse
+them, naming it: change a value in `sst.config.ts`. Each deploy publishes the whole set
+again, so a key the call stops listing is removed. Removing the call removes every value it
+wrote, unless another call has written that value since, so moving the call under another
+parent keeps the values. Values go to the project root, never to a folder.
+
+`opts` is the same as for `bind.postgres`, without a name: one call publishes everything for
+one tier, or one preview environment, so make one call per coordinate; a second call for
+one is refused.
 
 ## Types
 

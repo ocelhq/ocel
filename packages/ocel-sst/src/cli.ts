@@ -11,50 +11,49 @@ export interface Target {
   environment?: string;
 }
 
-export function runBindings(
+export function runOcel(
   args: string[],
   target: Target,
   directory: string,
   input?: string,
-): void {
+): unknown {
   checkTarget(target);
   const [command, prefix] = ocelCommand(directory);
   const result = childProcess.spawnSync(
     command,
-    [...prefix, "bindings", ...args, ...flagsFor(target)],
-    {
-      cwd: directory,
-      input,
-      encoding: "utf8",
-    },
+    [...prefix, ...args, "--json", ...flagsFor(target)],
+    { cwd: directory, input, encoding: "utf8" },
   );
   if (result.error) {
     throw result.error;
   }
+  const stdout = result.stdout ?? "";
+  const stderr = result.stderr ?? "";
   if (result.status !== 0) {
-    throw new Error(refusal(result.stderr ?? "", result.status));
+    throw new Error(refusal(args, stdout, stderr, result.status));
   }
+  return jsonLines(stdout).find((line) => line.ok === true)?.data;
 }
 
 export function checkTarget(target: Target): void {
   if (!target.project) {
     throw new Error(
-      "an ocel project is required: it is the directory containing ocel.json, whose apps consume this binding, and it is never read from an SST stage or stack name",
+      "an ocel project is required: it is the directory containing ocel.json, whose apps read what this program publishes, and it is never read from an SST stage or stack name",
     );
   }
   if (target.tier !== "production" && target.tier !== "preview") {
     throw new Error(
-      `tier ${JSON.stringify(target.tier ?? null)} is neither "production" nor "preview": a binding is published to an ocel tier, never to a stage or stack name`,
+      `tier ${JSON.stringify(target.tier ?? null)} is neither "production" nor "preview": a binding or variable is published to an ocel tier, never to a stage or stack name`,
     );
   }
   if (target.environment === tierWideMarker) {
     throw new Error(
-      `${tierWideMarker} is reserved: leave the environment off to publish to the whole tier, which serves every preview that binds the name in its ocel config as "bindings": { <type>: { <name>: "@<name>" } }`,
+      `${tierWideMarker} is reserved: leave the environment off to publish to the whole tier, which every preview environment reads unless something is published for it by name`,
     );
   }
   if (target.environment && target.tier !== "preview") {
     throw new Error(
-      `environment ${target.environment} is named alongside tier ${target.tier}: a binding is published to a tier and, in preview, to one preview environment`,
+      `environment ${target.environment} is named alongside tier ${target.tier}: a binding or variable is published to a tier and, in preview, to one preview environment`,
     );
   }
 }
@@ -69,10 +68,36 @@ function flagsFor(target: Target): string[] {
 
 const tierWideMarker = "*";
 
-function refusal(stderr: string, status: number | null): string {
+interface ReportedLine {
+  ok?: boolean;
+  data?: unknown;
+  error?: { message?: string };
+  summary?: { error?: { message?: string } };
+}
+
+function jsonLines(text: string): ReportedLine[] {
+  const out: ReportedLine[] = [];
+  for (const line of text.split("\n")) {
+    try {
+      const parsed: unknown = JSON.parse(line);
+      if (parsed && typeof parsed === "object") {
+        out.push(parsed as ReportedLine);
+      }
+    } catch {}
+  }
+  return out;
+}
+
+function refusal(args: string[], stdout: string, stderr: string, status: number | null): string {
+  const reported = [...jsonLines(stdout), ...jsonLines(stderr)]
+    .map((line) => line.error?.message ?? line.summary?.error?.message)
+    .find((message) => message);
+  if (reported) {
+    return reported;
+  }
   const said = stderr.trim();
   if (!said) {
-    return `ocel bindings exited ${status ?? "on a signal"} without saying why`;
+    return `ocel ${args.slice(0, 2).join(" ")} exited ${status ?? "on a signal"} without saying why`;
   }
   return said;
 }
@@ -91,7 +116,7 @@ function ocelCommand(project: string): [string, string[]] {
     return [process.execPath, [bin]];
   }
   throw new Error(
-    `@ocel/sst publishes bindings with the ocel CLI and found none: set $OCEL_CLI to its path, put ocel on PATH, or add @ocel/cli to the dependencies of ${project}`,
+    `@ocel/sst publishes bindings and variables with the ocel CLI and found none: set $OCEL_CLI to its path, put ocel on PATH, or add @ocel/cli to the dependencies of ${project}`,
   );
 }
 

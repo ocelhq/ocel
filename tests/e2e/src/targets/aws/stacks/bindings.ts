@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { bindingChecks } from "../../../checks";
+import { bindingChecks, publishedVariablesCheck } from "../../../checks";
 import { journeyConfigIn } from "../../../config";
 import { ocel, spawnOcel, workTree } from "../../../ocel";
 import { progress } from "../../../progress";
@@ -13,6 +13,7 @@ import type { AwsWorld } from "../world";
 const BINDING_NAME = "orders";
 const CUSTOM_BINDING_NAME = "network";
 const BINDING_NAMES = [BINDING_NAME, CUSTOM_BINDING_NAME] as const;
+const PUBLISHED_VARIABLES = ["API_KEY", "DATABASE_PORT"] as const;
 
 const NOTHING_PUBLISHED = "nothing has published a record under that name";
 const NOTHING_AT_ALL = "Nothing at all is published to";
@@ -168,6 +169,46 @@ export abstract class AwsStack implements ExternalStack {
             assert.ok(listed[0]!.source.length > 0, `${name} is listed with no source`);
             assert.ok(listed[0]!.owner.length > 0, `${name} is listed with no owner`);
           }
+        },
+      },
+      {
+        title:
+          "ocel env ls names the publisher of each published variable, and ocel env set refuses one naming it",
+        run: async (cell) => {
+          const dir = await workTree(cell, "aws");
+          const env = {
+            ...process.env,
+            OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)),
+          };
+          const result = await ocel(dir, ["env", "ls", "--json"], env);
+          const values = (
+            JSON.parse(result.stdout) as {
+              data: { values: Array<{ coordinate: { key: string }; publisher?: string }> };
+            }
+          ).data.values;
+          const publishers = new Set<string>();
+          for (const key of PUBLISHED_VARIABLES) {
+            const listed = values.find((row) => row.coordinate.key === key);
+            assert.ok(listed, `ocel env ls lists no ${key}, which the IaC program published`);
+            assert.match(
+              listed!.publisher ?? "",
+              /^urn:pulumi:[^:]+::[^:]+$/,
+              `${key} is listed as published by ${listed!.publisher ?? "nobody"}, not the program that published it`,
+            );
+            publishers.add(listed!.publisher!);
+          }
+          assert.equal(
+            publishers.size,
+            1,
+            `the variables name ${publishers.size} publishers, want 1`,
+          );
+          const refused = await spawnOcel(dir, ["env", "set", "DATABASE_PORT=6543"], env);
+          assert.notEqual(refused.code, 0, "ocel env set wrote over a published variable");
+          assert.ok(
+            refused.stderr.includes([...publishers][0]!) ||
+              refused.stdout.includes([...publishers][0]!),
+            `ocel env set's refusal names no publisher: ${refused.stderr}`,
+          );
         },
       },
       {
@@ -347,13 +388,13 @@ export abstract class AwsStack implements ExternalStack {
         },
       },
       {
-        title: "both binding routes answer",
+        title: "the binding routes and the published variables answer",
         run: async (_cell, serving) => {
           assert.ok(
             serving,
             "a check while serving ran with no deployment to reach the binding routes on",
           );
-          for (const check of bindingChecks) {
+          for (const check of [...bindingChecks, publishedVariablesCheck]) {
             await check.run(serving!);
           }
         },

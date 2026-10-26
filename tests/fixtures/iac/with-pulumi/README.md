@@ -13,9 +13,15 @@ three files that make it work.
 pnpm install
 pulumi config set aws:region us-east-1
 pulumi config set --secret dbPassword "$(openssl rand -hex 16)"
+pulumi config set --secret apiKey "ak-$(openssl rand -hex 16)"
 pulumi up
 ocel deploy
 ```
+
+`pulumi up` also publishes two variables with `bind.variables`: `API_KEY`, a secret output, and
+`DATABASE_PORT`, the database's port, stored as JSON. The app declares both in its discovery
+folder's `variables.ts` and reads them as it reads any variable; `ocel env ls` names the Pulumi
+resource that wrote them, and `ocel env set` refuses to change one.
 
 That order is a contract, not a convention. Ocel resolves the published records while it
 renders, so `ocel deploy` before `pulumi up` — or after `pulumi destroy` — refuses before it
