@@ -11,9 +11,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/lease"
+	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -185,7 +188,7 @@ func (i *infraProvisioning) markShipped() {
 	i.shipped = true
 }
 
-func (i *infraProvisioning) release(ctx context.Context, slug string) error {
+func (i *infraProvisioning) release(ctx context.Context, r *run.Run, slug string) error {
 	i.stopRenewing()
 	if i.shipped {
 		return nil
@@ -193,10 +196,26 @@ func (i *infraProvisioning) release(ctx context.Context, slug string) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abandonTimeout)
 	defer cancel()
 	if i.attempted {
-		_ = i.providerProcess.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
-			_, err := client.AbandonDeploy(ctx, &contractv1.AbandonDeployRequest{Slug: slug, Environment: i.env, LeaseToken: i.leaseToken})
-			return err
+		_ = releaseIn(r, progressv1.Phase_PHASE_PROVISION, slug, progress.Releasing.Title("this deploy's lease on "+place(i.env)), func() error {
+			return i.providerProcess.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+				_, err := client.AbandonDeploy(ctx, &contractv1.AbandonDeployRequest{Slug: slug, Environment: i.env, LeaseToken: i.leaseToken})
+				return err
+			})
 		})
 	}
-	return forgetUnclaimedPreviewAlias(ctx, i.providerProcess, slug, i.env, i.mintedAlias)
+	if i.mintedAlias == "" {
+		return nil
+	}
+	return releaseIn(r, progressv1.Phase_PHASE_CHECK, slug, progress.Releasing.Title("the unclaimed preview URLs of "+place(i.env)), func() error {
+		return forgetUnclaimedPreviewAlias(ctx, i.providerProcess, slug, i.env, i.mintedAlias)
+	})
+}
+
+func releaseIn(r *run.Run, phase progressv1.Phase, slug string, title progress.Title, release func() error) error {
+	root := r.Phase(phase)
+	releasing := root.Child(slug, title)
+	err := release()
+	releasing.End(err)
+	root.End(nil)
+	return err
 }
