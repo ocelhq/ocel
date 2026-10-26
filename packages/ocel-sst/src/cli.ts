@@ -1,4 +1,5 @@
 import childProcess from "node:child_process";
+import fs from "node:fs";
 import nodeModule from "node:module";
 import path from "node:path";
 
@@ -17,10 +18,10 @@ export function runBindings(
   input?: string,
 ): void {
   checkTarget(target);
-  const [runtime, entry] = ocelCommand(directory);
+  const [command, prefix] = ocelCommand(directory);
   const result = childProcess.spawnSync(
-    runtime,
-    [entry, "bindings", ...args, ...flagsFor(target)],
+    command,
+    [...prefix, "bindings", ...args, ...flagsFor(target)],
     {
       cwd: directory,
       input,
@@ -76,16 +77,56 @@ function refusal(stderr: string, status: number | null): string {
   return said;
 }
 
-function ocelCommand(project: string): [string, string] {
-  const require = nodeModule.createRequire(path.join(project, "sst.config.ts"));
+function ocelCommand(project: string): [string, string[]] {
+  const named = process.env.OCEL_CLI;
+  if (named) {
+    return [named, []];
+  }
+  const found = onPath(process.platform === "win32" ? "ocel.exe" : "ocel");
+  if (found) {
+    return [found, []];
+  }
+  const bin = packageBin(project);
+  if (bin) {
+    return [process.execPath, [bin]];
+  }
+  throw new Error(
+    `@ocel/sst publishes bindings with the ocel CLI and found none: set $OCEL_CLI to its path, put ocel on PATH, or add @ocel/cli to the dependencies of ${project}`,
+  );
+}
+
+function onPath(file: string): string | undefined {
+  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+    if (!dir) continue;
+    const candidate = path.join(dir, file);
+    if (isExecutable(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function isExecutable(file: string): boolean {
+  try {
+    if (!fs.statSync(file).isFile()) return false;
+    fs.accessSync(file, process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function packageBin(project: string): string | undefined {
+  const require = nodeModule.createRequire(path.join(project, "ocel.json"));
   let manifest: string;
   try {
-    manifest = require.resolve("ocel/package.json");
-  } catch (cause) {
-    throw new Error(
-      `@ocel/sst runs the ocel CLI in ${project}, and ocel is not installed there. Add ocel to that project's dependencies.`,
-      { cause },
-    );
+    manifest = require.resolve("@ocel/cli/package.json");
+  } catch {
+    return undefined;
   }
-  return [process.execPath, path.join(path.dirname(manifest), "bin", "run.js")];
+  const { bin } = JSON.parse(fs.readFileSync(manifest, "utf8")) as {
+    bin?: string | Record<string, string>;
+  };
+  const entry = typeof bin === "string" ? bin : bin?.ocel;
+  return entry ? path.join(path.dirname(manifest), entry) : undefined;
 }

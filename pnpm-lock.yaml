@@ -734,15 +734,15 @@ importers:
 
   packages/ocel-pulumi:
     devDependencies:
+      '@ocel/cli':
+        specifier: workspace:^
+        version: link:../cli
       '@pulumi/pulumi':
         specifier: ~3.252.0
         version: 3.252.0(ts-node@10.9.2(@types/node@20.19.43)(typescript@5.9.3))(typescript@5.9.3)
       '@types/node':
         specifier: ^20
         version: 20.19.43
-      ocel:
-        specifier: workspace:^
-        version: link:../ocel
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -755,12 +755,12 @@ importers:
 
   packages/ocel-sst:
     devDependencies:
+      '@ocel/cli':
+        specifier: workspace:^
+        version: link:../cli
       '@types/node':
         specifier: ^20
         version: 20.19.43
-      ocel:
-        specifier: workspace:^
-        version: link:../ocel
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

@@ -9,8 +9,17 @@ reach them by name.
 pnpm add @ocel/pulumi
 ```
 
-`@pulumi/pulumi` and `ocel` are peer dependencies. `ocel` is resolved from the ocel
-project — the directory containing `ocel.config.ts` or `ocel.json` — not from the Pulumi program.
+`@pulumi/pulumi` is a peer dependency. Each binding is published by running the ocel CLI
+in the ocel project, the directory containing `ocel.config.ts` or `ocel.json`, so the CLI
+that deploys the project is the one that publishes to it. The first of these is run:
+
+1. `$OCEL_CLI`, the path to an `ocel` binary.
+2. `ocel` on `PATH`, as `curl -fsSL https://ocel.dev/install.sh | sh` or a CI setup step puts it.
+3. The `ocel` bin of `@ocel/cli` resolved from the ocel project, when the project installs it
+   with npm.
+
+A project with no `node_modules`, such as one whose apps are all Go, needs only the first or the
+second. With none of the three, `pulumi up` fails naming them.
 
 ## Use
 
