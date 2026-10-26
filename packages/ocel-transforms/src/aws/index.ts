@@ -84,6 +84,13 @@ export interface AwsResourceArgs {
    * ones the network carries provisions it again with its own.
    */
   network: {
+    /**
+     * The tier's VPC. Its `cidrBlock` is the block ocel carves the six subnets
+     * from: a `/16` to a `/24` inside 10.0.0.0/8, 172.16.0.0/12 or
+     * 192.168.0.0/16. Left off, the tier takes the first `/16` from 10.16.0.0
+     * to 10.255.0.0 that no VPC in the region overlaps. It is fixed once the
+     * VPC exists: a deploy that asks for another block is refused.
+     */
     vpc: ec2.VpcArgs;
     internetGateway: ec2.InternetGatewayArgs;
     publicSubnet: ec2.SubnetArgs;
@@ -268,7 +275,6 @@ export const awsOwnedFields = {
   },
   network: {
     vpc: [
-      "cidrBlock",
       "enableDnsHostnames",
       "enableDnsSupport",
       "instanceTenancy",

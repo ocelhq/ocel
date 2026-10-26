@@ -146,12 +146,51 @@ func TestTheFirstConsumerOfATiersNetworkProvisionsItAndTheLastToLeaveTakesItDown
 	}
 }
 
-func TestAClaimWhoseConfigAsksForAnotherBlockThanTheNetworkHoldsIsRefused(t *testing.T) {
+func blockPatchedTo(cidr string) *fixedPass {
+	return &fixedPass{result: transform.Result{Patches: transform.Patches{"vpc": {"cidrBlock": cidr}}}}
+}
+
+func TestANetworkIsRaisedOnTheBlockATransformSets(t *testing.T) {
+	t.Parallel()
+
+	cfg := routedConfig(t, cloudfront.Kind)
+	cfg.Transform = blockPatchedTo("172.20.0.0/16")
+	stacks, _, _ := networkStacks(t, cfg)
+
+	said := &recordingProgress{}
+	if _, err := stacks.Network().Claim(context.Background(), consumerRef("shop"), said); err != nil {
+		t.Fatalf("Claim() = %v", err)
+	}
+	if !strings.Contains(strings.Join(said.reported(), "\n"), "a VPC of 172.20.0.0/16") {
+		t.Errorf("progress = %v, want the VPC raised on the block the transform sets", said.reported())
+	}
+}
+
+func TestABlockOutsideWhatOcelCanCarveIsRefusedBeforeAnythingIsProvisioned(t *testing.T) {
+	t.Parallel()
+
+	for _, cidr := range []string{"10.50.0.0/25", "10.50.0.0/12", "100.64.0.0/16", "not-a-block"} {
+		cfg := routedConfig(t, cloudfront.Kind)
+		cfg.Transform = blockPatchedTo(cidr)
+		stacks, engine, _ := networkStacks(t, cfg)
+
+		_, err := stacks.Network().Claim(context.Background(), consumerRef("shop"), progress.Discard())
+		var refused refusal.Refusal
+		if !errors.As(err, &refused) || !strings.Contains(refused.Message, cidr) {
+			t.Errorf("Claim() with %s = %v, want a refusal naming the block", cidr, err)
+		}
+		if ups, _ := engine.networkRuns(); ups != 0 {
+			t.Errorf("ran the network %d times for %s, want nothing provisioned", ups, cidr)
+		}
+	}
+}
+
+func TestAClaimWhoseTransformAsksForAnotherBlockThanTheNetworkHoldsIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	cfg := routedConfig(t, cloudfront.Kind)
-	cfg.NetworkCIDR = "10.50.0.0/16"
+	cfg.Transform = blockPatchedTo("10.50.0.0/16")
 	stacks, _, _ := networkStacks(t, cfg)
 	if _, err := stacks.Network().Claim(ctx, consumerRef("shop"), progress.Discard()); err != nil {
 		t.Fatalf("Claim() = %v", err)
@@ -159,8 +198,8 @@ func TestAClaimWhoseConfigAsksForAnotherBlockThanTheNetworkHoldsIsRefused(t *tes
 
 	_, err := stacks.Network().Claim(ctx, consumerRef("admin"), progress.Discard())
 	var refused refusal.Refusal
-	if !errors.As(err, &refused) || !strings.Contains(refused.Message, network.DefaultCIDR("ocel", environment.TierProduction)) || !strings.Contains(refused.Message, "network.production.cidr") {
-		t.Fatalf("Claim() = %v, want a refusal naming the block the VPC holds and the option asking for another", err)
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, network.DefaultCIDR("ocel", environment.TierProduction)) || !strings.Contains(refused.Message, "vpc.cidrBlock") {
+		t.Fatalf("Claim() = %v, want a refusal naming the block the VPC holds and the patch asking for another", err)
 	}
 }
 
@@ -191,7 +230,7 @@ func TestANetworkWhoseBlockOverlapsAVPCInTheRegionIsRefusedBeforeAnythingIsProvi
 	t.Parallel()
 
 	cfg := routedConfig(t, cloudfront.Kind)
-	cfg.NetworkCIDR = "10.20.0.0/16"
+	cfg.Transform = blockPatchedTo("10.20.0.0/16")
 	cfg.Network = networkRegion{vpcs: []ec2types.Vpc{{VpcId: aws.String("vpc-peered"), CidrBlock: aws.String("10.20.4.0/24")}}}
 	stacks, engine, store := networkStacks(t, cfg)
 
@@ -289,6 +328,49 @@ func TestThePlanOfTheFirstDatabaseInATierShowsTheNetworkItRaises(t *testing.T) {
 	}
 	if ups, _ := engine.networkRuns(); ups != 0 {
 		t.Errorf("planning raised the network %d times, want never", ups)
+	}
+}
+
+func TestThePlanOfTheFirstDatabaseInATierRefusesABlockOcelCannotCarveTheNetworkFrom(t *testing.T) {
+	t.Parallel()
+
+	engine := &mockedEngine{outputs: provisionedOutputs()}
+	cfg := conformingConfig(&fakeArtifactStore{})
+	cfg.Transform = blockPatchedTo("10.50.0.0/12")
+	_, err := stacksWith(cfg, engine).Plan(context.Background(), provider.StackSpec{
+		Ref:       provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
+		Kind:      provider.StackInfra,
+		Recorded:  true,
+		Resources: []provider.Resource{{Name: "c-postgres", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}}},
+	}, nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "vpc.cidrBlock") || !strings.Contains(refused.Message, "10.50.0.0/12") {
+		t.Fatalf("Plan() = %v, want a refusal naming vpc.cidrBlock and the block: the deploy would raise the network on it", err)
+	}
+}
+
+func TestThePlanOfADatabaseWhoseTransformAsksForAnotherBlockThanTheNetworkHoldsIsRefused(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	engine := &mockedEngine{outputs: provisionedOutputs()}
+	engine.outputs["network"] = patchedNetworkOutputs("10.20.0.0/16", "")["network"]
+	cfg := conformingConfig(&fakeArtifactStore{})
+	cfg.Transform = blockPatchedTo("10.50.0.0/16")
+	stacks := stacksWith(cfg, engine)
+	if _, err := stacks.Network().ClaimWithoutRepatch(ctx, consumerRef("blog"), progress.Discard()); err != nil {
+		t.Fatalf("ClaimWithoutRepatch(blog) = %v", err)
+	}
+
+	_, err := stacks.Plan(ctx, provider.StackSpec{
+		Ref:       provider.StackRef{Project: "conformance", Tier: environment.TierProduction, Name: naming.InfraStack("conformance")},
+		Kind:      provider.StackInfra,
+		Recorded:  true,
+		Resources: []provider.Resource{{Name: "c-postgres", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}}},
+	}, nil)
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "10.20.0.0/16") || !strings.Contains(refused.Message, "vpc.cidrBlock") {
+		t.Fatalf("Plan() = %v, want a refusal naming the block the VPC holds and the patch asking for another", err)
 	}
 }
 
@@ -422,6 +504,18 @@ func TestThePlanOfTheFirstContainerAppInATierShowsTheNetworkBeforeTheContainerIn
 	}
 	if len(plan.Groups) < 2 || plan.Groups[0].Part != network.Part || plan.Groups[1].Name != containers.StackRef(environment.TierProduction).Name.String() {
 		t.Fatalf("plan groups = %+v, want the network part and then the container infrastructure it runs in", plan.Groups)
+	}
+}
+
+func TestThePlanOfTheFirstContainerAppInATierRefusesABlockOcelCannotCarveTheNetworkFrom(t *testing.T) {
+	t.Parallel()
+
+	cfg, spec := containerPartSpec(t, "v1.0.0")
+	cfg.Transform = blockPatchedTo("not-a-block")
+	_, err := stacksWith(cfg, &mockedEngine{outputs: containerPartOutputs()}).Plan(context.Background(), spec, progress.Discard())
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "vpc.cidrBlock") || !strings.Contains(refused.Message, "not-a-block") {
+		t.Fatalf("Plan() = %v, want a refusal naming vpc.cidrBlock and the block: the deploy would raise the network on it", err)
 	}
 }
 

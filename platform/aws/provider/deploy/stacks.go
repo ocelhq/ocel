@@ -148,7 +148,6 @@ func (r *Stacks) openShared(ctx context.Context, ref provider.StackRef) (shareds
 		EC2:            owner.cfg.Network,
 		Quotas:         owner.cfg.Quotas,
 		AccountID:      owner.cfg.AccountID,
-		NetworkCIDR:    owner.cfg.NetworkCIDR,
 		VPCOrigins:     owner.cfg.VPCOrigins,
 		AppBoundaryARN: owner.cfg.AppBoundaryARN,
 		AppRolePath:    owner.cfg.AppRolePath,
@@ -540,7 +539,11 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress pr
 		previewed.Groups = append(append(raised, functionnetwork.NewChangeGroup(spec.Ref.Tier)), previewed.Groups...)
 	}
 	if prepared.infra != nil && prepared.infra.networkPending {
-		previewed.Groups = append([]provider.ChangeGroup{network.NewChangeGroup(r.cfg.Namespace, spec.Ref.Tier)}, previewed.Groups...)
+		raised, err := r.network.PlanRaise(ctx, r.cfg.Namespace, spec.Ref.Tier)
+		if err != nil {
+			return provider.Plan{}, err
+		}
+		previewed.Groups = append([]provider.ChangeGroup{raised}, previewed.Groups...)
 	}
 	repatched, err := r.planRepatchesOf(ctx, spec.Ref.Tier, prepared)
 	if err != nil {

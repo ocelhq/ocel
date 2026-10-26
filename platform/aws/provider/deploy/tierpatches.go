@@ -17,10 +17,14 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
-const transformTypeNetwork = "network"
+const (
+	transformTypeNetwork = "network"
+	vpcSurface           = "vpc"
+	vpcBlockField        = "cidrBlock"
+)
 
 type tierPatches struct {
-	network         component.Patches
+	network         network.Patches
 	functionNetwork component.Patches
 }
 
@@ -42,7 +46,7 @@ func (r *Stacks) tierPatchesFor(ctx context.Context, tier environment.Tier) (tie
 	return evaluated, nil
 }
 
-func (r *Stacks) networkPatches(ctx context.Context, tier environment.Tier) (component.Patches, error) {
+func (r *Stacks) networkPatches(ctx context.Context, tier environment.Tier) (network.Patches, error) {
 	evaluated, err := r.tierPatchesFor(ctx, tier)
 	return evaluated.network, err
 }
@@ -75,7 +79,10 @@ func evaluateTierPatches(ctx context.Context, pass transform.Pass, namespace str
 	}); err != nil {
 		return tierPatches{}, err
 	}
-	result := results[0]
+	result, cidr, err := takeNetworkBlock(tier, results[0])
+	if err != nil {
+		return tierPatches{}, err
+	}
 	parts := map[string]map[string][]component.ResourceRef{
 		"network":          network.ResourceNames(namespace, tier),
 		"function network": functionnetwork.ResourceNames(namespace, tier),
@@ -90,8 +97,8 @@ func evaluateTierPatches(ctx context.Context, pass transform.Pass, namespace str
 		return tierPatches{}, refusal.Refuse(refusal.CodeInvalid,
 			"a transform patches the %s tier's network's %s, and ocel constructs no such resource for it", tier, patched)
 	}
-	var evaluated tierPatches
-	if evaluated.network, err = patchesOver(key, parts["network"], result); err != nil {
+	evaluated := tierPatches{network: network.Patches{CIDR: cidr}}
+	if evaluated.network.Patches, err = patchesOver(key, parts["network"], result); err != nil {
 		return tierPatches{}, err
 	}
 	if evaluated.functionNetwork, err = patchesOver(key, parts["function network"], result); err != nil {
@@ -120,4 +127,26 @@ func patchesOver(key resourceKey, names map[string][]component.ResourceRef, resu
 	}
 	sum := sha256.Sum256(encoded)
 	return component.Patches{Digest: hex.EncodeToString(sum[:]), Tags: subset.Tags, Install: indexed.install}, nil
+}
+
+func takeNetworkBlock(tier environment.Tier, result transform.Result) (transform.Result, string, error) {
+	vpc := result.Patches[vpcSurface]
+	block, set := vpc[vpcBlockField]
+	if !set {
+		return result, "", nil
+	}
+	cidr, isString := block.(string)
+	if !isString {
+		return transform.Result{}, "", refusal.Refuse(refusal.CodeInvalid,
+			"a transform sets the %s tier's network's %s.%s to %v, and it takes a CIDR block such as 10.64.0.0/16",
+			tier, vpcSurface, vpcBlockField, block)
+	}
+	if _, err := network.NewLayout(cidr); err != nil {
+		return transform.Result{}, "", refusal.Refuse(refusal.CodeInvalid,
+			"a transform sets the %s tier's network's %s.%s: %v", tier, vpcSurface, vpcBlockField, err)
+	}
+	rest := maps.Clone(result.Patches)
+	rest[vpcSurface] = maps.Clone(vpc)
+	delete(rest[vpcSurface], vpcBlockField)
+	return transform.Result{Patches: rest, Tags: result.Tags}, cidr, nil
 }

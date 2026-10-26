@@ -128,7 +128,7 @@ export default defineTransform(({ bindings }) => ({
 
 On AWS, `network` patches the tier's [VPC](/docs/providers/aws#the-network) and the function
 network's NAT gateways. A subnet or route table key reaches that kind in every zone, so
-`privateSubnet` patches both private subnets. Its block, zones, routes, endpoints' route tables
+`privateSubnet` patches both private subnets. Its subnets' blocks, zones, routes, endpoints' route tables
 and the NAT gateways' placement stay ocel's, and so do the VPC's DNS settings and tenancy, a
 subnet's IPv4 addressing and a NAT gateway's public connectivity: the databases, caches and
 functions of every project in the tier depend on them, and changing some would replace the VPC
@@ -159,6 +159,27 @@ The network belongs to the tier, not to a project:
   transforms patch nothing in it leaves it as it is.
 - A changed patch takes effect at the next deploy of anything that runs in the network.
 - A patch cannot be filled from `bindings`: no project's records reach a tier's network.
+
+`vpc.cidrBlock` is the VPC's private block, a `/16` to a `/24` inside `10.0.0.0/8`,
+`172.16.0.0/12` or `192.168.0.0/16`, which ocel splits into the six subnets. A deploy's plan
+refuses any other block, or one with host bits set such as `10.64.1.0/16`, and once the VPC
+exists, any block but the one it holds. Left off, the tier takes the first free `/16`, as
+[the network](/docs/providers/aws#the-network) describes:
+
+```ts title="transforms/network.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform({
+  aws: { network: { vpc: { cidrBlock: "10.64.0.0/16" } } },
+});
+```
+
+The block is fixed once the VPC exists: a deploy that asks for another is refused, since a new
+block means a new VPC and everything in it. The block is not one of the patches a deploy
+compares, so a project whose transforms name another block than the VPC holds is refused rather
+than provisioning the network again, and one whose transforms name none leaves it as it is.
+Before it creates the VPC, a deploy refuses a block that overlaps a VPC already in the region,
+naming that VPC.
 
 ## On a VPS
 

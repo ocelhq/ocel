@@ -259,7 +259,6 @@ describe("evaluate", () => {
   );
 
   it.each([
-    ["vpc", "cidrBlock"],
     ["privateSubnet", "cidrBlock"],
     ["publicSubnet", "mapPublicIpOnLaunch"],
     ["isolatedRouteTable", "routes"],
@@ -304,6 +303,20 @@ describe("evaluate", () => {
       evaluate(request({ env: "", resources: [{ type: "network", name: "production" }] }), modules)
         .resources[0]?.patches,
     ).toEqual({ vpc: { enableNetworkAddressUsageMetrics: true } });
+  });
+
+  it("sets the block of the tier's network, which ocel carves its subnets from", () => {
+    const modules = [
+      module(
+        "./network.transform.ts",
+        defineTransform({ aws: { network: { vpc: { cidrBlock: "172.20.0.0/16" } } } }),
+      ),
+    ];
+
+    expect(
+      evaluate(request({ env: "", resources: [{ type: "network", name: "production" }] }), modules)
+        .resources[0]?.patches,
+    ).toEqual({ vpc: { cidrBlock: "172.20.0.0/16" } });
   });
 
   it("returns a patch for every resource the aws provider constructs", () => {

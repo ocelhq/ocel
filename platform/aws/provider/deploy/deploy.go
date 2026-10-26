@@ -47,8 +47,7 @@ type Config struct {
 	Network   component.NetworkAPI
 	Quotas    component.QuotasAPI
 
-	AccountID   string
-	NetworkCIDR string
+	AccountID string
 
 	VPCOrigins awsports.VPCOriginsAPI
 
