@@ -18,6 +18,8 @@ func (s Status) Description() provider.BootstrapDescription {
 		Present:    s.Present,
 		Stacks:     s.Stacks,
 		Unfinished: s.Unfinished,
+		Identity:   s.Identity,
+		Trust:      s.Trust,
 	}
 }
 

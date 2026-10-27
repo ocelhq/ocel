@@ -136,6 +136,14 @@ func (n Namespace) bootstrapRolePathFor(tier environment.Tier) string {
 	return n.rolePathFor(tier, "bootstrap")
 }
 
+func (n Namespace) DeployRoleName(tier environment.Tier) string {
+	return n.name(tier, "deploy")
+}
+
+func (n Namespace) deployPolicyStem(tier environment.Tier) string {
+	return n.name(tier, "deploy", "role")
+}
+
 func (n Namespace) AppRolePathFor(tier environment.Tier) string {
 	return n.rolePathFor(tier, "app")
 }

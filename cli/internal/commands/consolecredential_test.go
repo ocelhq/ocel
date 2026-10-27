@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/consolecredential"
 	"github.com/ocelhq/ocel/cli/internal/githubactions/githubactionstest"
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
@@ -38,6 +39,9 @@ func newConsoleCredentialRun(t *testing.T) consoleCredentialRun {
 	project.Provider.WithFacts(func(facts *provider.Facts) {
 		facts.WebIdentity = &provider.WebIdentityFacts{CredentialEnvVars: []string{fakeCredentialEnvVar}}
 	})
+	bootstrap := project.Provider.FakeBootstrap()
+	bootstrap.Offers(append(bootstrap.Parts(), provider.Part{Name: provider.ConsoleTrustPart, Summary: "the console's trust"})...)
+	clitest.Bootstrap(t, project.Provider, environment.TierProduction, provider.ConsoleTrustPart)
 	served := clitest.ServeConsole(t)
 	served.Credential = &consolev1.IssueCredentialResponse{
 		Token:       "console-token",
@@ -160,5 +164,17 @@ func TestARunNamingItsOwnCredentialAndAConsoleProjectIsRefusedRatherThanGuessed(
 
 	if err == nil || !strings.Contains(err.Error(), fakeCredentialEnvVar) {
 		t.Fatalf("OpenProvider err = %v, want a refusal naming %s", err, fakeCredentialEnvVar)
+	}
+}
+
+func TestAPipelineIsRefusedADeployIdentityAnOlderOcelMade(t *testing.T) {
+	run := newConsoleCredentialRun(t)
+	run.project.Provider.FakeBootstrap().MarkStale(provider.ConsoleTrustPart)
+
+	_, closeProvider, err := run.open(t)
+	defer closeProvider()
+
+	if err == nil || !strings.Contains(err.Error(), "the production deploy identity predates this ocel; an admin runs `ocel bootstrap production`") {
+		t.Fatalf("OpenProvider err = %v, want the stale deploy identity refused", err)
 	}
 }

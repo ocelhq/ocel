@@ -94,19 +94,11 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 }
 
 func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environment.Tier) (edge.CredentialDocument, error) {
-	var (
-		document string
-		err      error
-	)
-	switch purpose {
-	case edge.PurposeBootstrap:
-		document, err = BootstrapCredentialPermissions(c.Namespace, tier, c.VariablesKey)
-	case edge.PurposeDeploy:
-		document, err = DeployCredentialPermissions(c.Namespace, tier, c.VariablesKey)
-	default:
-		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
-			"credential permissions are rendered for bootstrap or deploy credentials; this request named neither")
+	policies, err := CredentialPolicies(c.Namespace, purpose, tier, c.VariablesKey)
+	if err != nil {
+		return edge.CredentialDocument{}, err
 	}
+	document, err := iam.RenderManagedPolicies(string(purpose), policies)
 	if err != nil {
 		return edge.CredentialDocument{}, err
 	}
@@ -146,6 +138,7 @@ func bootstrapStatements(s iam.Scope) []iam.Statement {
 		deployStatements(s),
 		account.ProvisionCredential(s),
 		account.EdgePrincipalCredential(s),
+		account.ConsoleTrustCredential(s),
 		account.RuntimeLayerReclaimCredential(s),
 		tiercloudfront.ReclaimCredential(s),
 		notfoundapi.ReclaimCredential(s),
@@ -165,26 +158,22 @@ func scopeOf(ns account.Namespace, tier environment.Tier, broughtKey string) iam
 	return s
 }
 
-func DeployCredentialPermissions(ns account.Namespace, tier environment.Tier, broughtKey string) (string, error) {
+func CredentialPolicies(ns account.Namespace, purpose edge.CredentialPurpose, tier environment.Tier, broughtKey string) ([]iam.ManagedPolicy, error) {
+	var statements func(iam.Scope) []iam.Statement
+	switch purpose {
+	case edge.PurposeBootstrap:
+		statements = bootstrapStatements
+	case edge.PurposeDeploy:
+		statements = deployStatements
+	default:
+		return nil, refusal.Refuse(refusal.CodeInvalid,
+			"credential permissions are rendered for bootstrap or deploy credentials; this request named neither")
+	}
 	if err := refuseUnservedTier(tier); err != nil {
-		return "", err
+		return nil, err
 	}
-	return credentialPolicies(ns, "deploy", tier, deployStatements(scopeOf(ns, tier, broughtKey)))
-}
-
-func BootstrapCredentialPermissions(ns account.Namespace, tier environment.Tier, broughtKey string) (string, error) {
-	if err := refuseUnservedTier(tier); err != nil {
-		return "", err
-	}
-	return credentialPolicies(ns, "bootstrap", tier, bootstrapStatements(scopeOf(ns, tier, broughtKey)))
-}
-
-func credentialPolicies(ns account.Namespace, purpose string, tier environment.Tier, grants []iam.Statement) (string, error) {
-	policies, err := iam.Split(purpose, func(i int) string { return naming.OcelName(string(ns), tier, purpose, strconv.Itoa(i)) }, grants)
-	if err != nil {
-		return "", err
-	}
-	return iam.RenderManagedPolicies(purpose, policies)
+	named := func(i int) string { return naming.OcelName(string(ns), tier, string(purpose), strconv.Itoa(i)) }
+	return iam.Split(string(purpose), named, statements(scopeOf(ns, tier, broughtKey)))
 }
 
 func refuseCallerIdentity(err error) error {

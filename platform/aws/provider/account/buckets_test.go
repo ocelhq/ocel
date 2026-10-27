@@ -255,7 +255,7 @@ func TestReadingABootstrapWhoseBucketsShareNoRandomTagIsRefusedRatherThanPlannin
 	stacks.outputs[coreStackName][outputStateBucket] = "ocel-prod-state"
 	stacks.mu.Unlock()
 
-	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction)
+	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		groups, _ := PlanRemove(ctx, stacks, newFakeLayers(), newFakeRecords().in, read)

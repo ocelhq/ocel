@@ -12,7 +12,7 @@ import (
 )
 
 func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {
-	read, err := account.Read(ctx, b.CFN, b.Namespace, tier)
+	read, err := b.readAccount(ctx, tier)
 	if err != nil {
 		return provider.Plan{}, err
 	}

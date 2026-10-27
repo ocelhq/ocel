@@ -80,10 +80,12 @@ func apisFronting(stacks *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectSto
 
 func apisAcross(stacks *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore, front edge.Edge, registry *fakeEdges) APIs {
 	stacks.users = iamc
-	return APIs{CFN: stacks, SSM: ssmc, IAM: iamc, Layers: newFakeLayers(), Store: store, Records: newFakeRecords().in, Edge: front, Edges: registry}
+	return APIs{CFN: stacks, SSM: ssmc, IAM: iamc, Layers: newFakeLayers(), Store: store, Records: newFakeRecords().in, Edge: front, Edges: registry, IdentityProviders: newFakeIdentityProviders()}
 }
 
-func everything() Request { return Request{Parts: partNames()} }
+func everything() Request {
+	return Request{Parts: partNames(), Trust: fixtureTrust(), DeployPolicies: fixtureDeploy(environment.TierProduction)}
+}
 
 func edgeStack(tier environment.Tier) string {
 	return defaultNamespace.PartStackName(CloudflareEdgePart, tier)
@@ -366,11 +368,11 @@ func TestRun(t *testing.T) {
 		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		dropped := Request{Remove: []string{provider.VariablesKeyPart, CloudflareEdgePart}}
+		dropped := Request{Remove: []string{provider.VariablesKeyPart, CloudflareEdgePart, provider.ConsoleTrustPart}}
 		if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, dropped, nil); err != nil {
 			t.Fatalf("Run without the parts: %v", err)
 		}
-		want := []string{keyStack(environment.TierProduction), edgeStack(environment.TierProduction)}
+		want := []string{keyStack(environment.TierProduction), edgeStack(environment.TierProduction), defaultNamespace.PartStackName(provider.ConsoleTrustPart, environment.TierProduction)}
 		if !slices.Equal(stacks.deleted, want) {
 			t.Errorf("deleted %v, want %v", stacks.deleted, want)
 		}

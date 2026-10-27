@@ -118,3 +118,14 @@ func TestRealtimeIsServedRatherThanRefusedAtPreflight(t *testing.T) {
 	}
 	conformance.RunRealtime(t, p.Facts())
 }
+
+func TestTheProviderOffersTheConsolesTrustAsABootstrapPart(t *testing.T) {
+	t.Parallel()
+
+	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	boot, err := p.Bootstrap(edges.DefaultKind)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	conformance.RunConsoleTrust(t, p.Facts(), boot.Parts())
+}

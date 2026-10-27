@@ -8,6 +8,7 @@ import (
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/cloudresourcemanager/v1"
+	crm "google.golang.org/api/cloudresourcemanager/v3"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
 	run "google.golang.org/api/run/v2"
@@ -327,4 +328,47 @@ func BucketPolicy(c *Clients, bucket string) policy.Resource {
 		}
 		return FromProtoBindings(held.Bindings), write, nil
 	}}
+}
+
+func TagValuePolicy(c *Clients, value, named string) policy.Resource {
+	return policy.Resource{Name: "the tag value " + named, Read: func(ctx context.Context) ([]policy.Binding, policy.Write, error) {
+		service, err := c.GlobalTagService()
+		if err != nil {
+			return nil, nil, err
+		}
+		held, err := googleretry.Attempted(ctx, service.TagValues.GetIamPolicy(value, &crm.GetIamPolicyRequest{
+			Options: &crm.GetPolicyOptions{RequestedPolicyVersion: policy.ConditionalVersion},
+		}).Context(ctx).Do)
+		if err != nil {
+			return nil, nil, absentWhenAnswered(err)
+		}
+		write := func(ctx context.Context, bindings []policy.Binding) error {
+			held.Bindings = make([]*crm.Binding, 0, len(bindings))
+			for _, binding := range bindings {
+				held.Bindings = append(held.Bindings, &crm.Binding{Role: binding.Role, Members: binding.Members, Condition: tagValueExpr(binding.Condition)})
+			}
+			held.Version = conditionalVersion(bindings, held.Version)
+			_, err := googleretry.Attempted(ctx, service.TagValues.SetIamPolicy(value, &crm.SetIamPolicyRequest{Policy: held}).Context(ctx).Do)
+			return err
+		}
+		bindings := make([]policy.Binding, 0, len(held.Bindings))
+		for _, binding := range held.Bindings {
+			bindings = append(bindings, policy.Binding{Role: binding.Role, Members: binding.Members, Condition: tagValueCondition(binding.Condition)})
+		}
+		return bindings, write, nil
+	}}
+}
+
+func tagValueCondition(condition *crm.Expr) *policy.Condition {
+	if condition == nil {
+		return nil
+	}
+	return &policy.Condition{Title: condition.Title, Description: condition.Description, Expression: condition.Expression}
+}
+
+func tagValueExpr(condition *policy.Condition) *crm.Expr {
+	if condition == nil {
+		return nil
+	}
+	return &crm.Expr{Title: condition.Title, Description: condition.Description, Expression: condition.Expression}
 }

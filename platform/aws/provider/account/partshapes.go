@@ -29,6 +29,9 @@ func ShapeParts(ns Namespace, tier environment.Tier, parts []string, options ...
 		if !known {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "this provider has no bootstrap part named %q", name)
 		}
+		if f.free {
+			continue
+		}
 		stack, err := f.template(in)
 		if err != nil {
 			return nil, err

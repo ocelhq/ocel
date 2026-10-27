@@ -6,6 +6,5 @@ import (
 )
 
 func init() {
-	account.DeployCredentialPermissions = control.DeployCredentialPermissions
-	account.BootstrapCredentialPermissions = control.BootstrapCredentialPermissions
+	account.CredentialPolicies = control.CredentialPolicies
 }

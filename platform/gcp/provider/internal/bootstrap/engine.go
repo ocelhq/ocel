@@ -80,23 +80,37 @@ func (b Engine) Described(ctx context.Context, read Survey) (provider.BootstrapD
 		if err != nil {
 			return provider.BootstrapDescription{}, err
 		}
+		current, err := b.partCurrent(read, part, installed)
+		if err != nil {
+			return provider.BootstrapDescription{}, err
+		}
 		stacks = append(stacks, provider.BootstrapStack{
 			Name:          read.Project + "/" + string(read.Tier) + "/" + part,
 			Part:          part,
 			Present:       installed,
-			DigestCurrent: installed,
+			DigestCurrent: current,
 			WrittenBy:     read.Stamp.Writer,
 		})
 	}
 	if read.ResourcesRead {
 		b.Surveyed.Remember(read)
 	}
-	return provider.BootstrapDescription{
+	described := provider.BootstrapDescription{
 		Tier:       read.Tier,
 		Present:    read.Present,
 		Unfinished: read.Present && read.Stamp.State != StateComplete,
 		Stacks:     stacks,
-	}, nil
+	}
+	if read.Stamp.Trust != nil && slices.ContainsFunc(stacks, func(stack provider.BootstrapStack) bool {
+		return stack.Part == provider.ConsoleTrustPart && stack.Present
+	}) {
+		identity, err := b.ConsoleTrustIdentity(ctx, read.Tier, *read.Stamp.Trust)
+		if err != nil {
+			return provider.BootstrapDescription{}, err
+		}
+		described.Identity, described.Trust = identity, read.Stamp.Trust
+	}
+	return described, nil
 }
 
 func (b Engine) surveyFor(ctx context.Context, tier environment.Tier) (Survey, error) {
@@ -159,6 +173,9 @@ func (b Engine) Plan(ctx context.Context, req provider.BootstrapRequest) (provid
 		return provider.Plan{}, err
 	}
 	groups := bootstrapplan.ChangeGroups(current, CredentialParts(), req)
+	if err := b.planConsoleTrustGroup(ctx, read, req, groups); err != nil {
+		return provider.Plan{}, err
+	}
 	groups[0].Changes = Planned(read, StackResources(read.Names, read.Tier, read.Emulated))
 
 	params := provider.ChangeGroup{
@@ -263,6 +280,7 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 		Writer: req.WrittenBy.String(),
 		Digest: DigestOf(read.Names.Namespace(), items),
 		Parts:  InstalledParts(CredentialParts(), read.Stamp.Parts, req),
+		Trust:  InstalledTrust(read, req),
 	}
 	generation, err := b.stampWith(ctx, read, written, read.Generation)
 	if err != nil {
@@ -281,10 +299,15 @@ func (b Engine) Apply(ctx context.Context, req provider.BootstrapRequest, progre
 			return err
 		}
 	}
-	if err := b.raiseParts(ctx, req, progress); err != nil {
+	if err := b.raiseParts(ctx, read, req, progress); err != nil {
 		return err
 	}
 	written.State = StateComplete
+	if written.Trust != nil {
+		if written.TrustDigest, err = ConsoleTrustDigest(read.Names, read.Region, req.Tier, *written.Trust); err != nil {
+			return err
+		}
+	}
 	if _, err := b.stampWith(ctx, read, written, generation); err != nil {
 		return err
 	}
@@ -480,6 +503,7 @@ func (b Engine) PlanRemove(ctx context.Context, tier environment.Tier) (provider
 	if err != nil {
 		return provider.Plan{}, err
 	}
+	fronts = append(fronts, b.plannedConsoleTrustTeardown(read)...)
 	return provider.Plan{Groups: slices.Concat(parts, bootstrapplan.PrefixWithVendor(gcloud.Vendor, append([]provider.ChangeGroup{stack, params}, fronts...)))}, nil
 }
 
@@ -546,7 +570,7 @@ func (b Engine) Remove(ctx context.Context, tier environment.Tier, progress prog
 			return err
 		}
 	}
-	if err := b.tearParts(ctx, tier, read.Stamp.Parts); err != nil {
+	if err := b.tearParts(ctx, read, progress); err != nil {
 		return err
 	}
 	if err := b.RemoveParts(ctx, tier, progress); err != nil {

@@ -338,3 +338,47 @@ func RuntimeLayerReclaimCredential(s iam.Scope) []iam.Statement {
 		},
 	}
 }
+
+func ConsoleTrustCredential(s iam.Scope) []iam.Statement {
+	return []iam.Statement{
+		{
+			Actions: []string{
+				"iam:CreatePolicy",
+				"iam:CreatePolicyVersion",
+				"iam:DeletePolicy",
+				"iam:DeletePolicyVersion",
+				"iam:GetPolicy",
+				"iam:GetPolicyVersion",
+				"iam:ListEntitiesForPolicy",
+				"iam:ListPolicyTags",
+				"iam:ListPolicyVersions",
+				"iam:TagPolicy",
+				"iam:UntagPolicy",
+			},
+			Resources: []string{s.DeployPolicies},
+		},
+		{
+			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
+			Resources: s.BootstrapRoles,
+			Condition: iam.MergeConditions(s.TaggedForItsTier(), map[string]any{"ArnLike": map[string]any{"iam:PolicyARN": s.DeployPolicies}}),
+		},
+		{
+			Actions:   []string{"iam:GetOpenIDConnectProvider"},
+			Resources: []string{identityProviderARNPrefix + "*"},
+		},
+		{
+			Actions:   []string{"iam:CreateOpenIDConnectProvider", "iam:TagOpenIDConnectProvider"},
+			Resources: []string{identityProviderARNPrefix + "*"},
+			Condition: map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + identityProviderComponentTagKey: identityProviderComponentTagValue}},
+		},
+		{
+			Actions: []string{
+				"iam:AddClientIDToOpenIDConnectProvider",
+				"iam:DeleteOpenIDConnectProvider",
+				"iam:RemoveClientIDFromOpenIDConnectProvider",
+			},
+			Resources: []string{identityProviderARNPrefix + "*"},
+			Condition: map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + identityProviderComponentTagKey: identityProviderComponentTagValue}},
+		},
+	}
+}

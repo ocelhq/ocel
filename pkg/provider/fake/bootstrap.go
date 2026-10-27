@@ -35,6 +35,7 @@ type Bootstrap struct {
 	removal     *provider.Plan
 	described   int
 	parts       map[environment.Tier][]provider.BootstrapPart
+	trusts      map[environment.Tier]provider.WebIdentityTrust
 }
 
 func NewBootstrap() *Bootstrap {
@@ -44,6 +45,7 @@ func NewBootstrap() *Bootstrap {
 		unreadable: map[string]string{},
 		writer:     "1.0.0",
 		parts:      map[environment.Tier][]provider.BootstrapPart{},
+		trusts:     map[environment.Tier]provider.WebIdentityTrust{},
 	}
 }
 
@@ -169,6 +171,12 @@ func (b *Bootstrap) Describe(_ context.Context, tier environment.Tier) (provider
 	for _, part := range parts {
 		described.Stacks = append(described.Stacks, b.stack(tier, part))
 	}
+	if slices.Contains(parts, provider.ConsoleTrustPart) {
+		described.Identity = &provider.TierIdentity{IdentityProvider: "fake-issuer", Principal: "fake-deploy-" + string(tier)}
+		if trust, recorded := b.trusts[tier]; recorded {
+			described.Trust = &trust
+		}
+	}
 	return described, nil
 }
 
@@ -261,6 +269,12 @@ func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, prog
 		return b.refusal
 	}
 	b.requests = append(b.requests, req)
+	if req.Trust != nil {
+		b.trusts[req.Tier] = *req.Trust
+	}
+	if slices.Contains(req.Remove, provider.ConsoleTrustPart) {
+		delete(b.trusts, req.Tier)
+	}
 	installed := slices.Clone(b.applied[req.Tier])
 	for _, part := range req.Parts {
 		if !slices.Contains(installed, part) {

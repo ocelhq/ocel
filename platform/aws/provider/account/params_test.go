@@ -235,7 +235,7 @@ func TestPlanParameterRemovalReadsTheAccountInBatches(t *testing.T) {
 	ssmc, iamc := installedParams(t)
 	ssmc.batches = 0
 
-	group, err := PlanParameterRemoval(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, defaultNamespace, environment.TierProduction)
+	group, err := PlanParameterRemoval(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc, Stacks: newFakeCFN()}, defaultNamespace, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("PlanParameterRemoval: %v", err)
 	}

@@ -23,13 +23,24 @@ var substitutedName = regexp.MustCompile(`\$\{([A-Za-z0-9:.]+)\}`)
 
 var pseudoParameters = []string{"AWS::AccountId", "AWS::Region", "AWS::Partition", "AWS::URLSuffix", "AWS::StackName", "AWS::NoValue"}
 
+func substitutedNames(sub any) []string {
+	text, ok := sub.(string)
+	if list, isList := sub.([]any); isList && len(list) > 0 {
+		text, ok = list[0].(string)
+	}
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, m := range substitutedName.FindAllStringSubmatch(text, -1) {
+		out = append(out, strings.Split(m[1], ".")[0])
+	}
+	return out
+}
+
 func referencedNames(value any) []string {
 	var out []string
 	switch v := value.(type) {
-	case string:
-		for _, m := range substitutedName.FindAllStringSubmatch(v, -1) {
-			out = append(out, strings.Split(m[1], ".")[0])
-		}
 	case []any:
 		for _, item := range v {
 			out = append(out, referencedNames(item)...)
@@ -47,6 +58,8 @@ func referencedNames(value any) []string {
 						out = append(out, name)
 					}
 				}
+			case "Fn::Sub":
+				out = append(out, substitutedNames(item)...)
 			}
 			out = append(out, referencedNames(item)...)
 		}

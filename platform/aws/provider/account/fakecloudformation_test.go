@@ -342,7 +342,7 @@ func (f *fakeCFN) record(stackName, body string, params []cfntypes.Parameter, ta
 			} `json:"Properties"`
 		} `json:"Resources"`
 		Outputs map[string]struct {
-			Value templateText `json:"Value"`
+			Value json.RawMessage `json:"Value"`
 		} `json:"Outputs"`
 	}
 	if err := json.Unmarshal([]byte(body), &tmpl); err != nil {
@@ -354,13 +354,24 @@ func (f *fakeCFN) record(stackName, body string, params []cfntypes.Parameter, ta
 		f.outputs[stackName] = out
 	}
 	for key, o := range tmpl.Outputs {
-		if bucket, ok := tmpl.Resources[string(o.Value)]; ok && bucket.Type == "AWS::S3::Bucket" {
+		var literal string
+		if json.Unmarshal(o.Value, &literal) == nil {
+			out[key] = literal
+			continue
+		}
+		var declared templateText
+		if err := json.Unmarshal(o.Value, &declared); err != nil {
+			panic("fake CloudFormation was handed an output it cannot read: " + err.Error())
+		}
+		if bucket, ok := tmpl.Resources[string(declared)]; ok && bucket.Type == "AWS::S3::Bucket" {
 			out[key] = bucket.Properties.BucketName
 			continue
 		}
-		out[key] = syntheticOutput(stackName, key, string(o.Value))
+		out[key] = syntheticOutput(stackName, key, fakeAccount.Replace(string(declared)))
 	}
 }
+
+var fakeAccount = strings.NewReplacer("${AWS::Partition}", "aws", "${AWS::AccountId}", "111122223333", "${AWS::Region}", "us-east-1")
 
 func syntheticOutput(stackName, key, declared string) string {
 	switch key {

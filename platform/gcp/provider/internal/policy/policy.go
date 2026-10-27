@@ -196,3 +196,24 @@ func Members(bindings []Binding) int {
 	}
 	return total
 }
+
+func GrantOnly(member string, wanted []Binding) Change {
+	changes := []Change{revokeWhere(member, func(binding Binding) bool {
+		return !slices.ContainsFunc(wanted, func(want Binding) bool {
+			return want.Role == binding.Role && sameCondition(binding.Condition, want.Condition)
+		})
+	})}
+	for _, want := range wanted {
+		changes = append(changes, Grant(want.Role, member, want.Condition))
+	}
+	return Each(changes...)
+}
+
+func HoldsOnly(bindings []Binding, member string, wanted []Binding) bool {
+	_, differs := GrantOnly(member, wanted)(bindings)
+	return !differs
+}
+
+func RevokeAll(member string) Change {
+	return revokeWhere(member, func(Binding) bool { return true })
+}

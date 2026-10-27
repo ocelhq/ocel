@@ -517,6 +517,32 @@ message BootstrapRequest {
   bool dry = 6;
 
   common.plan.v1.ChangePlan consented = 7;
+
+  WebIdentityTrust trust = 8;
+}
+
+message WebIdentityTrust {
+  string issuer = 1 [(buf.validate.field).string.uri = true];
+
+  string audience = 2 [(buf.validate.field).string.min_len = 1];
+
+  string organization_id = 3 [(buf.validate.field).string.min_len = 1];
+
+  string target_id = 4 [(buf.validate.field).string.min_len = 1];
+
+  GitHubTrust github = 5;
+}
+
+message GitHubTrust {
+  string repository = 1 [(buf.validate.field).string.pattern = "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"];
+
+  string branch = 2;
+}
+
+message TierIdentity {
+  string identity_provider = 1;
+
+  string principal = 2;
 }
 
 message DescribeBootstrapRequest {
@@ -609,6 +635,10 @@ message BootstrapStatus {
   bool downgrade = 5;
 
   bool unfinished = 6;
+
+  TierIdentity identity = 7;
+
+  WebIdentityTrust trust = 8;
 }
 
 enum CredentialPurpose {

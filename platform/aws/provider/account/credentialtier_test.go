@@ -24,6 +24,12 @@ type witness struct {
 
 var actionsOnWhatBothTiersShare = []string{
 	"iam:CreateServiceLinkedRole",
+	"iam:AddClientIDToOpenIDConnectProvider",
+	"iam:CreateOpenIDConnectProvider",
+	"iam:DeleteOpenIDConnectProvider",
+	"iam:GetOpenIDConnectProvider",
+	"iam:RemoveClientIDFromOpenIDConnectProvider",
+	"iam:TagOpenIDConnectProvider",
 }
 
 var resourcesAWSOwns = []string{

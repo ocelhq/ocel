@@ -31,7 +31,7 @@ func TestABroughtKeyIsFencedIntoTheCoreBoundaryOnlyWhileItsPartIsRequested(t *te
 	if !strings.Contains(stacks.template(coreStackName), broughtKeyARN) {
 		t.Error("the core boundary does not name the brought key")
 	}
-	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction)
+	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction, nil)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}

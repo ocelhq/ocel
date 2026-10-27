@@ -83,7 +83,47 @@ func applyRequestOf(req *contractv1.BootstrapRequest) bootstrapplan.ApplyRequest
 		Remove:             req.GetRemove(),
 		Force:              req.GetForce(),
 		AcceptReplacements: req.GetAcceptReplacements(),
+		Trust:              trustOf(req.GetTrust()),
 	}
+}
+
+func trustOf(sent *contractv1.WebIdentityTrust) *provider.WebIdentityTrust {
+	if sent == nil {
+		return nil
+	}
+	trust := &provider.WebIdentityTrust{
+		Issuer:         sent.GetIssuer(),
+		Audience:       sent.GetAudience(),
+		OrganizationID: sent.GetOrganizationId(),
+		TargetID:       sent.GetTargetId(),
+	}
+	if github := sent.GetGithub(); github != nil {
+		trust.GitHub = &provider.GitHubTrust{Repository: github.GetRepository(), Branch: github.GetBranch()}
+	}
+	return trust
+}
+
+func trustProto(trust *provider.WebIdentityTrust) *contractv1.WebIdentityTrust {
+	if trust == nil {
+		return nil
+	}
+	sent := &contractv1.WebIdentityTrust{
+		Issuer:         trust.Issuer,
+		Audience:       trust.Audience,
+		OrganizationId: trust.OrganizationID,
+		TargetId:       trust.TargetID,
+	}
+	if trust.GitHub != nil {
+		sent.Github = &contractv1.GitHubTrust{Repository: trust.GitHub.Repository, Branch: trust.GitHub.Branch}
+	}
+	return sent
+}
+
+func tierIdentityProto(identity *provider.TierIdentity) *contractv1.TierIdentity {
+	if identity == nil {
+		return nil
+	}
+	return &contractv1.TierIdentity{IdentityProvider: identity.IdentityProvider, Principal: identity.Principal}
 }
 
 func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.DescribeBootstrapRequest) (*contractv1.DescribeBootstrapResponse, error) {
@@ -192,6 +232,8 @@ func BootstrapStatusProto(current bootstrapplan.Status, writing provider.Written
 		Writer:     writing.String(),
 		Downgrade:  current.Downgrade(writing),
 		Unfinished: current.Unfinished,
+		Identity:   tierIdentityProto(current.Identity),
+		Trust:      trustProto(current.Trust),
 	}
 	for _, stack := range current.Stacks {
 		status.Stacks = append(status.Stacks, &contractv1.BootstrapStack{
