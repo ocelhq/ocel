@@ -242,3 +242,20 @@ func TestPermissionsRefuseTheTierThatIsNoTier(t *testing.T) {
 		t.Fatalf("Permissions(neither) = %v, want an invalid refusal", err)
 	}
 }
+
+func TestWhoamiRefusesATokenThatNamesNoPrincipal(t *testing.T) {
+	t.Parallel()
+
+	server := tokenInfo(t, `{"scope":"https://www.googleapis.com/auth/cloud-platform"}`)
+
+	_, err := gcp.Credentials{
+		Project:      gcp.Named("acme-prod"),
+		Tokens:       fixedToken{token: mintedAccessToken},
+		TokenInfoURL: server.URL,
+		Projects:     &reachedProject{},
+	}.Whoami(context.Background())
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
+		t.Fatalf("Whoami() = %v, want a denial: an empty principal is granted roles as user:, which IAM rejects mid-bootstrap", err)
+	}
+}

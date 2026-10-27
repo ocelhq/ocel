@@ -13,6 +13,8 @@ import (
 
 const CloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
 
+const UserinfoEmailScope = "https://www.googleapis.com/auth/userinfo.email"
+
 const TokenInfoURL = "https://oauth2.googleapis.com/tokeninfo"
 
 const credentialHint = "authenticate with Google Cloud: run `gcloud auth application-default login`"
@@ -28,7 +30,7 @@ type TokenSource interface {
 type ApplicationDefault struct{}
 
 func (ApplicationDefault) Token(ctx context.Context) (string, error) {
-	found, err := google.FindDefaultCredentials(ctx, CloudPlatformScope)
+	found, err := google.FindDefaultCredentials(ctx, CloudPlatformScope, UserinfoEmailScope)
 	if err != nil {
 		return "", err
 	}
@@ -50,6 +52,10 @@ func PrincipalNamed(ctx context.Context, endpoint, token string) (string, error)
 		return askTokenInfo(ctx, endpoint, token)
 	})
 	if err == nil && status == http.StatusOK {
+		if principal == "" {
+			return "", refusal.Refuse(refusal.CodeDenied,
+				"this credential names no user or service account for ocel to grant roles to: authenticate as one, or have a workload identity impersonate a service account")
+		}
 		return principal, nil
 	}
 	if isThrottledOrDown(status) {
