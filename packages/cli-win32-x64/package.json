@@ -1,6 +1,6 @@
 {
   "name": "@ocel/cli-win32-x64",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "The ocel binary for win32-x64",
   "os": [
     "win32"
