@@ -200,14 +200,7 @@ func readDeclarations(ctx context.Context, provider *providerprocess.Provider, c
 	if env == nil {
 		return variables.NewDeclarations(variables.NoValues{}, variables.Scope{Apps: variables.AppsOf(cfg)}), nil
 	}
-	store := variables.Store{Provider: provider, Project: cfg, Tier: env.GetTier()}
-	scope := variables.ScopeOf(cfg, env.GetTier(), env.GetIdentity())
-	described, err := store.DescribeEnvSource(ctx)
-	if err != nil {
-		return nil, err
-	}
-	scope.EnvSource = described
-	return variables.NewDeclarations(store, scope), nil
+	return variables.ReadDeployedDeclarations(ctx, provider, cfg, env)
 }
 
 func collectDeclarations(ctx context.Context, dependencies Dependencies, cfg *project.Project, declarations *variables.Declarations, span *run.Span) (build.HostedWorkers, error) {
