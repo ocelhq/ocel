@@ -206,6 +206,52 @@ func TestRemovingTheTrustFromBothTiersDeletesTheIdentityProviderThisNamespaceMad
 	}
 }
 
+func TestRemovingTheTrustOrTearingTheTierDownKeepsAnIdentityProviderOcelDidNotMake(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		remove func(*testing.T, *fakeCFN, *fakeSSM, APIs, *fakeIdentityProviders) error
+	}{
+		{name: "removing the trust", remove: func(_ *testing.T, _ *fakeCFN, _ *fakeSSM, apis APIs, _ *fakeIdentityProviders) error {
+			drop := Request{Remove: []string{provider.ConsoleTrustPart}}
+			return Run(context.Background(), apis, defaultNamespace, environment.TierProduction, drop, nil)
+		}},
+		{name: "tearing the tier down", remove: func(_ *testing.T, stacks *fakeCFN, ssmc *fakeSSM, _ APIs, providers *fakeIdentityProviders) error {
+			return Teardown(context.Background(), TeardownAPIs{
+				CFN: stacks, SSM: ssmc, IAM: &teardownIAM{keys: map[string][]string{}}, Layers: newFakeLayers(), Records: newFakeRecords().in,
+				Buckets: &teardownS3{pages: map[string][]objectPage{}}, IdentityProviders: providers,
+			}, defaultNamespace, environment.TierProduction, nil)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+			apis := apisOf(stacks, ssmc, iamc, preloadedStore())
+			providers := apis.IdentityProviders.(*fakeIdentityProviders)
+			providers.madeElsewhere(fixtureIssuerHost, fixtureAudience)
+			trusted := everything()
+			trusted.Parts = []string{provider.ConsoleTrustPart}
+			if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, trusted, nil); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+
+			planned, err := plannedIssuerRelease(context.Background(), ParamAPIs{Stacks: stacks, IdentityProviders: providers}, defaultNamespace, environment.TierProduction)
+			if err != nil || len(planned) != 0 {
+				t.Errorf("planned release = %+v, %v, want none for a provider Ocel did not make", planned, err)
+			}
+			if err := tc.remove(t, stacks, ssmc, apis, providers); err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			if made, ok := providers.has(fixtureIssuerHost); !ok || !reflect.DeepEqual(made.clientIDs, []string{fixtureAudience}) {
+				t.Errorf("%s left the provider Ocel did not make as %+v, want it untouched", tc.name, made)
+			}
+			for _, call := range providers.calls {
+				if strings.HasPrefix(call, "delete ") || strings.HasPrefix(call, "remove ") {
+					t.Errorf("identity provider call %q touched a provider Ocel did not make", call)
+				}
+			}
+		})
+	}
+}
+
 func TestATrustThatMovesReleasesWhatTheTierTrustedBefore(t *testing.T) {
 	moved := func(change func(*provider.WebIdentityTrust)) Request {
 		req := everything()
