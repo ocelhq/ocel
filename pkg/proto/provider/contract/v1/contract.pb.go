@@ -8620,12 +8620,12 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x06remove\x18\x05 \x03(\tR\x06remove\x12\x10\n" +
 	"\x03dry\x18\x06 \x01(\bR\x03dry\x128\n" +
 	"\tconsented\x18\a \x01(\v2\x1a.common.plan.v1.ChangePlanR\tconsented\x12<\n" +
-	"\x05trust\x18\b \x01(\v2&.provider.contract.v1.WebIdentityTrustR\x05trust\"\xb1\x01\n" +
+	"\x05trust\x18\b \x01(\v2&.provider.contract.v1.WebIdentityTrustR\x05trust\"\xbf\x01\n" +
 	"\x10WebIdentityTrust\x12 \n" +
 	"\x06issuer\x18\x01 \x01(\tB\b\xbaH\x05r\x03\x88\x01\x01R\x06issuer\x12#\n" +
 	"\baudience\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\baudience\x120\n" +
 	"\x0forganization_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eorganizationId\x12$\n" +
-	"\ttarget_id\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\btargetId\"Y\n" +
+	"\ttarget_id\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\btargetIdJ\x04\b\x05\x10\x06R\x06github\"Y\n" +
 	"\fTierIdentity\x12+\n" +
 	"\x11identity_provider\x18\x01 \x01(\tR\x10identityProvider\x12\x1c\n" +
 	"\tprincipal\x18\x02 \x01(\tR\tprincipal\"\xad\x01\n" +

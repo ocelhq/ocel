@@ -529,6 +529,9 @@ message WebIdentityTrust {
   string organization_id = 3 [(buf.validate.field).string.min_len = 1];
 
   string target_id = 4 [(buf.validate.field).string.min_len = 1];
+
+  reserved 5;
+  reserved "github";
 }
 
 message TierIdentity {
