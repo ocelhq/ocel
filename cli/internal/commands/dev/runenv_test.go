@@ -27,6 +27,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
 type forwards struct {
@@ -189,6 +190,41 @@ func TestRunInADeployedEnvironmentHidesWhatTheBindingsKeepSecretInTheCommandsOut
 	}
 	if password := binding.GetPostgres().GetPassword(); strings.Contains(got, password) {
 		t.Errorf("ocel run printed main's password in %q, want it hidden on stdout and stderr", got)
+	}
+}
+
+func TestRunInADeployedEnvironmentGivesTheCommandTheRecordAnInlineBindingBindsAResourceToAndHidesItsSecret(t *testing.T) {
+	fixture := setUpDeployedProject(t)
+	forwardingPorts(t, fixture)
+	clitest.WriteFile(t, filepath.Join(fixture.Root, "ocel.config.ts"), `
+export default {
+  slug: "`+clitest.FixtureSlug+`",
+  provider: { fake: {} },
+  domains: { production: "app.acme.com", preview: "*.preview.acme.com" },
+  bindings: { postgres: { main: { url: { $env: "MAIN_DATABASE_URL" } } } },
+};
+`)
+	url := "postgres://app:s3cret-pw@" + clitest.ServePostgres(t, "170004") + "/main?sslmode=disable"
+	store := variablestore.Store{KeyValues: fixture.Provider.KeyValues(), Cipher: fixture.Provider.Cipher()}
+	at := variablestore.Coordinate{Cell: variablestore.Cell{Key: "MAIN_DATABASE_URL"}}
+	if _, err := store.Set(context.Background(), variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}, at, url, nil); err != nil {
+		t.Fatalf("set MAIN_DATABASE_URL: %v", err)
+	}
+	deployProject(t, fixture, clitest.NewInvocation())
+	out := filepath.Join(t.TempDir(), "seen")
+
+	got, err := runInEnvironment(t, fixture, clitest.NewInvocation(), "--env", "production", "--", "sh", "-c",
+		`cp "$OCEL_LIVE_DIR/OCEL_RESOURCE_POSTGRES_main" `+out+`; cat `+out)
+
+	if err != nil {
+		t.Fatalf("ocel run err = %v; out=%s", err, got)
+	}
+	var binding bindingsv1.Binding
+	if err := protojson.Unmarshal([]byte(readFile(t, out)), &binding); err != nil || binding.GetPostgres().GetUrl() != url || binding.GetName() != "main" {
+		t.Errorf("the command read %q as main's binding (%v), want the record bindings.postgres.main names, by its url", readFile(t, out), err)
+	}
+	if strings.Contains(got, "s3cret-pw") {
+		t.Errorf("ocel run printed main's password in %q, want it hidden", got)
 	}
 }
 

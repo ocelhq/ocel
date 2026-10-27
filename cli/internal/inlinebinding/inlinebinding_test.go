@@ -1,4 +1,4 @@
-package deploy
+package inlinebinding
 
 import (
 	"strings"
@@ -17,10 +17,10 @@ func inlinePostgres(p project.PostgresInline) project.Binding {
 
 func TestAnInlineBindingIsBuiltFromTheValuesItsFieldsName(t *testing.T) {
 	t.Run("a url binding keeps the url whole", func(t *testing.T) {
-		records, err := buildInlineBindings([]project.Binding{inlinePostgres(project.PostgresInline{URL: "ORDERS_URL"})},
+		records, err := build([]project.Binding{inlinePostgres(project.PostgresInline{URL: "ORDERS_URL"})},
 			map[string]string{"ORDERS_URL": "postgres://u:p@ep-cool.neon.tech/orders?sslmode=require&options=endpoint%3Dep-cool"}, "ocel.json")
 		if err != nil {
-			t.Fatalf("buildInlineBindings: %v", err)
+			t.Fatalf("build: %v", err)
 		}
 		want := &bindingsv1.Binding{
 			Name:   "ocel:postgres.orders",
@@ -30,12 +30,12 @@ func TestAnInlineBindingIsBuiltFromTheValuesItsFieldsName(t *testing.T) {
 			}},
 		}
 		if len(records) != 1 || !proto.Equal(records[0], want) {
-			t.Fatalf("buildInlineBindings = %d records, want one binding %s by its url", len(records), want.GetName())
+			t.Fatalf("build = %d records, want one binding %s by its url", len(records), want.GetName())
 		}
 	})
 
 	t.Run("a host binding reads each field from its literal or its variable", func(t *testing.T) {
-		records, err := buildInlineBindings([]project.Binding{inlinePostgres(project.PostgresInline{
+		records, err := build([]project.Binding{inlinePostgres(project.PostgresInline{
 			Host:     project.Text{Literal: "db.example.com"},
 			Database: project.Text{Variable: "ORDERS_DB"},
 			Username: project.Text{Literal: "app"},
@@ -43,7 +43,7 @@ func TestAnInlineBindingIsBuiltFromTheValuesItsFieldsName(t *testing.T) {
 			TLS:      &project.PostgresTLS{Mode: "verify-full", CA: "ORDERS_CA"},
 		})}, map[string]string{"ORDERS_DB": "orders", "ORDERS_PASSWORD": "hunter2", "ORDERS_CA": "-----BEGIN CERTIFICATE-----"}, "ocel.json")
 		if err != nil {
-			t.Fatalf("buildInlineBindings: %v", err)
+			t.Fatalf("build: %v", err)
 		}
 		want := &bindingsv1.PostgresProperties{
 			Host: "db.example.com", Port: 5432, Database: "orders", Username: "app", Password: "hunter2",
@@ -57,22 +57,22 @@ func TestAnInlineBindingIsBuiltFromTheValuesItsFieldsName(t *testing.T) {
 	})
 
 	t.Run("a published binding is no record ocel writes", func(t *testing.T) {
-		records, err := buildInlineBindings([]project.Binding{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "analytics", External: "warehouse"}}, nil, "ocel.json")
+		records, err := build([]project.Binding{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "analytics", External: "warehouse"}}, nil, "ocel.json")
 		if err != nil || len(records) != 0 {
-			t.Fatalf("buildInlineBindings = %d records, %v, want nothing", len(records), err)
+			t.Fatalf("build = %d records, %v, want nothing", len(records), err)
 		}
 	})
 
 	t.Run("a variable with no value is refused naming it", func(t *testing.T) {
-		_, err := buildInlineBindings([]project.Binding{inlinePostgres(project.PostgresInline{URL: "ORDERS_URL"})}, map[string]string{}, "ocel.json")
+		_, err := build([]project.Binding{inlinePostgres(project.PostgresInline{URL: "ORDERS_URL"})}, map[string]string{}, "ocel.json")
 		if err == nil || !strings.Contains(err.Error(), "ORDERS_URL") {
-			t.Fatalf("buildInlineBindings = %v, want ORDERS_URL named", err)
+			t.Fatalf("build = %v, want ORDERS_URL named", err)
 		}
 	})
 }
 
 func TestAnInlineBucketBindingKeepsThePublicBaseURLItNames(t *testing.T) {
-	records, err := buildInlineBindings([]project.Binding{{
+	records, err := build([]project.Binding{{
 		Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads",
 		Inline: &project.Inline{Bucket: &project.BucketInline{
 			Endpoint:        project.Text{Literal: "https://storage.example.com"},
@@ -85,7 +85,7 @@ func TestAnInlineBucketBindingKeepsThePublicBaseURLItNames(t *testing.T) {
 		}},
 	}}, map[string]string{"UPLOADS_BUCKET": "acme", "BUCKET_KEY": "AKID", "BUCKET_SECRET": "s3cr3t"}, "ocel.json")
 	if err != nil {
-		t.Fatalf("buildInlineBindings: %v", err)
+		t.Fatalf("build: %v", err)
 	}
 	want := &bindingsv1.BucketProperties{
 		Bucket: "acme", Endpoint: "https://storage.example.com", Region: "example-region", Prefix: "uploads/",
