@@ -218,7 +218,6 @@ jobs:
           source: ${{ needs.changes.outputs.preview }}
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
-          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
           aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
           expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
           cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}

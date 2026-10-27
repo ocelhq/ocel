@@ -63,10 +63,7 @@ jobs:
       - name: Enter the account Ocel deploys itself into
         uses: ./.github/actions/dogfood-session
         with:
-          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
           aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
-          role-session-name: ocel-preview-${{ github.run_id }}
-          expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
           cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
           variables-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
