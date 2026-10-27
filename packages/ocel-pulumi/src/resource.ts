@@ -98,9 +98,7 @@ function bindingProvider<I extends BindingInputs>(
     return {
       name: inputs.name,
       owner: inputs.owner,
-      project: inputs.project,
-      tier: inputs.tier,
-      environment: inputs.environment,
+      ...definedTarget(inputs),
       version: result.version,
       digest: digestOf(inputs),
     };
@@ -221,9 +219,7 @@ const publishVariables = (inputs: VariablesInputs): VariablesState => {
   );
   return {
     publisher: inputs.publisher,
-    project: inputs.project,
-    tier: inputs.tier,
-    environment: inputs.environment,
+    ...definedTarget(inputs),
     versions: writtenVersions(record, result),
     digest: variablesDigest(inputs),
   };
@@ -349,6 +345,10 @@ function logicalName(kind: string, target: Target, name = ""): string {
 function describeTarget(target: Target): string {
   const at = target.environment ? `${target.tier} environment ${target.environment}` : target.tier;
   return `${at} of ocel project ${target.project}`;
+}
+
+function definedTarget({ project, tier, environment }: Target): Target {
+  return environment === undefined ? { project, tier } : { project, tier, environment };
 }
 
 function targetFor(opts: BindOptions | undefined): { target: Target; directory: string } {
