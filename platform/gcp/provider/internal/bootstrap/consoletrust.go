@@ -50,7 +50,7 @@ func ConsoleProviderOf(trust provider.WebIdentityTrust) *iam.WorkloadIdentityPoo
 			"google.subject":   "assertion.target + ':' + assertion.tier + ':' + assertion.project",
 			"attribute.org":    "assertion.org",
 			"attribute.target": "assertion.target",
-			"attribute.tier":   "assertion.tier",
+			"attribute.deploy": "assertion.target + ':' + assertion.tier",
 		},
 		AttributeCondition: "assertion.org == " + celQuoted(trust.OrganizationID) + " && assertion.target == " + celQuoted(trust.TargetID),
 	}
@@ -150,13 +150,13 @@ func supersededTarget(read Survey, trust provider.WebIdentityTrust) string {
 	return previous.TargetID
 }
 
-func (b Engine) principalSet(ctx context.Context, tier environment.Tier) (string, error) {
+func (b Engine) principalSet(ctx context.Context, tier environment.Tier, target string) (string, error) {
 	number, err := b.Clients.ReadProjectNumber(ctx)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("principalSet://iam.googleapis.com/projects/%d/locations/global/workloadIdentityPools/%s/attribute.tier/%s",
-		number, b.Clients.ConsolePool(), tier), nil
+	return fmt.Sprintf("principalSet://iam.googleapis.com/projects/%d/locations/global/workloadIdentityPools/%s/attribute.deploy/%s:%s",
+		number, b.Clients.ConsolePool(), target, tier), nil
 }
 
 func (b Engine) ConsoleTrustIdentity(ctx context.Context, tier environment.Tier, trust provider.WebIdentityTrust) (*provider.TierIdentity, error) {
@@ -235,7 +235,7 @@ func (b Engine) planConsoleTrust(ctx context.Context, read Survey, trust provide
 	grantsChange := provider.Change{Kind: string(KindGrants), Name: n.DeployAccountEmail(tier), Action: provider.ActionCreate}
 	if account != nil {
 		accountChange.Action, accountChange.Reason = provider.ActionKeep, reasonCurrent
-		granted, err := b.deployGranted(ctx, tier, grants)
+		granted, err := b.deployGranted(ctx, tier, trust.TargetID, grants)
 		if err != nil {
 			return nil, err
 		}
@@ -269,7 +269,7 @@ func (b Engine) tagValuePolicy(ctx context.Context, tier environment.Tier) (poli
 	return gcloud.TagValuePolicy(b.Clients, value, b.Clients.TierTagValuePath(tier)), true, nil
 }
 
-func (b Engine) deployGranted(ctx context.Context, tier environment.Tier, grants deployGrants) (bool, error) {
+func (b Engine) deployGranted(ctx context.Context, tier environment.Tier, target string, grants deployGrants) (bool, error) {
 	held, err := policy.Read(ctx, gcloud.ProjectPolicy(b.Clients))
 	if err != nil || !policy.HoldsOnly(held, grants.member, grants.project) {
 		return false, err
@@ -283,11 +283,19 @@ func (b Engine) deployGranted(ctx context.Context, tier environment.Tier, grants
 			return false, err
 		}
 	}
-	principals, err := b.principalSet(ctx, tier)
+	principals, err := b.principalSet(ctx, tier, target)
 	if err != nil {
 		return false, err
 	}
-	return gcloud.AccountRoleGranted(ctx, b.Clients, b.Clients.DeployAccount(tier), WorkloadIdentityUserRole, principals)
+	held, err = policy.Read(ctx, gcloud.AccountPolicy(b.Clients, b.Clients.DeployAccount(tier)))
+	if policy.IsAbsent(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	_, differs := policy.OnlyMember(WorkloadIdentityUserRole, principals)(held)
+	return !differs, nil
 }
 
 func (b Engine) RaiseConsoleTrust(ctx context.Context, read Survey, trust provider.WebIdentityTrust, progress progress.Log) error {
@@ -320,14 +328,14 @@ func (b Engine) RaiseConsoleTrust(ctx context.Context, read Survey, trust provid
 		"deploys the "+string(tier)+" tier for the console it trusts, holding what a deploy credential of the tier is granted"); err != nil {
 		return err
 	}
-	if err := b.grantDeploy(ctx, tier, grants); err != nil {
+	if err := b.grantDeploy(ctx, tier, trust.TargetID, grants); err != nil {
 		return err
 	}
 	gcloud.EnsureProgress(progress).Say("Trusted the console to deploy the " + string(tier) + " tier as " + n.DeployAccountEmail(tier))
 	return nil
 }
 
-func (b Engine) grantDeploy(ctx context.Context, tier environment.Tier, grants deployGrants) error {
+func (b Engine) grantDeploy(ctx context.Context, tier environment.Tier, target string, grants deployGrants) error {
 	account := b.Clients.DeployAccount(tier)
 	if err := gcloud.UntilVisible(ctx, func() error {
 		_, err := policy.Edit(ctx, gcloud.ProjectPolicy(b.Clients), policy.GrantOnly(grants.member, grants.project))
@@ -344,13 +352,13 @@ func (b Engine) grantDeploy(ctx context.Context, tier environment.Tier, grants d
 			return err
 		}
 	}
-	principals, err := b.principalSet(ctx, tier)
+	principals, err := b.principalSet(ctx, tier, target)
 	if err != nil {
 		return err
 	}
 	return gcloud.UntilVisible(ctx, func() error {
-		return gcloud.WrapAccountGrantError(gcloud.BindAccountRole(ctx, b.Clients, account, WorkloadIdentityUserRole, principals, true),
-			WorkloadIdentityUserRole+" on the "+account+" service account")
+		_, err := policy.Edit(ctx, gcloud.AccountPolicy(b.Clients, account), policy.OnlyMember(WorkloadIdentityUserRole, principals))
+		return gcloud.WrapAccountGrantError(err, WorkloadIdentityUserRole+" on the "+account+" service account")
 	})
 }
 

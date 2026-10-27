@@ -251,7 +251,7 @@ func TestATrustedConsoleIsAProviderOfItsTargetInTheProjectsPoolThatTakesOnlyThat
 		"google.subject":   "assertion.target + ':' + assertion.tier + ':' + assertion.project",
 		"attribute.org":    "assertion.org",
 		"attribute.target": "assertion.target",
-		"attribute.tier":   "assertion.tier",
+		"attribute.deploy": "assertion.target + ':' + assertion.tier",
 	}
 	if !maps.Equal(console.AttributeMapping, wantMapping) {
 		t.Errorf("console provider mapping = %v, want %v", console.AttributeMapping, wantMapping)
@@ -350,20 +350,75 @@ func TestTheDeployAccountOfATierHoldsExactlyWhatADeployCredentialOfThatTierIsGra
 	}
 }
 
-func TestTheConsolesTokensOfATierMayActAsThatTiersDeployAccountAndNoOther(t *testing.T) {
+func (h trustHarness) workloadIdentityUsers(account string) []string {
+	h.iam.Mu.Lock()
+	defer h.iam.Mu.Unlock()
+	held := h.iam.AccountPolicies["/v1/"+gcloud.AccountPath(h.b.Clients, account)]
+	if held == nil {
+		return nil
+	}
+	var members []string
+	for _, binding := range held.Bindings {
+		if binding.Role == bootstrap.WorkloadIdentityUserRole {
+			members = append(members, binding.Members...)
+		}
+	}
+	return members
+}
+
+func deployPrincipals(target string, tier environment.Tier) string {
+	return "principalSet://iam.googleapis.com/projects/123456789/locations/global/workloadIdentityPools/ocel-console/attribute.deploy/" + target + ":" + string(tier)
+}
+
+func TestOnlyTheTrustedTargetsTokensForATierMayActAsThatTiersDeployAccount(t *testing.T) {
 	t.Parallel()
 	h := trusting(t)
+	other := consoleTrust()
+	other.TargetID = "t-2"
 
 	h.apply(t, trustRequest(environment.TierProduction, consoleTrust()))
+	h.apply(t, trustRequest(environment.TierPreview, other))
 
+	for account, want := range map[string]string{
+		"ocel-prod-deploy":    deployPrincipals("t-1", environment.TierProduction),
+		"ocel-preview-deploy": deployPrincipals("t-2", environment.TierPreview),
+	} {
+		if got := h.workloadIdentityUsers(account); !slices.Equal(got, []string{want}) {
+			t.Errorf("%s may be impersonated by %v, want %s alone", account, got, want)
+		}
+	}
+	console := h.pools.Provider(consolePool, h.b.Clients.ConsoleProvider("t-2"))
+	if console == nil || console.AttributeMapping["attribute.deploy"] != "assertion.target + ':' + assertion.tier" {
+		t.Fatalf("the t-2 provider = %+v, want it to map attribute.deploy to the token's target and tier", console)
+	}
+}
+
+func TestABootstrapRevokesEveryOtherPrincipalTheDeployAccountAdmits(t *testing.T) {
+	t.Parallel()
+	h := trusting(t)
+	tier := environment.TierProduction
+	h.apply(t, trustRequest(tier, consoleTrust()))
+	wide := "principalSet://iam.googleapis.com/projects/123456789/locations/global/workloadIdentityPools/ocel-console/attribute.tier/production"
 	h.iam.Mu.Lock()
 	held := h.iam.AccountPolicies["/v1/"+gcloud.AccountPath(h.b.Clients, "ocel-prod-deploy")]
+	for _, binding := range held.Bindings {
+		if binding.Role == bootstrap.WorkloadIdentityUserRole {
+			binding.Members = append(binding.Members, wide)
+		}
+	}
 	h.iam.Mu.Unlock()
-	want := "principalSet://iam.googleapis.com/projects/123456789/locations/global/workloadIdentityPools/ocel-console/attribute.tier/production"
-	if held == nil || !slices.ContainsFunc(held.Bindings, func(binding *iam.Binding) bool {
-		return binding.Role == bootstrap.WorkloadIdentityUserRole && slices.Equal(binding.Members, []string{want})
+
+	planned := h.plan(t, rerunRequest(tier))
+	grants := provider.Change{Kind: string(bootstrap.KindGrants), Name: productionAgent, Action: provider.ActionUpdate}
+	if !slices.ContainsFunc(planned.Changes, func(change provider.Change) bool {
+		return change.Kind == grants.Kind && change.Name == grants.Name && change.Action == grants.Action
 	}) {
-		t.Errorf("the deploy account's policy = %+v, want %s holding %s", held, want, bootstrap.WorkloadIdentityUserRole)
+		t.Errorf("planned %+v, want the deploy account's grants updated while %s may impersonate it", planned.Changes, wide)
+	}
+	h.apply(t, rerunRequest(tier))
+
+	if got, want := h.workloadIdentityUsers("ocel-prod-deploy"), []string{deployPrincipals("t-1", tier)}; !slices.Equal(got, want) {
+		t.Errorf("ocel-prod-deploy may be impersonated by %v, want %v alone", got, want)
 	}
 }
 
