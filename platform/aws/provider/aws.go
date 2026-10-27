@@ -74,6 +74,9 @@ func New(ctx context.Context, settings provider.Settings) (provider.Provider, er
 	if err := account.Namespace(ns).RefuseReservedPrefix(); err != nil {
 		return nil, err
 	}
+	if err := useWebIdentity(settings.WebIdentity); err != nil {
+		return nil, err
+	}
 	cfg, err := sdkconfig.Control(ctx, decoded.Region)
 	if err != nil {
 		return nil, err
@@ -106,6 +109,8 @@ func (p *Provider) Facts() provider.Facts {
 		WorkerCeilings:    topic.WorkerCeilings,
 
 		MaxFunctionBytes: function.MaxBytes,
+
+		WebIdentity: &provider.WebIdentityFacts{CredentialEnvVars: credentialEnvVars},
 	}
 }
 
