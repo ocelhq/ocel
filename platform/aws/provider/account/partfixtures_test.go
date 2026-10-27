@@ -82,7 +82,6 @@ func fixtureTrust() *provider.WebIdentityTrust {
 		Audience:       fixtureAudience,
 		OrganizationID: "o",
 		TargetID:       "t",
-		GitHub:         &provider.GitHubTrust{Repository: "acme/shop", Branch: "main"},
 	}
 }
 

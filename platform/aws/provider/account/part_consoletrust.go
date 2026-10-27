@@ -16,20 +16,14 @@ import (
 )
 
 const (
-	gitHubIssuerHost = "token.actions.githubusercontent.com"
-	gitHubAudience   = "sts.amazonaws.com"
-
 	deploySessionSeconds = 14400
 
 	outputDeployRoleARN              = "DeployRoleArn"
 	outputConsoleIdentityProviderARN = "ConsoleIdentityProviderArn"
-	outputGitHubIdentityProviderARN  = "GitHubIdentityProviderArn"
 	outputTrustedIssuer              = "TrustedIssuer"
 	outputTrustedAudience            = "TrustedAudience"
 	outputTrustedOrganization        = "TrustedOrganization"
 	outputTrustedTarget              = "TrustedTarget"
-	outputTrustedGitHubRepository    = "TrustedGitHubRepository"
-	outputTrustedGitHubBranch        = "TrustedGitHubBranch"
 	assumeRoleWithWebIdentity        = "sts:AssumeRoleWithWebIdentity"
 	identityProviderARNInTemplate    = "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/"
 	identityProviderKind             = "AWS::IAM::OIDCProvider"
@@ -118,43 +112,14 @@ func trustStatements(tier environment.Tier, trust provider.WebIdentityTrust) ([]
 	if trust.Audience == "" || trust.OrganizationID == "" || trust.TargetID == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "the console's trust names no audience, organization or target, so no token could be matched to it")
 	}
-	statements := []iam.Statement{{
+	return []iam.Statement{{
 		Principal: iam.Principal{Federated: identityProviderInTemplate(host)},
 		Actions:   []string{assumeRoleWithWebIdentity},
 		Condition: map[string]any{
 			"StringEquals": map[string]any{host + ":aud": trust.Audience},
 			"StringLike":   map[string]any{host + ":sub": consoleSubject(tier, trust)},
 		},
-	}}
-	if trust.GitHub == nil {
-		return statements, nil
-	}
-	subject, err := gitHubSubject(tier, *trust.GitHub)
-	if err != nil {
-		return nil, err
-	}
-	return append(statements, iam.Statement{
-		Principal: iam.Principal{Federated: identityProviderInTemplate(gitHubIssuerHost)},
-		Actions:   []string{assumeRoleWithWebIdentity},
-		Condition: map[string]any{"StringEquals": map[string]any{
-			gitHubIssuerHost + ":aud": gitHubAudience,
-			gitHubIssuerHost + ":sub": subject,
-		}},
-	}), nil
-}
-
-func gitHubSubject(tier environment.Tier, github provider.GitHubTrust) (string, error) {
-	owner, repository, found := strings.Cut(github.Repository, "/")
-	if !found || owner == "" || repository == "" || strings.Contains(repository, "/") {
-		return "", refusal.Refuse(refusal.CodeInvalid, "GitHub repository %q is not owner/repo", github.Repository)
-	}
-	if tier == environment.TierPreview {
-		return "repo:" + github.Repository + ":pull_request", nil
-	}
-	if github.Branch == "" {
-		return "", refusal.Refuse(refusal.CodeInvalid, "the %s tier trusts GitHub repository %s on no branch: name the branch it deploys from", tier, github.Repository)
-	}
-	return "repo:" + github.Repository + ":ref:refs/heads/" + github.Branch, nil
+	}}, nil
 }
 
 func issuerHost(issuer string) (string, error) {
@@ -171,7 +136,7 @@ func identityProviderInTemplate(host string) cfn.Intrinsic {
 
 func consoleTrustOutputs(trust provider.WebIdentityTrust) []cfn.Output {
 	host, _ := issuerHost(trust.Issuer)
-	outputs := []cfn.Output{
+	return []cfn.Output{
 		{Name: outputDeployRoleARN, Description: "The role a console's identity token assumes to deploy into this tier.", Value: cfn.GetAtt("DeployRole", "Arn")},
 		{Name: outputConsoleIdentityProviderARN, Description: "The identity provider that role trusts for the console's tokens.", Value: identityProviderInTemplate(host)},
 		{Name: outputTrustedIssuer, Description: "The console issuer this tier trusts.", Value: trust.Issuer},
@@ -179,33 +144,18 @@ func consoleTrustOutputs(trust provider.WebIdentityTrust) []cfn.Output {
 		{Name: outputTrustedOrganization, Description: "The console organization whose tokens this tier trusts.", Value: trust.OrganizationID},
 		{Name: outputTrustedTarget, Description: "The console target whose tokens this tier trusts.", Value: trust.TargetID},
 	}
-	if trust.GitHub == nil {
-		return outputs
-	}
-	outputs = append(outputs,
-		cfn.Output{Name: outputGitHubIdentityProviderARN, Description: "The identity provider that role trusts for GitHub Actions tokens.", Value: identityProviderInTemplate(gitHubIssuerHost)},
-		cfn.Output{Name: outputTrustedGitHubRepository, Description: "The GitHub repository whose workflows may deploy here.", Value: trust.GitHub.Repository},
-	)
-	if trust.GitHub.Branch != "" {
-		outputs = append(outputs, cfn.Output{Name: outputTrustedGitHubBranch, Description: "The branch those workflows deploy production from.", Value: trust.GitHub.Branch})
-	}
-	return outputs
 }
 
 func recordedTrust(outputs map[string]string) *provider.WebIdentityTrust {
 	if outputs[outputTrustedIssuer] == "" {
 		return nil
 	}
-	trust := &provider.WebIdentityTrust{
+	return &provider.WebIdentityTrust{
 		Issuer:         outputs[outputTrustedIssuer],
 		Audience:       outputs[outputTrustedAudience],
 		OrganizationID: outputs[outputTrustedOrganization],
 		TargetID:       outputs[outputTrustedTarget],
 	}
-	if repository := outputs[outputTrustedGitHubRepository]; repository != "" {
-		trust.GitHub = &provider.GitHubTrust{Repository: repository, Branch: outputs[outputTrustedGitHubBranch]}
-	}
-	return trust
 }
 
 func (d Deployed) Identity() *provider.TierIdentity {

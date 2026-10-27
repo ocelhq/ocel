@@ -41,11 +41,7 @@ func trustedIssuers(trust provider.WebIdentityTrust) ([]trustedIssuer, error) {
 	if err != nil {
 		return nil, err
 	}
-	issuers := []trustedIssuer{{host: host, audience: trust.Audience}}
-	if trust.GitHub != nil {
-		issuers = append(issuers, trustedIssuer{host: gitHubIssuerHost, audience: gitHubAudience})
-	}
-	return issuers, nil
+	return []trustedIssuer{{host: host, audience: trust.Audience}}, nil
 }
 
 type recordedIssuer struct {
@@ -54,21 +50,13 @@ type recordedIssuer struct {
 }
 
 func issuersRecordedIn(outputs map[string]string) []recordedIssuer {
-	audiences := map[string]string{
-		outputConsoleIdentityProviderARN: outputs[outputTrustedAudience],
-		outputGitHubIdentityProviderARN:  gitHubAudience,
+	named := outputs[outputConsoleIdentityProviderARN]
+	parsed, err := arn.Parse(named)
+	if err != nil {
+		return nil
 	}
-	var recorded []recordedIssuer
-	for _, output := range []string{outputConsoleIdentityProviderARN, outputGitHubIdentityProviderARN} {
-		named := outputs[output]
-		parsed, err := arn.Parse(named)
-		if err != nil {
-			continue
-		}
-		_, host, _ := strings.Cut(parsed.Resource, "/")
-		recorded = append(recorded, recordedIssuer{named: named, trustedIssuer: trustedIssuer{host: host, audience: audiences[output]}})
-	}
-	return recorded
+	_, host, _ := strings.Cut(parsed.Resource, "/")
+	return []recordedIssuer{{named: named, trustedIssuer: trustedIssuer{host: host, audience: outputs[outputTrustedAudience]}}}
 }
 
 func identityProviderARN(deployed Deployed, host string) (string, bool) {

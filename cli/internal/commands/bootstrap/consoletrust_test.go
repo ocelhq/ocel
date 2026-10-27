@@ -34,9 +34,9 @@ func consoleTrustProject(t *testing.T, linked bool) (clitest.FakeProject, comman
 	return project, invocation, served
 }
 
-func trustedBefore(t *testing.T, project clitest.FakeProject, github *provider.GitHubTrust) {
+func trustedBefore(t *testing.T, project clitest.FakeProject) {
 	t.Helper()
-	trust := &provider.WebIdentityTrust{Issuer: "https://console.example.test/oidc", Audience: "https://console.example.test", OrganizationID: "org_1", TargetID: clitest.FixtureConsoleTargetID, GitHub: github}
+	trust := &provider.WebIdentityTrust{Issuer: "https://console.example.test/oidc", Audience: "https://console.example.test", OrganizationID: "org_1", TargetID: clitest.FixtureConsoleTargetID}
 	if err := project.Provider.FakeBootstrap().Apply(context.Background(), provider.BootstrapRequest{Tier: environment.TierProduction, Parts: []string{provider.ConsoleTrustPart}, Trust: trust}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -64,8 +64,8 @@ func TestABootstrapLinkedToAConsoleTrustsItToDeployTheTierAndRecordsTheIdentity(
 	}
 	trust := sent[len(sent)-1].GetTrust()
 	if trust.GetIssuer() != served.URL+"/oidc" || trust.GetAudience() != served.URL || trust.GetTargetId() != clitest.FixtureConsoleTargetID ||
-		trust.GetOrganizationId() != "org_1" || trust.GetGithub() != nil {
-		t.Errorf("the bootstrap applied trust %v, want the prepared target's and no GitHub fallback under --yes", trust)
+		trust.GetOrganizationId() != "org_1" {
+		t.Errorf("the bootstrap applied trust %v, want the prepared target's", trust)
 	}
 	recorded := served.RecordedTiers()
 	if len(recorded) != 1 {
@@ -75,20 +75,6 @@ func TestABootstrapLinkedToAConsoleTrustsItToDeployTheTierAndRecordsTheIdentity(
 		got.GetIdentity().GetPrincipal() != "fake-deploy-production" || got.GetIdentity().GetIdentityProvider() != "fake-issuer" ||
 		got.GetCliVersion() != version.Version || got.GetProjectId() != clitest.FixtureConsoleProjectID {
 		t.Errorf("RecordTier got %v, want the identity the bootstrap made and the linked project", got)
-	}
-}
-
-func TestYesKeepsTheGitHubFallbackATierAlreadyHas(t *testing.T) {
-	project, invocation, _ := consoleTrustProject(t, true)
-	trustedBefore(t, project, &provider.GitHubTrust{Repository: "acme/shop", Branch: "trunk"})
-
-	sent, out, err := bootstrapWith(t, project, invocation, Options{Yes: true})
-	if err != nil {
-		t.Fatalf("Run() = %v; %s", err, out)
-	}
-
-	if github := sent[len(sent)-1].GetTrust().GetGithub(); github.GetRepository() != "acme/shop" || github.GetBranch() != "trunk" {
-		t.Errorf("the bootstrap applied GitHub trust %v, want the recorded acme/shop on trunk kept", github)
 	}
 }
 
@@ -123,7 +109,7 @@ func TestADryBootstrapInventsNoTrustAndAsksTheConsoleNothing(t *testing.T) {
 
 func TestADryBootstrapPlansFromTheRecordedTrust(t *testing.T) {
 	project, invocation, served := consoleTrustProject(t, true)
-	trustedBefore(t, project, nil)
+	trustedBefore(t, project)
 
 	sent, out, err := bootstrapWith(t, project, invocation, Options{Dry: true})
 	if err != nil {
@@ -137,7 +123,7 @@ func TestADryBootstrapPlansFromTheRecordedTrust(t *testing.T) {
 
 func TestRemovingTheConsolesTrustTellsTheConsoleToForgetTheTierFirst(t *testing.T) {
 	project, invocation, served := consoleTrustProject(t, true)
-	trustedBefore(t, project, nil)
+	trustedBefore(t, project)
 
 	sent, out, err := bootstrapWith(t, project, invocation, Options{Yes: true, Remove: provider.ConsoleTrustPart})
 	if err != nil {
@@ -156,7 +142,7 @@ func TestRemovingTheConsolesTrustTellsTheConsoleToForgetTheTierFirst(t *testing.
 func TestRemovingTheConsolesTrustWithNoConsoleToTellIsRefusedUnlessYes(t *testing.T) {
 	project, invocation, _ := consoleTrustProject(t, true)
 	invocation.Console.LoadCredentials = func() (console.Credentials, error) { return console.Credentials{}, console.ErrNotLoggedIn }
-	trustedBefore(t, project, nil)
+	trustedBefore(t, project)
 	clitest.Bootstrap(t, project.Provider, environment.TierProduction, provider.ConsoleTrustPart)
 
 	recorded := &contractv1.WebIdentityTrust{TargetId: clitest.FixtureConsoleTargetID}
@@ -165,33 +151,5 @@ func TestRemovingTheConsolesTrustWithNoConsoleToTellIsRefusedUnlessYes(t *testin
 	}
 	if _, out, err := bootstrapWith(t, project, invocation, Options{Yes: true, Remove: provider.ConsoleTrustPart}); err != nil || !strings.Contains(out, "keeps issuing them") {
 		t.Fatalf("Run(--yes) = %v; %s, want it removed with the warning said", err, out)
-	}
-}
-
-func TestOnlyAnOriginOnGitHubNamesTheRepositoryGitHubActionsMayDeployFrom(t *testing.T) {
-	for remote, want := range map[string]string{
-		"https://github.com/ocelhq/ocel.git":  "ocelhq/ocel",
-		"https://github.com/ocelhq/ocel":      "ocelhq/ocel",
-		"git@github.com:ocelhq/ocel.git":      "ocelhq/ocel",
-		"ssh://git@github.com/ocelhq/ocel":    "ocelhq/ocel",
-		"https://gitlab.com/ocelhq/ocel.git":  "",
-		"https://github.com.evil/ocelhq/ocel": "",
-	} {
-		var got string
-		if matched := githubRemote.FindStringSubmatch(remote); matched != nil {
-			got = matched[1]
-		}
-		if got != want {
-			t.Errorf("the repository of origin %s = %q, want %q", remote, got, want)
-		}
-	}
-}
-
-func TestTheDefaultBranchIsWhatTheRemoteSaysItsHeadIsAndNothingElse(t *testing.T) {
-	if branch, found := defaultBranchOf("ref: refs/heads/trunk\tHEAD\n0123abcd\tHEAD\n"); !found || branch != "trunk" {
-		t.Errorf("defaultBranchOf() = %q, %v, want trunk", branch, found)
-	}
-	if branch, found := defaultBranchOf("0123abcd\tHEAD\n"); found {
-		t.Errorf("defaultBranchOf() = %q for a remote naming no symbolic HEAD, want none", branch)
 	}
 }

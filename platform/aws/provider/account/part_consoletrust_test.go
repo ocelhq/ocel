@@ -39,11 +39,8 @@ func asJSON(t *testing.T, value any) string {
 	return string(out)
 }
 
-func TestTheDeployRoleAdmitsTheConsolesTokensForItsSubjectAndGitHubForTheTiersRef(t *testing.T) {
-	for tier, gitHubSubject := range map[environment.Tier]string{
-		environment.TierProduction: "repo:acme/shop:ref:refs/heads/main",
-		environment.TierPreview:    "repo:acme/shop:pull_request",
-	} {
+func TestTheDeployRoleAdmitsTheConsolesTokensForItsSubjectAndNothingElse(t *testing.T) {
+	for _, tier := range bothTiers {
 		t.Run(string(tier), func(t *testing.T) {
 			role := consoleTrustResources(t, tier).Resources["DeployRole"]
 			if role.Type != "AWS::IAM::Role" {
@@ -65,33 +62,12 @@ func TestTheDeployRoleAdmitsTheConsolesTokensForItsSubjectAndGitHubForTheTiersRe
 						"StringLike":   map[string]any{fixtureIssuerHost + ":sub": "org:o:target:t:tier:" + string(tier) + ":project:*"},
 					},
 				},
-				{
-					"Effect":    "Allow",
-					"Action":    "sts:AssumeRoleWithWebIdentity",
-					"Principal": map[string]any{"Federated": map[string]any{"Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"}},
-					"Condition": map[string]any{"StringEquals": map[string]any{
-						"token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-						"token.actions.githubusercontent.com:sub": gitHubSubject,
-					}},
-				},
 			}
 			document := role.Properties["AssumeRolePolicyDocument"].(map[string]any)
 			if got := asJSON(t, document["Statement"]); got != asJSON(t, want) {
 				t.Errorf("the trust policy is\n%s\nwant\n%s", got, asJSON(t, want))
 			}
 		})
-	}
-}
-
-func TestTheDeployRoleTrustsNoGitHubWorkflowUnlessTheTrustNamesARepository(t *testing.T) {
-	trust := fixtureTrust()
-	trust.GitHub = nil
-	stack, err := consoleTrustTemplate(partInputs{ns: defaultNamespace, tier: environment.TierProduction, trust: trust, deploy: fixtureDeploy(environment.TierProduction)})
-	if err != nil {
-		t.Fatalf("consoleTrustTemplate: %v", err)
-	}
-	if strings.Contains(stack.body, gitHubIssuerHost) {
-		t.Errorf("a trust naming no repository rendered a role that trusts GitHub:\n%s", stack.body)
 	}
 }
 
@@ -154,20 +130,18 @@ func TestABootstrapTrustingAConsoleMakesItsIdentityProvidersBeforeTheRoleAndSays
 		t.Fatalf("Run: %v", err)
 	}
 
-	if want := []string{fixtureIssuerHost, gitHubIssuerHost}; !reflect.DeepEqual(providers.before, want) {
+	if want := []string{fixtureIssuerHost}; !reflect.DeepEqual(providers.before, want) {
 		t.Errorf("made %v before the role's stack, want %v", providers.before, want)
 	}
-	for host, audience := range map[string]string{fixtureIssuerHost: fixtureAudience, gitHubIssuerHost: gitHubAudience} {
-		made, ok := providers.has(host)
-		if !ok {
-			t.Fatalf("no identity provider for %s", host)
-		}
-		if !reflect.DeepEqual(made.clientIDs, []string{audience}) {
-			t.Errorf("%s admits %v, want %s alone", host, made.clientIDs, audience)
-		}
-		if want := map[string]string{naming.ManagedByTagKey: string(defaultNamespace), "ocel:component": provider.ConsoleTrustPart}; !reflect.DeepEqual(made.tags, want) {
-			t.Errorf("%s is tagged %v, want %v: made by this namespace for either tier's console trust", host, made.tags, want)
-		}
+	made, ok := providers.has(fixtureIssuerHost)
+	if !ok {
+		t.Fatalf("no identity provider for %s", fixtureIssuerHost)
+	}
+	if !reflect.DeepEqual(made.clientIDs, []string{fixtureAudience}) {
+		t.Errorf("%s admits %v, want %s alone", fixtureIssuerHost, made.clientIDs, fixtureAudience)
+	}
+	if want := map[string]string{naming.ManagedByTagKey: string(defaultNamespace), "ocel:component": provider.ConsoleTrustPart}; !reflect.DeepEqual(made.tags, want) {
+		t.Errorf("%s is tagged %v, want %v: made by this namespace for either tier's console trust", fixtureIssuerHost, made.tags, want)
 	}
 
 	read, err := Read(context.Background(), stacks, defaultNamespace, environment.TierProduction, fixtureDeploy(environment.TierProduction))

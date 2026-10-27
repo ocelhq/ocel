@@ -7,7 +7,6 @@ import (
 
 const (
 	consoleWord     = "console"
-	githubWord      = "github"
 	deployWord      = "deploy"
 	deployRoleWord  = "deploy_"
 	deployRoleChars = 8
@@ -24,10 +23,6 @@ func (n Names) ConsolePoolPath() string {
 
 func (n Names) ConsoleProvider(target string) string {
 	return consoleWord + naming.WordSeparator + naming.HashDigits(targetChars, target)
-}
-
-func (n Names) GitHubProvider(tier environment.Tier) string {
-	return githubWord + naming.WordSeparator + naming.TierWord(tier)
 }
 
 func (n Names) DeployAccount(tier environment.Tier) string {

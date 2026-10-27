@@ -529,14 +529,6 @@ message WebIdentityTrust {
   string organization_id = 3 [(buf.validate.field).string.min_len = 1];
 
   string target_id = 4 [(buf.validate.field).string.min_len = 1];
-
-  GitHubTrust github = 5;
-}
-
-message GitHubTrust {
-  string repository = 1 [(buf.validate.field).string.pattern = "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"];
-
-  string branch = 2;
 }
 
 message TierIdentity {

@@ -18,12 +18,6 @@ type WebIdentityTrust struct {
 	Audience       string
 	OrganizationID string
 	TargetID       string
-	GitHub         *GitHubTrust
-}
-
-type GitHubTrust struct {
-	Repository string
-	Branch     string
 }
 
 type TierIdentity struct {
