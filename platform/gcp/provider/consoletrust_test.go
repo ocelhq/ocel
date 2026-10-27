@@ -259,9 +259,6 @@ func TestATrustedConsoleIsAProviderOfItsTargetInTheProjectsPoolThatTakesOnlyThat
 	if want := "assertion.org == 'o-1' && assertion.target == 't-1'"; console.AttributeCondition != want {
 		t.Errorf("console provider condition = %q, want %q", console.AttributeCondition, want)
 	}
-	if github := h.pools.Provider(consolePool, "github-prod"); github != nil {
-		t.Errorf("a trust naming no GitHub repository made the GitHub provider %+v", github)
-	}
 }
 
 func TestATargetsProviderIDAndTheSubjectItMapsFitGooglesLimitsForUUIDTargetsAndTheLongestProject(t *testing.T) {
@@ -307,47 +304,6 @@ func TestAConsoleTrustQuotesWhatItComparesSoAnIDCannotWidenTheCondition(t *testi
 
 	if want := `assertion.org == 'o\' || true || \'' && assertion.target == 't-1'`; got != want {
 		t.Errorf("condition = %q, want %q", got, want)
-	}
-}
-
-func TestAGitHubTrustAdmitsProductionDeploysFromItsBranchAndPreviewDeploysFromPullRequests(t *testing.T) {
-	t.Parallel()
-	github := provider.GitHubTrust{Repository: "acme/shop", Branch: "main"}
-
-	for tier, condition := range map[environment.Tier]string{
-		environment.TierProduction: "assertion.repository == 'acme/shop' && assertion.ref == 'refs/heads/main'",
-		environment.TierPreview:    "assertion.repository == 'acme/shop' && assertion.event_name == 'pull_request'",
-	} {
-		got, err := bootstrap.GitHubProviderOf(tier, github)
-		if err != nil {
-			t.Fatalf("GitHubProviderOf(%s) = %v", tier, err)
-		}
-		if got.AttributeCondition != condition {
-			t.Errorf("GitHubProviderOf(%s) condition = %q, want %q", tier, got.AttributeCondition, condition)
-		}
-		if got.Oidc.IssuerUri != bootstrap.GitHubIssuer {
-			t.Errorf("GitHubProviderOf(%s) issuer = %q, want GitHub's", tier, got.Oidc.IssuerUri)
-		}
-		if want := map[string]string{"google.subject": "assertion.sub", "attribute.tier": "'" + string(tier) + "'"}; !maps.Equal(got.AttributeMapping, want) {
-			t.Errorf("GitHubProviderOf(%s) mapping = %v, want %v so the tier's principal set admits it", tier, got.AttributeMapping, want)
-		}
-	}
-	if _, err := bootstrap.GitHubProviderOf(environment.TierProduction, provider.GitHubTrust{Repository: "acme/shop"}); err == nil {
-		t.Error("GitHubProviderOf(production) with no branch = nil, want a refusal: every branch would be refused")
-	}
-}
-
-func TestATrustNamingAGitHubRepositoryMakesTheTiersGitHubProviderInThePool(t *testing.T) {
-	t.Parallel()
-	h := trusting(t)
-	trust := consoleTrust()
-	trust.GitHub = &provider.GitHubTrust{Repository: "acme/shop", Branch: "main"}
-
-	h.apply(t, trustRequest(environment.TierPreview, trust))
-
-	github := h.pools.Provider(consolePool, "github-preview")
-	if github == nil || !strings.Contains(github.AttributeCondition, "pull_request") {
-		t.Fatalf("github-preview provider = %+v, want one admitting the repository's pull requests", github)
 	}
 }
 
@@ -416,7 +372,6 @@ func TestATrustedTierDescribesItsTargetsProviderTheAccountAndTheTrustItWasLastAp
 	h := trusting(t)
 	tier := environment.TierProduction
 	trust := consoleTrust()
-	trust.GitHub = &provider.GitHubTrust{Repository: "acme/shop", Branch: "main"}
 	h.apply(t, trustRequest(tier, trust))
 
 	described := h.describe(t, tier)
@@ -428,7 +383,7 @@ func TestATrustedTierDescribesItsTargetsProviderTheAccountAndTheTrustItWasLastAp
 	if described.Identity == nil || *described.Identity != want {
 		t.Errorf("Described().Identity = %+v, want %+v", described.Identity, want)
 	}
-	if got := described.Trust; got == nil || got.TargetID != "t-1" || got.Issuer != trust.Issuer || got.GitHub == nil || *got.GitHub != *trust.GitHub {
+	if got := described.Trust; got == nil || got.TargetID != "t-1" || *got != trust {
 		t.Errorf("Described().Trust = %+v, want %+v", got, trust)
 	}
 	if stack := consoleTrustStack(t, described); !stack.Present || !stack.DigestCurrent {

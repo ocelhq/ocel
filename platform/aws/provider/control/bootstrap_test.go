@@ -732,8 +732,6 @@ func TestDescribeSaysTheTiersIdentityOnceTheConsoleTrustIsInstalled(t *testing.T
 		"TrustedAudience":            "https://console.example.com",
 		"TrustedOrganization":        "o",
 		"TrustedTarget":              "t",
-		"TrustedGitHubRepository":    "acme/shop",
-		"TrustedGitHubBranch":        "main",
 	}}
 	described, err = b.Describe(context.Background(), environment.TierProduction)
 	if err != nil {
@@ -744,7 +742,6 @@ func TestDescribeSaysTheTiersIdentityOnceTheConsoleTrustIsInstalled(t *testing.T
 	}
 	trust := provider.WebIdentityTrust{
 		Issuer: "https://console.example.com/oidc", Audience: "https://console.example.com", OrganizationID: "o", TargetID: "t",
-		GitHub: &provider.GitHubTrust{Repository: "acme/shop", Branch: "main"},
 	}
 	if described.Trust == nil || !reflect.DeepEqual(*described.Trust, trust) {
 		t.Errorf("Describe().Trust = %+v, want the trust the part was applied with %+v", described.Trust, trust)

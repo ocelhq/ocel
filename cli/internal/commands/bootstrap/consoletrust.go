@@ -5,15 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os/exec"
-	"regexp"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -22,10 +18,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
-
-var githubRemote = regexp.MustCompile(`^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$`)
-
-var symbolicHead = regexp.MustCompile(`(?m)^ref: refs/heads/(\S+)\s+HEAD$`)
 
 var errConsoleUnreachable = errors.New("no console session can reach the console")
 
@@ -88,49 +80,12 @@ func readConsoleTrust(ctx context.Context, invocation commands.Invocation, p com
 	if err != nil {
 		return nil, fmt.Errorf("the console prepared no target for account %s: %w", identity.GetAccount(), err)
 	}
-	trusted := &consoleTrust{consoleSession: *session, projectID: link.ProjectID, trust: &contractv1.WebIdentityTrust{
+	return &consoleTrust{consoleSession: *session, projectID: link.ProjectID, trust: &contractv1.WebIdentityTrust{
 		Issuer:         prepared.GetIssuer(),
 		Audience:       prepared.GetAudience(),
 		OrganizationId: prepared.GetOrganizationId(),
 		TargetId:       prepared.GetTargetId(),
-	}}
-	trusted.trust.Github, err = chooseGitHubTrust(ctx, p.Project, tier, policy, recorded.GetGithub(), span)
-	return trusted, err
-}
-
-func chooseGitHubTrust(ctx context.Context, cfg *project.Project, tier environmentv1.Tier, policy consent.Policy, recorded *contractv1.GitHubTrust, span *run.Span) (*contractv1.GitHubTrust, error) {
-	if !policy.IsAsking() {
-		return recorded, nil
-	}
-	if recorded != nil {
-		question := fmt.Sprintf("Stop letting GitHub Actions in %s%s assume the %s deploy identity directly?", recorded.GetRepository(), triggerOf(tier, recorded.GetBranch()), readiness.TierName(tier))
-		stop, err := policy.Offer(ctx, span, question)
-		if err != nil || stop {
-			return nil, err
-		}
-		return recorded, nil
-	}
-	repository, branch, found := readGitHubOrigin(cfg, tier)
-	if !found {
-		return nil, nil
-	}
-	question := fmt.Sprintf("Also let GitHub Actions in %s%s assume the %s deploy identity directly while the console is unreachable, with the cloud credentials the workflow configures itself?", repository, triggerOf(tier, branch), readiness.TierName(tier))
-	granted, err := policy.Offer(ctx, span, question)
-	if err != nil || !granted {
-		return nil, err
-	}
-	trust := &contractv1.GitHubTrust{Repository: repository}
-	if tier == environmentv1.Tier_TIER_PRODUCTION {
-		trust.Branch = branch
-	}
-	return trust, nil
-}
-
-func triggerOf(tier environmentv1.Tier, branch string) string {
-	if tier == environmentv1.Tier_TIER_PRODUCTION {
-		return " on branch " + branch
-	}
-	return " for pull requests"
+	}}, nil
 }
 
 func (c *consoleTrust) record(ctx context.Context, span *run.Span, p commands.ProviderRun, tier environmentv1.Tier) error {
@@ -213,32 +168,4 @@ func hostOf(apiURL string) string {
 		return apiURL
 	}
 	return parsed.Host
-}
-
-func readGitHubOrigin(cfg *project.Project, tier environmentv1.Tier) (repository, branch string, found bool) {
-	remote, err := exec.Command("git", "-C", cfg.Dir, "remote", "get-url", "origin").Output()
-	if err != nil {
-		return "", "", false
-	}
-	matched := githubRemote.FindStringSubmatch(strings.TrimSpace(string(remote)))
-	if matched == nil {
-		return "", "", false
-	}
-	if tier != environmentv1.Tier_TIER_PRODUCTION {
-		return matched[1], "", true
-	}
-	head, err := exec.Command("git", "-C", cfg.Dir, "ls-remote", "--symref", "origin", "HEAD").Output()
-	if err != nil {
-		return "", "", false
-	}
-	branch, found = defaultBranchOf(string(head))
-	return matched[1], branch, found
-}
-
-func defaultBranchOf(lsRemote string) (string, bool) {
-	matched := symbolicHead.FindStringSubmatch(lsRemote)
-	if matched == nil {
-		return "", false
-	}
-	return matched[1], true
 }

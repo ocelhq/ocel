@@ -118,7 +118,6 @@ func TestABootstrapReusesAnIdentityProviderItFindsAndAddsTheAudienceItLacks(t *t
 	apis := apisOf(stacks, ssmc, iamc, preloadedStore())
 	providers := apis.IdentityProviders.(*fakeIdentityProviders)
 	providers.madeElsewhere(fixtureIssuerHost, "someone-else")
-	providers.madeElsewhere(gitHubIssuerHost, gitHubAudience)
 
 	if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -137,18 +136,27 @@ func TestPlanShowsTheIdentityProvidersABootstrapWouldMakeOrChange(t *testing.T) 
 	if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, core, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	providers.madeElsewhere(gitHubIssuerHost, "other")
 
-	changes, err := plannedTrustedIssuers(context.Background(), ParamAPIs{Stacks: stacks, IdentityProviders: providers}, defaultNamespace, environment.TierProduction, everything())
-	if err != nil {
-		t.Fatalf("plannedTrustedIssuers: %v", err)
-	}
-	want := []provider.Change{
-		{Kind: identityProviderKind, Name: fixtureIssuerHost, Action: provider.ActionCreate},
-		{Kind: identityProviderKind, Name: gitHubIssuerHost, Action: provider.ActionUpdate, Reason: "adds audience " + gitHubAudience},
-	}
-	if !reflect.DeepEqual(changes, want) {
-		t.Errorf("planned %+v, want %+v", changes, want)
+	for _, tc := range []struct {
+		name  string
+		found []string
+		want  provider.Change
+	}{
+		{name: "missing", want: provider.Change{Kind: identityProviderKind, Name: fixtureIssuerHost, Action: provider.ActionCreate}},
+		{name: "lacking the audience", found: []string{"other"}, want: provider.Change{Kind: identityProviderKind, Name: fixtureIssuerHost, Action: provider.ActionUpdate, Reason: "adds audience " + fixtureAudience}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.found != nil {
+				providers.madeElsewhere(fixtureIssuerHost, tc.found...)
+			}
+			changes, err := plannedTrustedIssuers(context.Background(), ParamAPIs{Stacks: stacks, IdentityProviders: providers}, defaultNamespace, environment.TierProduction, everything())
+			if err != nil {
+				t.Fatalf("plannedTrustedIssuers: %v", err)
+			}
+			if want := []provider.Change{tc.want}; !reflect.DeepEqual(changes, want) {
+				t.Errorf("planned %+v, want %+v", changes, want)
+			}
+		})
 	}
 }
 
@@ -157,7 +165,6 @@ func trustedInBothTiers(t *testing.T) (*fakeCFN, APIs, *fakeIdentityProviders) {
 	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	apis := apisOf(stacks, ssmc, iamc, preloadedStore())
 	providers := apis.IdentityProviders.(*fakeIdentityProviders)
-	providers.madeElsewhere(gitHubIssuerHost, gitHubAudience)
 	for _, tier := range bothTiers {
 		if err := Run(context.Background(), apis, defaultNamespace, tier, everything(), nil); err != nil {
 			t.Fatalf("Run %s: %v", tier, err)
@@ -196,9 +203,6 @@ func TestRemovingTheTrustFromBothTiersDeletesTheIdentityProviderThisNamespaceMad
 			if _, ok := providers.has(fixtureIssuerHost); ok {
 				t.Error("the console's identity provider survived the last trust in it")
 			}
-			if _, ok := providers.has(gitHubIssuerHost); !ok {
-				t.Error("removing the trust deleted a GitHub identity provider Ocel did not make")
-			}
 		})
 	}
 }
@@ -226,17 +230,6 @@ func TestATrustThatMovesReleasesWhatTheTierTrustedBefore(t *testing.T) {
 				}
 				if _, ok := providers.has("other.example.com/oidc"); !ok {
 					return "no provider was made for the issuer now trusted"
-				}
-				return ""
-			},
-		},
-		{
-			name:    "off GitHub",
-			req:     moved(func(trust *provider.WebIdentityTrust) { trust.GitHub = nil }),
-			planned: provider.Change{Kind: identityProviderKind, Name: gitHubIssuerHost, Action: provider.ActionDelete},
-			left: func(providers *fakeIdentityProviders) string {
-				if _, ok := providers.has(gitHubIssuerHost); ok {
-					return "the GitHub provider survived the fallback being dropped"
 				}
 				return ""
 			},
@@ -306,10 +299,8 @@ func TestTearingATierDownReleasesTheIdentityProvidersItsTrustMade(t *testing.T) 
 	if err != nil {
 		t.Fatalf("PlanParameterRemoval: %v", err)
 	}
-	for _, host := range []string{fixtureIssuerHost, gitHubIssuerHost} {
-		if !slices.Contains(planned.Changes, provider.Change{Kind: identityProviderKind, Name: host, Action: provider.ActionDelete}) {
-			t.Errorf("the removal plan %+v does not show identity provider %s going", planned.Changes, host)
-		}
+	if !slices.Contains(planned.Changes, provider.Change{Kind: identityProviderKind, Name: fixtureIssuerHost, Action: provider.ActionDelete}) {
+		t.Errorf("the removal plan %+v does not show identity provider %s going", planned.Changes, fixtureIssuerHost)
 	}
 
 	if err := Teardown(context.Background(), TeardownAPIs{
@@ -318,9 +309,7 @@ func TestTearingATierDownReleasesTheIdentityProvidersItsTrustMade(t *testing.T) 
 	}, defaultNamespace, environment.TierProduction, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	for _, host := range []string{fixtureIssuerHost, gitHubIssuerHost} {
-		if _, ok := providers.has(host); ok {
-			t.Errorf("identity provider %s survived the teardown of the only tier trusting it", host)
-		}
+	if _, ok := providers.has(fixtureIssuerHost); ok {
+		t.Errorf("identity provider %s survived the teardown of the only tier trusting it", fixtureIssuerHost)
 	}
 }

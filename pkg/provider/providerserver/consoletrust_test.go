@@ -21,7 +21,6 @@ func consoleTrust() *contractv1.WebIdentityTrust {
 		Audience:       "https://console.example.com",
 		OrganizationId: "o",
 		TargetId:       "t",
-		Github:         &contractv1.GitHubTrust{Repository: "acme/shop", Branch: "main"},
 	}
 }
 
@@ -44,9 +43,8 @@ func TestABootstrapTrustingTheConsoleAddsItsPartAndSaysTheTiersIdentity(t *testi
 	want := provider.WebIdentityTrust{
 		Issuer: "https://console.example.com/oidc", Audience: "https://console.example.com",
 		OrganizationID: "o", TargetID: "t",
-		GitHub: &provider.GitHubTrust{Repository: "acme/shop", Branch: "main"},
 	}
-	if last.Trust == nil || last.Trust.Issuer != want.Issuer || last.Trust.TargetID != want.TargetID || *last.Trust.GitHub != *want.GitHub {
+	if last.Trust == nil || *last.Trust != want {
 		t.Errorf("the vendor was handed trust %+v, want %+v", last.Trust, want)
 	}
 	if !slices.Contains(last.Parts, provider.ConsoleTrustPart) {

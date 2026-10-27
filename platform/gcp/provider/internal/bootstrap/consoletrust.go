@@ -14,7 +14,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -27,7 +26,6 @@ const (
 	KindGrants           Kind = "iam:policybinding"
 
 	WorkloadIdentityUserRole = "roles/iam.workloadIdentityUser"
-	GitHubIssuer             = "https://token.actions.githubusercontent.com"
 
 	consoleTrustSummary = "a workload identity pool that takes the console's tokens, and a service account this tier deploys as, " +
 		"holding what a deploy credential of the tier is granted"
@@ -56,28 +54,6 @@ func ConsoleProviderOf(trust provider.WebIdentityTrust) *iam.WorkloadIdentityPoo
 		},
 		AttributeCondition: "assertion.org == " + celQuoted(trust.OrganizationID) + " && assertion.target == " + celQuoted(trust.TargetID),
 	}
-}
-
-func GitHubProviderOf(tier environment.Tier, github provider.GitHubTrust) (*iam.WorkloadIdentityPoolProvider, error) {
-	condition := "assertion.repository == " + celQuoted(github.Repository)
-	switch {
-	case tier == environment.TierPreview:
-		condition += " && assertion.event_name == 'pull_request'"
-	case github.Branch == "":
-		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the GitHub trust of the %s tier names no branch, and a production deploy from GitHub is trusted only from one.\nName the branch production deploys from", tier)
-	default:
-		condition += " && assertion.ref == " + celQuoted("refs/heads/"+github.Branch)
-	}
-	return &iam.WorkloadIdentityPoolProvider{
-		DisplayName: "ocel GitHub " + string(tier),
-		Oidc:        &iam.Oidc{IssuerUri: GitHubIssuer},
-		AttributeMapping: map[string]string{
-			"google.subject": "assertion.sub",
-			"attribute.tier": celQuoted(string(tier)),
-		},
-		AttributeCondition: condition,
-	}, nil
 }
 
 type deployGrants struct {
@@ -129,15 +105,7 @@ func ConsoleTrustDigest(n names.Names, region string, tier environment.Tier, tru
 	for _, role := range grants.roles {
 		fmt.Fprintf(sum, "role %s %s\n", role.ID, strings.Join(role.Permissions, ","))
 	}
-	providers := []*iam.WorkloadIdentityPoolProvider{ConsoleProviderOf(trust)}
-	if trust.GitHub != nil {
-		github, err := GitHubProviderOf(tier, *trust.GitHub)
-		if err != nil {
-			return "", err
-		}
-		providers = append(providers, github)
-	}
-	encoded, err := json.Marshal(providers)
+	encoded, err := json.Marshal([]*iam.WorkloadIdentityPoolProvider{ConsoleProviderOf(trust)})
 	if err != nil {
 		return "", err
 	}
@@ -248,21 +216,6 @@ func (b Engine) planConsoleTrust(ctx context.Context, read Survey, trust provide
 		changes = append(changes, provider.Change{Kind: string(KindIdentityProvider), Name: n.ConsoleProvider(superseded), Action: provider.ActionDelete})
 	}
 
-	github, err := b.readIdentityProvider(ctx, n.GitHubProvider(tier))
-	if err != nil {
-		return nil, err
-	}
-	switch {
-	case trust.GitHub != nil:
-		want, err := GitHubProviderOf(tier, *trust.GitHub)
-		if err != nil {
-			return nil, err
-		}
-		changes = append(changes, identityChange(KindIdentityProvider, n.GitHubProvider(tier), github, want))
-	case github != nil && github.State != identityDeleted:
-		changes = append(changes, provider.Change{Kind: string(KindIdentityProvider), Name: n.GitHubProvider(tier), Action: provider.ActionDelete})
-	}
-
 	grants, err := newDeployGrants(n, b.Clients.Region, tier)
 	if err != nil {
 		return nil, err
@@ -354,19 +307,6 @@ func (b Engine) RaiseConsoleTrust(ctx context.Context, read Survey, trust provid
 			return err
 		}
 	}
-	if trust.GitHub == nil {
-		if err := b.deleteIdentityProvider(ctx, n.GitHubProvider(tier)); err != nil {
-			return err
-		}
-	} else {
-		want, err := GitHubProviderOf(tier, *trust.GitHub)
-		if err != nil {
-			return err
-		}
-		if err := b.makeIdentityProvider(ctx, n.GitHubProvider(tier), want); err != nil {
-			return err
-		}
-	}
 	grants, err := newDeployGrants(n, b.Clients.Region, tier)
 	if err != nil {
 		return err
@@ -430,7 +370,6 @@ func (b Engine) plannedConsoleTrustRemoval(read Survey) []provider.Change {
 	changes := []provider.Change{
 		{Kind: string(KindGrants), Name: n.DeployAccountEmail(read.Tier), Action: provider.ActionDelete},
 		{Kind: string(KindServiceAccount), Name: n.DeployAccountEmail(read.Tier), Action: provider.ActionDelete},
-		{Kind: string(KindIdentityProvider), Name: n.GitHubProvider(read.Tier), Action: provider.ActionDelete},
 	}
 	if !siblingTrusts(read) {
 		return append(changes, provider.Change{Kind: string(KindIdentityPool), Name: n.ConsolePool(), Action: provider.ActionDelete})
@@ -457,9 +396,6 @@ func (b Engine) TakeConsoleTrust(ctx context.Context, read Survey, progress prog
 		}
 	}
 	if _, err := b.Clients.DeleteAccount(ctx, read.Tier, n.DeployAccount(read.Tier)); err != nil {
-		return err
-	}
-	if err := b.deleteIdentityProvider(ctx, n.GitHubProvider(read.Tier)); err != nil {
 		return err
 	}
 	if !siblingTrusts(read) {

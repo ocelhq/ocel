@@ -91,32 +91,24 @@ func trustOf(sent *contractv1.WebIdentityTrust) *provider.WebIdentityTrust {
 	if sent == nil {
 		return nil
 	}
-	trust := &provider.WebIdentityTrust{
+	return &provider.WebIdentityTrust{
 		Issuer:         sent.GetIssuer(),
 		Audience:       sent.GetAudience(),
 		OrganizationID: sent.GetOrganizationId(),
 		TargetID:       sent.GetTargetId(),
 	}
-	if github := sent.GetGithub(); github != nil {
-		trust.GitHub = &provider.GitHubTrust{Repository: github.GetRepository(), Branch: github.GetBranch()}
-	}
-	return trust
 }
 
 func trustProto(trust *provider.WebIdentityTrust) *contractv1.WebIdentityTrust {
 	if trust == nil {
 		return nil
 	}
-	sent := &contractv1.WebIdentityTrust{
+	return &contractv1.WebIdentityTrust{
 		Issuer:         trust.Issuer,
 		Audience:       trust.Audience,
 		OrganizationId: trust.OrganizationID,
 		TargetId:       trust.TargetID,
 	}
-	if trust.GitHub != nil {
-		sent.Github = &contractv1.GitHubTrust{Repository: trust.GitHub.Repository, Branch: trust.GitHub.Branch}
-	}
-	return sent
 }
 
 func tierIdentityProto(identity *provider.TierIdentity) *contractv1.TierIdentity {
