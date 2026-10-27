@@ -105,7 +105,7 @@ func ConsoleTrustDigest(n names.Names, region string, tier environment.Tier, tru
 	for _, role := range grants.roles {
 		fmt.Fprintf(sum, "role %s %s\n", role.ID, strings.Join(role.Permissions, ","))
 	}
-	encoded, err := json.Marshal([]*iam.WorkloadIdentityPoolProvider{ConsoleProviderOf(trust)})
+	encoded, err := json.Marshal(ConsoleProviderOf(trust))
 	if err != nil {
 		return "", err
 	}
@@ -176,14 +176,14 @@ func (b Engine) consoleTrustInstalled(ctx context.Context, tier environment.Tier
 	return found != nil, err
 }
 
-func identityChange(kind Kind, name string, current, want *iam.WorkloadIdentityPoolProvider) provider.Change {
-	change := provider.Change{Kind: string(kind), Name: name, Action: provider.ActionCreate}
-	switch {
-	case current == nil:
-	case identityProviderDrift(current, want) != "":
-		change.Action, change.Reason = provider.ActionUpdate, identityProviderDrift(current, want)
-	default:
-		change.Action, change.Reason = provider.ActionKeep, reasonCurrent
+func identityProviderChange(name string, current, want *iam.WorkloadIdentityPoolProvider) provider.Change {
+	change := provider.Change{Kind: string(KindIdentityProvider), Name: name, Action: provider.ActionCreate}
+	if current == nil {
+		return change
+	}
+	change.Action, change.Reason = provider.ActionKeep, reasonCurrent
+	if drift := identityProviderDrift(current, want); drift != "" {
+		change.Action, change.Reason = provider.ActionUpdate, drift
 	}
 	return change
 }
@@ -211,7 +211,7 @@ func (b Engine) planConsoleTrust(ctx context.Context, read Survey, trust provide
 	if err != nil {
 		return nil, err
 	}
-	changes = append(changes, identityChange(KindIdentityProvider, n.ConsoleProvider(trust.TargetID), console, ConsoleProviderOf(trust)))
+	changes = append(changes, identityProviderChange(n.ConsoleProvider(trust.TargetID), console, ConsoleProviderOf(trust)))
 	if superseded := supersededTarget(read, trust); superseded != "" {
 		changes = append(changes, provider.Change{Kind: string(KindIdentityProvider), Name: n.ConsoleProvider(superseded), Action: provider.ActionDelete})
 	}
