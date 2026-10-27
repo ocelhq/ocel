@@ -20,9 +20,6 @@
 "area:edge":
   - changed-files:
       - any-glob-to-any-file: "platform/edge/**"
-"area:console":
-  - changed-files:
-      - any-glob-to-any-file: "console/**"
 "area:frameworks":
   - changed-files:
       - any-glob-to-any-file: "frameworks/**"

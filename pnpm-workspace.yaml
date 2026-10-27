@@ -1,6 +1,5 @@
 packages:
   - www
-  - console/github
   - cli/node
   - packages/*
   - pkg/provider/transform

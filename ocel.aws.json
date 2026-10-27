@@ -9,12 +9,5 @@
       "dns": "cloudflare"
     }
   },
-  "apps": [
-    { "name": "www", "path": "./www", "domains": { "production": "ocel.dev" } },
-    {
-      "name": "github",
-      "path": "./console/github",
-      "domains": { "production": "github.ocel.dev" }
-    }
-  ]
+  "apps": [{ "name": "www", "path": "./www", "domains": { "production": "ocel.dev" } }]
 }
