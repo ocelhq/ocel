@@ -1,4 +1,4 @@
-package deploy
+package inlinebinding
 
 import (
 	"context"
@@ -17,7 +17,7 @@ var inlineTLSModes = map[string]bindingsv1.PostgresTlsMode{
 	"verify-full": bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL,
 }
 
-func buildInlineBindings(bound []project.Binding, values map[string]string, source string) ([]*bindingsv1.Binding, error) {
+func build(bound []project.Binding, values map[string]string, source string) ([]*bindingsv1.Binding, error) {
 	var out []*bindingsv1.Binding
 	for _, b := range bound {
 		if b.Inline == nil {
@@ -110,10 +110,10 @@ func bucketProperties(b *project.BucketInline, read func(string) (string, error)
 	return props, nil
 }
 
-func inlineBindings(ctx context.Context, cfg *project.Project, declarations *variables.Declarations) ([]*bindingsv1.Binding, error) {
+func Read(ctx context.Context, cfg *project.Project, declarations *variables.Declarations) ([]*bindingsv1.Binding, error) {
 	values, err := declarations.ResolveBindingVariables(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return buildInlineBindings(cfg.BindingsFor(declarations.Scope().Tier), values, filepath.Base(cfg.Path))
+	return build(cfg.BindingsFor(declarations.Scope().Tier), values, filepath.Base(cfg.Path))
 }

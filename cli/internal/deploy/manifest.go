@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
+	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/portforward"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -87,7 +88,7 @@ func (d *deployRun) collect(ctx context.Context) (collected, error) {
 	if err := declarations.RefuseIncomplete(); err != nil {
 		return collected{}, err
 	}
-	inline, err := inlineBindings(ctx, cfg, declarations)
+	inline, err := inlinebinding.Read(ctx, cfg, declarations)
 	if err != nil {
 		return collected{}, err
 	}
