@@ -235,15 +235,12 @@ func resolve(ctx context.Context, manifest string) (*live.Values, error) {
 	if manifest == "" {
 		return nil, nil
 	}
-	values, err := source.FromManifest([]byte(manifest))
+	values, err := source.Resolve(ctx, []byte(manifest))
 	if err != nil {
-		return nil, fmt.Errorf("read this deployment's live variables: %w", err)
+		return nil, fmt.Errorf("resolve this deployment's live variables: %w", err)
 	}
 	if values == nil {
 		return nil, nil
-	}
-	if err := values.Join(values.Prefetch(ctx)); err != nil {
-		return nil, fmt.Errorf("resolve this deployment's live variables: %w", err)
 	}
 	if missing := values.Missing(); len(missing) > 0 {
 		return nil, fmt.Errorf("nothing is stored for %s, which this deployment declares as %s: set it with `ocel env set` and deploy again",

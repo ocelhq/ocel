@@ -2,11 +2,14 @@ package run
 
 import (
 	"testing"
+	"time"
 
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
+	variables "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 )
 
 func TestAReleasesTagAnswersOnTheURLCloudRunReportsForThatTag(t *testing.T) {
@@ -52,6 +55,20 @@ func TestATiersServiceCarriesItsTierOnEveryRevisionSoItsLogEntriesCarryIt(t *tes
 		if got := service.Labels[names.TierLabel]; got != string(tier) {
 			t.Errorf("a %s service carries %s=%q, want %q", tier, names.TierLabel, got, tier)
 		}
+	}
+}
+
+func TestAContainersStartupProbeOutlastsItsRuntimesWaitForTheAppsGrants(t *testing.T) {
+	t.Parallel()
+
+	service, err := ServiceOf(Serving{Service: "ocel-app-web", Tier: environment.TierProduction, Compute: provider.ComputeContainer, Health: "/health", Image: "europe-west1-docker.pkg.dev/acme-prod/ocel/web@sha256:abc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := service.Template.Containers[0].StartupProbe
+	window := time.Duration(probe.PeriodSeconds*probe.FailureThreshold) * time.Second
+	if window <= variables.GrantPatience {
+		t.Errorf("the startup probe gives up after %s, want longer than the %s the runtime waits for the app's grants to take effect before it serves", window, variables.GrantPatience)
 	}
 }
 

@@ -3,9 +3,14 @@ package live
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -57,6 +62,11 @@ func resolved(t *testing.T, values *live.Values) map[string]string {
 	if err := values.Join(values.Prefetch(context.Background())); err != nil {
 		t.Fatalf("Prefetch() = %v", err)
 	}
+	return pushed(t, values)
+}
+
+func pushed(t *testing.T, values *live.Values) map[string]string {
+	t.Helper()
 	var pushed struct {
 		Values map[string]string `json:"values"`
 	}
@@ -157,22 +167,19 @@ func TestAManifestNamingNothingLiveBuildsNoStoreClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	values, err := FromManifest(raw)
+	values, err := Resolve(context.Background(), raw)
 	if err != nil {
-		t.Fatalf("FromManifest() = %v", err)
+		t.Fatalf("Resolve() = %v", err)
 	}
 	if values != nil {
 		t.Error("a manifest naming no key and no binding built a store client anyway")
-	}
-	if err := values.Join(values.Prefetch(context.Background())); err != nil {
-		t.Errorf("Prefetch() on nothing live = %v, want nil", err)
 	}
 }
 
 func TestAManifestThatWillNotParseIsAnInitFailure(t *testing.T) {
 	t.Parallel()
-	if _, err := FromManifest([]byte("{not json")); err == nil {
-		t.Fatal("FromManifest() on garbage = nil, want the runtime to refuse to start rather than run the app without its values")
+	if _, err := Resolve(context.Background(), []byte("{not json")); err == nil {
+		t.Fatal("Resolve() on garbage = nil, want the runtime to refuse to start rather than run the app without its values")
 	}
 }
 
@@ -192,11 +199,93 @@ func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	values, err := FromManifest(raw)
+	values, err := Resolve(context.Background(), raw)
 	if err != nil {
-		t.Fatalf("FromManifest() = %v", err)
+		t.Fatalf("Resolve() = %v", err)
 	}
-	if got := resolved(t, values); got["DATABASE_URL"] != "postgres://through-kms" {
+	if got := pushed(t, values); got["DATABASE_URL"] != "postgres://through-kms" {
 		t.Errorf("resolved %v, want the value read out of the Firestore database and opened by the tier key the manifest names", got)
+	}
+}
+
+type refusingStore struct {
+	records.Store
+	refusals atomic.Int32
+	refusal  error
+	reads    atomic.Int32
+}
+
+func (s *refusingStore) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
+	s.reads.Add(1)
+	if s.refusals.Add(-1) >= 0 {
+		return nil, s.refusal
+	}
+	return s.Store.List(ctx, in, under...)
+}
+
+func (s *refusingStore) Read(ctx context.Context, key records.Key) (records.Entry, error) {
+	s.reads.Add(1)
+	if s.refusals.Add(-1) >= 0 {
+		return records.Entry{}, s.refusal
+	}
+	return s.Store.Read(ctx, key)
+}
+
+func refusing(fakes stores, times int32, refusal error) *refusingStore {
+	store := &refusingStore{Store: fakes.keyValues, refusal: refusal}
+	store.refusals.Store(times)
+	return store
+}
+
+var denied = status.Error(codes.PermissionDenied, "Missing or insufficient permissions.")
+
+func TestABootReadDeniedWhileTheAppsGrantTakesEffectResolvesOnceItHas(t *testing.T) {
+	t.Parallel()
+	fakes := fakeStores()
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
+	fakes.set(t, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, "postgres://live")
+	store := refusing(fakes, 2, denied)
+
+	values, err := resolveWithin(context.Background(), time.Minute, func() *live.Values {
+		return Over(manifestOf("DATABASE_URL"), store, fakes.cipher)
+	})
+	if err != nil {
+		t.Fatalf("resolveWithin() = %v, want the read denied while the app's grant takes effect to succeed once it has", err)
+	}
+	if got := pushed(t, values); got["DATABASE_URL"] != "postgres://live" {
+		t.Errorf("resolved %v, want the value read once the store let the app in", got)
+	}
+}
+
+func TestABootReadStillDeniedPastThePatienceFailsWithTheDenial(t *testing.T) {
+	t.Parallel()
+	fakes := fakeStores()
+	store := refusing(fakes, 1<<20, denied)
+
+	_, err := resolveWithin(context.Background(), 300*time.Millisecond, func() *live.Values {
+		return Over(manifestOf("DATABASE_URL"), store, fakes.cipher)
+	})
+	if status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("resolveWithin() = %v, want the denial once the patience runs out", err)
+	}
+	if store.reads.Load() < 2 {
+		t.Errorf("the store was read %d times, want the denied read retried within the patience", store.reads.Load())
+	}
+}
+
+func TestABootReadFailingForAnotherReasonIsNotRetried(t *testing.T) {
+	t.Parallel()
+	fakes := fakeStores()
+	refusal := errors.New("the record does not decode")
+	store := refusing(fakes, 1<<20, refusal)
+
+	_, err := resolveWithin(context.Background(), time.Minute, func() *live.Values {
+		return Over(manifestOf("DATABASE_URL"), store, fakes.cipher)
+	})
+	if !errors.Is(err, refusal) {
+		t.Fatalf("resolveWithin() = %v, want %v", err, refusal)
+	}
+	if store.reads.Load() != 1 {
+		t.Errorf("the store was read %d times, want a failure no grant can fix to fail the first read", store.reads.Load())
 	}
 }
