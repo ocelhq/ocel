@@ -128,15 +128,6 @@ func TestABootstrapReusesAnIdentityProviderItFindsAndAddsTheAudienceItLacks(t *t
 }
 
 func TestPlanShowsTheIdentityProvidersABootstrapWouldMakeOrChange(t *testing.T) {
-	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-	apis := apisOf(stacks, ssmc, iamc, preloadedStore())
-	providers := apis.IdentityProviders.(*fakeIdentityProviders)
-	core := everything()
-	core.Parts, core.Trust = nil, nil
-	if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, core, nil); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-
 	for _, tc := range []struct {
 		name  string
 		found []string
@@ -146,12 +137,20 @@ func TestPlanShowsTheIdentityProvidersABootstrapWouldMakeOrChange(t *testing.T) 
 		{name: "lacking the audience", found: []string{"other"}, want: provider.Change{Kind: identityProviderKind, Name: fixtureIssuerHost, Action: provider.ActionUpdate, Reason: "adds audience " + fixtureAudience}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+			apis := apisOf(stacks, ssmc, iamc, preloadedStore())
+			providers := apis.IdentityProviders.(*fakeIdentityProviders)
+			core := everything()
+			core.Parts, core.Trust = nil, nil
+			if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, core, nil); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
 			if tc.found != nil {
 				providers.madeElsewhere(fixtureIssuerHost, tc.found...)
 			}
-			changes, err := plannedTrustedIssuers(context.Background(), ParamAPIs{Stacks: stacks, IdentityProviders: providers}, defaultNamespace, environment.TierProduction, everything())
+			changes, err := plannedTrustedIssuer(context.Background(), ParamAPIs{Stacks: stacks, IdentityProviders: providers}, defaultNamespace, environment.TierProduction, everything())
 			if err != nil {
-				t.Fatalf("plannedTrustedIssuers: %v", err)
+				t.Fatalf("plannedTrustedIssuer: %v", err)
 			}
 			if want := []provider.Change{tc.want}; !reflect.DeepEqual(changes, want) {
 				t.Errorf("planned %+v, want %+v", changes, want)
@@ -255,9 +254,9 @@ func TestATrustThatMovesReleasesWhatTheTierTrustedBefore(t *testing.T) {
 				t.Fatalf("Run: %v", err)
 			}
 
-			planned, err := plannedTrustedIssuers(context.Background(), ParamAPIs{Stacks: stacks, IdentityProviders: providers}, defaultNamespace, environment.TierProduction, tc.req)
+			planned, err := plannedTrustedIssuer(context.Background(), ParamAPIs{Stacks: stacks, IdentityProviders: providers}, defaultNamespace, environment.TierProduction, tc.req)
 			if err != nil {
-				t.Fatalf("plannedTrustedIssuers: %v", err)
+				t.Fatalf("plannedTrustedIssuer: %v", err)
 			}
 			if !slices.Contains(planned, tc.planned) {
 				t.Errorf("planned %+v, want %+v among them", planned, tc.planned)

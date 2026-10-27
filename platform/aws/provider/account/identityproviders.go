@@ -36,12 +36,12 @@ type trustedIssuer struct {
 	audience string
 }
 
-func trustedIssuers(trust provider.WebIdentityTrust) ([]trustedIssuer, error) {
+func trustedIssuerOf(trust provider.WebIdentityTrust) (trustedIssuer, error) {
 	host, err := issuerHost(trust.Issuer)
 	if err != nil {
-		return nil, err
+		return trustedIssuer{}, err
 	}
-	return []trustedIssuer{{host: host, audience: trust.Audience}}, nil
+	return trustedIssuer{host: host, audience: trust.Audience}, nil
 }
 
 type recordedIssuer struct {
@@ -49,14 +49,14 @@ type recordedIssuer struct {
 	trustedIssuer
 }
 
-func issuersRecordedIn(outputs map[string]string) []recordedIssuer {
+func issuerRecordedIn(outputs map[string]string) (recordedIssuer, bool) {
 	named := outputs[outputConsoleIdentityProviderARN]
 	parsed, err := arn.Parse(named)
 	if err != nil {
-		return nil
+		return recordedIssuer{}, false
 	}
 	_, host, _ := strings.Cut(parsed.Resource, "/")
-	return []recordedIssuer{{named: named, trustedIssuer: trustedIssuer{host: host, audience: outputs[outputTrustedAudience]}}}
+	return recordedIssuer{named: named, trustedIssuer: trustedIssuer{host: host, audience: outputs[outputTrustedAudience]}}, true
 }
 
 func identityProviderARN(deployed Deployed, host string) (string, bool) {
@@ -90,24 +90,22 @@ func readIdentityProvider(ctx context.Context, api IdentityProviderAPI, named st
 	return found, nil
 }
 
-func ensureTrustedIssuers(ctx context.Context, d stepDeps) error {
+func ensureTrustedIssuer(ctx context.Context, d stepDeps) error {
 	if d.trust == nil {
 		return nil
 	}
-	issuers, err := trustedIssuers(*d.trust)
+	issuer, err := trustedIssuerOf(*d.trust)
 	if err != nil {
 		return err
 	}
-	for _, issuer := range issuers {
-		named, known := identityProviderARN(d.deployed, issuer.host)
-		if !known {
-			return fmt.Errorf("the %s bootstrap names no account, so identity provider %s cannot be addressed", d.tier, issuer.host)
-		}
-		if err := ensureIdentityProvider(ctx, d, named, issuer); err != nil {
-			return err
-		}
+	named, known := identityProviderARN(d.deployed, issuer.host)
+	if !known {
+		return fmt.Errorf("the %s bootstrap names no account, so identity provider %s cannot be addressed", d.tier, issuer.host)
 	}
-	return releaseIssuers(ctx, d, issuers)
+	if err := ensureIdentityProvider(ctx, d, named, issuer); err != nil {
+		return err
+	}
+	return releaseIssuer(ctx, d, &issuer)
 }
 
 func ensureIdentityProvider(ctx context.Context, d stepDeps, named string, issuer trustedIssuer) error {
@@ -150,11 +148,11 @@ func ensureIdentityProvider(ctx context.Context, d stepDeps, named string, issue
 	return nil
 }
 
-func plannedTrustedIssuers(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, req Request) ([]provider.Change, error) {
+func plannedTrustedIssuer(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, req Request) ([]provider.Change, error) {
 	if req.Trust == nil {
 		return nil, nil
 	}
-	issuers, err := trustedIssuers(*req.Trust)
+	issuer, err := trustedIssuerOf(*req.Trust)
 	if err != nil {
 		return nil, err
 	}
@@ -162,30 +160,26 @@ func plannedTrustedIssuers(ctx context.Context, apis ParamAPIs, ns Namespace, ti
 	if err != nil {
 		return nil, err
 	}
-	changes := make([]provider.Change, 0, len(issuers))
-	for _, issuer := range issuers {
-		change := provider.Change{Kind: identityProviderKind, Name: issuer.host, Action: provider.ActionCreate}
-		named, known := identityProviderARN(deployed, issuer.host)
-		if known {
-			found, err := readIdentityProvider(ctx, apis.IdentityProviders, named)
-			if err != nil {
-				return nil, err
-			}
-			switch {
-			case found == nil:
-			case slices.Contains(found.clientIDs, issuer.audience):
-				change.Action, change.Reason = provider.ActionKeep, paramCurrent
-			default:
-				change.Action, change.Reason = provider.ActionUpdate, "adds audience "+issuer.audience
-			}
+	change := provider.Change{Kind: identityProviderKind, Name: issuer.host, Action: provider.ActionCreate}
+	if named, known := identityProviderARN(deployed, issuer.host); known {
+		found, err := readIdentityProvider(ctx, apis.IdentityProviders, named)
+		if err != nil {
+			return nil, err
 		}
-		changes = append(changes, change)
+		switch {
+		case found == nil:
+		case slices.Contains(found.clientIDs, issuer.audience):
+			change.Action, change.Reason = provider.ActionKeep, paramCurrent
+		default:
+			change.Action, change.Reason = provider.ActionUpdate, "adds audience "+issuer.audience
+		}
 	}
-	released, err := plannedReleases(ctx, apis, ns, tier, issuers)
-	if err != nil {
-		return nil, err
+	changes := []provider.Change{change}
+	released, err := plannedRelease(ctx, apis, ns, tier, &issuer)
+	if err != nil || released == nil {
+		return changes, err
 	}
-	return append(changes, released...), nil
+	return append(changes, *released), nil
 }
 
 type issuerRelease struct {
@@ -193,87 +187,85 @@ type issuerRelease struct {
 	whole bool
 }
 
-func findIssuerReleases(ctx context.Context, stacks cfn.StacksAPI, api IdentityProviderAPI, ns Namespace, tier environment.Tier, kept []trustedIssuer) ([]issuerRelease, error) {
+func findIssuerRelease(ctx context.Context, stacks cfn.StacksAPI, api IdentityProviderAPI, ns Namespace, tier environment.Tier, kept *trustedIssuer) (*issuerRelease, error) {
 	current, err := cfn.StackOutputs(ctx, stacks, ns.partStackName(provider.ConsoleTrustPart, tier))
-	if err != nil || current == nil {
+	if err != nil {
 		return nil, err
+	}
+	recorded, found := issuerRecordedIn(current)
+	if !found {
+		return nil, nil
 	}
 	sibling, err := cfn.StackOutputs(ctx, stacks, ns.partStackName(provider.ConsoleTrustPart, tier.Sibling()))
 	if err != nil {
 		return nil, err
 	}
-	referenced := slices.Clone(kept)
-	for _, recorded := range issuersRecordedIn(sibling) {
-		referenced = append(referenced, recorded.trustedIssuer)
+	var referenced []trustedIssuer
+	if kept != nil {
+		referenced = append(referenced, *kept)
 	}
-	var releases []issuerRelease
-	for _, recorded := range issuersRecordedIn(current) {
-		if slices.Contains(referenced, recorded.trustedIssuer) {
-			continue
-		}
-		found, err := readIdentityProvider(ctx, api, recorded.named)
-		if err != nil {
-			return nil, err
-		}
-		if found == nil || found.madeBy != string(ns) {
-			continue
-		}
-		whole := !slices.ContainsFunc(referenced, func(issuer trustedIssuer) bool { return issuer.host == recorded.host })
-		if !whole && !slices.Contains(found.clientIDs, recorded.audience) {
-			continue
-		}
-		releases = append(releases, issuerRelease{recordedIssuer: recorded, whole: whole})
+	if siblings, found := issuerRecordedIn(sibling); found {
+		referenced = append(referenced, siblings.trustedIssuer)
 	}
-	return releases, nil
+	if slices.Contains(referenced, recorded.trustedIssuer) {
+		return nil, nil
+	}
+	held, err := readIdentityProvider(ctx, api, recorded.named)
+	if err != nil || held == nil || held.madeBy != string(ns) {
+		return nil, err
+	}
+	whole := !slices.ContainsFunc(referenced, func(issuer trustedIssuer) bool { return issuer.host == recorded.host })
+	if !whole && !slices.Contains(held.clientIDs, recorded.audience) {
+		return nil, nil
+	}
+	return &issuerRelease{recordedIssuer: recorded, whole: whole}, nil
 }
 
-func releaseIssuers(ctx context.Context, d stepDeps, kept []trustedIssuer) error {
-	releases, err := findIssuerReleases(ctx, d.stacks, d.identityProviders, d.ns, d.tier, kept)
-	if err != nil {
+func releaseIssuer(ctx context.Context, d stepDeps, kept *trustedIssuer) error {
+	release, err := findIssuerRelease(ctx, d.stacks, d.identityProviders, d.ns, d.tier, kept)
+	if err != nil || release == nil {
 		return err
 	}
 	var missing *iamtypes.NoSuchEntityException
-	for _, release := range releases {
-		if release.whole {
-			d.progress.Say("Deleting identity provider " + release.host)
-			_, err := d.identityProviders.DeleteOpenIDConnectProvider(ctx, &iam.DeleteOpenIDConnectProviderInput{OpenIDConnectProviderArn: aws.String(release.named)})
-			if err != nil && !errors.As(err, &missing) {
-				return fmt.Errorf("delete identity provider %s: %w", release.host, err)
-			}
-			continue
-		}
-		d.progress.Say(fmt.Sprintf("Removing audience %s from identity provider %s", release.audience, release.host))
-		_, err := d.identityProviders.RemoveClientIDFromOpenIDConnectProvider(ctx, &iam.RemoveClientIDFromOpenIDConnectProviderInput{
-			OpenIDConnectProviderArn: aws.String(release.named),
-			ClientID:                 aws.String(release.audience),
-		})
+	if release.whole {
+		d.progress.Say("Deleting identity provider " + release.host)
+		_, err := d.identityProviders.DeleteOpenIDConnectProvider(ctx, &iam.DeleteOpenIDConnectProviderInput{OpenIDConnectProviderArn: aws.String(release.named)})
 		if err != nil && !errors.As(err, &missing) {
-			return fmt.Errorf("remove audience %s from identity provider %s: %w", release.audience, release.host, err)
+			return fmt.Errorf("delete identity provider %s: %w", release.host, err)
 		}
+		return nil
+	}
+	d.progress.Say(fmt.Sprintf("Removing audience %s from identity provider %s", release.audience, release.host))
+	_, err = d.identityProviders.RemoveClientIDFromOpenIDConnectProvider(ctx, &iam.RemoveClientIDFromOpenIDConnectProviderInput{
+		OpenIDConnectProviderArn: aws.String(release.named),
+		ClientID:                 aws.String(release.audience),
+	})
+	if err != nil && !errors.As(err, &missing) {
+		return fmt.Errorf("remove audience %s from identity provider %s: %w", release.audience, release.host, err)
 	}
 	return nil
 }
 
-func releaseTrustedIssuers(ctx context.Context, d stepDeps) error {
-	return releaseIssuers(ctx, d, nil)
+func releaseTrustedIssuer(ctx context.Context, d stepDeps) error {
+	return releaseIssuer(ctx, d, nil)
 }
 
-func plannedReleases(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, kept []trustedIssuer) ([]provider.Change, error) {
-	releases, err := findIssuerReleases(ctx, apis.Stacks, apis.IdentityProviders, ns, tier, kept)
-	if err != nil {
+func plannedRelease(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, kept *trustedIssuer) (*provider.Change, error) {
+	release, err := findIssuerRelease(ctx, apis.Stacks, apis.IdentityProviders, ns, tier, kept)
+	if err != nil || release == nil {
 		return nil, err
 	}
-	changes := make([]provider.Change, 0, len(releases))
-	for _, release := range releases {
-		change := provider.Change{Kind: identityProviderKind, Name: release.host, Action: provider.ActionDelete}
-		if !release.whole {
-			change.Action, change.Reason = provider.ActionUpdate, "drops audience "+release.audience
-		}
-		changes = append(changes, change)
+	change := provider.Change{Kind: identityProviderKind, Name: release.host, Action: provider.ActionDelete}
+	if !release.whole {
+		change.Action, change.Reason = provider.ActionUpdate, "drops audience "+release.audience
 	}
-	return changes, nil
+	return &change, nil
 }
 
 func plannedIssuerRelease(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier) ([]provider.Change, error) {
-	return plannedReleases(ctx, apis, ns, tier, nil)
+	released, err := plannedRelease(ctx, apis, ns, tier, nil)
+	if err != nil || released == nil {
+		return nil, err
+	}
+	return []provider.Change{*released}, nil
 }
