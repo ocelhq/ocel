@@ -106,54 +106,39 @@ func listGrants(uses []Use) []*contractv1.ForwardPortsGrant {
 	return grants
 }
 
-func FindBound(infra *contractv1.Manifest, kind resourcesv1.ResourceType, name string) (string, bool) {
-	for _, resource := range infra.GetResources() {
-		declared := resource.GetResource()
-		if declared.GetType() == kind && declared.GetName() == name && resource.GetBinding() == "" {
-			return resource.GetLogicalName(), true
-		}
-	}
-	return "", false
+type Reach struct {
+	Forwarded []Use
+	Recorded  []Use
 }
 
-func FindRecord(infra *contractv1.Manifest, kind resourcesv1.ResourceType, name string) (string, bool) {
-	for _, resource := range infra.GetResources() {
-		declared := resource.GetResource()
-		if declared.GetType() == kind && declared.GetName() == name && resource.GetBinding() != "" {
-			return resource.GetBinding(), true
-		}
-	}
-	return "", false
-}
-
-func ListWholeProjectUses(infra *contractv1.Manifest) []Use {
-	return listWholeProject(infra, func(resource *contractv1.ManifestResource) string {
-		if resource.GetBinding() != "" {
-			return ""
-		}
-		return resource.GetLogicalName()
+func (r *Reach) Add(infra *contractv1.Manifest, app string, kind resourcesv1.ResourceType, name string) {
+	at := slices.IndexFunc(infra.GetResources(), func(resource *contractv1.ManifestResource) bool {
+		return resource.GetResource().GetType() == kind && resource.GetResource().GetName() == name
 	})
-}
-
-func ListWholeProjectRecords(infra *contractv1.Manifest) []Use {
-	return listWholeProject(infra, (*contractv1.ManifestResource).GetBinding)
-}
-
-func listWholeProject(infra *contractv1.Manifest, boundOf func(*contractv1.ManifestResource) string) []Use {
-	var uses []Use
-	for _, resource := range infra.GetResources() {
-		declared := resource.GetResource()
-		bound := boundOf(resource)
-		if _, bindable := bindings.BindableAs(declared.GetType()); !bindable || bound == "" {
-			continue
-		}
-		uses = append(uses, Use{App: WholeProject, Resource: declared.GetType(), Declared: declared.GetName(), Bound: bound})
+	if at >= 0 {
+		r.add(app, infra.GetResources()[at])
 	}
-	return uses
 }
 
-func ReadRecords(uses []Use, records []*bindingsv1.Binding) (map[string]map[string]string, error) {
-	return liveBindings(uses, records)
+func (r *Reach) add(app string, resource *contractv1.ManifestResource) {
+	declared := resource.GetResource()
+	use := Use{App: app, Resource: declared.GetType(), Declared: declared.GetName(), Bound: resource.GetBinding()}
+	if use.Bound != "" {
+		r.Recorded = append(r.Recorded, use)
+		return
+	}
+	use.Bound = resource.GetLogicalName()
+	r.Forwarded = append(r.Forwarded, use)
+}
+
+func ReachWholeProject(infra *contractv1.Manifest) Reach {
+	var reach Reach
+	for _, resource := range infra.GetResources() {
+		if _, bindable := bindings.BindableAs(resource.GetResource().GetType()); bindable {
+			reach.add(WholeProject, resource)
+		}
+	}
+	return reach
 }
 
 func RefuseUnforwarded(subject string, declared []string, err error) error {
@@ -196,7 +181,7 @@ func Open(ctx context.Context, p *providerprocess.Provider, slug string, env *en
 		return nil, err
 	}
 	forwards.unforwarded = declaredNames(uses, resp.GetUnforwarded())
-	byApp, err := liveBindings(uses, resp.GetBindings())
+	byApp, err := LiveBindings(uses, resp.GetBindings())
 	if err != nil {
 		return nil, errors.Join(err, forwards.Close())
 	}
@@ -253,14 +238,14 @@ func awaitAnswer(answered <-chan *contractv1.ForwardPortsResponse, ended chan er
 	}
 }
 
-func liveBindings(uses []Use, forwarded []*bindingsv1.Binding) (map[string]map[string]string, error) {
+func LiveBindings(uses []Use, records []*bindingsv1.Binding) (map[string]map[string]string, error) {
 	byApp := map[string]map[string]string{}
 	for _, use := range uses {
-		at := slices.IndexFunc(forwarded, func(binding *bindingsv1.Binding) bool { return binding.GetName() == use.Bound })
+		at := slices.IndexFunc(records, func(binding *bindingsv1.Binding) bool { return binding.GetName() == use.Bound })
 		if at < 0 {
 			continue
 		}
-		named := proto.Clone(forwarded[at]).(*bindingsv1.Binding)
+		named := proto.Clone(records[at]).(*bindingsv1.Binding)
 		named.Name = use.Declared
 		encoded, err := binding.Encode(use.Resource, named)
 		if err != nil {

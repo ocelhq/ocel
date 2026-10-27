@@ -187,3 +187,14 @@ func ListEnvironmentNames(ctx context.Context, opened *providerprocess.Provider,
 	}
 	return names, nil
 }
+
+func ReadDeployedDeclarations(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment) (*Declarations, error) {
+	store := Store{Provider: provider, Project: cfg, Tier: env.GetTier()}
+	scope := ScopeOf(cfg, env.GetTier(), env.GetIdentity())
+	described, err := store.DescribeEnvSource(ctx)
+	if err != nil {
+		return nil, err
+	}
+	scope.EnvSource = described
+	return NewDeclarations(store, scope), nil
+}
