@@ -208,6 +208,7 @@ func (s *session) configure(ctx context.Context, settings provider.Settings) err
 	if err != nil {
 		return provider.RefusalError(err)
 	}
+	handed := readEnviron()
 	p, err := s.config.New(ctx, settings)
 	if err != nil {
 		return provider.RefusalError(err)
@@ -215,7 +216,7 @@ func (s *session) configure(ctx context.Context, settings provider.Settings) err
 	if p == nil {
 		return connect.NewError(connect.CodeInternal, errors.New("the provider constructor returned nothing"))
 	}
-	if err := refuseWebIdentity(settings.WebIdentity, p.Facts()); err != nil {
+	if err := refuseWebIdentity(settings.WebIdentity, p.Facts(), handed); err != nil {
 		return provider.RefusalError(err)
 	}
 	s.provider = p
@@ -245,7 +246,7 @@ func (s *session) use() (provider.Provider, error) {
 	return s.provider, nil
 }
 
-func refuseWebIdentity(identity *provider.WebIdentity, facts provider.Facts) error {
+func refuseWebIdentity(identity *provider.WebIdentity, facts provider.Facts, getenv func(string) string) error {
 	if identity == nil {
 		return nil
 	}
@@ -253,15 +254,18 @@ func refuseWebIdentity(identity *provider.WebIdentity, facts provider.Facts) err
 		return refusal.Refuse(refusal.CodeInvalid,
 			"provider %s deploys with no web identity: deploy with the credentials its environment names", facts.Vendor)
 	}
-	var named []string
-	for _, name := range facts.WebIdentity.CredentialEnvVars {
-		if os.Getenv(name) != "" {
-			named = append(named, name)
-		}
-	}
-	if len(named) > 0 {
+	if named := facts.WebIdentity.FindOwnCredentialEnvVars(getenv); len(named) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"this run names its own credential in %s and was handed a web identity too: deploy with one of them", strings.Join(named, ", "))
 	}
 	return nil
+}
+
+func readEnviron() func(string) string {
+	env := map[string]string{}
+	for _, entry := range os.Environ() {
+		name, value, _ := strings.Cut(entry, "=")
+		env[name] = value
+	}
+	return func(name string) string { return env[name] }
 }

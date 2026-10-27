@@ -65,6 +65,8 @@ func runServedRPC(t *testing.T, suite Suite) {
 
 		child.stopsOnSIGTERM(t)
 	})
+
+	t.Run("takes the web identity it is handed", func(t *testing.T) { takesTheWebIdentityItIsHanded(t, suite) })
 }
 
 func runBootstrapStream(t *testing.T, suite Suite) {

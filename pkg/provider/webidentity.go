@@ -11,6 +11,16 @@ type WebIdentityFacts struct {
 	CredentialEnvVars []string
 }
 
+func (f WebIdentityFacts) FindOwnCredentialEnvVars(getenv func(string) string) []string {
+	var set []string
+	for _, name := range f.CredentialEnvVars {
+		if getenv(name) != "" {
+			set = append(set, name)
+		}
+	}
+	return set
+}
+
 const ConsoleTrustPart = "console-trust"
 
 type WebIdentityTrust struct {
