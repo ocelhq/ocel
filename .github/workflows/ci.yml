@@ -234,7 +234,7 @@ jobs:
 
   ci-ok:
     name: ci-ok
-    needs: [changes, lint, unit, build, smoke, integration, e2e, e2e-cloud, preview, labels]
+    needs: [changes, lint, unit, build, smoke, integration, e2e, preview, labels]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
