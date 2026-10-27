@@ -620,3 +620,23 @@ func deployWithInlinePreBuild(t *testing.T, fixture clitest.FakeProject) (string
 	}
 	return out, &read, url
 }
+
+func TestAPreBuildIsHandedTheRecordAPublishedBindingBindsAResourceTo(t *testing.T) {
+	fixture := setUpDeployProject(t)
+	forwardingPorts(t, fixture)
+	publishBinding(t, fixture, publishedPostgres("main"))
+	live := filepath.Join(t.TempDir(), "binding.json")
+	command := fmt.Sprintf(`cat "$OCEL_LIVE_DIR/OCEL_RESOURCE_POSTGRES_main" > %s`, live)
+	writeUsageMonorepo(t, fixture.Root, fmt.Sprintf("  bindings: { postgres: { main: \"@main\" } },\n  lifecycle: { preBuild: %q },\n", command))
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, apiFunction())
+
+	if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
+		t.Fatalf("runDeploy err = %v; out=%s", err, out)
+	}
+
+	var read bindingsv1.Binding
+	if err := protojson.Unmarshal([]byte(readOrEmpty(t, live)), &read); err != nil || read.GetPostgres().GetHost() != "db.example" {
+		t.Errorf("the preBuild read main's binding as %q (%v), want the record published as main", readOrEmpty(t, live), err)
+	}
+}
