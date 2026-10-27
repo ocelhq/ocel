@@ -64,6 +64,14 @@ func (s *templateText) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}
+	if list, isList := v.([]any); isList {
+		texts := templateStrings(list)
+		if len(texts) != len(list) {
+			return fmt.Errorf("%s holds something that is neither a string nor a Ref, Fn::Sub or Fn::GetAtt", b)
+		}
+		*s = templateText(strings.Join(texts, ","))
+		return nil
+	}
 	text, ok := templateString(v)
 	if !ok {
 		return fmt.Errorf("%s is neither a string nor a Ref, Fn::Sub or Fn::GetAtt", b)

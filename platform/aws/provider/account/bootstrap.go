@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 )
 
@@ -71,6 +72,8 @@ type APIs struct {
 	Records RecordStore
 	Edge    edge.Edge
 	Edges   provider.Edges
+
+	IdentityProviders IdentityProviderAPI
 }
 
 type Request struct {
@@ -79,6 +82,8 @@ type Request struct {
 	Remove             []string
 	Writer             provider.WrittenBy
 	AcceptReplacements bool
+	Trust              *provider.WebIdentityTrust
+	DeployPolicies     []iam.ManagedPolicy
 }
 
 func CheckDeployed(ctx context.Context, api cfn.StacksAPI, ns Namespace) (Deployed, error) {
@@ -90,7 +95,7 @@ func CheckDeployedPreview(ctx context.Context, api cfn.StacksAPI, ns Namespace) 
 }
 
 func CheckDeployedFor(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (Deployed, error) {
-	deployed, _, err := readBootstrap(ctx, api, ns, tier)
+	deployed, _, _, err := readInstalled(ctx, api, ns, tier)
 	return deployed, err
 }
 
@@ -99,18 +104,19 @@ type Reading struct {
 	ns       Namespace
 	tier     environment.Tier
 	refs     stackRefs
+	deploy   []iam.ManagedPolicy
 }
 
 func (r Reading) Tier() environment.Tier { return r.tier }
 
 func (r Reading) Namespace() Namespace { return r.ns }
 
-func Read(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (Reading, error) {
-	deployed, refs, err := readBootstrap(ctx, api, ns, tier)
+func Read(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier, deploy []iam.ManagedPolicy) (Reading, error) {
+	deployed, refs, err := readBootstrap(ctx, api, ns, tier, deploy)
 	if err != nil {
 		return Reading{}, err
 	}
-	return Reading{Deployed: deployed, ns: ns, tier: tier, refs: refs}, nil
+	return Reading{Deployed: deployed, ns: ns, tier: tier, refs: refs, deploy: deploy}, nil
 }
 
 func readCore(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (Deployed, stackRefs, *cfntypes.Stack, error) {
@@ -134,18 +140,17 @@ func readCore(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environ
 	return d, refs, core, nil
 }
 
-func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (Deployed, stackRefs, error) {
+func readInstalled(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier) (Deployed, stackRefs, map[string]Stamp, error) {
 	d, refs, core, err := readCore(ctx, api, ns, tier)
 	if err != nil || !d.Present {
-		return d, refs, err
+		return d, refs, nil, err
 	}
-	coreStamp := readStamp(core.Tags)
-
-	stamps := make(map[string]Stamp, len(partRegistry))
+	stamps := make(map[string]Stamp, len(partRegistry)+1)
+	stamps[""] = readStamp(core.Tags)
 	for _, f := range partRegistry {
 		stack, err := cfn.DescribeStack(ctx, api, f.stackName(ns, tier))
 		if err != nil {
-			return Deployed{}, stackRefs{}, err
+			return Deployed{}, stackRefs{}, nil, err
 		}
 		if stack == nil || cfn.Unusable(stack.StackStatus) {
 			continue
@@ -156,6 +161,15 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 		maps.Copy(d.Outputs, out)
 		absorb(&d, &refs, out)
 	}
+	return d, refs, stamps, nil
+}
+
+func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier environment.Tier, deploy []iam.ManagedPolicy) (Deployed, stackRefs, error) {
+	d, refs, stamps, err := readInstalled(ctx, api, ns, tier)
+	if err != nil || !d.Present {
+		return d, refs, err
+	}
+	coreStamp := stamps[""]
 
 	target, err := bootstrapFor(ns, tier)
 	if err != nil {
@@ -184,9 +198,11 @@ func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, tier en
 			refs:         refs,
 			alongside:    d.Parts,
 			variablesKey: broughtVariablesKey(d.Outputs),
+			trust:        recordedTrust(d.Outputs),
+			deploy:       deploy,
 		})
 		if err != nil {
-			return Deployed{}, stackRefs{}, err
+			return Deployed{}, stackRefs{}, fmt.Errorf("%s: %w", f.name, err)
 		}
 		d.Stacks = append(d.Stacks, StackStamp{
 			Name:      f.stackName(ns, tier),
@@ -375,7 +391,17 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	if _, err := EnsureRuntimeLayers(ctx, apis, target.ns, target.tier, RuntimeLayerRequest{ArtifactBucket: deployed.Buckets[naming.StorageArtifacts], StateTable: deployed.StateTable}, progress); err != nil {
 		return err
 	}
-	steps := stepDeps{ns: target.ns, tier: target.tier, ssm: apis.SSM, iam: apis.IAM, progress: progress}
+	steps := stepDeps{
+		ns:                target.ns,
+		tier:              target.tier,
+		ssm:               apis.SSM,
+		iam:               apis.IAM,
+		stacks:            apis.CFN,
+		identityProviders: apis.IdentityProviders,
+		trust:             req.Trust,
+		deployed:          deployed,
+		progress:          progress,
+	}
 	dropped := Removing(req.Parts, req.Remove)
 	if err := tearDownEdges(ctx, apis, steps, dropped); err != nil {
 		return err
@@ -400,6 +426,19 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 	}
 
 	if len(requested) > 0 {
+		trust, err := readTrustToRender(ctx, apis.CFN, target.ns, target.tier, req)
+		if err != nil {
+			return err
+		}
+		for _, name := range requested {
+			f, _ := partNamed(name)
+			if f.before == nil {
+				continue
+			}
+			if err := f.before(ctx, steps); err != nil {
+				return fmt.Errorf("%s: %w", name, err)
+			}
+		}
 		progress.Say(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(partStackNames(target.ns, requested, target.tier), ", ")))
 		group, gctx := errgroup.WithContext(ctx)
 		for _, name := range requested {
@@ -412,6 +451,8 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 					refs:         refs,
 					alongside:    alongside,
 					variablesKey: req.VariablesKey,
+					trust:        trust,
+					deploy:       req.DeployPolicies,
 				})
 				if err != nil {
 					return fmt.Errorf("%s: %w", name, err)
@@ -449,11 +490,13 @@ func dropParts(ctx context.Context, stacks cfn.API, steps stepDeps, dropOrder []
 	steps.progress.Say(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(partStackNames(steps.ns, dropOrder, steps.tier), ", ")))
 	for _, name := range dropOrder {
 		f, _ := partNamed(name)
-		if f.drop == nil {
-			continue
-		}
-		if err := f.drop(ctx, steps); err != nil {
-			return fmt.Errorf("%s: %w", name, err)
+		for _, step := range []func(context.Context, stepDeps) error{f.drop, f.release} {
+			if step == nil {
+				continue
+			}
+			if err := step(ctx, steps); err != nil {
+				return fmt.Errorf("%s: %w", name, err)
+			}
 		}
 	}
 	return deletePartStacks(ctx, stacks, steps.ns, steps.tier, dropOrder, steps.progress)

@@ -27,6 +27,7 @@ type Scope struct {
 	BootstrapChangeSets []string
 	BootstrapRoles      []string
 	PartRoles           []string
+	DeployPolicies      string
 
 	RuntimeLayers        []string
 	RuntimeLayerVersions []string

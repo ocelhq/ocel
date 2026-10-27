@@ -42,6 +42,11 @@ func PlanChanges(ctx context.Context, stacks cfn.API, layers LayerAPI, read Read
 		alongside[name] = true
 	}
 
+	trust := req.Trust
+	if trust == nil {
+		trust = recordedTrust(read.Deployed.Outputs)
+	}
+
 	planned := make([]provider.ChangeGroup, len(groups))
 	var work sync.WaitGroup
 	inFlight := make(chan struct{}, planFanOut)
@@ -61,6 +66,8 @@ func PlanChanges(ctx context.Context, stacks cfn.API, layers LayerAPI, read Read
 			refs:         refs,
 			alongside:    alongside,
 			variablesKey: req.VariablesKey,
+			trust:        trust,
+			deploy:       read.deploy,
 		})
 		if err != nil {
 			work.Wait()
@@ -121,6 +128,8 @@ func PlanRemove(ctx context.Context, stacks cfn.API, layers LayerTeardownAPI, re
 			refs:         read.refs,
 			alongside:    alongside,
 			variablesKey: broughtVariablesKey(read.Deployed.Outputs),
+			trust:        recordedTrust(read.Deployed.Outputs),
+			deploy:       read.deploy,
 		})
 		if err != nil {
 			return nil, err

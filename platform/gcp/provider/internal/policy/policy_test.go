@@ -270,3 +270,32 @@ func TestARevokeFromAPolicyPastThePrincipalLimitIsWritten(t *testing.T) {
 		t.Errorf("Edit() = %v, %v, want the revoke written: it only makes room", changed, err)
 	}
 }
+
+func TestGrantingAMemberOnlySomeBindingsTakesItOffEveryOtherAndLeavesOtherMembersAlone(t *testing.T) {
+	t.Parallel()
+	tiered := &policy.Condition{Title: "tier", Expression: "resource.matchTag('t', 'production')"}
+	bindings := []policy.Binding{
+		{Role: "roles/viewer", Members: []string{"serviceAccount:deploy", "user:kept@acme.example"}},
+		{Role: "roles/run.admin", Members: []string{"serviceAccount:deploy"}},
+		{Role: "roles/editor", Members: []string{"user:kept@acme.example"}},
+	}
+	wanted := []policy.Binding{{Role: "roles/run.admin", Condition: tiered}, {Role: "roles/viewer"}}
+
+	got, changed := policy.GrantOnly("serviceAccount:deploy", wanted)(bindings)
+
+	if !changed {
+		t.Fatal("GrantOnly() changed nothing, want the unconditioned run.admin binding swapped for the tiered one")
+	}
+	if !policy.HoldsOnly(got, "serviceAccount:deploy", wanted) {
+		t.Errorf("GrantOnly() = %s, want the member holding exactly %s", snapshotOf(t, got), snapshotOf(t, wanted))
+	}
+	if policy.Holds(got, "roles/run.admin", "serviceAccount:deploy", nil) {
+		t.Errorf("GrantOnly() = %s, still grants run.admin unconditioned", snapshotOf(t, got))
+	}
+	if !policy.Holds(got, "roles/editor", "user:kept@acme.example", nil) || !policy.Holds(got, "roles/viewer", "user:kept@acme.example", nil) {
+		t.Errorf("GrantOnly() = %s, want every other member's bindings kept", snapshotOf(t, got))
+	}
+	if _, again := policy.GrantOnly("serviceAccount:deploy", wanted)(got); again {
+		t.Error("GrantOnly() over what it granted changes it again, want nothing to change")
+	}
+}

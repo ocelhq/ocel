@@ -23,7 +23,7 @@ func planned(t *testing.T, stacks cfn.API, tier environment.Tier, req Request) [
 	t.Helper()
 
 	ctx := context.Background()
-	read, err := Read(ctx, stacks, defaultNamespace, tier)
+	read, err := Read(ctx, stacks, defaultNamespace, tier, nil)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -213,7 +213,7 @@ func (g *gatedPlans) CreateChangeSet(ctx context.Context, in *cloudformation.Cre
 func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 	stacks, _ := installedBootstrap(t)
 	ctx := context.Background()
-	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction)
+	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction, nil)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction)
+	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction, nil)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestRemovalPlansEveryStackLeftBesideACoreThatRolledBack(t *testing.T) {
 	stacks.statuses[core] = cfntypes.StackStatusRollbackComplete
 	stacks.statuses[part] = cfntypes.StackStatusCreateComplete
 
-	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction)
+	read, err := Read(ctx, stacks, defaultNamespace, environment.TierProduction, nil)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -411,7 +411,7 @@ func TestRemovalPlansEveryStackLeftBesideACoreThatRolledBack(t *testing.T) {
 func TestRemovalPlansNothingWhereNoStackStands(t *testing.T) {
 	ctx := context.Background()
 
-	read, err := Read(ctx, newFakeCFN(), defaultNamespace, environment.TierProduction)
+	read, err := Read(ctx, newFakeCFN(), defaultNamespace, environment.TierProduction, nil)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}

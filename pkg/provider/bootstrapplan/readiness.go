@@ -33,6 +33,8 @@ type Status struct {
 	Parts      []string
 	WrittenBy  provider.WrittenBy
 	Unfinished bool
+	Identity   *provider.TierIdentity
+	Trust      *provider.WebIdentityTrust
 }
 
 func (r Readiness) Status(ctx context.Context, tier environment.Tier) (Status, error) {
@@ -41,7 +43,7 @@ func (r Readiness) Status(ctx context.Context, tier environment.Tier) (Status, e
 		return Status{}, err
 	}
 	status := Status{Tier: tier, Present: described.Present, Stacks: described.Stacks,
-		Unfinished: described.Unfinished}
+		Unfinished: described.Unfinished, Identity: described.Identity, Trust: described.Trust}
 	var present []string
 	for _, stack := range described.Stacks {
 		if stack.Part == "" {
@@ -94,6 +96,8 @@ type ApplyRequest struct {
 	Force bool
 
 	AcceptReplacements bool
+
+	Trust *provider.WebIdentityTrust
 }
 
 type partChange struct {
@@ -131,6 +135,15 @@ func (r Readiness) resolvePartChange(ctx context.Context, status Status, req App
 	var requested []string
 	if edgePart := PartFrontingEdge(offered, r.Edge); edgePart != "" {
 		requested = append(requested, edgePart)
+	}
+	if req.Trust != nil {
+		if !slices.ContainsFunc(offered, func(part provider.Part) bool { return part.Name == provider.ConsoleTrustPart }) {
+			return partChange{}, refusal.Refuse(refusal.CodeUnsupported, "this provider makes no %s part, so no console can be trusted to deploy here", provider.ConsoleTrustPart)
+		}
+		if slices.Contains(removing, provider.ConsoleTrustPart) {
+			return partChange{}, refusal.Refuse(refusal.CodeInvalid, "this run both trusts the console and removes %s: do one or the other", provider.ConsoleTrustPart)
+		}
+		requested = append(requested, provider.ConsoleTrustPart)
 	}
 	for _, part := range append(slices.Clone(status.Parts), slices.Sorted(maps.Keys(wants))...) {
 		if !slices.Contains(requested, part) && !slices.Contains(removing, part) {
@@ -236,6 +249,7 @@ func (c partChange) request(tier environment.Tier, req ApplyRequest, writer prov
 		Force:              req.Force,
 		RefuseReplacements: !req.AcceptReplacements,
 		WrittenBy:          writer,
+		Trust:              req.Trust,
 	}
 }
 

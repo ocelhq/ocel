@@ -28,7 +28,7 @@ func CredentialParts() []provider.Part {
 			"a service account with an HMAC key that reads the tier's static files and nothing else, which the worker signs its reads with, " +
 			"and the credential and purge seed of the edge's workers, all in Secret Manager",
 		Edges: []edge.Kind{cloudflare.Kind},
-	}}
+	}, consoleTrustPart()}
 }
 
 func InstalledParts(offered []provider.Part, recorded []string, req provider.BootstrapRequest) []string {
@@ -77,13 +77,20 @@ func (b Engine) eachFront(parts []string, visit func(provider.Part, edge.Edge) e
 
 var frontedParts = []string{KeysPart, EdgeBucketPart}
 
-func (b Engine) raiseParts(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
+func (b Engine) raiseParts(ctx context.Context, read Survey, req provider.BootstrapRequest, progress progress.Log) error {
 	if len(b.fronted(req.Parts)) > 0 {
 		if err := b.ensureParts(ctx, req.Tier, "", frontedParts, !req.RefuseReplacements); err != nil {
 			return err
 		}
 	}
-	return b.RaiseFronts(ctx, req, progress)
+	if err := b.RaiseFronts(ctx, req, progress); err != nil {
+		return err
+	}
+	trust := InstalledTrust(read, req)
+	if trust == nil {
+		return nil
+	}
+	return b.RaiseConsoleTrust(ctx, read, *trust, progress)
 }
 
 func (b Engine) PlanFrontedParts(ctx context.Context, req provider.BootstrapRequest) ([]provider.ChangeGroup, error) {
@@ -152,14 +159,36 @@ func (b Engine) DropFronts(
 }
 
 func (b Engine) dropParts(ctx context.Context, read Survey, req provider.BootstrapRequest, progress progress.Log) error {
-	return b.DropFronts(ctx, read, req, progress)
+	if err := b.DropFronts(ctx, read, req, progress); err != nil {
+		return err
+	}
+	if !slices.Contains(droppedParts(read.Stamp.Parts, req), provider.ConsoleTrustPart) {
+		return nil
+	}
+	return b.TakeConsoleTrust(ctx, read, progress)
 }
 
-func (b Engine) tearParts(ctx context.Context, tier environment.Tier, parts []string) error {
-	return b.TearFronts(ctx, tier, parts)
+func (b Engine) tearParts(ctx context.Context, read Survey, progress progress.Log) error {
+	if err := b.TearFronts(ctx, read.Tier, read.Stamp.Parts); err != nil {
+		return err
+	}
+	if !slices.Contains(read.Stamp.Parts, provider.ConsoleTrustPart) {
+		return nil
+	}
+	return b.TakeConsoleTrust(ctx, read, progress)
+}
+
+func (b Engine) partCurrent(read Survey, part string, installed bool) (bool, error) {
+	if part == provider.ConsoleTrustPart && installed {
+		return b.consoleTrustCurrent(read)
+	}
+	return installed, nil
 }
 
 func (b Engine) partInstalled(ctx context.Context, tier environment.Tier, part string) (bool, error) {
+	if part == provider.ConsoleTrustPart {
+		return b.consoleTrustInstalled(ctx, tier)
+	}
 	return b.FrontInstalled(ctx, tier, part)
 }
 

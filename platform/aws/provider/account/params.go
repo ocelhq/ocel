@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
 const (
@@ -38,6 +39,9 @@ type ParamAPIs struct {
 	IAM    IAMKeyAPI
 	KMS    KeyAPI
 	Region string
+
+	Stacks            cfn.StacksAPI
+	IdentityProviders IdentityProviderAPI
 }
 
 type EdgeAdoption struct {
@@ -66,6 +70,10 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, tier envi
 		}
 		adopted = append(adopted, changes...)
 	}
+	trusted, err := partParams(ctx, apis, ns, tier, req, req.Parts, func(f part) paramChanges { return f.beforePlan })
+	if err != nil {
+		return provider.ChangeGroup{}, err
+	}
 	written, err := partParams(ctx, apis, ns, tier, req, req.Parts, func(f part) paramChanges { return f.afterPlan })
 	if err != nil {
 		return provider.ChangeGroup{}, err
@@ -74,13 +82,26 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, tier envi
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
-	group.Changes = slices.Concat(group.Changes, adopted, written, severed)
+	released, err := partParams(ctx, apis, ns, tier, req, Removing(req.Parts, req.Remove), func(f part) paramChanges { return releaseChanges(f.releasePlan) })
+	if err != nil {
+		return provider.ChangeGroup{}, err
+	}
+	group.Changes = slices.Concat(group.Changes, adopted, trusted, written, severed, released)
 
 	group.Action, group.Reason = provider.RollUp(group.Changes)
 	return group, nil
 }
 
 type paramChanges func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
+
+func releaseChanges(plan func(context.Context, ParamAPIs, Namespace, environment.Tier) ([]provider.Change, error)) paramChanges {
+	if plan == nil {
+		return nil
+	}
+	return func(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, _ Request) ([]provider.Change, error) {
+		return plan(ctx, apis, ns, tier)
+	}
+}
 
 func partParams(ctx context.Context, apis ParamAPIs, ns Namespace, tier environment.Tier, req Request, named []string, hook func(part) paramChanges) ([]provider.Change, error) {
 	var changes []provider.Change
@@ -133,6 +154,17 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, tie
 			Name:   user + "/" + id,
 			Action: provider.ActionDelete,
 		})
+	}
+
+	for _, f := range partRegistry {
+		if f.releasePlan == nil {
+			continue
+		}
+		released, err := f.releasePlan(ctx, apis, ns, tier)
+		if err != nil {
+			return provider.ChangeGroup{}, err
+		}
+		group.Changes = append(group.Changes, released...)
 	}
 
 	if present[ns.PassphraseParamFor(tier)] {

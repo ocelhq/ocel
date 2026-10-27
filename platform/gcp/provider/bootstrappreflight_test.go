@@ -170,7 +170,7 @@ func TestEveryPermissionABootstrapChecksIsHeldByTheRoleItIsGroupedUnder(t *testi
 	t.Parallel()
 
 	predefined := predefinedRoles(t)
-	for _, parts := range [][]string{nil, {bootstrap.CloudflareOriginPart}} {
+	for _, parts := range [][]string{nil, {bootstrap.CloudflareOriginPart}, {provider.ConsoleTrustPart}} {
 		for _, grant := range bootstrap.GrantsFor(parts) {
 			held := rolePermissions(t, predefined, grant.Role)
 			for _, permission := range grant.Permissions {

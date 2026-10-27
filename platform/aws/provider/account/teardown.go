@@ -40,6 +40,8 @@ type TeardownAPIs struct {
 	Records RecordStore
 	Buckets cfn.BucketEmptierAPI
 
+	IdentityProviders IdentityProviderAPI
+
 	RemoveParts func(ctx context.Context, tier environment.Tier, progress progress.Log) error
 }
 
@@ -105,7 +107,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 	if err != nil {
 		return err
 	}
-	deployed, _, err := readBootstrap(ctx, apis.CFN, ns, tier)
+	deployed, _, _, err := readInstalled(ctx, apis.CFN, ns, tier)
 	if err != nil {
 		return err
 	}
@@ -126,6 +128,16 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, tier environ
 		return err
 	}
 	present := installed.Names()
+	released := stepDeps{ns: ns, tier: tier, stacks: apis.CFN, identityProviders: apis.IdentityProviders, progress: progress}
+	for _, name := range present {
+		f, _ := partNamed(name)
+		if f.release == nil {
+			continue
+		}
+		if err := f.release(ctx, released); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+	}
 	if len(present) > 0 {
 		progress.Say(fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(partStackNames(ns, present, tier), ", ")))
 		if err := deletePartStacks(ctx, apis.CFN, ns, tier, present, progress); err != nil {

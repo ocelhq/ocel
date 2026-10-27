@@ -48,6 +48,17 @@ func TestTheCredentialsPortAnswersOrSaysWhyItCannot(t *testing.T) {
 	conformance.RunCredentials(t, p.Facts(), p.Credentials())
 }
 
+func TestAConsoleCanBeTrustedToDeployWhereTheProviderDeploysWithAWebIdentity(t *testing.T) {
+	withoutApplicationDefaultCredentials(t)
+	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	bootstrap, err := p.Bootstrap(p.Facts().DefaultEdge)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conformance.RunConsoleTrust(t, p.Facts(), bootstrap.Parts())
+}
+
 func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})

@@ -25,6 +25,8 @@ type TierTags struct {
 	Values   map[string]*crm.TagValue
 	Bindings map[string][]string
 
+	ValuePolicies map[string]*crm.Policy
+
 	BindingsMade    []string
 	BindingsAsked   int
 	BindingsRemoved []string
@@ -122,6 +124,22 @@ func (s *TierTags) Serve(t *testing.T, w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		WriteBody(w, granted)
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "tagValues/") && strings.HasSuffix(path, ":getIamPolicy"):
+		held := s.ValuePolicies[strings.TrimSuffix(path, ":getIamPolicy")]
+		if held == nil {
+			held = &crm.Policy{Etag: "BwXhoLA="}
+		}
+		WriteBody(w, held)
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "tagValues/") && strings.HasSuffix(path, ":setIamPolicy"):
+		asked := ReadBody[crm.SetIamPolicyRequest](w, r)
+		if asked == nil {
+			return
+		}
+		if s.ValuePolicies == nil {
+			s.ValuePolicies = map[string]*crm.Policy{}
+		}
+		s.ValuePolicies[strings.TrimSuffix(path, ":setIamPolicy")] = asked.Policy
+		WriteBody(w, asked.Policy)
 	case r.Method == http.MethodGet && path == "tagKeys/namespaced":
 		key := s.Keys[r.URL.Query().Get("name")]
 		if key == nil || slices.Contains(s.Denied, "resourcemanager.tagKeys.get") {

@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 const CloudflareEdgePart = "cloudflare-edge"
@@ -30,6 +31,8 @@ type partInputs struct {
 	refs         stackRefs
 	alongside    PartSet
 	variablesKey string
+	trust        *provider.WebIdentityTrust
+	deploy       []iam.ManagedPolicy
 }
 
 type partStack struct {
@@ -47,23 +50,32 @@ func newPartStack(template cfn.Template, params []cfntypes.Parameter) (partStack
 }
 
 type stepDeps struct {
-	ns       Namespace
-	tier     environment.Tier
-	ssm      SSMAPI
-	iam      IAMAPI
-	progress progress.Log
+	ns                Namespace
+	tier              environment.Tier
+	ssm               SSMAPI
+	iam               IAMAPI
+	stacks            cfn.StacksAPI
+	identityProviders IdentityProviderAPI
+	trust             *provider.WebIdentityTrust
+	deployed          Deployed
+	progress          progress.Log
 }
 
 type part struct {
 	name    string
 	summary string
 	edges   []edge.Kind
+	free    bool
 
-	template  func(partInputs) (partStack, error)
-	after     func(context.Context, stepDeps) error
-	afterPlan func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
-	drop      func(context.Context, stepDeps) error
-	dropPlan  func(context.Context, ParamAPIs, Namespace, environment.Tier, Request) ([]provider.Change, error)
+	template    func(partInputs) (partStack, error)
+	before      func(context.Context, stepDeps) error
+	beforePlan  paramChanges
+	after       func(context.Context, stepDeps) error
+	afterPlan   paramChanges
+	drop        func(context.Context, stepDeps) error
+	dropPlan    paramChanges
+	release     func(context.Context, stepDeps) error
+	releasePlan func(context.Context, ParamAPIs, Namespace, environment.Tier) ([]provider.Change, error)
 }
 
 func (f part) edgeKind() (edge.Kind, bool) {
@@ -80,6 +92,7 @@ func (f part) stackName(ns Namespace, tier environment.Tier) string {
 var partRegistry = []part{
 	cloudflareEdgePart,
 	variablesKeyPart,
+	consoleTrustPart,
 }
 
 func Parts() []provider.Part {

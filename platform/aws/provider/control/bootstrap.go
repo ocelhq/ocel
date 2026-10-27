@@ -58,6 +58,8 @@ type Bootstrap struct {
 	Read         func(context.Context, environment.Tier) (account.Reading, error)
 	TierParts    []tier.Part
 
+	IdentityProviders account.IdentityProviderAPI
+
 	Namespace account.Namespace
 }
 
@@ -78,22 +80,38 @@ func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kind
 		VariablesKey: variablesKey,
 		Read:         read,
 
+		IdentityProviders: iam.NewFromConfig(cfg),
+
 		Namespace: ns,
 	}
 }
 
 func (b Bootstrap) paramAPIs() account.ParamAPIs {
-	return account.ParamAPIs{SSM: b.SSM, IAM: b.IAM, KMS: b.KMS, Region: b.Region}
+	return account.ParamAPIs{SSM: b.SSM, IAM: b.IAM, KMS: b.KMS, Region: b.Region, Stacks: b.CFN, IdentityProviders: b.IdentityProviders}
 }
 
-func (b Bootstrap) request(req provider.BootstrapRequest) account.Request {
+func (b Bootstrap) request(req provider.BootstrapRequest) (account.Request, error) {
+	deploy, err := CredentialPolicies(b.Namespace, edge.PurposeDeploy, req.Tier, b.VariablesKey)
+	if err != nil {
+		return account.Request{}, err
+	}
 	return account.Request{
 		VariablesKey:       b.VariablesKey,
 		Parts:              req.Parts,
 		Remove:             req.Remove,
 		Writer:             req.WrittenBy,
 		AcceptReplacements: !req.RefuseReplacements,
+		Trust:              req.Trust,
+		DeployPolicies:     deploy,
+	}, nil
+}
+
+func (b Bootstrap) readAccount(ctx context.Context, tier environment.Tier) (account.Reading, error) {
+	deploy, err := CredentialPolicies(b.Namespace, edge.PurposeDeploy, tier, b.VariablesKey)
+	if err != nil {
+		return account.Reading{}, err
 	}
+	return account.Read(ctx, b.CFN, b.Namespace, tier, deploy)
 }
 
 func (b Bootstrap) Parts() []provider.Part { return account.Parts() }
@@ -104,6 +122,7 @@ func (b Bootstrap) Describe(ctx context.Context, tier environment.Tier) (provide
 		return provider.BootstrapDescription{}, err
 	}
 	description := described(tier, read.Deployed)
+	description.Identity, description.Trust = read.Deployed.Identity(), read.Deployed.Trust()
 	edgeStacks, err := b.edgeBootstrapStacks(ctx, tier, read.Deployed)
 	if err != nil {
 		return provider.BootstrapDescription{}, err
@@ -131,7 +150,11 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	groups, err := account.PlanChanges(ctx, b.CFN, b.Layers, read, b.request(req),
+	planned, err := b.request(req)
+	if err != nil {
+		return provider.Plan{}, err
+	}
+	groups, err := account.PlanChanges(ctx, b.CFN, b.Layers, read, planned,
 		bootstrapplan.ChangeGroups(account.WithDefaultStackNames(b.Namespace, described(req.Tier, read.Deployed)), account.Parts(), req))
 	if err != nil {
 		return provider.Plan{}, err
@@ -140,7 +163,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	params, err := account.PlanParameters(ctx, b.paramAPIs(), b.Namespace, req.Tier, adoptions, b.request(req))
+	params, err := account.PlanParameters(ctx, b.paramAPIs(), b.Namespace, req.Tier, adoptions, planned)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -155,7 +178,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 
 func (b Bootstrap) read(ctx context.Context, tier environment.Tier) (account.Reading, error) {
 	if b.Read == nil {
-		return account.Read(ctx, b.CFN, b.Namespace, tier)
+		return b.readAccount(ctx, tier)
 	}
 	return b.Read(ctx, tier)
 }
@@ -269,7 +292,11 @@ func installedEdgeChanges(installed *provider.ChangeGroup) *provider.ChangeGroup
 }
 
 func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress progress.Log) error {
-	err := account.Run(ctx, b.apis(), b.Namespace, req.Tier, b.request(req), progress)
+	applied, err := b.request(req)
+	if err != nil {
+		return err
+	}
+	err = account.Run(ctx, b.apis(), b.Namespace, req.Tier, applied, progress)
 	if account.RefusedWrite(err) {
 		return refusal.Refuse(refusal.CodeDenied, "%s", err.Error())
 	}
@@ -277,7 +304,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 }
 
 func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress progress.Log) error {
-	read, err := account.Read(ctx, b.CFN, b.Namespace, tier)
+	read, err := b.readAccount(ctx, tier)
 	if err != nil {
 		return err
 	}
@@ -301,6 +328,8 @@ func (b Bootstrap) Remove(ctx context.Context, tier environment.Tier, progress p
 		Records: b.Records,
 		Buckets: b.Buckets,
 
+		IdentityProviders: b.IdentityProviders,
+
 		RemoveParts: b.tearDownParts,
 	}, b.Namespace, tier, progress)
 }
@@ -318,7 +347,7 @@ func (b Bootstrap) tearDownParts(ctx context.Context, tier environment.Tier, pro
 }
 
 func (b Bootstrap) apis() account.APIs {
-	return account.APIs{CFN: b.CFN, SSM: b.SSM, IAM: b.IAM, Layers: b.Layers, Store: b.Store, Records: b.Records, Edge: b.Edge, Edges: b.Edges}
+	return account.APIs{CFN: b.CFN, SSM: b.SSM, IAM: b.IAM, Layers: b.Layers, Store: b.Store, Records: b.Records, Edge: b.Edge, Edges: b.Edges, IdentityProviders: b.IdentityProviders}
 }
 
 var _ provider.Bootstrap = Bootstrap{}

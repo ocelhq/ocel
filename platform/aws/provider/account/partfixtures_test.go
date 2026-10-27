@@ -3,10 +3,14 @@ package account
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
+	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
 func namesFor(tier environment.Tier, kind edge.Kind) edgeNames {
@@ -66,6 +70,30 @@ func declaredResources(body string) []templateResource {
 }
 
 const fixtureBucketTag = "k3x9q2"
+
+const (
+	fixtureIssuerHost = "console.example.com/oidc"
+	fixtureAudience   = "https://console.example.com"
+)
+
+func fixtureTrust() *provider.WebIdentityTrust {
+	return &provider.WebIdentityTrust{
+		Issuer:         "https://" + fixtureIssuerHost,
+		Audience:       fixtureAudience,
+		OrganizationID: "o",
+		TargetID:       "t",
+		GitHub:         &provider.GitHubTrust{Repository: "acme/shop", Branch: "main"},
+	}
+}
+
+func fixtureDeploy(tier environment.Tier) []iam.ManagedPolicy {
+	scoped := defaultNamespace.Scope(tier)
+	policies, err := iam.Split("deploy", func(i int) string { return "fixture-deploy-" + strconv.Itoa(i) }, slices.Concat(AccessCredential(scoped), RuntimeLayerCredential(scoped)))
+	if err != nil {
+		panic(err)
+	}
+	return policies
+}
 
 func fixtureBucketName(tier environment.Tier, class naming.StorageClass) string {
 	return defaultNamespace.BootstrapBucketName(tier, class, fixtureBucketTag)
@@ -127,6 +155,8 @@ func partStackFor(name string, tier environment.Tier, alongside PartSet) partSta
 		tier:      tier,
 		refs:      fixtureRefs(),
 		alongside: alongside,
+		trust:     fixtureTrust(),
+		deploy:    fixtureDeploy(tier),
 	})
 }
 

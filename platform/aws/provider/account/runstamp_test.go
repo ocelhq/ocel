@@ -28,11 +28,11 @@ func TestRunStamps(t *testing.T) {
 				t.Errorf("%s was written by %q, want 1.9.0", name, stamp.WrittenBy)
 			}
 		}
-		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
+		read, err := Read(context.Background(), stacks, defaultNamespace, environment.TierProduction, fixtureDeploy(environment.TierProduction))
 		if err != nil {
-			t.Fatalf("CheckDeployed: %v", err)
+			t.Fatalf("Read: %v", err)
 		}
-		if stale := deployed.Stale(partNames()); len(stale) != 0 {
+		if stale := read.Deployed.Stale(partNames()); len(stale) != 0 {
 			t.Errorf("a bootstrap this build just wrote reads as stale: %+v", stale)
 		}
 	})

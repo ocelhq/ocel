@@ -233,10 +233,11 @@ func TestCheckDeployed(t *testing.T) {
 		}
 		api := stubStacksAPI{coreStackName: outputs(core).stamped(Stamp{Digest: "written-digest", WrittenBy: "1.4.0"})}
 
-		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
+		read, err := Read(context.Background(), api, defaultNamespace, environment.TierProduction, nil)
 		if err != nil {
-			t.Fatalf("CheckDeployed: %v", err)
+			t.Fatalf("Read: %v", err)
 		}
+		got := read.Deployed
 		want := Deployed{
 			Present: true,
 			Parts:   PartSet{},
@@ -259,10 +260,11 @@ func TestCheckDeployed(t *testing.T) {
 				},
 				{Name: coreStackName + "-" + CloudflareEdgePart, Part: CloudflareEdgePart},
 				{Name: coreStackName + "-" + provider.VariablesKeyPart, Part: provider.VariablesKeyPart},
+				{Name: coreStackName + "-" + provider.ConsoleTrustPart, Part: provider.ConsoleTrustPart},
 			},
 		}
 		if !reflect.DeepEqual(got, want) {
-			t.Errorf("CheckDeployed = %+v, want %+v", got, want)
+			t.Errorf("Read = %+v, want %+v", got, want)
 		}
 	})
 
@@ -314,11 +316,11 @@ func TestCheckDeployed(t *testing.T) {
 		api := stubStacksAPI{coreStackName: coreOutputs(map[string]string{outputInfraTier: string(environment.TierProduction)}).
 			stamped(Stamp{Digest: "stale"})}
 
-		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
+		read, err := Read(context.Background(), api, defaultNamespace, environment.TierProduction, nil)
 		if err != nil {
-			t.Fatalf("CheckDeployed: %v", err)
+			t.Fatalf("Read: %v", err)
 		}
-		if stale := got.Stale(nil); len(stale) != 1 || stale[0].Name != coreStackName {
+		if stale := read.Deployed.Stale(nil); len(stale) != 1 || stale[0].Name != coreStackName {
 			t.Errorf("Stale() = %+v, want the core stack alone: a part that was never installed is not stale", stale)
 		}
 	})
@@ -348,7 +350,7 @@ func TestABootstrapWhoseCoreNamesNoBucketYetReadsAsNotYetBootstrappedRatherThanO
 		t.Run(string(status), func(t *testing.T) {
 			api := stubStacksAPI{coreStackName: stubStack{status: status}.stamped(Stamp{})}
 
-			read, err := Read(context.Background(), api, defaultNamespace, environment.TierProduction)
+			read, err := Read(context.Background(), api, defaultNamespace, environment.TierProduction, nil)
 			if err != nil {
 				t.Fatalf("Read = %v, want no error: a core still being created has no outputs yet, and deleting it is never the answer", err)
 			}

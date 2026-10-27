@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
+	"github.com/ocelhq/ocel/platform/aws/provider/control"
 )
 
 type tierEdge struct {
@@ -30,7 +31,11 @@ func (p *Provider) bootstrapped(ctx context.Context, tier environment.Tier) (acc
 
 func (p *Provider) readBootstrap(ctx context.Context, tier environment.Tier) (account.Reading, error) {
 	return p.deployed.resolve(tier, func() (account.Reading, error) {
-		return account.Read(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, tier)
+		deploy, err := control.CredentialPolicies(p.namespace, edge.PurposeDeploy, tier, p.options.VariablesKey)
+		if err != nil {
+			return account.Reading{}, err
+		}
+		return account.Read(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, tier, deploy)
 	})
 }
 

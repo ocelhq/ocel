@@ -28,8 +28,9 @@ type Statement struct {
 }
 
 type Principal struct {
-	Service string
-	AWS     any
+	Service   string
+	AWS       any
+	Federated any
 }
 
 func (p Principal) rendered() map[string]any {
@@ -39,6 +40,9 @@ func (p Principal) rendered() map[string]any {
 	}
 	if p.AWS != nil {
 		out["AWS"] = p.AWS
+	}
+	if p.Federated != nil {
+		out["Federated"] = p.Federated
 	}
 	return out
 }

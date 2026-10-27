@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -31,6 +32,9 @@ type Stamp struct {
 	Writer string   `json:"writer"`
 	Digest string   `json:"digest"`
 	Parts  []string `json:"parts,omitempty"`
+
+	Trust       *provider.WebIdentityTrust `json:"trust,omitempty"`
+	TrustDigest string                     `json:"trustDigest,omitempty"`
 }
 
 type Survey struct {
@@ -48,6 +52,7 @@ type Survey struct {
 	Mending       map[string]string
 	Replacing     map[string]string
 	Sibling       bool
+	SiblingStamp  Stamp
 
 	Buckets naming.Buckets
 }
@@ -163,7 +168,7 @@ func (b Engine) surveyReading(ctx context.Context, tier environment.Tier, resour
 	if err != nil {
 		return Survey{}, err
 	}
-	read.Sibling = sibling.present
+	read.Sibling, read.SiblingStamp = sibling.present, sibling.stamp
 	read.Present, read.Stamp, read.Generation = own.present, own.stamp, own.generation
 	return read, nil
 }

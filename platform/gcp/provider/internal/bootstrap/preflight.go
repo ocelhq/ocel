@@ -9,6 +9,7 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
@@ -151,6 +152,24 @@ var AssetStoreGrants = gcloud.Grants{
 	}},
 }
 
+var ConsoleTrustGrants = gcloud.Grants{
+	{Role: "roles/iam.workloadIdentityPoolAdmin", Permissions: []string{
+		"iam.workloadIdentityPools.create",
+		"iam.workloadIdentityPools.get",
+		"iam.workloadIdentityPools.delete",
+		"iam.workloadIdentityPools.undelete",
+		"iam.workloadIdentityPoolProviders.create",
+		"iam.workloadIdentityPoolProviders.get",
+		"iam.workloadIdentityPoolProviders.update",
+		"iam.workloadIdentityPoolProviders.delete",
+		"iam.workloadIdentityPoolProviders.undelete",
+	}},
+	{Role: "roles/resourcemanager.tagAdmin", Permissions: []string{
+		"resourcemanager.tagValues.getIamPolicy",
+		"resourcemanager.tagValues.setIamPolicy",
+	}},
+}
+
 var bootstrapRoles = []string{
 	"roles/datastore.owner",
 	"roles/storage.admin",
@@ -161,6 +180,7 @@ var bootstrapRoles = []string{
 	"roles/iam.serviceAccountAdmin",
 	"roles/iam.serviceAccountUser",
 	"roles/iam.roleAdmin",
+	"roles/iam.workloadIdentityPoolAdmin",
 	"roles/resourcemanager.projectIamAdmin",
 	"roles/run.admin",
 	"roles/memorystore.admin",
@@ -189,10 +209,14 @@ func (b Engine) preflight(ctx context.Context, read Survey, parts []string) erro
 }
 
 func GrantsFor(parts []string) gcloud.Grants {
+	grants := BootstrapGrants
 	if slices.Contains(parts, CloudflareOriginPart) {
-		return slices.Concat(BootstrapGrants, AssetStoreGrants)
+		grants = slices.Concat(grants, AssetStoreGrants)
 	}
-	return BootstrapGrants
+	if slices.Contains(parts, provider.ConsoleTrustPart) {
+		grants = slices.Concat(grants, ConsoleTrustGrants)
+	}
+	return grants
 }
 
 func PermissionsFor(parts []string) []string { return GrantsFor(parts).Permissions() }

@@ -31,6 +31,10 @@ type BootstrapDescription struct {
 	Stacks  []BootstrapStack
 
 	Unfinished bool
+
+	Identity *TierIdentity
+
+	Trust *WebIdentityTrust
 }
 
 type BootstrapStack struct {
@@ -83,6 +87,8 @@ type BootstrapRequest struct {
 	RefuseReplacements bool
 
 	WrittenBy WrittenBy
+
+	Trust *WebIdentityTrust
 }
 
 type WantedPartError struct {

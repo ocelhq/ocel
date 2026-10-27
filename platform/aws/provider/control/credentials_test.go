@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
@@ -155,10 +156,11 @@ func TestSplittingACredentialKeepsEveryStatement(t *testing.T) {
 	t.Parallel()
 
 	whole := canonicalStatements(t, iam.Statements(deployStatements(scopeOf(defaultNamespace, environment.TierProduction, ""))))
-	document, err := DeployCredentialPermissions(defaultNamespace, environment.TierProduction, "")
+	credential, err := Credentials{Namespace: defaultNamespace}.Permissions(edge.PurposeDeploy, environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
+	document := credential.Document
 	var policies []struct {
 		PolicyDocument struct {
 			Statement []any `json:"Statement"`
@@ -173,5 +175,28 @@ func TestSplittingACredentialKeepsEveryStatement(t *testing.T) {
 	}
 	if split := canonicalStatements(t, printed); !slices.Equal(split, whole) {
 		t.Errorf("the split credential prints %d statements, want exactly the %d of the whole, none lost and none added", len(split), len(whole))
+	}
+}
+
+func TestABootstrapHandsTheConsoleTrustThePoliciesTheDeployCredentialPrints(t *testing.T) {
+	t.Parallel()
+
+	const broughtKey = "arn:aws:kms:us-east-1:111122223333:key/brought"
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		printed, err := Credentials{Namespace: defaultNamespace, VariablesKey: broughtKey}.Permissions(edge.PurposeDeploy, tier)
+		if err != nil {
+			t.Fatalf("Permissions(deploy, %s): %v", tier, err)
+		}
+		handed, err := Bootstrap{Namespace: defaultNamespace, VariablesKey: broughtKey}.request(provider.BootstrapRequest{Tier: tier})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		rendered, err := iam.RenderManagedPolicies("deploy", handed.DeployPolicies)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rendered != printed.Document {
+			t.Errorf("the %s console trust is handed policies other than the deploy credential prints", tier)
+		}
 	}
 }

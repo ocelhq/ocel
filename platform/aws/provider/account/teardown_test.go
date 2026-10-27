@@ -540,6 +540,7 @@ func TestTeardownRemovesEachPartStackBeforeCore(t *testing.T) {
 	want := []string{
 		defaultNamespace.PartStackName(CloudflareEdgePart, environment.TierProduction),
 		defaultNamespace.PartStackName(provider.VariablesKeyPart, environment.TierProduction),
+		defaultNamespace.PartStackName(provider.ConsoleTrustPart, environment.TierProduction),
 		coreStackName,
 	}
 	if !slices.Equal(cfnc.deleted, want) {

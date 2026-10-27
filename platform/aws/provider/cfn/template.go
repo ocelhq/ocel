@@ -8,6 +8,8 @@ import (
 
 const FormatVersion = "2010-09-09"
 
+const TemplateBodyBytes = 51200
+
 type Template struct {
 	Description string
 	Parameters  []Parameter
@@ -56,6 +58,26 @@ func (i Intrinsic) MarshalJSON() ([]byte, error) {
 }
 
 func (t Template) Body() (string, error) {
+	compact, err := t.compact()
+	if err != nil {
+		return "", err
+	}
+	var indented bytes.Buffer
+	if err := json.Indent(&indented, compact, "", "  "); err != nil {
+		return "", fmt.Errorf("render the CloudFormation template: %w", err)
+	}
+	return indented.String(), nil
+}
+
+func (t Template) CompactBody() (string, error) {
+	compact, err := t.compact()
+	if err != nil {
+		return "", err
+	}
+	return string(bytes.TrimRight(compact, "\n")), nil
+}
+
+func (t Template) compact() ([]byte, error) {
 	document := object{{"AWSTemplateFormatVersion", FormatVersion}, {"Description", t.Description}}
 	if len(t.Parameters) > 0 {
 		parameters := make(object, 0, len(t.Parameters))
@@ -86,13 +108,9 @@ func (t Template) Body() (string, error) {
 
 	compact, err := encodeJSON(document)
 	if err != nil {
-		return "", fmt.Errorf("render the CloudFormation template: %w", err)
+		return nil, fmt.Errorf("render the CloudFormation template: %w", err)
 	}
-	var indented bytes.Buffer
-	if err := json.Indent(&indented, compact, "", "  "); err != nil {
-		return "", fmt.Errorf("render the CloudFormation template: %w", err)
-	}
-	return indented.String(), nil
+	return compact, nil
 }
 
 type member struct {

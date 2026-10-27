@@ -230,6 +230,12 @@ func (s *session) managedBy() string {
 	return string(s.namespace)
 }
 
+func (s *session) deploysWithWebIdentity() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.settings.WebIdentity != nil
+}
+
 func (s *session) use() (provider.Provider, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

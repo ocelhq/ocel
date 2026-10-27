@@ -119,6 +119,11 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 		return resp, nil
 	}
 	resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
+	if h.session.deploysWithWebIdentity() {
+		if err := refuseStaleDeployIdentity(status.own, tier); err != nil {
+			return nil, provider.RefusalError(err)
+		}
+	}
 	resp.KnownSlugs, resp.PreviewWildcard = status.knownSlugs, status.previewWildcard
 	if err := verifyOwnPushAccess(ctx, steps, p, req, resp, own, ownErr); err != nil {
 		return nil, err
@@ -449,4 +454,14 @@ func CredentialProblemProto(vendor provider.Vendor, err error) *contractv1.Crede
 	}
 	problem.Message = fmt.Sprintf("could not authenticate: %v", err)
 	return problem
+}
+
+func refuseStaleDeployIdentity(status bootstrapplan.Status, tier environment.Tier) error {
+	for _, stack := range status.Stacks {
+		if stack.Part == provider.ConsoleTrustPart && stack.Present && stack.DigestCurrent {
+			return nil
+		}
+	}
+	return refusal.Refuse(refusal.CodeNotReady,
+		"the %s deploy identity predates this ocel; an admin runs `%s`", tier, provider.BootstrapCommand(tier))
 }

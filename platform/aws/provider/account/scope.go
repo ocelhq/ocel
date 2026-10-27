@@ -49,7 +49,8 @@ func (n Namespace) Scope(tier environment.Tier) iam.Scope {
 			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + sync.ScheduleRole,
 			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + optimizer.Role,
 		},
-		BastionRole: "arn:aws:iam::*:role/" + bastion.NameFor(string(n), tier),
+		DeployPolicies: "arn:aws:iam::*:policy" + n.bootstrapRolePathFor(tier) + n.deployPolicyStem(tier) + "-*",
+		BastionRole:    "arn:aws:iam::*:role/" + bastion.NameFor(string(n), tier),
 		TierFunctions: []string{
 			functionARNPrefix + sync.Function,
 			functionARNPrefix + invalidator.Function,

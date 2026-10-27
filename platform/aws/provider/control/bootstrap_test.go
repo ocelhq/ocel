@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -502,7 +503,10 @@ func (c *teardownCFN) DescribeStacks(_ context.Context, in *cloudformation.Descr
 			buckets = fixtureBuckets(tier)
 		}
 	}
-	var outputs []cfntypes.Output
+	outputs := make([]cfntypes.Output, 0, len(deployed.Outputs))
+	for key, value := range deployed.Outputs {
+		outputs = append(outputs, cfntypes.Output{OutputKey: aws.String(key), OutputValue: aws.String(value)})
+	}
 	for key, value := range map[string]string{
 		"StateBucketName":    buckets[naming.StorageState],
 		"ArtifactBucketName": buckets[naming.StorageArtifacts],
@@ -644,7 +648,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 		if read, ok := remembered[tier]; ok {
 			return read, nil
 		}
-		read, err := account.Read(ctx, cfn, b.Namespace, tier)
+		read, err := account.Read(ctx, cfn, b.Namespace, tier, nil)
 		if err == nil {
 			remembered[tier] = read
 		}
@@ -704,4 +708,45 @@ func (noLayers) PublishLayerVersion(_ context.Context, in *lambda.PublishLayerVe
 
 func (noLayers) DeleteLayerVersion(context.Context, *lambda.DeleteLayerVersionInput, ...func(*lambda.Options)) (*lambda.DeleteLayerVersionOutput, error) {
 	return &lambda.DeleteLayerVersionOutput{}, nil
+}
+
+func TestDescribeSaysTheTiersIdentityOnceTheConsoleTrustIsInstalled(t *testing.T) {
+	t.Parallel()
+
+	b := installedBootstrapper(t, environment.TierProduction)
+	stacks := b.CFN.(*teardownCFN)
+	described, err := b.Describe(context.Background(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+	if described.Identity != nil || described.Trust != nil {
+		t.Errorf("Describe() = %+v, %+v before any console is trusted, want no identity and no trust", described.Identity, described.Trust)
+	}
+
+	role := "arn:aws:iam::111122223333:role/ocel/prod/bootstrap/ocel-prod-deploy"
+	issuer := "arn:aws:iam::111122223333:oidc-provider/console.example.com/oidc"
+	stacks.present[defaultNamespace.PartStackName(provider.ConsoleTrustPart, environment.TierProduction)] = account.Deployed{Outputs: map[string]string{
+		"DeployRoleArn":              role,
+		"ConsoleIdentityProviderArn": issuer,
+		"TrustedIssuer":              "https://console.example.com/oidc",
+		"TrustedAudience":            "https://console.example.com",
+		"TrustedOrganization":        "o",
+		"TrustedTarget":              "t",
+		"TrustedGitHubRepository":    "acme/shop",
+		"TrustedGitHubBranch":        "main",
+	}}
+	described, err = b.Describe(context.Background(), environment.TierProduction)
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+	if want := (provider.TierIdentity{IdentityProvider: issuer, Principal: role}); described.Identity == nil || *described.Identity != want {
+		t.Errorf("Describe().Identity = %+v, want %+v", described.Identity, want)
+	}
+	trust := provider.WebIdentityTrust{
+		Issuer: "https://console.example.com/oidc", Audience: "https://console.example.com", OrganizationID: "o", TargetID: "t",
+		GitHub: &provider.GitHubTrust{Repository: "acme/shop", Branch: "main"},
+	}
+	if described.Trust == nil || !reflect.DeepEqual(*described.Trust, trust) {
+		t.Errorf("Describe().Trust = %+v, want the trust the part was applied with %+v", described.Trust, trust)
+	}
 }
