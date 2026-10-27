@@ -23,3 +23,17 @@ func TestBaseURL(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeBaseURLTrimsItAndFallsBackToTheHostedConsoleWithoutReadingTheEnvironment(t *testing.T) {
+	t.Setenv(URLEnvVar, "https://env.example.com")
+	cases := map[string]string{
+		" https://named.example.com/ ": "https://named.example.com",
+		"":                             DefaultBaseURL,
+		"  ":                           DefaultBaseURL,
+	}
+	for raw, want := range cases {
+		if got := NormalizeBaseURL(raw); got != want {
+			t.Errorf("NormalizeBaseURL(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
