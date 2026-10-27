@@ -5,7 +5,6 @@ on:
     types: [closed]
     paths:
       - "www/**"
-      - "console/github/**"
       - "ocel.aws.json"
       - "cli/**"
       - "packages/**"
@@ -45,12 +44,9 @@ jobs:
       cancel-in-progress: false
     env:
       OCEL_CONFIG: ocel.aws.json
-      OCEL_GITHUB_APP_URL: ${{ vars.OCEL_GITHUB_APP_URL }}
-      OCEL_REPORT_SECRET: ${{ secrets.OCEL_REPORT_SECRET }}
-      PR: ${{ github.event.pull_request.number }}
-      SHA: ${{ github.event.pull_request.head.sha }}
+      OCEL_CONSOLE_PROJECT_ID: ${{ vars.OCEL_CONSOLE_PROJECT_ID }}
+      OCEL_CONSOLE_URL: ${{ vars.OCEL_CONSOLE_URL }}
       REF: ${{ github.event.pull_request.head.ref }}
-      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Checkout the default branch, the head and a stacked base may already be gone
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -80,10 +76,6 @@ jobs:
           set -euo pipefail
           git checkout --detach
           GITHUB_HEAD_REF="$REF" ocel preview rm --yes
-
-      - name: Tell the app the preview is gone
-        continue-on-error: true
-        run: scripts/preview-report.sh removed
 
   reapable:
     name: Reapable

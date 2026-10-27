@@ -5,7 +5,6 @@ on:
     types: [labeled]
     paths:
       - "www/**"
-      - "console/github/**"
       - "cli/**"
       - "packages/**"
       - "frameworks/**"
@@ -25,7 +24,6 @@ on:
 permissions:
   contents: read
   id-token: write
-  pull-requests: write
 
 jobs:
   preview:
@@ -38,12 +36,8 @@ jobs:
       cancel-in-progress: true
     env:
       OCEL_CONFIG: ocel.aws.json
-      OCEL_GITHUB_APP_URL: ${{ vars.OCEL_GITHUB_APP_URL }}
-      OCEL_REPORT_SECRET: ${{ secrets.OCEL_REPORT_SECRET }}
-      PR: ${{ github.event.pull_request.number }}
-      SHA: ${{ github.event.pull_request.head.sha }}
-      REF: ${{ github.event.pull_request.head.ref }}
-      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      OCEL_CONSOLE_PROJECT_ID: ${{ vars.OCEL_CONSOLE_PROJECT_ID }}
+      OCEL_CONSOLE_URL: ${{ vars.OCEL_CONSOLE_URL }}
     steps:
       - name: Checkout the branch the preview is named after
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,5 +56,3 @@ jobs:
           cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
           variables-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
-          app-id: ${{ vars.OCEL_GITHUB_APP_ID }}
-          app-private-key: ${{ secrets.OCEL_GITHUB_APP_PRIVATE_KEY }}

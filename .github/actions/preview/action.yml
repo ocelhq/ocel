@@ -1,10 +1,9 @@
 name: preview
 description: >-
   Deploys this pull request's preview of Ocel's own app into the account Ocel
-  deploys itself into, reports it to the GitHub app, and says on the pull
-  request what the app could not. The job checks out the head branch first,
-  and names OCEL_CONFIG, OCEL_GITHUB_APP_URL, OCEL_REPORT_SECRET, PR, SHA, REF
-  and RUN_URL in its environment.
+  deploys itself into; the CLI reports it to the console, which says so on the
+  pull request. The job checks out the head branch first, and names OCEL_CONFIG,
+  OCEL_CONSOLE_PROJECT_ID and OCEL_CONSOLE_URL in its environment.
 
 inputs:
   source:
@@ -25,11 +24,6 @@ inputs:
   cloudflare-account-id:
     required: true
   variables-key:
-    required: true
-  app-id:
-    description: The GitHub app the fallback comment is written as.
-    required: true
-  app-private-key:
     required: true
 
 runs:
@@ -53,14 +47,7 @@ runs:
         cloudflare-account-id: ${{ inputs.cloudflare-account-id }}
         variables-key: ${{ inputs.variables-key }}
 
-    - name: Tell the app the preview has started
-      id: report-started
-      continue-on-error: true
-      shell: bash
-      run: scripts/preview-report.sh started
-
     - name: Deploy the preview
-      id: up
       shell: bash
       env:
         OCEL_PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -71,54 +58,6 @@ runs:
     - name: Drop the deployments this preview has outgrown
       shell: bash
       run: ocel preview prune --yes
-
-    - name: Tell the app the preview is deployed
-      id: report-deployed
-      if: ${{ success() }}
-      continue-on-error: true
-      shell: bash
-      run: scripts/preview-report.sh deployed .ocel/deploy-report.json
-
-    - name: Tell the app the preview failed
-      id: report-failed
-      if: ${{ failure() }}
-      continue-on-error: true
-      shell: bash
-      run: |
-        set -euo pipefail
-        ERROR=$(scripts/preview-error.sh)
-        export ERROR
-        scripts/preview-report.sh failed
-
-    - name: Mint the token the fallback comment is written with
-      id: app-token
-      if: ${{ always() && (steps.report-deployed.outcome == 'failure' || steps.report-failed.outcome == 'failure') && github.event.pull_request.number }}
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-      with:
-        app-id: ${{ inputs.app-id }}
-        private-key: ${{ inputs.app-private-key }}
-
-    - name: Say on the pull request what the app could not
-      if: ${{ always() && steps.app-token.outcome == 'success' }}
-      shell: bash
-      env:
-        GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        OUTCOME: ${{ steps.up.outcome }}
-      run: |
-        set -euo pipefail
-        if [ "$OUTCOME" = success ] && [ -f .ocel/deploy-report.json ]; then
-          body=$(scripts/preview-comment.sh deployed .ocel/deploy-report.json)
-        else
-          ERROR=$(scripts/preview-error.sh)
-          body=$(ERROR="$ERROR" scripts/preview-comment.sh failed)
-        fi
-        existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-          --jq 'map(select(.body | contains("<!-- ocel-preview -->"))) | first | .id // empty')
-        if [ -n "$existing" ]; then
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -f body="$body"
-        else
-          gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body"
-        fi
 
     - name: Keep what the preview reported
       if: always()
