@@ -9,6 +9,7 @@
     "frameworks",
     "configuration",
     "environments",
+    "report-from-github-actions",
     "transforms",
     "---Providers---",
     "providers/index",
