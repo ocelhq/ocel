@@ -150,6 +150,8 @@ message ProviderFacts {
 
 message WebIdentityFacts {
   string vendor = 1 [(buf.validate.field).string.min_len = 1];
+
+  repeated string credential_env_vars = 2 [(buf.validate.field).repeated.items.string.min_len = 1];
 }
 
 message EdgeFacts {

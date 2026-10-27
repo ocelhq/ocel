@@ -732,10 +732,11 @@ func (x *ProviderFacts) GetWebIdentity() *WebIdentityFacts {
 }
 
 type WebIdentityFacts struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Vendor        string                 `protobuf:"bytes,1,opt,name=vendor,proto3" json:"vendor,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Vendor            string                 `protobuf:"bytes,1,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	CredentialEnvVars []string               `protobuf:"bytes,2,rep,name=credential_env_vars,json=credentialEnvVars,proto3" json:"credential_env_vars,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *WebIdentityFacts) Reset() {
@@ -773,6 +774,13 @@ func (x *WebIdentityFacts) GetVendor() string {
 		return x.Vendor
 	}
 	return ""
+}
+
+func (x *WebIdentityFacts) GetCredentialEnvVars() []string {
+	if x != nil {
+		return x.CredentialEnvVars
+	}
+	return nil
 }
 
 type EdgeFacts struct {
@@ -8414,9 +8422,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0eforwards_ports\x18\b \x01(\bR\rforwardsPorts\x123\n" +
 	"\x04edge\x18\t \x01(\v2\x1f.provider.contract.v1.EdgeFactsR\x04edge\x12I\n" +
 	"\fweb_identity\x18\n" +
-	" \x01(\v2&.provider.contract.v1.WebIdentityFactsR\vwebIdentity\"3\n" +
+	" \x01(\v2&.provider.contract.v1.WebIdentityFactsR\vwebIdentity\"q\n" +
 	"\x10WebIdentityFacts\x12\x1f\n" +
-	"\x06vendor\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06vendor\"\xce\x01\n" +
+	"\x06vendor\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06vendor\x12<\n" +
+	"\x13credential_env_vars\x18\x02 \x03(\tB\f\xbaH\t\x92\x01\x06\"\x04r\x02\x10\x01R\x11credentialEnvVars\"\xce\x01\n" +
 	"\tEdgeFacts\x12\x1b\n" +
 	"\truns_code\x18\x01 \x01(\bR\brunsCode\x12N\n" +
 	"\x10cache_tag_limits\x18\x02 \x01(\v2$.provider.contract.v1.CacheTagLimitsR\x0ecacheTagLimits\x12T\n" +

@@ -67,7 +67,7 @@ func webIdentityFactsProto(facts provider.Facts) *contractv1.WebIdentityFacts {
 	if facts.WebIdentity == nil {
 		return nil
 	}
-	return &contractv1.WebIdentityFacts{Vendor: string(facts.Vendor)}
+	return &contractv1.WebIdentityFacts{Vendor: string(facts.Vendor), CredentialEnvVars: facts.WebIdentity.CredentialEnvVars}
 }
 
 func edgeFactsProto(facts edge.Facts) *contractv1.EdgeFacts {
