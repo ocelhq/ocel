@@ -20,6 +20,8 @@ import (
 
 const FixtureConsoleProjectID = "0199c3a2-5b7e-7c4d-8a1f-2e3d4c5b6a79"
 
+const FixtureConsoleTargetID = "0199c3a2-5b7e-7c4d-8a1f-2e3d4c5b6a80"
+
 type FakeConsole struct {
 	consolev1connect.UnimplementedTargetServiceHandler
 
@@ -28,10 +30,13 @@ type FakeConsole struct {
 	Credential        *consolev1.IssueCredentialResponse
 	CredentialRefusal *connect.Error
 
-	mu      sync.Mutex
-	reports []*consolev1.ReportRequest
-	events  []*consolev1.RecordEnvironmentEventRequest
-	issued  []*consolev1.IssueCredentialRequest
+	mu        sync.Mutex
+	reports   []*consolev1.ReportRequest
+	events    []*consolev1.RecordEnvironmentEventRequest
+	issued    []*consolev1.IssueCredentialRequest
+	prepared  []*consolev1.PrepareTargetRequest
+	recorded  []*consolev1.RecordTargetTierRequest
+	forgotten []*consolev1.ForgetTargetTierRequest
 }
 
 func ServeConsole(t *testing.T) *FakeConsole {
@@ -39,7 +44,7 @@ func ServeConsole(t *testing.T) *FakeConsole {
 	fake := &FakeConsole{}
 	validated := connect.WithInterceptors(connectvalidate.NewInterceptor())
 	path, handler := consolev1connect.NewDeploymentServiceHandler(fake, validated)
-	targetsPath, targets := consolev1connect.NewTargetServiceHandler(fake, validated)
+	targetsPath, targets := consolev1connect.NewTargetServiceHandler(fake)
 	mux := http.NewServeMux()
 	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
 	mux.Handle("/api/connect"+targetsPath, http.StripPrefix("/api/connect", targets))
@@ -71,6 +76,50 @@ func (f *FakeConsole) IssueCredential(_ context.Context, req *consolev1.IssueCre
 		return nil, f.CredentialRefusal
 	}
 	return f.Credential, nil
+}
+
+func (f *FakeConsole) Prepare(_ context.Context, req *consolev1.PrepareTargetRequest) (*consolev1.PrepareTargetResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.prepared = append(f.prepared, req)
+	return &consolev1.PrepareTargetResponse{
+		TargetId:       FixtureConsoleTargetID,
+		OrganizationId: "org_1",
+		Issuer:         f.URL + "/oidc",
+		Audience:       f.URL,
+	}, nil
+}
+
+func (f *FakeConsole) RecordTier(_ context.Context, req *consolev1.RecordTargetTierRequest) (*consolev1.RecordTargetTierResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.recorded = append(f.recorded, req)
+	return &consolev1.RecordTargetTierResponse{}, nil
+}
+
+func (f *FakeConsole) ForgetTier(_ context.Context, req *consolev1.ForgetTargetTierRequest) (*consolev1.ForgetTargetTierResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.forgotten = append(f.forgotten, req)
+	return &consolev1.ForgetTargetTierResponse{}, nil
+}
+
+func (f *FakeConsole) ForgottenTiers() []*consolev1.ForgetTargetTierRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*consolev1.ForgetTargetTierRequest(nil), f.forgotten...)
+}
+
+func (f *FakeConsole) PreparedTargets() []*consolev1.PrepareTargetRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*consolev1.PrepareTargetRequest(nil), f.prepared...)
+}
+
+func (f *FakeConsole) RecordedTiers() []*consolev1.RecordTargetTierRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*consolev1.RecordTargetTierRequest(nil), f.recorded...)
 }
 
 func (f *FakeConsole) IssuedCredentials() []*consolev1.IssueCredentialRequest {

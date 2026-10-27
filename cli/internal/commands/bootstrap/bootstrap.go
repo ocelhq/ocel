@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -25,6 +26,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	providercontract "github.com/ocelhq/ocel/pkg/provider"
 )
 
 type Options struct {
@@ -69,6 +71,7 @@ func newProvisionCommand(invocation commands.Invocation, tier environmentv1.Tier
 		Long: fmt.Sprintf("Set up or update the %s environment.\n\n", name) +
 			"A bootstrap only ever builds up: each run brings its base current and adds every part a project here was refused for. " +
 			"--remove takes a part down, whichever added it, and refuses while a project here uses it unless --force.\n\n" +
+			"Logged in to a console from a checkout linked to it, a run asks whether that console may deploy the environment here and adds the console-trust part that lets it, then records the identity it made in the console; --remove console-trust takes that trust down.\n\n" +
 			"Every run prints the changes it would make before asking; --dry prints them and stops.",
 		Example: fmt.Sprintf("  $ ocel bootstrap %s\n", name) +
 			fmt.Sprintf("  $ ocel bootstrap %s --remove variables-key\n", name) +
@@ -182,6 +185,15 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 			return nil
 		}
 
+		recorded := planned.GetBootstrap().GetTrust()
+		trusted, err := readConsoleTrust(ctx, invocation, p, tier, policy, named, recorded, planning)
+		if err != nil {
+			return err
+		}
+		if trusted != nil {
+			req.Trust = trusted.trust
+		}
+
 		drawn, err := drawPlan(ctx, planning, provider, req)
 		if err != nil {
 			return err
@@ -230,10 +242,23 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 			run.Succeed(fmt.Sprintf("Left the %s bootstrap as it is", readiness.TierName(tier)))
 			return nil
 		}
+		if slices.Contains(going, providercontract.ConsoleTrustPart) {
+			if err := forgetConsoleTrust(ctx, invocation, recorded, tier, policy, planning); err != nil {
+				return err
+			}
+		}
 		planning.End(nil)
 
 		if err := applyPlan(ctx, provider, req, drawn); err != nil {
 			return err
+		}
+		if trusted != nil {
+			recording := run.Phase(progressv1.Phase_PHASE_PROVISION)
+			err := trusted.record(ctx, recording, p, tier)
+			recording.End(err)
+			if err != nil {
+				return err
+			}
 		}
 		run.Succeed(fmt.Sprintf("Bootstrapped the %s environment", readiness.TierName(tier)))
 		return nil

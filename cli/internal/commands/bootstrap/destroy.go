@@ -95,7 +95,9 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 		return nil
 	}
 	granted, err := policy.ConfirmPlanByName(ctx, planning, consented, "environment name", plan.GetSubject())
-	planning.End(err)
+	if err != nil || !granted {
+		planning.End(err)
+	}
 	if err != nil {
 		return err
 	}
@@ -104,6 +106,16 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 		return nil
 	}
 
+	if provider.Facts().GetWebIdentity() != nil {
+		described, err := describeBootstrap(ctx, planning, provider, cfg, tier)
+		if err != nil {
+			return err
+		}
+		if err := forgetConsoleTrust(ctx, invocation, described.GetBootstrap().GetTrust(), tier, policy, planning); err != nil {
+			return err
+		}
+	}
+	planning.End(nil)
 	req := &contractv1.BootstrapScope{
 		Tier:      tier,
 		Edge:      cfg.EdgeSelection(),
