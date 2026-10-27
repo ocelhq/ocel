@@ -100,7 +100,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		infra := newInfraProvisioning(provider, env, facts)
 		defer func() { err = errors.Join(err, infra.release(ctx, run, cfg.Slug)) }()
 
-		d := newDeployRun(dependencies, target, cfg, provider, env, facts, infra, opts, dependencies.IsBrowserReachable(stdin))
+		d := newDeployRun(dependencies, target, cfg, provider, env, facts, infra, policy, opts, dependencies.IsBrowserReachable(stdin))
 		phase := run.Phase(progressv1.Phase_PHASE_BUILD)
 		releaseOutput, err := build.LockOutput(ctx, phase, cfg)
 		if err != nil {
@@ -110,6 +110,10 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		defer releaseOutput()
 		manifest, inline, err := d.buildManifest(ctx, phase)
 		phase.End(err)
+		if prerequisite.IsDeclined(err) {
+			run.Succeed(err.Error())
+			return nil
+		}
 		if err != nil {
 			return err
 		}
