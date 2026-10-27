@@ -60,6 +60,14 @@ func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provid
 	return read, nil
 }
 
+func RefuseMissingPart(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, req Request) error {
+	read, err := Read(ctx, provider, cfg, req)
+	if err != nil {
+		return err
+	}
+	return refuseMissingParts(NewPartGap(read.Response.GetBootstrap(), req.Part), provider, cfg, req)
+}
+
 func RefuseUnready(resp *contractv1.PreflightResponse, provider *providerprocess.Provider, cfg *project.Project, req Request) error {
 	if req.Require == None {
 		return nil

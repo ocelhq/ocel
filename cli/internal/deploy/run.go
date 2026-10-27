@@ -9,10 +9,12 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -34,6 +36,7 @@ type deployRun struct {
 	tag          string
 	registry     *contractv1.ImageRegistry
 	command      string
+	policy       consent.Policy
 
 	containerArchs map[string]string
 	workerCeilings []provider.WorkerCeiling
@@ -53,7 +56,7 @@ type deployRun struct {
 	span         *run.Span
 }
 
-func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project, process *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, infra *infraProvisioning, opts Options, browser bool) *deployRun {
+func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project, process *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, infra *infraProvisioning, policy consent.Policy, opts Options, browser bool) *deployRun {
 	scope := variables.ScopeOf(cfg, env.GetTier(), env.GetIdentity())
 	scope.Browser, scope.Job = browser, dependencies.JobAnswers != nil
 	return &deployRun{
@@ -65,6 +68,7 @@ func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project
 		tag:            target.tag,
 		registry:       facts.registry,
 		command:        target.command(),
+		policy:         policy,
 		containerArchs: facts.containerArchs,
 		workerCeilings: facts.workerCeilings,
 		host:           build.ReadHost(process.Facts()),
@@ -226,6 +230,9 @@ func (d *deployRun) fill(ctx context.Context, declarations *variables.Declaratio
 	if d.job != nil {
 		return d.fillOnCloud(ctx, declarations, refusal)
 	}
+	if err := d.ensureVariablesKey(ctx, refusal); err != nil {
+		return err
+	}
 	editor, err := d.dependencies.ServeVariableEditor(ctx, d.cfg, d.provider, d.tier(), declarations, d.recovery(refusal))
 	if err != nil {
 		return err
@@ -250,6 +257,16 @@ func (d *deployRun) fill(ctx context.Context, declarations *variables.Declaratio
 	default:
 		return waitErr
 	}
+}
+
+func (d *deployRun) ensureVariablesKey(ctx context.Context, refusal *variables.MissingError) error {
+	if !refusal.IsStoredByOcel() {
+		return nil
+	}
+	req := readiness.Request{Tier: d.tier(), Slug: d.cfg.Slug, Part: provider.VariablesKeyPart, RecordWants: true}
+	return d.dependencies.Setups.Ensure(ctx, d.policy, d.span, func(ctx context.Context) error {
+		return readiness.RefuseMissingPart(ctx, d.provider, d.cfg, req)
+	})
 }
 
 func (d *deployRun) fillOnCloud(ctx context.Context, declarations *variables.Declarations, refusal *variables.MissingError) error {
