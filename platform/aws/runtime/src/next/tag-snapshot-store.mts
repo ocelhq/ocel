@@ -63,7 +63,7 @@ export class S3TagSnapshotStore implements TagSnapshotStore {
     return { snapshot, etag: response.ETag ?? null };
   }
 
-  async write(snapshot: TagSnapshot, prior: StoredTagSnapshot): Promise<boolean> {
+  async write(snapshot: TagSnapshot, prior: StoredTagSnapshot | null): Promise<boolean> {
     try {
       await this.s3.send(
         new this.commands.PutObjectCommand({
@@ -71,7 +71,7 @@ export class S3TagSnapshotStore implements TagSnapshotStore {
           Key: this.key,
           Body: JSON.stringify(snapshot),
           ContentType: "application/json",
-          IfMatch: prior.etag,
+          ...(prior === null ? { IfNoneMatch: "*" } : { IfMatch: prior.etag }),
         }),
       );
       return true;

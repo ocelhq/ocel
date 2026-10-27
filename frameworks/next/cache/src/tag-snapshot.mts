@@ -49,7 +49,7 @@ export interface StoredTagSnapshot {
 
 export interface TagSnapshotStore {
   read(): Promise<StoredTagSnapshot | null>;
-  write(snapshot: TagSnapshot, prior: StoredTagSnapshot): Promise<boolean>;
+  write(snapshot: TagSnapshot, prior: StoredTagSnapshot | null): Promise<boolean>;
 }
 
 const publishRounds = 5;
@@ -64,13 +64,12 @@ async function publishOnce(
   at: number,
 ): Promise<boolean> {
   const stored = await store.read();
-  if (stored === null) return true;
-  if (stored.etag === null) {
+  if (stored !== null && stored.etag === null) {
     throw new Error(
       "ocel: the tag snapshot was read with no version, so a write could not be conditioned on it",
     );
   }
-  return store.write(mergeSnapshot(stored.snapshot, records, at), stored);
+  return store.write(mergeSnapshot(stored?.snapshot ?? null, records, at), stored);
 }
 
 function backoff(round: number): Promise<void> {
