@@ -1,6 +1,6 @@
 {
   "name": "@ocel/pulumi",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": false,
   "type": "module",
   "description": "Publishes Pulumi-defined resources as ocel bindings and Pulumi outputs as ocel variables",
