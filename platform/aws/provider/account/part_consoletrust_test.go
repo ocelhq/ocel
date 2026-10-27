@@ -194,9 +194,9 @@ func TestABootstrapWithNoTrustLeavesTheInstalledTrustAsItIs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	changes, err := plannedTrustedIssuers(context.Background(), ParamAPIs{Stacks: stacks, IdentityProviders: providers}, defaultNamespace, environment.TierProduction, untrusted)
+	changes, err := plannedTrustedIssuer(context.Background(), ParamAPIs{Stacks: stacks, IdentityProviders: providers}, defaultNamespace, environment.TierProduction, untrusted)
 	if err != nil || len(changes) != 0 {
-		t.Errorf("plannedTrustedIssuers = %v, %v, want no change", changes, err)
+		t.Errorf("plannedTrustedIssuer = %v, %v, want no change", changes, err)
 	}
 	for _, stack := range read.Deployed.Stacks {
 		if stack.Part == provider.ConsoleTrustPart && !stack.Current() {

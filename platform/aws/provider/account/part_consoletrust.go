@@ -35,9 +35,9 @@ var consoleTrustPart = part{
 	summary:     "the role a console's identity tokens assume to deploy here, holding exactly the deploy permissions",
 	free:        true,
 	template:    consoleTrustTemplate,
-	before:      ensureTrustedIssuers,
-	beforePlan:  plannedTrustedIssuers,
-	release:     releaseTrustedIssuers,
+	before:      ensureTrustedIssuer,
+	beforePlan:  plannedTrustedIssuer,
+	release:     releaseTrustedIssuer,
 	releasePlan: plannedIssuerRelease,
 }
 
