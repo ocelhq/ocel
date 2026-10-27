@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - "www/**"
-      - "console/github/**"
       - "ocel.aws.json"
       - "packages/ocel/**"
       - ".github/workflows/deploy.yml"
@@ -33,6 +32,8 @@ concurrency:
 
 env:
   OCEL_CONFIG: ocel.aws.json
+  OCEL_CONSOLE_PROJECT_ID: ${{ vars.OCEL_CONSOLE_PROJECT_ID }}
+  OCEL_CONSOLE_URL: ${{ vars.OCEL_CONSOLE_URL }}
 
 jobs:
   deploy:
