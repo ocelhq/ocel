@@ -574,3 +574,24 @@ func TestAPreBuildIsHandedTheBindingProxyAndNeverShowsItsSessionToken(t *testing
 		t.Errorf("the deploy showed %q, want the session token hidden", out)
 	}
 }
+
+func TestAPreBuildIsHandedTheRecordAnInlineBindingBindsAResourceTo(t *testing.T) {
+	fixture := setUpDeployProject(t)
+	forwardingPorts(t, fixture)
+	url := inlineURL(t)
+	envSet(t, fixture, "MAIN_DATABASE_URL", url, envOptions{})
+	live := filepath.Join(t.TempDir(), "binding.json")
+	command := fmt.Sprintf(`cat "$OCEL_LIVE_DIR/OCEL_RESOURCE_POSTGRES_main" > %s`, live)
+	writeUsageMonorepo(t, fixture.Root, fmt.Sprintf("  bindings: {%s},\n  lifecycle: { preBuild: %q },\n", inlineByURL, command))
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, apiFunction())
+
+	if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
+		t.Fatalf("runDeploy err = %v; out=%s", err, out)
+	}
+
+	var delivered bindingsv1.Binding
+	if err := protojson.Unmarshal([]byte(readOrEmpty(t, live)), &delivered); err != nil || delivered.GetPostgres().GetUrl() != url || delivered.GetName() != "main" {
+		t.Errorf("the preBuild read main's binding as %q (%v), want the record bindings.postgres.main names, by its url", readOrEmpty(t, live), err)
+	}
+}

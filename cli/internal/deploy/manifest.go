@@ -160,14 +160,23 @@ func (d *deployRun) provision(ctx context.Context, c collected) error {
 func (d *deployRun) build(ctx context.Context, steps *buildSteps, c collected, secrets map[string]map[string]string) (build.Output, error) {
 	cfg := d.cfg
 	runsPreBuild := d.preBuild != nil && !d.dry
-	forwards, err := d.forwardPorts(ctx, steps, c, runsPreBuild)
+	bound, err := d.infra.findBoundUses(cfg, c.resources, c.usages, runsPreBuild)
+	if err != nil {
+		return build.Output{}, err
+	}
+	records, err := portforward.ReadRecords(bound.records, c.inline)
+	if err != nil {
+		return build.Output{}, err
+	}
+	forwards, err := d.forwardPorts(ctx, steps, bound)
 	if err != nil {
 		return build.Output{}, err
 	}
 	values := build.SplitVariablesByClass(c.clients, secrets)
 	deliverForwards(forwards, values)
+	deliverRecords(records, values)
 	if runsPreBuild {
-		if err := d.runPreBuild(ctx, *d.preBuild, forwards, values, len(c.resources)); err != nil {
+		if err := d.runPreBuild(ctx, *d.preBuild, forwards, records[portforward.WholeProject], values, len(c.resources)); err != nil {
 			return build.Output{}, errors.Join(err, closeForwards(steps, cfg.Slug, forwards))
 		}
 	}
