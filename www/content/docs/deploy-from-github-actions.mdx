@@ -40,9 +40,8 @@ one expires, for as long as the command runs. The CLI refuses to go on if the cr
 in to a different account than the one the console bound to the tier. If the token cannot be
 renewed, the run says why.
 
-A job that sets any of these names its own cloud credential, and the CLI refuses to deploy with
-both rather than guess which one the cloud SDK would pick: drop the variable, or unset
-`OCEL_CONSOLE_PROJECT_ID`.
+A job that sets any of these names its own cloud credential: the CLI deploys with it and asks the
+console for none, and `OCEL_CONSOLE_PROJECT_ID` still reports the deploy.
 
 | Provider | Variables |
 | --- | --- |
@@ -60,3 +59,4 @@ An edge credential, such as a Cloudflare API token, stays a secret of the workfl
 | --- | --- |
 | the console binds no target to the tier | The deploy goes on with the credentials around it. Run `ocel bootstrap <tier>` to bind one |
 | the credential reached another account | Bind the project's tier to the target in the account it deploys to |
+| this run may not get credentials for the project | Trust the workflow under Trusted pipelines on the project's Git Integration page and grant it the tier's credentials on its Targets page, or give the job its own cloud credential |

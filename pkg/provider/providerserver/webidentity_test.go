@@ -84,6 +84,9 @@ func TestConfigureStatesTheWebIdentityTheProviderTakes(t *testing.T) {
 	if taken.GetVendor() != string(fake.Vendor) {
 		t.Errorf("WebIdentity.Vendor = %q, want %q", taken.GetVendor(), fake.Vendor)
 	}
+	if got := strings.Join(taken.GetCredentialEnvVars(), ","); got != "FAKE_ACCESS_KEY,FAKE_PROFILE" {
+		t.Errorf("WebIdentity.CredentialEnvVars = %q, want the variables that name the provider's own credential", got)
+	}
 
 	_, facts = configuredProvider(t, "1.2.3", fake.NewProvider(fake.Options{}))
 	if facts.GetWebIdentity() != nil {

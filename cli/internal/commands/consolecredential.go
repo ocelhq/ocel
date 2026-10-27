@@ -16,8 +16,8 @@ import (
 
 func (i Invocation) startWithConsoleCredential(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, string, error) {
 	launch := providerprocess.Launch{Pinning: executables.ChoosePinning(opts.DryRun)}
-	if !opts.ConsoleCredential || !i.ConsoleCredential.IsRequested() {
-		provider, err := i.startProvider(ctx, check, cfg, launch)
+	provider, err := i.startProvider(ctx, check, cfg, launch)
+	if err != nil || !opts.ConsoleCredential || !i.ConsoleCredential.IsRequested() || !i.ConsoleCredential.IsWantedBy(provider.Facts().GetWebIdentity()) {
 		return provider, "", err
 	}
 	tier := readiness.TierName(opts.Tier)
@@ -26,10 +26,13 @@ func (i Invocation) startWithConsoleCredential(ctx context.Context, check *run.S
 	if errors.Is(err, consolecredential.ErrNoTarget) {
 		issuing.End(nil)
 		check.Say(fmt.Sprintf("The console binds no target to this project's %s tier, so this deploys with the credentials around it.", tier))
-		provider, err := i.startProvider(ctx, check, cfg, launch)
-		return provider, "", err
+		return provider, "", nil
+	}
+	if consolecredential.IsRunRefused(err) {
+		err = fmt.Errorf("%w: trust this workflow under Trusted pipelines on the console project's Git Integration page and grant it %s credentials on its Targets page, or give this run its own cloud credential", err, tier)
 	}
 	issuing.End(err)
+	provider.Close()
 	if err != nil {
 		return nil, "", err
 	}
@@ -39,7 +42,7 @@ func (i Invocation) startWithConsoleCredential(ctx context.Context, check *run.S
 			check.Warn(fmt.Sprintf("The console's credential was last renewed with an error: %v", err))
 		}
 	}
-	provider, err := i.startProvider(ctx, check, cfg, launch)
+	provider, err = i.startProvider(ctx, check, cfg, launch)
 	if err != nil {
 		_ = credential.Close()
 		return nil, "", err

@@ -69,6 +69,15 @@ func (c Console) IsRequested() bool {
 	return c.Getenv != nil && githubactions.IsRunning(c.Getenv) && c.Getenv(console.ProjectIDEnvVar) != ""
 }
 
+func (c Console) IsWantedBy(taken *contractv1.WebIdentityFacts) bool {
+	return taken != nil && !slices.ContainsFunc(taken.GetCredentialEnvVars(), func(name string) bool { return c.Getenv(name) != "" })
+}
+
+func IsRunRefused(err error) bool {
+	var refused *refusedIssue
+	return errors.As(err, &refused) && refused.code == connect.CodePermissionDenied
+}
+
 func (c Console) Issue(ctx context.Context, req Request, warn func(string)) (*Credential, error) {
 	issue, err := c.issuing(req)
 	if err != nil {
