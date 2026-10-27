@@ -57,16 +57,21 @@ jobs:
       - name: Enter the account Ocel deploys itself into
         uses: ./.github/actions/dogfood-session
         with:
-          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
           aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
-          role-session-name: ocel-deploy-${{ github.run_id }}
-          expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
           cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
           variables-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
 
+      - name: Build, and stop unless the console's credential reaches the dogfood account
+        env:
+          EXPECTED: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          ocel deploy --dry --json --tag "sha-$(git rev-parse --short=7 HEAD)" > "$RUNNER_TEMP/dry.ndjson"
+          scripts/dogfood-account-guard.sh "$RUNNER_TEMP/dry.ndjson" "$EXPECTED"
+
       - name: Deploy
-        run: ocel deploy --yes --json --tag "sha-$(git rev-parse --short=7 HEAD)"
+        run: ocel deploy --prebuilt --yes --json --tag "sha-$(git rev-parse --short=7 HEAD)"
 
       - name: Keep what the deploy reported
         if: always()

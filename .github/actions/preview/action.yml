@@ -13,8 +13,6 @@ inputs:
     default: ""
   turbo-team:
     default: ""
-  role-to-assume:
-    required: true
   aws-region:
     required: true
   expected-aws-account-id:
@@ -39,13 +37,20 @@ runs:
     - name: Enter the account Ocel deploys itself into
       uses: ./.github/actions/dogfood-session
       with:
-        role-to-assume: ${{ inputs.role-to-assume }}
         aws-region: ${{ inputs.aws-region }}
-        role-session-name: ocel-preview-${{ github.run_id }}
-        expected-aws-account-id: ${{ inputs.expected-aws-account-id }}
         cloudflare-api-token: ${{ inputs.cloudflare-api-token }}
         cloudflare-account-id: ${{ inputs.cloudflare-account-id }}
         variables-key: ${{ inputs.variables-key }}
+
+    - name: Build, and stop unless the console's credential reaches the dogfood account
+      shell: bash
+      env:
+        OCEL_PR_NUMBER: ${{ github.event.pull_request.number }}
+        EXPECTED: ${{ inputs.expected-aws-account-id }}
+      run: |
+        set -euo pipefail
+        ocel preview up --dry --json > "$RUNNER_TEMP/dry.ndjson"
+        scripts/dogfood-account-guard.sh "$RUNNER_TEMP/dry.ndjson" "$EXPECTED"
 
     - name: Deploy the preview
       shell: bash
@@ -53,7 +58,7 @@ runs:
         OCEL_PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
         set -euo pipefail
-        ocel preview up --yes 2>&1 | tee "$RUNNER_TEMP/preview.log"
+        ocel preview up --prebuilt --yes 2>&1 | tee "$RUNNER_TEMP/preview.log"
 
     - name: Drop the deployments this preview has outgrown
       shell: bash
