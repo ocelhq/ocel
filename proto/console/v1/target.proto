@@ -1,0 +1,135 @@
+syntax = "proto3";
+package console.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1";
+
+import "buf/validate/validate.proto";
+import "common/environment/v1/environment.proto";
+import "google/protobuf/timestamp.proto";
+
+message TierIdentity {
+  string identity_provider = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2048
+    pattern: "^\\S+$"
+  }];
+
+  string principal = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2048
+    pattern: "^\\S+$"
+  }];
+}
+
+message PrepareTargetRequest {
+  string vendor = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+    pattern: "^[a-z0-9._:-]+$"
+  }];
+
+  string account = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[a-z0-9._:-]+$"
+  }];
+
+  string region = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+    pattern: "^[a-z0-9-]+$"
+  }];
+
+  string project_id = 4 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {uuid: true}
+  }];
+}
+
+message PrepareTargetResponse {
+  string target_id = 1;
+
+  string organization_id = 2;
+
+  string issuer = 3;
+
+  string audience = 4;
+}
+
+message RecordTargetTierRequest {
+  string target_id = 1 [(buf.validate.field).string.uuid = true];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  TierIdentity identity = 3 [(buf.validate.field).required = true];
+
+
+  string cli_version = 5 [(buf.validate.field).string = {min_len: 1, max_len: 64}];
+
+  string project_id = 6 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {uuid: true}
+  }];
+}
+
+message RecordTargetTierResponse {
+}
+
+message ForgetTargetTierRequest {
+  string target_id = 1 [(buf.validate.field).string.uuid = true];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+message ForgetTargetTierResponse {
+}
+
+message IssueCredentialRequest {
+  string project_id = 1 [(buf.validate.field).string.uuid = true];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string vendor = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+    pattern: "^[a-z0-9._:-]+$"
+  }];
+
+
+  string cli_version = 5 [(buf.validate.field).string = {min_len: 1, max_len: 64}];
+}
+
+message IssueCredentialResponse {
+  string token = 1 [debug_redact = true];
+
+  google.protobuf.Timestamp expires_at = 2;
+
+  string target_id = 3;
+
+  string account = 4;
+
+  string region = 5;
+
+  string session_name = 6;
+
+  TierIdentity identity = 7;
+}
+
+service TargetService {
+  rpc Prepare(PrepareTargetRequest) returns (PrepareTargetResponse);
+
+  rpc RecordTier(RecordTargetTierRequest) returns (RecordTargetTierResponse);
+
+  rpc ForgetTier(ForgetTargetTierRequest) returns (ForgetTargetTierResponse);
+
+  rpc IssueCredential(IssueCredentialRequest) returns (IssueCredentialResponse);
+}
