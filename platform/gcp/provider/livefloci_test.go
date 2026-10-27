@@ -64,11 +64,11 @@ func liveNames(t *testing.T) names.Names {
 }
 
 func TestLiveCredentials(t *testing.T) {
-	credentials := live(t).Credentials()
+	p := live(t)
 
-	conformance.RunCredentials(t, credentials)
+	conformance.RunCredentials(t, p.Facts(), p.Credentials())
 
-	principal, err := credentials.Whoami(context.Background())
+	principal, err := p.Credentials().Whoami(context.Background())
 	if err != nil {
 		t.Fatalf("Whoami() against the emulator = %v, want an identity: the project the run targets answers there", err)
 	}

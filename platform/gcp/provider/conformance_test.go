@@ -44,7 +44,8 @@ func TestGCPProvider(t *testing.T) {
 func TestTheCredentialsPortAnswersOrSaysWhyItCannot(t *testing.T) {
 	withoutApplicationDefaultCredentials(t)
 
-	conformance.RunCredentials(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Credentials())
+	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	conformance.RunCredentials(t, p.Facts(), p.Credentials())
 }
 
 func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {

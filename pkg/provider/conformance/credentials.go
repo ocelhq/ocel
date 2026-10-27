@@ -3,6 +3,7 @@ package conformance
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -11,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func RunCredentials(t *testing.T, credentials provider.Credentials) {
+func RunCredentials(t *testing.T, facts provider.Facts, credentials provider.Credentials) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -46,6 +47,12 @@ func RunCredentials(t *testing.T, credentials provider.Credentials) {
 						purpose, tier, err, refusal.CodeNotReady)
 				}
 			}
+		}
+	})
+
+	t.Run("a provider that deploys with a web identity names only environment variables as its explicit credentials", func(t *testing.T) {
+		if facts.WebIdentity != nil && slices.Contains(facts.WebIdentity.CredentialEnvVars, "") {
+			t.Errorf("WebIdentity.CredentialEnvVars = %q, want only names of environment variables", facts.WebIdentity.CredentialEnvVars)
 		}
 	})
 }

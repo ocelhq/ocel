@@ -68,6 +68,9 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 	if err != nil {
 		return nil, err
 	}
+	if err := useWebIdentity(settings.WebIdentity); err != nil {
+		return nil, err
+	}
 	p, err := NewProvider(decoded)
 	if err != nil {
 		return nil, err
@@ -125,6 +128,8 @@ func (p *Provider) Facts() provider.Facts {
 
 		RunsGates:             true,
 		RunsFunctionsAsImages: true,
+
+		WebIdentity: &provider.WebIdentityFacts{CredentialEnvVars: credentialEnvVars},
 	}
 }
 

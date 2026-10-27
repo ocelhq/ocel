@@ -15,6 +15,8 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 		Slug:       req.GetConfig().GetSlug(),
 		ProjectDir: req.GetConfig().GetProjectDir(),
 		WrittenBy:  h.session.writer,
+
+		WebIdentity: webIdentityOf(req.GetConfig().GetWebIdentity()),
 	}
 	if err := h.session.configure(ctx, settings); err != nil {
 		return nil, err
@@ -45,7 +47,27 @@ func factsProto(p provider.Provider) *contractv1.ProviderFacts {
 		WorkerCeilings:   provider.WorkerCeilingMessages(facts.WorkerCeilings),
 		MaxFunctionBytes: facts.MaxFunctionBytes,
 		ForwardsPorts:    p.Hooks().BindingAccess != nil,
+		WebIdentity:      webIdentityFactsProto(facts),
 	}
+}
+
+func webIdentityOf(sent *contractv1.WebIdentity) *provider.WebIdentity {
+	if sent == nil {
+		return nil
+	}
+	return &provider.WebIdentity{
+		TokenFile:        sent.GetTokenFile(),
+		IdentityProvider: sent.GetIdentityProvider(),
+		Principal:        sent.GetPrincipal(),
+		SessionName:      sent.GetSessionName(),
+	}
+}
+
+func webIdentityFactsProto(facts provider.Facts) *contractv1.WebIdentityFacts {
+	if facts.WebIdentity == nil {
+		return nil
+	}
+	return &contractv1.WebIdentityFacts{Vendor: string(facts.Vendor)}
 }
 
 func edgeFactsProto(facts edge.Facts) *contractv1.EdgeFacts {

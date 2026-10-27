@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -214,6 +215,9 @@ func (s *session) configure(ctx context.Context, settings provider.Settings) err
 	if p == nil {
 		return connect.NewError(connect.CodeInternal, errors.New("the provider constructor returned nothing"))
 	}
+	if err := refuseWebIdentity(settings.WebIdentity, p.Facts()); err != nil {
+		return provider.RefusalError(err)
+	}
 	s.provider = p
 	s.settings = settings
 	s.namespace = namespace
@@ -233,4 +237,25 @@ func (s *session) use() (provider.Provider, error) {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("Configure must be the first call on a provider session"))
 	}
 	return s.provider, nil
+}
+
+func refuseWebIdentity(identity *provider.WebIdentity, facts provider.Facts) error {
+	if identity == nil {
+		return nil
+	}
+	if facts.WebIdentity == nil {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"provider %s deploys with no web identity: deploy with the credentials its environment names", facts.Vendor)
+	}
+	var named []string
+	for _, name := range facts.WebIdentity.CredentialEnvVars {
+		if os.Getenv(name) != "" {
+			named = append(named, name)
+		}
+	}
+	if len(named) > 0 {
+		return refusal.Refuse(refusal.CodeInvalid,
+			"this run names its own credential in %s and was handed a web identity too: deploy with one of them", strings.Join(named, ", "))
+	}
+	return nil
 }

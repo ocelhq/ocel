@@ -108,6 +108,18 @@ message ProviderConfig {
   string slug = 3;
 
   string project_dir = 4 [(buf.validate.field).string.min_len = 1];
+
+  WebIdentity web_identity = 5;
+}
+
+message WebIdentity {
+  string token_file = 1 [(buf.validate.field).string.min_len = 1];
+
+  string identity_provider = 2 [(buf.validate.field).string.min_len = 1];
+
+  string principal = 3 [(buf.validate.field).string.min_len = 1];
+
+  string session_name = 4;
 }
 
 message ConfigureRequest {
@@ -132,6 +144,12 @@ message ProviderFacts {
   bool forwards_ports = 8;
 
   EdgeFacts edge = 9;
+
+  WebIdentityFacts web_identity = 10;
+}
+
+message WebIdentityFacts {
+  string vendor = 1 [(buf.validate.field).string.min_len = 1];
 }
 
 message EdgeFacts {

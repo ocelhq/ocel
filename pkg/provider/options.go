@@ -21,6 +21,8 @@ type Settings struct {
 	Slug       string
 	ProjectDir string
 	WrittenBy  WrittenBy
+
+	WebIdentity *WebIdentity
 }
 
 func RefuseTransforms(vendor Vendor, transforms []string) error {
