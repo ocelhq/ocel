@@ -18,6 +18,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
@@ -70,12 +71,7 @@ func (c Console) IsRequested() bool {
 }
 
 func (c Console) IsWantedBy(taken *contractv1.WebIdentityFacts) bool {
-	return taken != nil && !slices.ContainsFunc(taken.GetCredentialEnvVars(), func(name string) bool { return c.Getenv(name) != "" })
-}
-
-func IsRunRefused(err error) bool {
-	var refused *refusedIssue
-	return errors.As(err, &refused) && refused.code == connect.CodePermissionDenied
+	return taken != nil && len(provider.WebIdentityFacts{CredentialEnvVars: taken.GetCredentialEnvVars()}.FindOwnCredentialEnvVars(c.Getenv)) == 0
 }
 
 func (c Console) Issue(ctx context.Context, req Request, warn func(string)) (*Credential, error) {

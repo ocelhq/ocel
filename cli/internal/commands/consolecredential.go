@@ -28,9 +28,6 @@ func (i Invocation) startWithConsoleCredential(ctx context.Context, check *run.S
 		check.Say(fmt.Sprintf("The console binds no target to this project's %s tier, so this deploys with the credentials around it.", tier))
 		return provider, "", nil
 	}
-	if consolecredential.IsRunRefused(err) {
-		err = fmt.Errorf("%w: trust this workflow under Trusted pipelines on the console project's Git Integration page and grant it %s credentials on its Targets page, or give this run its own cloud credential", err, tier)
-	}
 	issuing.End(err)
 	provider.Close()
 	if err != nil {

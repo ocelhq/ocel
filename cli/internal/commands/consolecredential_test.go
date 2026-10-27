@@ -98,6 +98,13 @@ func TestAPipelineDeploysWithTheCredentialTheConsoleIssuesForItsTier(t *testing.
 		issued[0].GetProjectId() != clitest.FixtureConsoleProjectID {
 		t.Errorf("IssueCredential got %v, want one request for the project's production tier", issued)
 	}
+	configures := clitest.RequestsTo[*contractv1.ConfigureRequest](t, run.project.Requests, "/provider.contract.v1.ProviderService/Configure")
+	if len(configures) != 2 || configures[0].GetConfig().GetWebIdentity() != nil {
+		t.Errorf("the provider was configured %d times, want twice: first with the environment's credentials to read which variables name its own", len(configures))
+	}
+	if open := run.project.Requests.OpenSessions(); open != 1 {
+		t.Errorf("%d provider sessions are open, want only the one holding the console's credential", open)
+	}
 	identity := configured.GetConfig().GetWebIdentity()
 	if identity.GetPrincipal() != "deploy-production" || identity.GetIdentityProvider() != "console-issuer" || identity.GetSessionName() != "ocel-production-1" {
 		t.Fatalf("the provider was configured with web identity %v, want the console's", identity)
@@ -190,16 +197,18 @@ func TestAProviderTakingNoWebIdentityDeploysWithoutAskingTheConsole(t *testing.T
 	}
 }
 
-func TestAConsoleRefusingThePipelineCredentialsSaysWhereToGrantThem(t *testing.T) {
+func TestAPipelineTheConsoleRefusesCredentialsStopsTheCommandWithTheConsolesReasonAndNoProviderOpen(t *testing.T) {
 	run := newConsoleCredentialRun(t)
 	run.console.CredentialRefusal = connect.NewError(connect.CodePermissionDenied, errors.New("This run may not get credentials for the project: the project trusts no pipeline"))
 
 	_, closeProvider, err := run.open(t)
 	defer closeProvider()
 
-	if err == nil || !strings.Contains(err.Error(), "the project trusts no pipeline") ||
-		!strings.Contains(err.Error(), "Git Integration") || !strings.Contains(err.Error(), "production credentials") {
-		t.Fatalf("OpenProvider err = %v, want the console's reason and where to grant this pipeline production credentials", err)
+	if err == nil || !strings.HasSuffix(err.Error(), "This run may not get credentials for the project: the project trusts no pipeline") {
+		t.Fatalf("OpenProvider err = %v, want the console's reason", err)
+	}
+	if open := run.project.Requests.OpenSessions(); open != 0 {
+		t.Errorf("%d provider sessions are open, want none", open)
 	}
 }
 

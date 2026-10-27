@@ -48,8 +48,10 @@ console for none, and `OCEL_CONSOLE_PROJECT_ID` still reports the deploy.
 | `aws` | `AWS_ACCESS_KEY_ID`, `AWS_PROFILE`, `AWS_DEFAULT_PROFILE`, `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_CONTAINER_CREDENTIALS_FULL_URI`, `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` |
 | `gcp` | `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CREDENTIALS`, `GOOGLE_CLOUD_KEYFILE_JSON`, `GCLOUD_KEYFILE_JSON`, `GOOGLE_OAUTH_ACCESS_TOKEN`, `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT`, `GOOGLE_GHA_CREDS_PATH`, `CLOUDSDK_AUTH_ACCESS_TOKEN_FILE`, `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE` |
 
-A shared AWS credentials or config file alone does not count: the SDK prefers the console's token
-to the profiles it holds.
+Only these variables count as the job's own credential. A runner whose credential comes from
+anywhere else, such as an instance profile, a default profile in `~/.aws/credentials` or a gcloud
+application default credentials file, still asks the console. Its workflow must be a trusted
+pipeline with a grant for the tier, or the job leaves `OCEL_CONSOLE_PROJECT_ID` unset.
 
 An edge credential, such as a Cloudflare API token, stays a secret of the workflow.
 
@@ -59,4 +61,6 @@ An edge credential, such as a Cloudflare API token, stays a secret of the workfl
 | --- | --- |
 | the console binds no target to the tier | The deploy goes on with the credentials around it. Run `ocel bootstrap <tier>` to bind one |
 | the credential reached another account | Bind the project's tier to the target in the account it deploys to |
-| this run may not get credentials for the project | Trust the workflow under Trusted pipelines on the project's Git Integration page and grant it the tier's credentials on its Targets page, or give the job its own cloud credential |
+| the project trusts no pipeline | Link the repository on the project's Git Integration page and choose Your CI |
+| the pipeline holds no credential grant for the tier | Grant it on the project's Targets page |
+| a branch, workflow or environment is not the pipeline's or the grant's | Run the job from one they name, or widen them on the Git Integration or Targets page |
