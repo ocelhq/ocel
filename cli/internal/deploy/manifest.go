@@ -165,7 +165,7 @@ func (d *deployRun) build(ctx context.Context, steps *buildSteps, c collected, s
 	if err != nil {
 		return build.Output{}, err
 	}
-	records, err := portforward.ReadRecords(bound.records, c.inline)
+	records, err := portforward.LiveBindings(bound.recorded(), c.inline)
 	if err != nil {
 		return build.Output{}, err
 	}
@@ -177,7 +177,7 @@ func (d *deployRun) build(ctx context.Context, steps *buildSteps, c collected, s
 	deliverForwards(forwards, values)
 	deliverRecords(records, values)
 	if runsPreBuild {
-		if err := d.runPreBuild(ctx, *d.preBuild, forwards, records[portforward.WholeProject], values, len(c.resources)); err != nil {
+		if err := d.runPreBuild(ctx, *d.preBuild, forwards, records[portforward.WholeProject], values, len(bound.preBuild.Forwarded)); err != nil {
 			return build.Output{}, errors.Join(err, closeForwards(steps, cfg.Slug, forwards))
 		}
 	}

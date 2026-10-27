@@ -19,8 +19,11 @@ import (
 )
 
 type boundUses struct {
-	build, preBuild []portforward.Use
-	records         []portforward.Use
+	build, preBuild portforward.Reach
+}
+
+func (b boundUses) recorded() []portforward.Use {
+	return slices.Concat(b.build.Recorded, b.preBuild.Recorded)
 }
 
 func deliverForwards(f *portforward.Forwards, values map[string]build.AppVariables) {
@@ -28,8 +31,7 @@ func deliverForwards(f *portforward.Forwards, values map[string]build.AppVariabl
 		if app == portforward.WholeProject {
 			continue
 		}
-		delivered := appVariablesOf(values, app)
-		maps.Copy(delivered.Live, f.Bindings(app))
+		delivered := deliverLive(values, app, f.Bindings(app))
 		delivered.BindingProxyEnv = f.BindingProxyEnv(app)
 		values[app] = delivered
 	}
@@ -37,20 +39,20 @@ func deliverForwards(f *portforward.Forwards, values map[string]build.AppVariabl
 
 func deliverRecords(records map[string]map[string]string, values map[string]build.AppVariables) {
 	for app, live := range records {
-		if app == portforward.WholeProject {
-			continue
+		if app != portforward.WholeProject {
+			deliverLive(values, app, live)
 		}
-		delivered := appVariablesOf(values, app)
-		maps.Copy(delivered.Live, live)
-		values[app] = delivered
 	}
 }
 
-func appVariablesOf(values map[string]build.AppVariables, app string) build.AppVariables {
-	if _, ok := values[app]; !ok {
-		values[app] = build.AppVariables{Env: map[string]string{}, Live: map[string]string{}}
+func deliverLive(values map[string]build.AppVariables, app string, live map[string]string) build.AppVariables {
+	delivered, ok := values[app]
+	if !ok {
+		delivered = build.AppVariables{Env: map[string]string{}, Live: map[string]string{}}
 	}
-	return values[app]
+	maps.Copy(delivered.Live, live)
+	values[app] = delivered
+	return delivered
 }
 
 func (d *deployRun) forwardPorts(ctx context.Context, steps *buildSteps, bound boundUses) (*portforward.Forwards, error) {
@@ -58,7 +60,7 @@ func (d *deployRun) forwardPorts(ctx context.Context, steps *buildSteps, bound b
 		return nil, nil
 	}
 	cfg := d.cfg
-	buildUses, preBuildUses := bound.build, bound.preBuild
+	buildUses, preBuildUses := bound.build.Forwarded, bound.preBuild.Forwarded
 	uses := slices.Concat(buildUses, preBuildUses)
 	if len(uses) == 0 {
 		return nil, nil
@@ -118,20 +120,12 @@ func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []decl
 	}
 	var uses boundUses
 	for _, usage := range usages {
-		_, bindable := bindings.BindableAs(usage.Type)
-		if !built[usage.App] || !bindable {
-			continue
-		}
-		if bound, provisioned := portforward.FindBound(infra, usage.Type, usage.Name); provisioned {
-			uses.build = append(uses.build, portforward.Use{App: usage.App, Resource: usage.Type, Declared: usage.Name, Bound: bound})
-		}
-		if record, recorded := portforward.FindRecord(infra, usage.Type, usage.Name); recorded {
-			uses.records = append(uses.records, portforward.Use{App: usage.App, Resource: usage.Type, Declared: usage.Name, Bound: record})
+		if _, bindable := bindings.BindableAs(usage.Type); built[usage.App] && bindable {
+			uses.build.Add(infra, usage.App, usage.Type, usage.Name)
 		}
 	}
 	if runsPreBuild {
-		uses.preBuild = portforward.ListWholeProjectUses(infra)
-		uses.records = append(uses.records, portforward.ListWholeProjectRecords(infra)...)
+		uses.preBuild = portforward.ReachWholeProject(infra)
 	}
 	return uses, nil
 }

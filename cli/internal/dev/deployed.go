@@ -32,14 +32,11 @@ type Deployed struct {
 }
 
 func RunDeployed(ctx context.Context, opts Options, deployed Deployed) error {
-	forwards, records, err := forwardDeployed(ctx, opts, deployed)
+	forwards, live, err := reachDeployed(ctx, opts, deployed)
 	deployed.Check.End(err)
 	if err != nil {
 		return err
 	}
-	live := map[string]string{}
-	maps.Copy(live, records)
-	maps.Copy(live, forwards.Bindings(portforward.WholeProject))
 	hidden := redaction.NewValues(build.SecretValues(live))
 	stdout, stderr := hidden.Writer(opts.Stdout), hidden.Writer(opts.Stderr)
 	if opts.Stdout == opts.Stderr {
@@ -60,70 +57,74 @@ func closeForwards(opts Options, forwards *portforward.Forwards) error {
 	return err
 }
 
-func forwardDeployed(ctx context.Context, opts Options, deployed Deployed) (*portforward.Forwards, map[string]string, error) {
-	cfg, check, env := opts.Project, deployed.Check, deployed.Environment
-	declarations, err := readDeclarations(ctx, cfg, deployed)
+func reachDeployed(ctx context.Context, opts Options, deployed Deployed) (*portforward.Forwards, map[string]string, error) {
+	reach, records, err := readReach(ctx, opts, deployed)
 	if err != nil {
 		return nil, nil, err
+	}
+	if len(reach.Forwarded) == 0 && len(records) == 0 {
+		deployed.Check.Say(opts.Project.Slug + " declares no resource a port can reach, so the command runs without bindings")
+	}
+	forwards, err := forwardDeployed(ctx, opts, deployed, reach.Forwarded)
+	if err != nil {
+		return nil, nil, err
+	}
+	live := map[string]string{}
+	maps.Copy(live, records)
+	maps.Copy(live, forwards.Bindings(portforward.WholeProject))
+	return forwards, live, nil
+}
+
+func readReach(ctx context.Context, opts Options, deployed Deployed) (portforward.Reach, map[string]string, error) {
+	cfg := opts.Project
+	declarations, err := variables.ReadDeployedDeclarations(ctx, deployed.Provider, cfg, deployed.Environment)
+	if err != nil {
+		return portforward.Reach{}, nil, err
 	}
 	resources, err := collectResources(ctx, opts, deployed, declarations)
 	if err != nil {
-		return nil, nil, err
+		return portforward.Reach{}, nil, err
 	}
 	infra, err := manifest.AssembleInfra(manifest.InfraInput{
 		Project:        cfg,
-		Tier:           env.GetTier(),
+		Tier:           deployed.Environment.GetTier(),
 		Resources:      resources,
 		WorkerCeilings: provider.WorkerCeilingsOf(deployed.Provider.Facts().GetWorkerCeilings()),
 	})
 	if err != nil {
-		return nil, nil, err
+		return portforward.Reach{}, nil, err
 	}
+	reach := portforward.ReachWholeProject(infra)
 	inline, err := inlinebinding.Read(ctx, cfg, declarations)
 	if err != nil {
-		return nil, nil, err
+		return portforward.Reach{}, nil, err
 	}
-	read, err := portforward.ReadRecords(portforward.ListWholeProjectRecords(infra), inline)
-	if err != nil {
-		return nil, nil, err
-	}
-	records := read[portforward.WholeProject]
-	uses := portforward.ListWholeProjectUses(infra)
+	records, err := portforward.LiveBindings(reach.Recorded, inline)
+	return reach, records[portforward.WholeProject], err
+}
+
+func forwardDeployed(ctx context.Context, opts Options, deployed Deployed, uses []portforward.Use) (*portforward.Forwards, error) {
+	cfg, check := opts.Project, deployed.Check
 	if len(uses) == 0 {
-		if len(records) == 0 {
-			check.Say(cfg.Slug + " declares no resource a port can reach, so the command runs without bindings")
-		}
-		return nil, records, nil
+		return nil, nil
 	}
 	if !deployed.Provider.Facts().GetForwardsPorts() {
-		return nil, nil, fmt.Errorf("the provider of %s forwards no port to a deployed environment, so a command cannot reach its resources from this machine", cfg.Slug)
+		return nil, fmt.Errorf("the provider of %s forwards no port to a deployed environment, so a command cannot reach its resources from this machine", cfg.Slug)
 	}
 	declared := portforward.ListDeclared(uses)
 	step := check.Child(cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)))
-	forwards, err := portforward.Open(ctx, deployed.Provider, cfg.Slug, env, uses, check)
+	forwards, err := portforward.Open(ctx, deployed.Provider, cfg.Slug, deployed.Environment, uses, check)
 	if err != nil {
 		err = portforward.RefuseUnforwarded("the command", declared, err)
 	}
 	step.End(err)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if unforwarded := forwards.Unforwarded(); len(unforwarded) > 0 {
 		check.Warn(portforward.DescribeUnforwarded("The command", unforwarded))
 	}
-	return forwards, records, nil
-}
-
-func readDeclarations(ctx context.Context, cfg *project.Project, deployed Deployed) (*variables.Declarations, error) {
-	tier := deployed.Environment.GetTier()
-	store := variables.Store{Provider: deployed.Provider, Project: cfg, Tier: tier}
-	scope := variables.ScopeOf(cfg, tier, deployed.Environment.GetIdentity())
-	described, err := store.DescribeEnvSource(ctx)
-	if err != nil {
-		return nil, err
-	}
-	scope.EnvSource = described
-	return variables.NewDeclarations(store, scope), nil
+	return forwards, nil
 }
 
 func collectResources(ctx context.Context, opts Options, deployed Deployed, declarations *variables.Declarations) ([]declaration.Resource, error) {

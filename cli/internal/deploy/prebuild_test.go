@@ -578,6 +578,30 @@ func TestAPreBuildIsHandedTheBindingProxyAndNeverShowsItsSessionToken(t *testing
 func TestAPreBuildIsHandedTheRecordAnInlineBindingBindsAResourceTo(t *testing.T) {
 	fixture := setUpDeployProject(t)
 	forwardingPorts(t, fixture)
+
+	_, read, url := deployWithInlinePreBuild(t, fixture)
+
+	if read.GetPostgres().GetUrl() != url || read.GetName() != "main" {
+		t.Errorf("the preBuild read main's binding as %v, want the record bindings.postgres.main names, by its url", read)
+	}
+}
+
+func TestAPreBuildOfAProviderThatForwardsNoPortIsHandedEveryRecordAndSaysNothingGoesWithout(t *testing.T) {
+	fixture := setUpDeployProject(t)
+	fixture.Provider.WithHooks(func(h *provider.Hooks) { h.BindingAccess = nil })
+
+	out, read, url := deployWithInlinePreBuild(t, fixture)
+
+	if read.GetPostgres().GetUrl() != url {
+		t.Errorf("the preBuild read main's binding as %v, want the record bindings.postgres.main names", read)
+	}
+	if strings.Contains(out, "forwards no port") {
+		t.Errorf("the deploy said %q, want nothing said to go without bindings when a record reaches every resource", out)
+	}
+}
+
+func deployWithInlinePreBuild(t *testing.T, fixture clitest.FakeProject) (string, *bindingsv1.Binding, string) {
+	t.Helper()
 	url := inlineURL(t)
 	envSet(t, fixture, "MAIN_DATABASE_URL", url, envOptions{})
 	live := filepath.Join(t.TempDir(), "binding.json")
@@ -586,12 +610,13 @@ func TestAPreBuildIsHandedTheRecordAnInlineBindingBindsAResourceTo(t *testing.T)
 	dependencies := newTestDependencies()
 	stubBuild(&dependencies, apiFunction())
 
-	if out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true}); err != nil {
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
 		t.Fatalf("runDeploy err = %v; out=%s", err, out)
 	}
-
-	var delivered bindingsv1.Binding
-	if err := protojson.Unmarshal([]byte(readOrEmpty(t, live)), &delivered); err != nil || delivered.GetPostgres().GetUrl() != url || delivered.GetName() != "main" {
-		t.Errorf("the preBuild read main's binding as %q (%v), want the record bindings.postgres.main names, by its url", readOrEmpty(t, live), err)
+	var read bindingsv1.Binding
+	if err := protojson.Unmarshal([]byte(readOrEmpty(t, live)), &read); err != nil {
+		t.Fatalf("the preBuild read main's binding as %q: %v", readOrEmpty(t, live), err)
 	}
+	return out, &read, url
 }
