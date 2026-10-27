@@ -11,9 +11,11 @@ import (
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 func TestAFirestoreOperationThatOutlastsAFastCallsWaitIsAwaitedUntilItEnds(t *testing.T) {
@@ -96,5 +98,56 @@ func TestADatabaseFirestoreStillHoldsAsDeletedIsRefusedSayingWhenItsNameIsFree(t
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady || !strings.Contains(err.Error(), "10:05") {
 		t.Errorf("MakeTierDatabase() = %v, want it refused as not ready, saying the name is free at 10:05, 5 minutes after the delete", err)
+	}
+}
+
+func recordingInFirestore(t *testing.T) (Engine, Survey, *googletest.Firestore) {
+	t.Helper()
+	databases := googletest.NewDatabases(t, nil)
+	served := googletest.NewFirestore(t, databases)
+	clients := &gcloud.Clients{Names: googletest.Names, Region: googletest.Region, Endpoint: served.URL}
+	clients.Records = ports.KeyValues{Clients: clients.Workload()}
+	read := Survey{Tier: environment.TierProduction, Names: googletest.Names, Project: googletest.Project, Region: googletest.Region}
+	return Engine{Clients: clients}, read, served
+}
+
+func claimStateBucket(ctx context.Context, b Engine) (string, error) {
+	return b.Clients.ClaimTierBucket(ctx, environment.TierProduction, naming.StorageState, func() string {
+		return googletest.Names.TierBucket(environment.TierProduction, naming.StorageState, googletest.BucketTag)
+	})
+}
+
+func TestTheStateBucketIsRecordedInARecordsDatabaseFirestoreAnswersAsAbsentForAWhileAfterMakingIt(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	b, read, served := recordingInFirestore(t)
+	database := databaseOf(read)
+	if err := database.KindOps().Make(ctx, b, read, database); err != nil {
+		t.Fatal(err)
+	}
+	served.AnswerAbsent(4)
+
+	if _, err := claimStateBucket(ctx, b); err != nil {
+		t.Fatalf("ClaimTierBucket() = %v, want the state bucket recorded once Firestore serves the database it just made", err)
+	}
+	if got := served.AnsweredAbsent(); got != 4 {
+		t.Errorf("Firestore answered %d calls as for a database that does not exist, want all 4 it was set to answer so", got)
+	}
+	recorded, err := b.Clients.RecordedTierBuckets(ctx, environment.TierProduction)
+	if err != nil || recorded[naming.StorageState] == "" {
+		t.Errorf("RecordedTierBuckets() = %v, %v, want the state bucket on record", recorded, err)
+	}
+}
+
+func TestRecordingTheStateBucketWithNoRecordsDatabaseRefusesAsNotBootstrapped(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	b, read, _ := recordingInFirestore(t)
+
+	_, err := claimStateBucket(ctx, b)
+
+	want := `this project keeps no "` + read.Names.RecordsDatabase(read.Tier) + `" Firestore database, so there is nowhere to store an entry`
+	if !errors.Is(err, ports.ErrNoRecordsDatabase) || !strings.Contains(err.Error(), want) {
+		t.Errorf("ClaimTierBucket() = %v, want it refused saying %q", err, want)
 	}
 }

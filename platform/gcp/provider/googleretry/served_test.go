@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"google.golang.org/api/googleapi"
 	"google.golang.org/grpc/codes"
@@ -45,5 +46,33 @@ func TestACallRefusedForAnythingButNotFoundIsNotWaitedOn(t *testing.T) {
 	})
 	if !errors.Is(err, denied) || calls != 1 {
 		t.Errorf("UntilServed() over a refusal = %v after %d calls, want the refusal after one", err, calls)
+	}
+}
+
+func TestACallAnsweredNotFoundIsMadeAgainWithinItsPatience(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	err := googleretry.UntilServedWithin(context.Background(), time.Minute, func() error {
+		calls++
+		if calls < 3 {
+			return status.Error(codes.NotFound, "The database does not exist")
+		}
+		return nil
+	})
+	if err != nil || calls != 3 {
+		t.Errorf("UntilServedWithin() = %v after %d calls, want it to succeed on the third", err, calls)
+	}
+}
+
+func TestACallStillAnsweredNotFoundOnceItsPatienceIsSpentReturnsThatAnswer(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	absent := status.Error(codes.NotFound, "The database does not exist")
+	err := googleretry.UntilServedWithin(context.Background(), 0, func() error {
+		calls++
+		return absent
+	})
+	if !errors.Is(err, absent) || calls != 1 {
+		t.Errorf("UntilServedWithin() with no patience = %v after %d calls, want the NotFound answer after one", err, calls)
 	}
 }

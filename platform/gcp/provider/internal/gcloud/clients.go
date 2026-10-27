@@ -60,7 +60,6 @@ type Clients struct {
 
 	workload      Memo[*ports.Clients]
 	storage       Memo[*storage.Client]
-	databases     Memo[*firestoreadmin.Service]
 	secrets       Memo[*secretmanager.Service]
 	services      Memo[*serviceusage.Service]
 	images        Memo[*artifactregistry.Service]
@@ -117,11 +116,7 @@ func (c *Clients) Storage() (*storage.Client, error) {
 	})
 }
 
-func (c *Clients) Databases() (*firestoreadmin.Service, error) {
-	return opened(c, &c.databases, "Firestore admin", func() (*firestoreadmin.Service, error) {
-		return firestoreadmin.NewService(context.Background(), ports.NewRESTOptions(c.Endpoint, c.QuotaProject())...)
-	})
-}
+func (c *Clients) Databases() (*firestoreadmin.Service, error) { return c.Workload().Databases() }
 
 func (c *Clients) Secrets() (*secretmanager.Service, error) {
 	return opened(c, &c.secrets, "Secret Manager", func() (*secretmanager.Service, error) {
