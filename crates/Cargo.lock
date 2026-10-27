@@ -1130,7 +1130,7 @@ dependencies = [
 
 [[package]]
 name = "ocel-macros"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "ocel-sdk",
  "proc-macro2",
@@ -1142,7 +1142,7 @@ dependencies = [
 
 [[package]]
 name = "ocel-sdk"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "axum",
  "boon",
