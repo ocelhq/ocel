@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { output, type Resource, secret } from "@pulumi/pulumi";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -47,6 +48,10 @@ vi.mock("node:child_process", () => {
 });
 
 const run = vi.mocked(spawnSync);
+
+const { Struct } = createRequire(createRequire(import.meta.url).resolve("@pulumi/pulumi"))(
+  "google-protobuf/google/protobuf/struct_pb",
+) as { Struct: { fromJavaScript(value: object): unknown } };
 
 const ocelCLI = "/usr/local/bin/ocel";
 
@@ -233,6 +238,12 @@ describe("publishing a postgres binding", () => {
     expect(JSON.stringify(created.outs)).not.toContain(properties.password);
   });
 
+  it("outputs only what the engine can send back, on the production tier", async () => {
+    const created = await postgresProvider.create(await inputs(declare()));
+
+    expect(() => Struct.fromJavaScript(created.outs)).not.toThrow();
+  });
+
   it("resolves a grant's resource from a pulumi output before it publishes", async () => {
     const resourceArn = "arn:aws:rds-db:us-east-1:111122223333:dbuser:cluster-abc/operator";
     postgres(
@@ -408,6 +419,12 @@ describe("declaring a custom binding", () => {
     expect(created.id).toBe("production/network");
   });
 
+  it("outputs only what the engine can send back, on the production tier", async () => {
+    const created = await customProvider.create(await inputs(declareCustom()));
+
+    expect(() => Struct.fromJavaScript(created.outs)).not.toThrow();
+  });
+
   it("reports a change rather than throwing while a property is still unknown", async () => {
     const olds = (await customProvider.create(await inputs(declareCustom()))).outs;
     custom(
@@ -534,6 +551,12 @@ describe("publishing variables", () => {
     expect(created.id).toBe("variables/production");
     expect(created.outs).toMatchObject({ versions: { API_KEY: "1", DATABASE_URL: "1" } });
     expect(JSON.stringify(created.outs)).not.toContain("k3y");
+  });
+
+  it("outputs only what the engine can send back, on the production tier", async () => {
+    const created = await variablesProvider.create(await inputs(declareVariables()));
+
+    expect(() => Struct.fromJavaScript(created.outs)).not.toThrow();
   });
 
   it("names the preview environment it publishes into", async () => {
