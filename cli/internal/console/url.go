@@ -1,21 +1,22 @@
 package console
 
 import (
+	"cmp"
 	"os"
 	"strings"
 )
 
 const DefaultBaseURL = "https://app.ocelhq.com"
 
-const URLEnvVar = "OCEL_CONSOLE_URL"
+const (
+	URLEnvVar       = "OCEL_CONSOLE_URL"
+	ProjectIDEnvVar = "OCEL_CONSOLE_PROJECT_ID"
+)
 
 func BaseURL(stored string) string {
-	chosen := strings.TrimSpace(os.Getenv(URLEnvVar))
-	if chosen == "" {
-		chosen = strings.TrimSpace(stored)
-	}
-	if chosen == "" {
-		chosen = DefaultBaseURL
-	}
-	return strings.TrimRight(chosen, "/")
+	return NormalizeBaseURL(cmp.Or(strings.TrimSpace(os.Getenv(URLEnvVar)), stored))
+}
+
+func NormalizeBaseURL(raw string) string {
+	return strings.TrimRight(cmp.Or(strings.TrimSpace(raw), DefaultBaseURL), "/")
 }

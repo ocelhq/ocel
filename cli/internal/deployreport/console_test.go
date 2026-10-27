@@ -61,9 +61,14 @@ func (f *fakeConsole) RecordEnvironmentEvent(_ context.Context, req *consolev1.R
 
 func serveConsole(t *testing.T, fake *fakeConsole) string {
 	t.Helper()
+	return serveConsoleUnder(t, fake, "")
+}
+
+func serveConsoleUnder(t *testing.T, fake *fakeConsole, prefix string) string {
+	t.Helper()
 	path, handler := consolev1connect.NewDeploymentServiceHandler(fake, connect.WithInterceptors(connectvalidate.NewInterceptor()))
 	mux := http.NewServeMux()
-	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle(prefix+"/api/connect"+path, http.StripPrefix(prefix+"/api/connect", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fake.mu.Lock()
 		fake.auth = append(fake.auth, r.Header.Get("Authorization"))
 		fake.mu.Unlock()
@@ -300,5 +305,187 @@ func TestAnUnlinkedTreeThatIsNotLoggedInMakesNoCallAndPrintsNothing(t *testing.T
 
 	if len(fake.reports) != 0 || stderr.Len() != 0 {
 		t.Errorf("reports %d, stderr %q, want no call and no output for a tree that uses no console", len(fake.reports), stderr.String())
+	}
+}
+
+const pipelineProjectID = "0199c3a2-5b7e-7c4d-8a1f-000000000042"
+
+func trustedPipeline(env map[string]string) Console {
+	return Console{
+		Getenv: func(name string) string { return env[name] },
+		LoadCredentials: func() (console.Credentials, error) {
+			return console.Credentials{}, errors.New("a trusted pipeline must not read the saved login")
+		},
+	}
+}
+
+func pipelineEnv(consoleURL, tokenURL string) map[string]string {
+	return map[string]string{
+		"GITHUB_ACTIONS":                 "true",
+		console.ProjectIDEnvVar:          pipelineProjectID,
+		console.URLEnvVar:                consoleURL,
+		"ACTIONS_ID_TOKEN_REQUEST_URL":   tokenURL,
+		"ACTIONS_ID_TOKEN_REQUEST_TOKEN": "request-token",
+	}
+}
+
+func TestAGitHubActionsRunNamingAConsoleProjectReportsWithAnIDTokenForTheConsoleOrigin(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	apiURL := serveConsole(t, fake)
+	issuer := &fakeIDTokenIssuer{}
+	var stderr bytes.Buffer
+
+	trustedPipeline(pipelineEnv(apiURL+"/", serveIDTokens(t, issuer))).ReportDeployment(context.Background(), t.TempDir(), productionDeployment(), &stderr)
+
+	if len(fake.reports) != 1 {
+		t.Fatalf("the console received %d reports, want 1 (stderr %q)", len(fake.reports), stderr.String())
+	}
+	if got := fake.reports[0].GetProjectId(); got != pipelineProjectID {
+		t.Errorf("the console received project %q, want %q from %s", got, pipelineProjectID, console.ProjectIDEnvVar)
+	}
+	if issuer.audiences[0] != apiURL {
+		t.Errorf("the ID token was requested for audience %q, want the console origin %q", issuer.audiences[0], apiURL)
+	}
+	if fake.auth[0] != "Bearer id-token-1" {
+		t.Errorf("the console received Authorization %q, want the ID token", fake.auth[0])
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want nothing from a report that went through", stderr.String())
+	}
+}
+
+func TestATrustedPipelineAsksForItsConsoleOriginAndCallsTheConsoleAtItsFullURL(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	apiURL := serveConsoleUnder(t, fake, "/console")
+	issuer := &fakeIDTokenIssuer{}
+	port := strings.TrimPrefix(apiURL, "http://127.0.0.1:")
+	var stderr bytes.Buffer
+
+	trustedPipeline(pipelineEnv("http://LOCALHOST:"+port+"/console/", serveIDTokens(t, issuer))).ReportDeployment(context.Background(), t.TempDir(), productionDeployment(), &stderr)
+
+	if want := "http://localhost:" + port; len(issuer.audiences) != 1 || issuer.audiences[0] != want {
+		t.Errorf("audiences %q, want one for %q", issuer.audiences, want)
+	}
+	if len(fake.reports) != 1 {
+		t.Errorf("the console under /console received %d reports, want 1 (stderr %q)", len(fake.reports), stderr.String())
+	}
+}
+
+func TestATrustedPipelineThatNamesNoConsoleURLReportsToTheHostedConsole(t *testing.T) {
+	t.Parallel()
+	issuer := &fakeIDTokenIssuer{status: http.StatusForbidden}
+	env := pipelineEnv("", serveIDTokens(t, issuer))
+	delete(env, console.URLEnvVar)
+
+	trustedPipeline(env).ReportDeployment(context.Background(), t.TempDir(), productionDeployment(), &bytes.Buffer{})
+
+	if len(issuer.audiences) != 1 || issuer.audiences[0] != console.DefaultBaseURL {
+		t.Errorf("audiences %q, want one for the hosted console %q", issuer.audiences, console.DefaultBaseURL)
+	}
+}
+
+func TestATrustedPipelineReadsTheConsoleURLOnlyFromItsOwnEnvironment(t *testing.T) {
+	t.Setenv(console.URLEnvVar, "http://127.0.0.1:1")
+	fake := &fakeConsole{}
+	apiURL := serveConsole(t, fake)
+	var stderr bytes.Buffer
+
+	trustedPipeline(pipelineEnv(apiURL, serveIDTokens(t, &fakeIDTokenIssuer{}))).ReportDeployment(context.Background(), t.TempDir(), productionDeployment(), &stderr)
+
+	if len(fake.reports) != 1 {
+		t.Errorf("the console the injected environment names received %d reports, want 1 (stderr %q)", len(fake.reports), stderr.String())
+	}
+}
+
+func TestATrustedPipelineRequestsAFreshIDTokenForEveryReport(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	apiURL := serveConsole(t, fake)
+	issuer := &fakeIDTokenIssuer{}
+	reporting := trustedPipeline(pipelineEnv(apiURL, serveIDTokens(t, issuer)))
+	event := &consolev1.EnvironmentEvent{
+		Id:          traceID,
+		Kind:        consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED,
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"},
+		At:          timestamppb.New(finishedAt),
+	}
+	var stderr bytes.Buffer
+
+	reporting.ReportDeployment(context.Background(), t.TempDir(), productionDeployment(), &stderr)
+	reporting.ReportEnvironmentEvent(context.Background(), t.TempDir(), event, &stderr)
+
+	if len(fake.events) != 1 || fake.events[0].GetProjectId() != pipelineProjectID {
+		t.Fatalf("events %d, stderr %q, want one event for project %s", len(fake.events), stderr.String(), pipelineProjectID)
+	}
+	if len(issuer.audiences) != 2 || len(fake.auth) != 2 || fake.auth[0] == fake.auth[1] {
+		t.Errorf("issued %d ID tokens, the console saw %q, want a fresh token per report", len(issuer.audiences), fake.auth)
+	}
+}
+
+func TestATrustedPipelineIgnoresTheLinkFile(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	apiURL := serveConsole(t, fake)
+	reporting := trustedPipeline(pipelineEnv(apiURL, serveIDTokens(t, &fakeIDTokenIssuer{})))
+	var stderr bytes.Buffer
+
+	reporting.ReportDeployment(context.Background(), linkedTree(t, apiURL), productionDeployment(), &stderr)
+
+	if len(fake.reports) != 1 || fake.reports[0].GetProjectId() != pipelineProjectID {
+		t.Errorf("reports %d, stderr %q, want one report for project %s rather than the linked one", len(fake.reports), stderr.String(), pipelineProjectID)
+	}
+}
+
+func TestATrustedPipelineThatCannotRequestAnIDTokenLeavesOneWarningNamingTheFix(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	apiURL := serveConsole(t, fake)
+	env := pipelineEnv(apiURL, "")
+	delete(env, "ACTIONS_ID_TOKEN_REQUEST_URL")
+	var stderr bytes.Buffer
+
+	trustedPipeline(env).ReportDeployment(context.Background(), t.TempDir(), productionDeployment(), &stderr)
+
+	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
+	if len(fake.reports) != 0 || len(lines) != 1 || !strings.Contains(lines[0], traceID) || !strings.Contains(lines[0], "permissions: id-token: write") {
+		t.Errorf("reports %d, stderr %q, want no call and one warning naming %s and `permissions: id-token: write`", len(fake.reports), stderr.String(), traceID)
+	}
+}
+
+func TestAGitHubActionsRunNamingNoConsoleProjectReportsWithTheSavedLogin(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	apiURL := serveConsole(t, fake)
+	issuer := &fakeIDTokenIssuer{}
+	env := pipelineEnv(apiURL, serveIDTokens(t, issuer))
+	delete(env, console.ProjectIDEnvVar)
+	reporting := signedIn(apiURL)
+	reporting.Getenv = func(name string) string { return env[name] }
+	var stderr bytes.Buffer
+
+	reporting.ReportDeployment(context.Background(), linkedTree(t, apiURL), productionDeployment(), &stderr)
+
+	if len(fake.reports) != 1 || fake.reports[0].GetProjectId() != consoleProjectID || fake.auth[0] != "Bearer tok" || len(issuer.audiences) != 0 {
+		t.Errorf("reports %d, auth %q, token requests %d, stderr %q, want the linked project reported with the saved login", len(fake.reports), fake.auth, len(issuer.audiences), stderr.String())
+	}
+}
+
+func TestAProjectIDOutsideGitHubActionsReportsWithTheSavedLogin(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	apiURL := serveConsole(t, fake)
+	issuer := &fakeIDTokenIssuer{}
+	env := pipelineEnv(apiURL, serveIDTokens(t, issuer))
+	delete(env, "GITHUB_ACTIONS")
+	reporting := signedIn(apiURL)
+	reporting.Getenv = func(name string) string { return env[name] }
+	var stderr bytes.Buffer
+
+	reporting.ReportDeployment(context.Background(), linkedTree(t, apiURL), productionDeployment(), &stderr)
+
+	if len(fake.reports) != 1 || fake.reports[0].GetProjectId() != consoleProjectID || fake.auth[0] != "Bearer tok" || len(issuer.audiences) != 0 {
+		t.Errorf("reports %d, auth %q, token requests %d, stderr %q, want the linked project reported with the saved login", len(fake.reports), fake.auth, len(issuer.audiences), stderr.String())
 	}
 }

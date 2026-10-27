@@ -14,12 +14,16 @@ const (
 	unknownCIName     = "ci"
 )
 
+func isGitHubActions(getenv func(string) string) bool {
+	return getenv("GITHUB_ACTIONS") == "true"
+}
+
 func ReadTrigger(getenv func(string) string, prNumber string) (*consolev1.Trigger, *consolev1.CI) {
-	if getenv("GITHUB_ACTIONS") != "true" && getenv("CI") == "" {
+	if !isGitHubActions(getenv) && getenv("CI") == "" {
 		return &consolev1.Trigger{Kind: consolev1.TriggerKind_TRIGGER_KIND_CLI}, nil
 	}
 	trigger := &consolev1.Trigger{Kind: consolev1.TriggerKind_TRIGGER_KIND_CI}
-	if getenv("GITHUB_ACTIONS") != "true" {
+	if !isGitHubActions(getenv) {
 		return trigger, &consolev1.CI{Name: unknownCIName}
 	}
 	trigger.Actor = getenv("GITHUB_ACTOR")
