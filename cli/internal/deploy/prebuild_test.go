@@ -582,7 +582,7 @@ func TestAPreBuildIsHandedTheRecordAnInlineBindingBindsAResourceTo(t *testing.T)
 	_, read, url := deployWithInlinePreBuild(t, fixture)
 
 	if read.GetPostgres().GetUrl() != url || read.GetName() != "main" {
-		t.Errorf("the preBuild read main's binding as %v, want the record bindings.postgres.main names, by its url", read)
+		t.Errorf("the preBuild read a binding named %q with url set = %v, want the record bindings.postgres.main names, by its url", read.GetName(), read.GetPostgres().GetUrl() != "")
 	}
 }
 
@@ -593,7 +593,7 @@ func TestAPreBuildOfAProviderThatForwardsNoPortIsHandedEveryRecordAndSaysNothing
 	out, read, url := deployWithInlinePreBuild(t, fixture)
 
 	if read.GetPostgres().GetUrl() != url {
-		t.Errorf("the preBuild read main's binding as %v, want the record bindings.postgres.main names", read)
+		t.Errorf("the preBuild read a binding named %q with url set = %v, want the record bindings.postgres.main names", read.GetName(), read.GetPostgres().GetUrl() != "")
 	}
 	if strings.Contains(out, "forwards no port") {
 		t.Errorf("the deploy said %q, want nothing said to go without bindings when a record reaches every resource", out)
