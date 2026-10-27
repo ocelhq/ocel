@@ -10,6 +10,7 @@
     "configuration",
     "environments",
     "report-from-github-actions",
+    "deploy-from-github-actions",
     "transforms",
     "---Providers---",
     "providers/index",

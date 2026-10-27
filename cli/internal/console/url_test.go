@@ -37,3 +37,24 @@ func TestNormalizeBaseURLTrimsItAndFallsBackToTheHostedConsoleWithoutReadingTheE
 		}
 	}
 }
+
+func TestTheAudienceIsTheConsolesCanonicalOrigin(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		"https://Console.Example.COM/app/": "https://console.example.com",
+		"https://console.example.com:443":  "https://console.example.com",
+		"http://console.example.com:80/":   "http://console.example.com",
+		"http://localhost:8080/console":    "http://localhost:8080",
+		"https://console.example.com:80":   "https://console.example.com:80",
+	}
+	for apiURL, want := range cases {
+		if got, err := Origin(apiURL); err != nil || got != want {
+			t.Errorf("Origin(%q) = %q, %v, want %q", apiURL, got, err, want)
+		}
+	}
+	for _, malformed := range []string{"console.example.com", "https://", "http://[::1"} {
+		if got, err := Origin(malformed); err == nil {
+			t.Errorf("Origin(%q) = %q, want an error", malformed, got)
+		}
+	}
+}

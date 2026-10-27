@@ -21,19 +21,28 @@ import (
 const FixtureConsoleProjectID = "0199c3a2-5b7e-7c4d-8a1f-2e3d4c5b6a79"
 
 type FakeConsole struct {
+	consolev1connect.UnimplementedTargetServiceHandler
+
 	URL string
+
+	Credential        *consolev1.IssueCredentialResponse
+	CredentialRefusal *connect.Error
 
 	mu      sync.Mutex
 	reports []*consolev1.ReportRequest
 	events  []*consolev1.RecordEnvironmentEventRequest
+	issued  []*consolev1.IssueCredentialRequest
 }
 
 func ServeConsole(t *testing.T) *FakeConsole {
 	t.Helper()
 	fake := &FakeConsole{}
-	path, handler := consolev1connect.NewDeploymentServiceHandler(fake, connect.WithInterceptors(connectvalidate.NewInterceptor()))
+	validated := connect.WithInterceptors(connectvalidate.NewInterceptor())
+	path, handler := consolev1connect.NewDeploymentServiceHandler(fake, validated)
+	targetsPath, targets := consolev1connect.NewTargetServiceHandler(fake, validated)
 	mux := http.NewServeMux()
 	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
+	mux.Handle("/api/connect"+targetsPath, http.StripPrefix("/api/connect", targets))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	fake.URL = srv.URL
@@ -52,6 +61,22 @@ func (f *FakeConsole) RecordEnvironmentEvent(_ context.Context, req *consolev1.R
 	defer f.mu.Unlock()
 	f.events = append(f.events, req)
 	return &consolev1.RecordEnvironmentEventResponse{}, nil
+}
+
+func (f *FakeConsole) IssueCredential(_ context.Context, req *consolev1.IssueCredentialRequest) (*consolev1.IssueCredentialResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.issued = append(f.issued, req)
+	if f.CredentialRefusal != nil {
+		return nil, f.CredentialRefusal
+	}
+	return f.Credential, nil
+}
+
+func (f *FakeConsole) IssuedCredentials() []*consolev1.IssueCredentialRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*consolev1.IssueCredentialRequest(nil), f.issued...)
 }
 
 func (f *FakeConsole) Reports() []*consolev1.ReportRequest {

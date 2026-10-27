@@ -1,0 +1,57 @@
+---
+title: Deploy from GitHub Actions without cloud keys
+description: Let the console issue a short-lived cloud credential to each deploy a workflow runs.
+---
+
+A workflow that [reports to the console](/docs/report-from-github-actions) can also deploy with
+no AWS or Google Cloud secret in the repository. The console issues each deploy a short-lived
+token for the tier it deploys to, and the cloud exchanges it for that tier's deploy role. This
+works for the `aws` and `gcp` providers.
+
+## Bind the tier to your account
+
+Run `ocel bootstrap production` (and `ocel bootstrap preview`) once from a machine logged in to
+the console with `ocel login`, in a checkout linked with `ocel link`. Bootstrap asks whether the
+console may deploy that tier to the account, then writes the trust and the tier's deploy role
+into it and records them in the console.
+
+## Run the deploy
+
+The workflow needs nothing beyond what reporting needs:
+
+```yaml title=".github/workflows/deploy.yml"
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  OCEL_CONSOLE_PROJECT_ID: ${{ vars.OCEL_CONSOLE_PROJECT_ID }}
+```
+
+`ocel deploy`, `ocel rollback`, `ocel preview up`, `ocel preview rm` and `ocel preview prune` then ask the console for
+a credential: production for a deploy or a rollback, preview for a preview. The run says which
+account and region the credential is for, and the CLI requests a new token before the current
+one expires, for as long as the command runs. The CLI refuses to go on if the credential signs
+in to a different account than the one the console bound to the tier. If the token cannot be
+renewed, the run says why.
+
+A job that sets any of these names its own cloud credential, and the CLI refuses to deploy with
+both rather than guess which one the cloud SDK would pick: drop the variable, or unset
+`OCEL_CONSOLE_PROJECT_ID`.
+
+| Provider | Variables |
+| --- | --- |
+| `aws` | `AWS_ACCESS_KEY_ID`, `AWS_PROFILE`, `AWS_DEFAULT_PROFILE`, `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_CONTAINER_CREDENTIALS_FULL_URI`, `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` |
+| `gcp` | `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CREDENTIALS`, `GOOGLE_CLOUD_KEYFILE_JSON`, `GCLOUD_KEYFILE_JSON`, `GOOGLE_OAUTH_ACCESS_TOKEN`, `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT`, `GOOGLE_GHA_CREDS_PATH`, `CLOUDSDK_AUTH_ACCESS_TOKEN_FILE`, `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE` |
+
+A shared AWS credentials or config file alone does not count: the SDK prefers the console's token
+to the profiles it holds.
+
+An edge credential, such as a Cloudflare API token, stays a secret of the workflow.
+
+## When the console issues no credential
+
+| The run says | Fix |
+| --- | --- |
+| the console binds no target to the tier | The deploy goes on with the credentials around it. Run `ocel bootstrap <tier>` to bind one |
+| the credential reached another account | Bind the project's tier to the target in the account it deploys to |

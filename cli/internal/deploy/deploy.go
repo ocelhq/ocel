@@ -75,7 +75,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 
 	deployTelemetry := watchDeploy(dependencies.Events, cfg, target.telemetryTarget(), opts.Dry)
 	var report *consolev1.Deployment
-	err = dependencies.WithProvider(ctx, cfg, target.command(), commands.OpenOptions{Intent: commands.Deploy, Tier: target.tier, Policy: policy, DryRun: policy.DryRun}, func(ctx context.Context, p commands.ProviderRun) (err error) {
+	err = dependencies.WithProvider(ctx, cfg, target.command(), commands.OpenOptions{Intent: commands.Deploy, Tier: target.tier, Policy: policy, DryRun: policy.DryRun, ConsoleCredential: true}, func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider := p.Run, p.Check, p.Provider
 		var attempt *deployreport.Attempt
 		var apps []*consolev1.App

@@ -8,7 +8,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -41,6 +40,8 @@ type OpenOptions struct {
 	DryRun      bool
 	Cloud       *CloudTarget
 	CloudScopes []cloudv1.Scope
+
+	ConsoleCredential bool
 }
 
 func (i Intent) requirement() readiness.Requirement {
@@ -98,37 +99,35 @@ func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *proje
 			return nil, readiness.Preflight{}, err
 		}
 	}
-	provider, identity, err := i.start(ctx, check, cfg, opts)
+	provider, identity, account, err := i.start(ctx, check, cfg, opts)
 	if err != nil {
 		return nil, readiness.Preflight{}, err
 	}
 	if req.Require == readiness.None {
 		return provider, readiness.Preflight{}, nil
 	}
-	req.Identity = identity
+	req.Identity, req.Account = identity, account
 	read, err := readiness.Check(ctx, check, provider, cfg, req)
 	return provider, read, err
 }
 
-func (i Invocation) start(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, *contractv1.Identity, error) {
+func (i Invocation) start(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, *contractv1.Identity, string, error) {
 	if opts.Cloud == nil {
-		loading := check.Child(providerID(cfg), progress.Loading.Title("the provider"))
-		provider, err := providerprocess.Start(ctx, cfg, check, i.Questions, executables.ChoosePinning(opts.DryRun))
-		loading.End(err)
-		return provider, nil, err
+		provider, account, err := i.startWithConsoleCredential(ctx, check, cfg, opts)
+		return provider, nil, account, err
 	}
 	scopes := opts.sessionScopes()
 	if open := i.CloudSessions.find(check.Run(), cfg, scopes); open != nil {
-		return open.provider, open.identity, nil
+		return open.provider, open.identity, "", nil
 	}
 	opening := check.Child(CloudProviderID, progress.Title{Started: "Opening a session on Ocel Cloud", Ended: "Opened a session on Ocel Cloud"})
 	open, err := i.openOnCloud(ctx, check, cfg, opts.Cloud, scopes)
 	opening.End(err)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	i.CloudSessions.keep(check.Run(), cfg, open)
-	return open.provider, open.identity, nil
+	return open.provider, open.identity, "", nil
 }
 
 func (i Invocation) openOnCloud(ctx context.Context, check *run.Span, cfg *project.Project, cloud *CloudTarget, scopes []cloudv1.Scope) (*openCloudSession, error) {

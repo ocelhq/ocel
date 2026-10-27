@@ -1,4 +1,4 @@
-package deployreport
+package githubactions
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 )
 
@@ -19,29 +18,16 @@ const (
 	idTokenRequestTimeout     = 30 * time.Second
 )
 
-var errNoIDToken = errors.New("the workflow can't mint an ID token; give the job `permissions: id-token: write` (GitHub mints none for a pull_request run from a fork)")
+var ErrNoIDToken = errors.New("the workflow can't mint an ID token; give the job `permissions: id-token: write` (GitHub mints none for a pull_request run from a fork)")
 
-var defaultPorts = map[string]string{"http": "80", "https": "443"}
-
-func readAudience(apiURL string) (string, error) {
-	parsed, err := url.Parse(apiURL)
-	if err != nil || defaultPorts[parsed.Scheme] == "" || parsed.Hostname() == "" {
-		return "", fmt.Errorf("the console URL %q is not an http or https URL", apiURL)
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if strings.Contains(host, ":") {
-		host = "[" + host + "]"
-	}
-	if port := parsed.Port(); port != "" && port != defaultPorts[parsed.Scheme] {
-		host += ":" + port
-	}
-	return parsed.Scheme + "://" + host, nil
+func IsRunning(getenv func(string) string) bool {
+	return getenv("GITHUB_ACTIONS") == "true"
 }
 
-func requestIDToken(ctx context.Context, getenv func(string) string, audience string) (string, error) {
+func RequestIDToken(ctx context.Context, getenv func(string) string, audience string) (string, error) {
 	requestURL, requestToken := getenv(idTokenRequestURLEnvVar), getenv(idTokenRequestTokenEnvVar)
 	if requestURL == "" || requestToken == "" {
-		return "", errNoIDToken
+		return "", ErrNoIDToken
 	}
 	endpoint, err := url.Parse(requestURL)
 	if err != nil {

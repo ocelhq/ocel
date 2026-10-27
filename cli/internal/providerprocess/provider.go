@@ -21,14 +21,27 @@ type Provider struct {
 	questions Questions
 	name      string
 	transport transport
+	release   func()
 }
 
-func Start(ctx context.Context, cfg *project.Project, span *run.Span, questions Questions, pinning executables.Pinning) (*Provider, error) {
-	spec, err := newLaunchSpec(ctx, cfg, pinning)
+type Launch struct {
+	Pinning     executables.Pinning
+	WebIdentity *contractv1.WebIdentity
+	Release     func()
+}
+
+func Start(ctx context.Context, cfg *project.Project, span *run.Span, questions Questions, launch Launch) (*Provider, error) {
+	spec, err := newLaunchSpec(ctx, cfg, launch.Pinning)
 	if err != nil {
 		return nil, err
 	}
-	return start(ctx, span, questions, spec)
+	spec.ProviderConfig.WebIdentity = launch.WebIdentity
+	provider, err := start(ctx, span, questions, spec)
+	if err != nil {
+		return nil, err
+	}
+	provider.release = launch.Release
+	return provider, nil
 }
 
 func start(ctx context.Context, span *run.Span, questions Questions, spec LaunchSpec) (*Provider, error) {
@@ -50,7 +63,12 @@ func (p *Provider) Name() string { return p.name }
 
 func (p *Provider) Facts() *contractv1.ProviderFacts { return p.transport.Facts() }
 
-func (p *Provider) Close() { p.transport.Close() }
+func (p *Provider) Close() {
+	p.transport.Close()
+	if p.release != nil {
+		p.release()
+	}
+}
 
 func (p *Provider) callAnswering(ctx context.Context, call func(transport) error) error {
 	err := call(p.transport)

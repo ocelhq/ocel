@@ -42,6 +42,7 @@ import (
 	skillcommand "github.com/ocelhq/ocel/cli/internal/commands/skill"
 	"github.com/ocelhq/ocel/cli/internal/commands/telemetryflush"
 	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/consolecredential"
 	"github.com/ocelhq/ocel/cli/internal/declaration"
 	"github.com/ocelhq/ocel/cli/internal/deploy"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
@@ -295,13 +296,14 @@ func newInvocation(bus *run.Bus, set *flags) (commands.Invocation, error) {
 		Questions:       providerprocess.Questions{Prompt: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr, IsJSON: isJSON},
 		ConfigPath:      set.explicitConfigPath,
 
-		Console:       deployreport.Console{LoadCredentials: console.LoadCredentials, Getenv: os.Getenv},
-		CloudOffer:    console.NewCloudOffers(console.LoadCredentials, console.SaveCredentials).Resolve,
-		CloudSessions: commands.NewCloudSessions(),
-		BuilderJob:    job,
+		Console:           deployreport.Console{LoadCredentials: console.LoadCredentials, Getenv: os.Getenv},
+		ConsoleCredential: consolecredential.Console{Getenv: os.Getenv, Version: version.Version},
+		CloudOffer:        console.NewCloudOffers(console.LoadCredentials, console.SaveCredentials).Resolve,
+		CloudSessions:     commands.NewCloudSessions(),
+		BuilderJob:        job,
 	}
 	if invocation.BuilderJob != nil {
-		invocation.Console, invocation.CloudOffer = deployreport.Console{}, nil
+		invocation.Console, invocation.ConsoleCredential, invocation.CloudOffer = deployreport.Console{}, consolecredential.Console{}, nil
 		invocation.JobAnswers = jobinput.New(os.Stdin)
 		invocation.Questions.Job = invocation.JobAnswers
 	}

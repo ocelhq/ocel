@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/githubactions"
+
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
@@ -14,16 +16,12 @@ const (
 	unknownCIName     = "ci"
 )
 
-func isGitHubActions(getenv func(string) string) bool {
-	return getenv("GITHUB_ACTIONS") == "true"
-}
-
 func ReadTrigger(getenv func(string) string, prNumber string) (*consolev1.Trigger, *consolev1.CI) {
-	if !isGitHubActions(getenv) && getenv("CI") == "" {
+	if !githubactions.IsRunning(getenv) && getenv("CI") == "" {
 		return &consolev1.Trigger{Kind: consolev1.TriggerKind_TRIGGER_KIND_CLI}, nil
 	}
 	trigger := &consolev1.Trigger{Kind: consolev1.TriggerKind_TRIGGER_KIND_CI}
-	if !isGitHubActions(getenv) {
+	if !githubactions.IsRunning(getenv) {
 		return trigger, &consolev1.CI{Name: unknownCIName}
 	}
 	trigger.Actor = getenv("GITHUB_ACTOR")
