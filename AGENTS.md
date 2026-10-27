@@ -29,6 +29,7 @@ before — the CLI works on its own; the SDK and console do not.
   and the call _is_ the provisioning step, so there is no separate wiring to keep in sync.
   Proto-backed and language-neutral.
 - **Console** — provides the UI over both: a view into what the CLI did and where it landed.
+  It lives in github.com/ocelhq/console.
 
 **Targets.** A target is where a deploy lands. A provider target is the customer's own account
 (AWS, GCP, a VPS), under their billing and access. **Ocel Cloud** is the zero-config managed
@@ -59,10 +60,6 @@ which are tooling.
 
 - **`packages/`** — everything published to npm, and nothing else. `@ocel/*` is public
   API; nothing internal may claim it.
-- **`console/`** — only `console/github`, the app that posts this repo's previews, until
-  the console's git integration replaces it. The console itself, the UI over
-  Ocel, lives in github.com/ocelhq/console. Never call the console a cloud; Ocel Cloud is a
-  target the console may offer, not the console.
 - **`platform/<vendor>/`** — code targeting someone else's infrastructure. Each vendor
   has its provisioning/deploy Go **and** the JS that runs on it. A second origin cloud
   lands here as a sibling. No import crosses from one vendor into another.
