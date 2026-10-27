@@ -32,6 +32,18 @@ func UntilServed(ctx context.Context, call func() error) error {
 	return err
 }
 
+func UntilServedWithin(ctx context.Context, patience time.Duration, call func() error) error {
+	deadline := time.Now().Add(patience)
+	err := call()
+	for attempt := 1; IsUnserved(err) && time.Now().Before(deadline); attempt++ {
+		if !WaitedFor(ctx, attempt, servedCeiling) {
+			return ctx.Err()
+		}
+		err = call()
+	}
+	return err
+}
+
 func AttemptedUntilServed[T any](ctx context.Context, call func(...googleapi.CallOption) (T, error)) (T, error) {
 	var value T
 	err := UntilServed(ctx, func() error {

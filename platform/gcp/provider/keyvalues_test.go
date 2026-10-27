@@ -3,7 +3,6 @@ package gcp_test
 import (
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -11,7 +10,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/firestore/apiv1/firestorepb"
-	"google.golang.org/grpc"
+	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
@@ -58,16 +58,11 @@ func firestoreHoldingOnly(t *testing.T, tier environment.Tier) string {
 
 func serveFirestore(t *testing.T, answering answeringFirestore) string {
 	t.Helper()
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen on loopback: %v", err)
+	databases := googletest.NewDatabases(t, nil)
+	if answering.present != "" {
+		databases.Held[answering.present] = &firestoreadmin.GoogleFirestoreAdminV1Database{Name: "projects/" + googletest.Project + "/databases/" + answering.present}
 	}
-	server := grpc.NewServer()
-	firestorepb.RegisterFirestoreServer(server, answering)
-	go func() { _ = server.Serve(listener) }()
-	t.Cleanup(server.Stop)
-	return "http://" + listener.Addr().String()
+	return googletest.ServeFirestore(t, answering, databases)
 }
 
 func cloudflareAccountHoldingNothing(t *testing.T) {

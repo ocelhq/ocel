@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/grpc/codes"
@@ -26,6 +28,8 @@ const (
 	valueField           = "value"
 	revisionField        = "rev"
 )
+
+const tierDatabasePatience = 3 * time.Minute
 
 type KeyValues struct {
 	Clients *Clients
@@ -57,19 +61,64 @@ func (s KeyValues) refuseAbsentDocument(ctx context.Context, collection *firesto
 	documents := googleretry.QueryDocuments(ctx, collection.Select().Limit(1))
 	defer documents.Stop()
 	_, err := documents.Next()
-	switch {
-	case status.Code(err) == codes.NotFound:
-		return s.refuseUnbootstrapped(key.Partition.Tier)
-	case googleretry.IsRetried(err):
+	if status.Code(err) == codes.NotFound || googleretry.IsRetried(err) {
 		return fmt.Errorf("read %s: %w", key, err)
 	}
 	return records.ErrNotFound
+}
+
+func untilTierServes[T any](ctx context.Context, s KeyValues, in records.Partition, call func() (T, error)) (T, error) {
+	if _, owned := ProjectOfRecords(in); owned {
+		return call()
+	}
+	answer, err := call()
+	if !googleretry.IsUnserved(err) {
+		return answer, err
+	}
+	var nothing T
+	database := s.Clients.RecordsDatabase(in.Tier)
+	held, heldErr := s.Clients.hasDatabase(ctx, database)
+	switch {
+	case heldErr != nil:
+		return nothing, fmt.Errorf("the %q Firestore database answered as one that does not exist, then %w", database, heldErr)
+	case !held:
+		return nothing, s.refuseUnbootstrapped(in.Tier)
+	}
+	err = googleretry.UntilServedWithin(ctx, tierDatabasePatience, func() error {
+		answer, err = call()
+		return err
+	})
+	if googleretry.IsUnserved(err) {
+		return nothing, refusal.Refuse(refusal.CodeNotReady,
+			"Firestore holds the %q database but answered for %s that it does not exist.\nRun the same command again in a few minutes",
+			database, tierDatabasePatience)
+	}
+	return answer, err
+}
+
+func (c *Clients) hasDatabase(ctx context.Context, database string) (bool, error) {
+	service, err := c.Databases()
+	if err != nil {
+		return false, err
+	}
+	held, err := googleretry.Attempted(ctx, service.Projects.Databases.Get("projects/"+c.Project+"/databases/"+database).Context(ctx).Do)
+	if googleretry.AnsweredCode(err) == http.StatusNotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read the %q Firestore database: %w", database, err)
+	}
+	return held.DeleteTime == "", nil
 }
 
 func (s KeyValues) Read(ctx context.Context, key records.Key) (records.Entry, error) {
 	if err := records.RefuseMalformedKey(key); err != nil {
 		return records.Entry{}, err
 	}
+	return untilTierServes(ctx, s, key.Partition, func() (records.Entry, error) { return s.read(ctx, key) })
+}
+
+func (s KeyValues) read(ctx context.Context, key records.Key) (records.Entry, error) {
 	_, collection, err := s.open(ctx, key.Partition)
 	if err != nil {
 		return records.Entry{}, err
@@ -91,6 +140,10 @@ func (s KeyValues) Write(ctx context.Context, entry records.Entry) (records.Revi
 	if err := records.RefuseUnwritable(entry); err != nil {
 		return "", err
 	}
+	return untilTierServes(ctx, s, entry.Key.Partition, func() (records.Revision, error) { return s.write(ctx, entry) })
+}
+
+func (s KeyValues) write(ctx context.Context, entry records.Entry) (records.Revision, error) {
 	client, collection, err := s.open(ctx, entry.Key.Partition)
 	if err != nil {
 		return "", err
@@ -114,6 +167,11 @@ func (s KeyValues) WritePair(ctx context.Context, first, second records.Entry) e
 			return err
 		}
 	}
+	_, err := untilTierServes(ctx, s, first.Key.Partition, func() (struct{}, error) { return struct{}{}, s.writePair(ctx, first, second) })
+	return err
+}
+
+func (s KeyValues) writePair(ctx context.Context, first, second records.Entry) error {
 	client, collection, err := s.open(ctx, first.Key.Partition)
 	if err != nil {
 		return err
@@ -156,6 +214,11 @@ func (s KeyValues) Remove(ctx context.Context, key records.Key, expected records
 	if err := records.RefuseMalformedKey(key); err != nil {
 		return err
 	}
+	_, err := untilTierServes(ctx, s, key.Partition, func() (struct{}, error) { return struct{}{}, s.remove(ctx, key, expected) })
+	return err
+}
+
+func (s KeyValues) remove(ctx context.Context, key records.Key, expected records.Revision) error {
 	client, collection, err := s.open(ctx, key.Partition)
 	if err != nil {
 		return err
@@ -184,6 +247,10 @@ func (s KeyValues) Remove(ctx context.Context, key records.Key, expected records
 }
 
 func (s KeyValues) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
+	return untilTierServes(ctx, s, in, func() ([]records.Entry, error) { return s.list(ctx, in, under...) })
+}
+
+func (s KeyValues) list(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
 	_, collection, err := s.open(ctx, in)
 	if err != nil {
 		return nil, err
@@ -206,9 +273,6 @@ func (s KeyValues) List(ctx context.Context, in records.Partition, under ...stri
 	})
 	if _, owned := ProjectOfRecords(in); owned && status.Code(err) == codes.NotFound {
 		return nil, nil
-	}
-	if status.Code(err) == codes.NotFound {
-		return nil, s.refuseUnbootstrapped(in.Tier)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read everything in %s: %w", in, err)
@@ -287,9 +351,6 @@ func (s KeyValues) refuseFailedWrite(key records.Key, err error) error {
 	}
 	if project, owned := ProjectOfRecords(key.Partition); owned && status.Code(err) == codes.NotFound {
 		return refuseNoProjectRecords(key.Partition.Tier, project, err)
-	}
-	if status.Code(err) == codes.NotFound {
-		return s.refuseUnbootstrapped(key.Partition.Tier)
 	}
 	return fmt.Errorf("write %s: %w", key, err)
 }

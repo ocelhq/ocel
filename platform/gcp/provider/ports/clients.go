@@ -14,6 +14,7 @@ import (
 	kms "cloud.google.com/go/kms/apiv1"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/cloudscheduler/v1"
+	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/api/option"
 	pubsub "google.golang.org/api/pubsub/v1"
 	htransport "google.golang.org/api/transport/http"
@@ -68,12 +69,12 @@ type Clients struct {
 	ProjectDatabases map[string]string
 	Records          records.Store
 
-	tierStores    sync.Map
 	projectStores sync.Map
 	tagStores     sync.Map
 	ownDatabases  sync.Map
 	sealingKeys   sealingKeys
 	openedKeys    sync.Map
+	databases     memo[*firestoreadmin.Service]
 	kms           memo[*kms.KeyManagementClient]
 	pubsub        memo[*pubsub.Service]
 	tasks         memo[*cloudtasks.Client]
@@ -123,10 +124,12 @@ func Unauthenticated() error {
 }
 
 func (c *Clients) TierFirestore(tier environment.Tier) (*firestore.Client, error) {
-	database := c.RecordsDatabase(tier)
-	held, _ := c.tierStores.LoadOrStore(database, &memo[*firestore.Client]{})
-	return Opened(c, held.(*memo[*firestore.Client]), "Firestore", func() (*firestore.Client, error) {
-		return firestore.NewClientWithDatabase(context.Background(), c.Project, database, NewGRPCOptions(c.Endpoint, c.QuotaProject())...)
+	return c.DatabaseFirestore(c.RecordsDatabase(tier))
+}
+
+func (c *Clients) Databases() (*firestoreadmin.Service, error) {
+	return Opened(c, &c.databases, "Firestore admin", func() (*firestoreadmin.Service, error) {
+		return firestoreadmin.NewService(context.Background(), NewRESTOptions(c.Endpoint, c.QuotaProject())...)
 	})
 }
 
