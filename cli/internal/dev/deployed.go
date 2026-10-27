@@ -62,9 +62,6 @@ func closeForwards(opts Options, forwards *portforward.Forwards) error {
 
 func forwardDeployed(ctx context.Context, opts Options, deployed Deployed) (*portforward.Forwards, map[string]string, error) {
 	cfg, check, env := opts.Project, deployed.Check, deployed.Environment
-	if !deployed.Provider.Facts().GetForwardsPorts() {
-		return nil, nil, fmt.Errorf("the provider of %s forwards no port to a deployed environment, so a command cannot reach its resources from this machine", cfg.Slug)
-	}
 	declarations, err := readDeclarations(ctx, cfg, deployed)
 	if err != nil {
 		return nil, nil, err
@@ -97,6 +94,9 @@ func forwardDeployed(ctx context.Context, opts Options, deployed Deployed) (*por
 			check.Say(cfg.Slug + " declares no resource a port can reach, so the command runs without bindings")
 		}
 		return nil, records, nil
+	}
+	if !deployed.Provider.Facts().GetForwardsPorts() {
+		return nil, nil, fmt.Errorf("the provider of %s forwards no port to a deployed environment, so a command cannot reach its resources from this machine", cfg.Slug)
 	}
 	declared := portforward.ListDeclared(uses)
 	step := check.Child(cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)))
