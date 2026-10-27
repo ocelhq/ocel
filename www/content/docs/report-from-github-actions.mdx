@@ -1,0 +1,59 @@
+---
+title: Report deploys from GitHub Actions
+description: Show a workflow's deploys and previews in the console without logging in.
+---
+
+A deploy run in GitHub Actions can report to the console with no `ocel login` and no
+`ocel link`. The job proves which repository and workflow it is with a GitHub Actions ID token,
+and the console accepts it when the project trusts that pipeline. The console then puts each
+preview on its pull request: a status, one comment it keeps up to date, and a `preview/pr-<n>`
+deployment.
+
+## Trust the workflow
+
+On the project's **Git Integration** page in the console, link the repository and choose
+**Your CI**. To trust a workflow by hand instead, add a trusted pipeline:
+
+| Field | Matches |
+| --- | --- |
+| Repository | The repository the workflow runs in |
+| Workflow | Optional. Only runs of this workflow file |
+| Environment | Optional. Only jobs that name this GitHub environment |
+| Branches | Branch patterns. `*` matches anything, `/` included, so `release/*` matches `release/v1/rc` |
+
+## Name the project
+
+Set the repository variable `OCEL_CONSOLE_PROJECT_ID` to the project's ID, from its settings in
+the console, under **Settings → Secrets and variables → Actions → Variables**. Set
+`OCEL_CONSOLE_URL` as well only for a self-hosted console; without it, reports go to
+`https://app.ocelhq.com`.
+
+## Let the job request an ID token
+
+Add these to the workflow that deploys:
+
+```yaml title=".github/workflows/deploy.yml"
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  OCEL_CONSOLE_PROJECT_ID: ${{ vars.OCEL_CONSOLE_PROJECT_ID }}
+```
+
+Every report requests a fresh ID token for the console's origin. With
+`OCEL_CONSOLE_PROJECT_ID` set, the CLI reports to that project and ignores any saved login or
+`.ocel/console.json`.
+
+A run started by a `pull_request` event reports previews only: run [`ocel preview`](/docs/cli/preview)
+there, and `ocel deploy` from a push to a branch the pipeline trusts.
+
+## When a report doesn't go through
+
+Reporting never fails the deploy. A report that can't be sent leaves one line on stderr naming
+what to fix:
+
+| Line names | Fix |
+| --- | --- |
+| `` permissions: id-token: write `` | Grant `id-token: write` to the job. A `pull_request` run from a fork gets no ID token, whatever the job grants |
+| the console refusing the token | Check the trusted pipeline matches the repository, workflow, environment and branch |
