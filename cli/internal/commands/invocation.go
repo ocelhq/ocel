@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/consolecredential"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
@@ -37,11 +38,12 @@ type Invocation struct {
 	Setups          prerequisite.Setups
 	RecordEvent     func(telemetry.Payload) bool
 
-	Console       deployreport.Console
-	CloudOffer    func(ctx context.Context, creds console.Credentials) (*console.CloudOffer, error)
-	CloudSessions *CloudSessions
-	BuilderJob    *BuilderJob
-	JobAnswers    *jobinput.Answers
+	Console           deployreport.Console
+	ConsoleCredential consolecredential.Console
+	CloudOffer        func(ctx context.Context, creds console.Credentials) (*console.CloudOffer, error)
+	CloudSessions     *CloudSessions
+	BuilderJob        *BuilderJob
+	JobAnswers        *jobinput.Answers
 }
 
 func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Project, error) {

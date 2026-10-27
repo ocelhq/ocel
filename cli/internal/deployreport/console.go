@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/githubactions"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
@@ -56,7 +57,7 @@ func (c Console) send(ctx context.Context, projectDir, subject string, stderr io
 	defer cancel()
 	var session *reportSession
 	var err error
-	if isGitHubActions(c.getenv) && c.getenv(console.ProjectIDEnvVar) != "" {
+	if githubactions.IsRunning(c.getenv) && c.getenv(console.ProjectIDEnvVar) != "" {
 		session, err = c.readPipelineSession(ctx)
 	} else {
 		session, err = c.readSavedLoginSession(projectDir)
@@ -75,11 +76,11 @@ func (c Console) send(ctx context.Context, projectDir, subject string, stderr io
 
 func (c Console) readPipelineSession(ctx context.Context) (*reportSession, error) {
 	apiURL := console.NormalizeBaseURL(c.getenv(console.URLEnvVar))
-	audience, err := readAudience(apiURL)
+	audience, err := console.Origin(apiURL)
 	if err != nil {
 		return nil, err
 	}
-	idToken, err := requestIDToken(ctx, c.getenv, audience)
+	idToken, err := githubactions.RequestIDToken(ctx, c.getenv, audience)
 	if err != nil {
 		return nil, err
 	}

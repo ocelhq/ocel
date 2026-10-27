@@ -37,6 +37,7 @@ type Request struct {
 	DryRun           bool
 	Registry         *contractv1.ImageRegistry
 	Identity         *contractv1.Identity
+	Account          string
 
 	CheckPreviewRoute bool
 	CheckForwarding   bool
@@ -49,6 +50,9 @@ func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provid
 	}
 	if err == nil {
 		span.Identity(identityEvent(cfg, req.Tier, read.Response.GetIdentity()))
+		err = refuseOtherAccount(read.Response.GetIdentity(), req.Account)
+	}
+	if err == nil {
 		err = RefuseUnready(read.Response, provider, cfg, req)
 	}
 	if err == nil && req.Part != "" {
@@ -58,6 +62,13 @@ func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provid
 		return Preflight{}, err
 	}
 	return read, nil
+}
+
+func refuseOtherAccount(identity *contractv1.Identity, account string) error {
+	if account == "" || identity.GetAccount() == account {
+		return nil
+	}
+	return fmt.Errorf("the credential reached account %s, and the console issued it for the target in account %s: bind this project's tier to the target in the account it deploys to", identity.GetAccount(), account)
 }
 
 func RefuseMissingPart(ctx context.Context, provider *providerprocess.Provider, cfg *project.Project, req Request) error {

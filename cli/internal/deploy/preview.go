@@ -98,7 +98,7 @@ func RemovePreview(ctx context.Context, dependencies Dependencies, cwd, name str
 	policy := consent.NewPolicy("ocel preview rm", yes, dependencies.CanAsk(stdin), stdout, stdin)
 
 	var removed *consolev1.EnvironmentEvent
-	err = dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}, ConsoleCredential: true}, func(ctx context.Context, p commands.ProviderRun) error {
 		run, check, provider := p.Run, p.Check, p.Provider
 		reading := check.Child(cfg.Slug, progress.Reading.Title("preview "+env.GetIdentity()))
 		recorded, err := readPreview(ctx, provider, cfg.Slug, env)
@@ -229,7 +229,7 @@ func PrunePreview(ctx context.Context, dependencies Dependencies, cwd, name stri
 		return err
 	}
 
-	return dependencies.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}}, func(ctx context.Context, p commands.ProviderRun) error {
+	return dependencies.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}, ConsoleCredential: true}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		plan := p.Run.Phase(progressv1.Phase_PHASE_PLAN)
 		plan.Say(fmt.Sprintf("This will delete every deployment of preview %s but the newest %d and the live one; none of them can be rolled back to afterwards", env.GetIdentity(), keep))
