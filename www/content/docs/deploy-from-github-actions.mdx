@@ -12,8 +12,23 @@ works for the `aws` and `gcp` providers.
 
 Run `ocel bootstrap production` (and `ocel bootstrap preview`) once from a machine logged in to
 the console with `ocel login`, in a checkout linked with `ocel link`. Bootstrap asks whether the
-console may deploy that tier to the account, then writes the trust and the tier's deploy role
-into it and records them in the console.
+console may deploy that tier to the account, then adds the `console-trust` part, which makes the
+tier's deploy identity and lets the console's tokens assume it, and records that identity in the
+console. Run it again after upgrading Ocel: a deploy refuses a deploy identity an older Ocel made.
+
+`ocel bootstrap <tier> --remove console-trust` tells the console to stop issuing credentials for
+the tier, then removes the identity. If the console can't be told, bootstrap stops, and `--yes`
+removes it anyway while the console keeps issuing credentials for an identity that is gone.
+
+### A GitHub Actions fallback
+
+When the checkout's `origin` is on github.com and bootstrap can ask, it also offers to let GitHub
+Actions in that repository assume the tier's deploy identity directly, for when the console is
+unreachable: production from pushes to the repository's default branch, preview from pull
+requests. This is an alternative a workflow opts into with its own cloud credentials step (for
+example `aws-actions/configure-aws-credentials` with the identity as its role, or
+`google-github-actions/auth`), not something `ocel deploy` does by itself. A later bootstrap keeps
+the fallback unless you answer that it should stop; `--yes` never adds or removes it.
 
 ## Run the deploy
 

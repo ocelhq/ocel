@@ -9,6 +9,8 @@ ocel bootstrap preview [flags]
 
 A bootstrap only ever builds up: each run brings its base current and adds every part a project here was refused for. `--remove` takes a part down, whichever added it, and refuses while a project here uses it unless `--force`.
 
+Logged in to a console from a checkout linked to it, a run asks whether that console may deploy the environment here and adds the console-trust part that lets it, then records the identity it made in the console; `--remove` console-trust takes that trust down.
+
 Every run prints the changes it would make before asking; `--dry` prints them and stops.
 
 ## Flags
