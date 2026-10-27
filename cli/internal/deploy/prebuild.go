@@ -43,10 +43,11 @@ func sayPrebuiltSkipsPreBuild(span *run.Span, command project.LifecycleCommand, 
 	span.Say(fmt.Sprintf("--prebuilt skips %s, which runs before a build and this deploy builds nothing; if its command %q must run first, run it yourself, for example with `ocel run --env %s -- <command>`", preBuildName, command.Command, readiness.TierName(tier)))
 }
 
-func (d *deployRun) runPreBuild(ctx context.Context, command project.LifecycleCommand, forwards *portforward.Forwards, values map[string]build.AppVariables, resourceCount int) error {
+func (d *deployRun) runPreBuild(ctx context.Context, command project.LifecycleCommand, forwards *portforward.Forwards, records map[string]string, values map[string]build.AppVariables, resourceCount int) error {
 	cfg := d.cfg
 	env := map[string]string{}
 	live := map[string]string{}
+	maps.Copy(live, records)
 	maps.Copy(live, forwards.Bindings(portforward.WholeProject))
 	maps.Copy(env, forwards.BindingProxyEnv(portforward.WholeProject))
 	if command.App != "" {

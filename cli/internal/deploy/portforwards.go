@@ -18,30 +18,47 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
+type boundUses struct {
+	build, preBuild []portforward.Use
+	records         []portforward.Use
+}
+
 func deliverForwards(f *portforward.Forwards, values map[string]build.AppVariables) {
 	for _, app := range f.Apps() {
 		if app == portforward.WholeProject {
 			continue
 		}
-		if _, ok := values[app]; !ok {
-			values[app] = build.AppVariables{Env: map[string]string{}, Live: map[string]string{}}
-		}
-		delivered := values[app]
+		delivered := appVariablesOf(values, app)
 		maps.Copy(delivered.Live, f.Bindings(app))
 		delivered.BindingProxyEnv = f.BindingProxyEnv(app)
 		values[app] = delivered
 	}
 }
 
-func (d *deployRun) forwardPorts(ctx context.Context, steps *buildSteps, c collected, runsPreBuild bool) (*portforward.Forwards, error) {
+func deliverRecords(records map[string]map[string]string, values map[string]build.AppVariables) {
+	for app, live := range records {
+		if app == portforward.WholeProject {
+			continue
+		}
+		delivered := appVariablesOf(values, app)
+		maps.Copy(delivered.Live, live)
+		values[app] = delivered
+	}
+}
+
+func appVariablesOf(values map[string]build.AppVariables, app string) build.AppVariables {
+	if _, ok := values[app]; !ok {
+		values[app] = build.AppVariables{Env: map[string]string{}, Live: map[string]string{}}
+	}
+	return values[app]
+}
+
+func (d *deployRun) forwardPorts(ctx context.Context, steps *buildSteps, bound boundUses) (*portforward.Forwards, error) {
 	if !d.forwardsPorts {
 		return nil, nil
 	}
 	cfg := d.cfg
-	buildUses, preBuildUses, err := d.infra.findBoundUses(cfg, c.resources, c.usages, runsPreBuild)
-	if err != nil {
-		return nil, err
-	}
+	buildUses, preBuildUses := bound.build, bound.preBuild
 	uses := slices.Concat(buildUses, preBuildUses)
 	if len(uses) == 0 {
 		return nil, nil
@@ -82,7 +99,7 @@ func (d *deployRun) forwardPorts(ctx context.Context, steps *buildSteps, c colle
 	return forwards, nil
 }
 
-func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage, runsPreBuild bool) (buildUses, preBuildUses []portforward.Use, err error) {
+func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []declaration.Resource, usages []attribution.Usage, runsPreBuild bool) (boundUses, error) {
 	built := map[string]bool{}
 	for _, app := range cfg.Apps {
 		if app.BuildsWithResources && buildoutput.BuildsWithItsOwnScript(app.Framework) {
@@ -90,27 +107,31 @@ func (i *infraProvisioning) findBoundUses(cfg *project.Project, resources []decl
 		}
 	}
 	if len(built) == 0 && !runsPreBuild {
-		return nil, nil, nil
+		return boundUses{}, nil
 	}
 	infra := i.sent.GetManifest()
 	if infra == nil {
+		var err error
 		if infra, err = i.assemble(resources); err != nil {
-			return nil, nil, err
+			return boundUses{}, err
 		}
 	}
+	var uses boundUses
 	for _, usage := range usages {
 		_, bindable := bindings.BindableAs(usage.Type)
 		if !built[usage.App] || !bindable {
 			continue
 		}
-		bound, provisioned := portforward.FindBound(infra, usage.Type, usage.Name)
-		if !provisioned {
-			continue
+		if bound, provisioned := portforward.FindBound(infra, usage.Type, usage.Name); provisioned {
+			uses.build = append(uses.build, portforward.Use{App: usage.App, Resource: usage.Type, Declared: usage.Name, Bound: bound})
 		}
-		buildUses = append(buildUses, portforward.Use{App: usage.App, Resource: usage.Type, Declared: usage.Name, Bound: bound})
+		if record, recorded := portforward.FindRecord(infra, usage.Type, usage.Name); recorded {
+			uses.records = append(uses.records, portforward.Use{App: usage.App, Resource: usage.Type, Declared: usage.Name, Bound: record})
+		}
 	}
 	if runsPreBuild {
-		preBuildUses = portforward.ListWholeProjectUses(infra)
+		uses.preBuild = portforward.ListWholeProjectUses(infra)
+		uses.records = append(uses.records, portforward.ListWholeProjectRecords(infra)...)
 	}
-	return buildUses, preBuildUses, nil
+	return uses, nil
 }

@@ -116,16 +116,44 @@ func FindBound(infra *contractv1.Manifest, kind resourcesv1.ResourceType, name s
 	return "", false
 }
 
+func FindRecord(infra *contractv1.Manifest, kind resourcesv1.ResourceType, name string) (string, bool) {
+	for _, resource := range infra.GetResources() {
+		declared := resource.GetResource()
+		if declared.GetType() == kind && declared.GetName() == name && resource.GetBinding() != "" {
+			return resource.GetBinding(), true
+		}
+	}
+	return "", false
+}
+
 func ListWholeProjectUses(infra *contractv1.Manifest) []Use {
+	return listWholeProject(infra, func(resource *contractv1.ManifestResource) string {
+		if resource.GetBinding() != "" {
+			return ""
+		}
+		return resource.GetLogicalName()
+	})
+}
+
+func ListWholeProjectRecords(infra *contractv1.Manifest) []Use {
+	return listWholeProject(infra, (*contractv1.ManifestResource).GetBinding)
+}
+
+func listWholeProject(infra *contractv1.Manifest, boundOf func(*contractv1.ManifestResource) string) []Use {
 	var uses []Use
 	for _, resource := range infra.GetResources() {
 		declared := resource.GetResource()
-		if _, bindable := bindings.BindableAs(declared.GetType()); !bindable || resource.GetBinding() != "" {
+		bound := boundOf(resource)
+		if _, bindable := bindings.BindableAs(declared.GetType()); !bindable || bound == "" {
 			continue
 		}
-		uses = append(uses, Use{App: WholeProject, Resource: declared.GetType(), Declared: declared.GetName(), Bound: resource.GetLogicalName()})
+		uses = append(uses, Use{App: WholeProject, Resource: declared.GetType(), Declared: declared.GetName(), Bound: bound})
 	}
 	return uses
+}
+
+func ReadRecords(uses []Use, records []*bindingsv1.Binding) (map[string]map[string]string, error) {
+	return liveBindings(uses, records)
 }
 
 func RefuseUnforwarded(subject string, declared []string, err error) error {

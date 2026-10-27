@@ -158,6 +158,29 @@ func TestADeployBuildsAnAppWithTheBindingsOfWhatItUsesPointedAtPortForwardsAndCl
 	}
 }
 
+func TestADeployBuildsAnAppWithTheRecordAnInlineBindingBindsWhatItUsesToAndForwardsNoPortForIt(t *testing.T) {
+	dependencies := newTestDependencies()
+	fixture := setUpDeployProject(t)
+	url := inlineURL(t)
+	envSet(t, fixture, "MAIN_DATABASE_URL", url, envOptions{})
+	clitest.WriteUsageMonorepo(t, fixture.Root)
+	writeConfig(t, fixture.Root, `  apps: [{ name: "web", path: "apps/api", framework: "next", compute: "serverless" }],
+  bindings: {`+inlineByURL+`},
+`)
+	forwardingPorts(t, fixture)
+	built := capturingBuild(t, &dependencies)
+
+	deployed(t, dependencies, fixture, deployOptions{yes: true})
+
+	var delivered bindingsv1.Binding
+	if err := protojson.Unmarshal([]byte(built.Live[forwardedPostgresKey]), &delivered); err != nil || delivered.GetPostgres().GetUrl() != url || delivered.GetName() != "main" {
+		t.Errorf("the build read %s as %q (%v), want the record bindings.postgres.main names, by its url", forwardedPostgresKey, built.Live[forwardedPostgresKey], err)
+	}
+	if sent := clitest.RequestsTo[*contractv1.ForwardPortsRequest](t, fixture.Requests, contractv1connect.ProviderServiceForwardPortsProcedure); len(sent) != 0 {
+		t.Errorf("the CLI forwarded ports for %v, want none for a resource its record already reaches", sent)
+	}
+}
+
 func TestAnAppWhoseBuildTakesNoBindingsIsBuiltWithoutForwardingAPort(t *testing.T) {
 	dependencies := newTestDependencies()
 	fixture := setUpDeployProject(t)
