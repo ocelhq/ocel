@@ -1,6 +1,7 @@
 package pulumi
 
 import (
+	"context"
 	"slices"
 	"testing"
 	"time"
@@ -31,7 +32,7 @@ func rowsOf(t *testing.T, stream ...events.EngineEvent) []provider.Change {
 	t.Helper()
 
 	engineEvents := make(chan events.EngineEvent, len(stream))
-	drained := drainRows(engineEvents)
+	drained := drainRows(engineEvents, newResourceSteps(context.Background(), nil))
 	for _, ev := range stream {
 		engineEvents <- ev
 	}

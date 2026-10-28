@@ -19,11 +19,14 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -227,7 +230,7 @@ func (a *Automation[S]) setup(ctx context.Context, ref provider.StackRef, work S
 		if err != nil {
 			return WorkspaceSpec{}, err
 		}
-		setup.Options = append(setup.Options, auto.Pulumi(command))
+		setup.Options = append(setup.Options, auto.Pulumi(tracedCommand{PulumiCommand: command, secrets: setup.Secrets, collector: tracing.ReadCollector()}))
 	}
 	return setup, nil
 }
@@ -403,20 +406,24 @@ func busy(err error, setup WorkspaceSpec) error {
 
 type autoEngine struct{}
 
-func (autoEngine) Preview(ctx context.Context, setup WorkspaceSpec, op Operation, progress progress.Log) ([]provider.Change, error) {
+func (autoEngine) Preview(ctx context.Context, setup WorkspaceSpec, op Operation, progress progress.Log) (_ []provider.Change, err error) {
 	if op == OperationDestroy {
+		ctx, span := startEngineSpan(ctx, "plan stack teardown", setup)
+		defer func() { endEngineSpan(span, err, setup.Secrets) }()
 		return previewDestroy(ctx, setup)
 	}
+	ctx, span := startEngineSpan(ctx, "plan stack", setup)
+	defer func() { endEngineSpan(span, err, setup.Secrets) }()
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
 	}
-	if err := applyConfig(ctx, stack, setup.Config); err != nil {
+	if err := applyConfig(ctx, stack.Workspace(), stack.Name(), setup.Config, setup.Secrets); err != nil {
 		return nil, err
 	}
 
 	engineEvents := make(chan events.EngineEvent, 256)
-	rows := drainRows(engineEvents)
+	rows := drainRows(engineEvents, newResourceSteps(ctx, setup.Secrets))
 	opts := []optpreview.Option{optpreview.EventStreams(engineEvents), optpreview.Parallel(setup.Parallel)}
 	if setup.Refresh {
 		opts = append(opts, optpreview.Refresh())
@@ -435,7 +442,7 @@ func previewDestroy(ctx context.Context, setup WorkspaceSpec) ([]provider.Change
 	}
 
 	engineEvents := make(chan events.EngineEvent, 256)
-	rows := drainRows(engineEvents)
+	rows := drainRows(engineEvents, newResourceSteps(ctx, setup.Secrets))
 	opts := []optdestroy.Option{optdestroy.EventStreams(engineEvents), optdestroy.Parallel(setup.Parallel)}
 	if setup.Refresh {
 		opts = append(opts, optdestroy.Refresh())
@@ -455,11 +462,12 @@ func awaitPlan(rows <-chan []provider.Change, setup WorkspaceSpec, err error) ([
 	return drained, nil
 }
 
-func drainRows(engineEvents <-chan events.EngineEvent) <-chan []provider.Change {
+func drainRows(engineEvents <-chan events.EngineEvent, steps *resourceSteps) <-chan []provider.Change {
 	drained := make(chan []provider.Change, 1)
 	go func() {
 		var mutations, unchanged []apitype.StepEventMetadata
 		for ev := range engineEvents {
+			steps.consume(ev, time.Now())
 			switch {
 			case ev.ResourcePreEvent != nil:
 				mutations = append(mutations, ev.ResourcePreEvent.Metadata)
@@ -467,6 +475,7 @@ func drainRows(engineEvents <-chan events.EngineEvent) <-chan []provider.Change 
 				unchanged = append(unchanged, ev.ResOutputsEvent.Metadata)
 			}
 		}
+		steps.close(time.Now())
 		drained <- planRows(mutations, unchanged)
 	}()
 	return drained
@@ -482,17 +491,19 @@ func awaitRows(drained <-chan []provider.Change, grace time.Duration) ([]provide
 	}
 }
 
-func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress progress.Log) (auto.OutputMap, error) {
+func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress progress.Log) (_ auto.OutputMap, err error) {
+	ctx, span := startEngineSpan(ctx, "provision stack", setup)
+	defer func() { endEngineSpan(span, err, setup.Secrets) }()
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
 	}
-	if err := applyConfig(ctx, stack, setup.Config); err != nil {
+	if err := applyConfig(ctx, stack.Workspace(), stack.Name(), setup.Config, setup.Secrets); err != nil {
 		return nil, err
 	}
 
 	var res auto.UpResult
-	err = runReportingResourceOperations(setup, progress, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
+	err = runReportingResourceOperations(ctx, setup, progress, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
 		opts := []optup.Option{optup.Parallel(setup.Parallel), optup.EventStreams(engineEvents)}
 		if lines != nil {
 			opts = append(opts, optup.ProgressStreams(lines))
@@ -510,25 +521,21 @@ func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress progress
 	return res.Outputs, nil
 }
 
-func runReportingResourceOperations(setup WorkspaceSpec, progress progress.Log, run func(engineEvents chan<- events.EngineEvent, lines *lineLog) error) error {
+func runReportingResourceOperations(ctx context.Context, setup WorkspaceSpec, progress progress.Log, run func(engineEvents chan<- events.EngineEvent, lines *lineLog) error) error {
 	lines := engineLines(progress, setup.Secrets)
 	engineEvents := make(chan events.EngineEvent, 256)
-	traced := drainTrace(engineEvents, resourceLatencyOutlierThreshold, setup.Secrets)
+	ops := drainResourceOps(engineEvents, newResourceSteps(ctx, setup.Secrets))
 
-	start := time.Now()
 	err := run(engineEvents, lines)
-	end := time.Now()
 	lines.Flush()
 
-	trace := awaitTrace(traced, engineDrainGrace)
-	if trace.Start.IsZero() {
-		trace.Start, trace.End = start, end
-	}
-	reportTrace(progress, trace, err)
+	reportResourceOps(progress, awaitResourceOps(ops, engineDrainGrace))
 	return err
 }
 
-func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress progress.Log) error {
+func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress progress.Log) (err error) {
+	ctx, span := startEngineSpan(ctx, "destroy stack", setup)
+	defer func() { endEngineSpan(span, err, setup.Secrets) }()
 	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
 	if auto.IsSelectStack404Error(err) {
 		if progress != nil {
@@ -543,7 +550,7 @@ func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress pro
 	if progress != nil {
 		progress.Say("Destroying every resource in stack " + setup.Stack + ", which can take several minutes")
 	}
-	err = runReportingResourceOperations(setup, progress, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
+	err = runReportingResourceOperations(ctx, setup, progress, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
 		opts := []optdestroy.Option{optdestroy.Parallel(setup.Parallel), optdestroy.EventStreams(engineEvents)}
 		if lines != nil {
 			opts = append(opts, optdestroy.ProgressStreams(lines))
@@ -564,7 +571,9 @@ func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress pro
 	return nil
 }
 
-func (autoEngine) Outputs(ctx context.Context, setup WorkspaceSpec) (auto.OutputMap, error) {
+func (autoEngine) Outputs(ctx context.Context, setup WorkspaceSpec) (_ auto.OutputMap, err error) {
+	ctx, span := startEngineSpan(ctx, "read stack outputs", setup)
+	defer func() { endEngineSpan(span, err, setup.Secrets) }()
 	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
 	if auto.IsSelectStack404Error(err) {
 		return auto.OutputMap{}, nil
@@ -579,7 +588,9 @@ func (autoEngine) Outputs(ctx context.Context, setup WorkspaceSpec) (auto.Output
 	return outputs, nil
 }
 
-func (autoEngine) Export(ctx context.Context, setup WorkspaceSpec) ([]ExportedResource, error) {
+func (autoEngine) Export(ctx context.Context, setup WorkspaceSpec) (_ []ExportedResource, err error) {
+	ctx, span := startEngineSpan(ctx, "export stack state", setup)
+	defer func() { endEngineSpan(span, err, setup.Secrets) }()
 	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
 	if auto.IsSelectStack404Error(err) {
 		return nil, nil
@@ -595,10 +606,13 @@ func (autoEngine) Export(ctx context.Context, setup WorkspaceSpec) ([]ExportedRe
 	if err != nil {
 		return nil, fmt.Errorf("read what stack %s holds: %w", setup.Stack, err)
 	}
+	span.SetAttributes(attribute.Int(progress.AttrKeyResourceCount.Name, len(exported)))
 	return exported, nil
 }
 
-func (autoEngine) Unlock(ctx context.Context, setup WorkspaceSpec) error {
+func (autoEngine) Unlock(ctx context.Context, setup WorkspaceSpec) (err error) {
+	ctx, span := startEngineSpan(ctx, "unlock stack", setup)
+	defer func() { endEngineSpan(span, err, setup.Secrets) }()
 	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
 	if auto.IsSelectStack404Error(err) {
 		return nil
@@ -609,12 +623,20 @@ func (autoEngine) Unlock(ctx context.Context, setup WorkspaceSpec) error {
 	return stack.Cancel(ctx)
 }
 
-func applyConfig(ctx context.Context, stack auto.Stack, values auto.ConfigMap) error {
+type stackSettings interface {
+	StackSettings(ctx context.Context, stack string) (*workspace.ProjectStack, error)
+	SaveStackSettings(ctx context.Context, stack string, settings *workspace.ProjectStack) error
+}
+
+func applyConfig(ctx context.Context, ws stackSettings, stack string, values auto.ConfigMap, secrets []string) (err error) {
 	if len(values) == 0 {
 		return nil
 	}
-	ws := stack.Workspace()
-	settings, err := ws.StackSettings(ctx, stack.Name())
+	ctx, span := tracer.Start(ctx, "configure stack", oteltrace.WithAttributes(
+		attribute.StringSlice("pulumi.config.keys", slices.Sorted(maps.Keys(values))),
+	))
+	defer func() { endEngineSpan(span, err, secrets) }()
+	settings, err := ws.StackSettings(ctx, stack)
 	if err != nil {
 		settings = &workspace.ProjectStack{}
 	}
@@ -628,8 +650,8 @@ func applyConfig(ctx context.Context, stack auto.Stack, values auto.ConfigMap) e
 		}
 		settings.Config[key] = configValue(values[name])
 	}
-	if err := ws.SaveStackSettings(ctx, stack.Name(), settings); err != nil {
-		return fmt.Errorf("configure %s: %w", stack.Name(), err)
+	if err := ws.SaveStackSettings(ctx, stack, settings); err != nil {
+		return fmt.Errorf("configure %s: %w", stack, err)
 	}
 	return nil
 }
@@ -667,7 +689,7 @@ func (e *maskedError) Unwrap() error { return e.err }
 func maskSecrets(text string, secrets []string) string {
 	longestFirst := slices.SortedFunc(slices.Values(secrets), func(a, b string) int { return len(b) - len(a) })
 	for _, secret := range longestFirst {
-		text = strings.ReplaceAll(text, secret, redactedSecret)
+		text = strings.ReplaceAll(text, secret, tracing.Redacted)
 	}
 	return text
 }

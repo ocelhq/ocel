@@ -37,7 +37,7 @@ env:
   TESTS_PER_SHARD: ${{ inputs.testsPerShard || (inputs.target == 'gcp-cloudflare' && '2' || '3') }}
   # FIXME: must match PinnedVersion in pkg/provider/pulumi/runtime.go —
   # nothing checks that it does, and a mismatch silently warms the wrong directory.
-  PULUMI_VERSION: "3.146.0"
+  PULUMI_VERSION: "3.259.0"
 
 permissions:
   contents: read
