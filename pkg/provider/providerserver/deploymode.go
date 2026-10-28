@@ -140,7 +140,7 @@ func (p *planned) app(ctx context.Context, r *deployRun, slot int, release appSt
 func (*planned) hostnames(context.Context, *deployRun) error { return nil }
 
 func (p *planned) promote(ctx context.Context, r *deployRun) (*progressv1.OperationEvent, error) {
-	err := r.spanEvents.run(r.spans.Promotion, func(u *spanRun) error {
+	err := r.spanEvents.run(ctx, r.spans.Promotion, func(ctx context.Context, u *spanRun) error {
 		return u.phase(func(progress.Log) error {
 			retired, err := planRetirement(ctx, r.provider, r.liveApps(), progress.Discard())
 			if err != nil {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	connect "connectrpc.com/connect"
 	"github.com/ocelhq/ocel/pkg/edge"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -13,7 +14,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type defaultingTo struct {
@@ -247,4 +253,67 @@ func TestAPartAnEdgeAddsDuringAReconcileIsSaidAtInfoLevel(t *testing.T) {
 	if !slices.Contains(said(events, progressv1.Level_LEVEL_INFO), "added the kit part") {
 		t.Errorf("the deploy said %v at info level, want the part the edge added: adding one is news, not a warning", said(events, progressv1.Level_LEVEL_INFO))
 	}
+}
+
+type tracedEdges struct {
+	provider.Edges
+}
+
+func (e tracedEdges) Open(kind edge.Kind, options provider.Options) (edge.Edge, error) {
+	opened, err := e.Edges.Open(kind, options)
+	if err != nil {
+		return nil, err
+	}
+	return tracedEdge{opened}, nil
+}
+
+type tracedEdge struct {
+	edge.Edge
+}
+
+func (e tracedEdge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+	_, span := otel.Tracer("vendor").Start(ctx, "edge.Reconcile")
+	defer span.End()
+	return e.Edge.Reconcile(ctx, spec, prior)
+}
+
+type tracedEdgeVendor struct {
+	*fake.Provider
+}
+
+func (p tracedEdgeVendor) Edges() provider.Edges {
+	return tracedEdges{p.Provider.Edges()}
+}
+
+func TestTheEdgesWorkDuringADeployIsTracedUnderTheDeploysEdgeStep(t *testing.T) {
+	recording, recorded := tracingtest.Record(t)
+	traceID := trace.SpanContextFromContext(recording).TraceID().String()
+	builtProject(t)
+	client := servedBy(t, tracedEdgeVendor{fake.NewProvider(fake.Options{})})
+
+	ctx, call := connect.NewClientContext(context.Background())
+	call.RequestHeader().Set("traceparent", "00-"+traceID+"-00f067aa0ba902b7-01")
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+	stream, err := client.Deploy(ctx, rooted(req))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %v, %v", result, err)
+	}
+
+	caller, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
+	edgeStep := providerserver.RootSpanID(providerserver.SpanEdge)
+	want := tracing.StepSpanID(caller, edgeStep[:])
+	for _, span := range recorded.Ended() {
+		if span.Name() != "edge.Reconcile" {
+			continue
+		}
+		if got := span.Parent().SpanID(); got != want {
+			t.Errorf("the edge's reconcile nests under %s, want the deploy's edge step %s", got, want)
+		}
+		return
+	}
+	t.Fatal("the edge's reconcile was not traced")
 }

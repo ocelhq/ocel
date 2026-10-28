@@ -277,7 +277,7 @@ func certificateGroup(cert provider.Certificate) *planv1.ChangeGroup {
 
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	root := RootSpan(SpanEnvironment, req.GetSlug(), removalTitle(req.GetEnvironment()), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, root, func(sender *eventStream, progress progress.Log) error {
+	return streamed(ctx, stream, root, func(ctx context.Context, sender *eventStream, progress progress.Log) error {
 		if req.GetSlug() == "" {
 			return errUnnamedProject
 		}
@@ -502,7 +502,7 @@ func (r *projectRemoval) pointers() []string {
 
 func (r *projectRemoval) destroyStack(ctx context.Context, stack naming.StackName) error {
 	span := RootSpan(stack.String(), stack.String(), stackDestroyTitle(stack), progressv1.Phase_PHASE_DESTROY)
-	return r.spans.run(span, func(u *spanRun) error {
+	return r.spans.run(ctx, span, func(ctx context.Context, u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
 			teardown := provider.StackDestroy{Ref: provider.StackRef{Project: r.slug, Tier: r.tier, Name: stack}, Images: r.images, Lease: r.lease}
 			if err := r.provider.Stacks().Destroy(ctx, teardown, progress); err != nil {

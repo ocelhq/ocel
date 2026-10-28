@@ -295,7 +295,7 @@ func TestAFailedSpanSaysWhyAtErrorInItsSpanOnceBeforeTheSpanEnds(t *testing.T) {
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
 	root := RootSpan("web", "web", progress.Deploying.Title("the serverless app to production"), progressv1.Phase_PHASE_DEPLOY)
-	_ = newSpanEvents(sender).run(root, func(u *spanRun) error {
+	_ = newSpanEvents(sender).run(context.Background(), root, func(_ context.Context, u *spanRun) error {
 		return u.phase(func(progress.Log) error {
 			return errors.New("the web stack could not be provisioned\x1b[0m")
 		})
@@ -335,7 +335,7 @@ func TestASpanWhoseWorkAsksAQuestionNeitherFailsNorSaysItAtError(t *testing.T) {
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
 	root := RootSpan("web", "web", progress.Updating.Title("bootstrap stack box"), progressv1.Phase_PHASE_PROVISION)
-	err := newSpanEvents(sender).run(root, func(u *spanRun) error {
+	err := newSpanEvents(sender).run(context.Background(), root, func(_ context.Context, u *spanRun) error {
 		return u.phase(func(progress.Log) error {
 			return provider.Ask("ports 80 and 443 are closed", provider.Question{Finding: "ports 80 and 443 are closed", Prompt: "Have you opened them?"})
 		})
@@ -366,7 +366,7 @@ func TestASpansWorkSpeaksInTheSpansOwnSpanWithNoSpanOfItsOwn(t *testing.T) {
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
 	root := RootSpan("web", "web", progress.Deploying.Title("the serverless app to production"), progressv1.Phase_PHASE_DEPLOY)
-	_ = newSpanEvents(sender).run(root, func(u *spanRun) error {
+	_ = newSpanEvents(sender).run(context.Background(), root, func(_ context.Context, u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
 			progress.Say("Uploading function web's artifact (1.2 MiB)")
 			return nil
@@ -396,7 +396,7 @@ func TestASpanThatFailsOutsideItsPhaseSaysWhyInItsOwnSpan(t *testing.T) {
 	stream := &recordingStream{}
 	sender := newEventStream(context.Background(), stream.send)
 	root := RootSpan("web", "web", progress.Deploying.Title("the serverless app to production"), progressv1.Phase_PHASE_DEPLOY)
-	_ = newSpanEvents(sender).run(root, func(*spanRun) error {
+	_ = newSpanEvents(sender).run(context.Background(), root, func(_ context.Context, _ *spanRun) error {
 		return errors.New("the web stack is locked")
 	})
 

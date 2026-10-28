@@ -285,7 +285,7 @@ func (t *spanEvents) releaseHold(ctx context.Context, hold *leaseHold, span Span
 	if hold == nil {
 		return
 	}
-	_ = t.run(span, func(u *spanRun) error {
+	_ = t.run(ctx, span, func(ctx context.Context, u *spanRun) error {
 		if err := hold.release(ctx); err != nil {
 			u.recordPartial(fmt.Sprintf("Could not release %s, so the next deploy to it waits until its lease runs out: %v", hold.scope.describe(), err))
 		}

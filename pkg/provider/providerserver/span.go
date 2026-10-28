@@ -1,18 +1,21 @@
 package providerserver
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/progressproto"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -64,6 +67,14 @@ func (s Span) event(ev *progressv1.OperationEvent) *progressv1.OperationEvent {
 	return ev
 }
 
+func (s Span) context(ctx context.Context) context.Context {
+	caller := callerOf(ctx)
+	if !caller.IsValid() {
+		return ctx
+	}
+	return trace.ContextWithRemoteSpanContext(ctx, caller.WithSpanID(tracing.StepSpanID(caller.SpanID(), s.ID[:])))
+}
+
 func sanitizeTitle(title progress.Title) progress.Title {
 	return progress.Title{Started: progress.SanitizeSpanName(title.Started), Ended: progress.SanitizeSpanName(title.Ended)}
 }
@@ -109,11 +120,11 @@ func newSpanEvents(sender *eventStream) *spanEvents {
 	return &spanEvents{sender: sender}
 }
 
-func (t *spanEvents) run(span Span, do func(*spanRun) error) error {
+func (t *spanEvents) run(ctx context.Context, span Span, do func(context.Context, *spanRun) error) error {
 	start := time.Now()
 	t.Start(start, span)
 	run := &spanRun{events: t, span: span}
-	err := do(run)
+	err := do(span.context(ctx), run)
 	if _, asked := provider.QuestionOf(err); asked {
 		t.EndPartial(span, start, time.Now(), span.Title.Started+": waiting on your answer")
 		return err

@@ -67,8 +67,8 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 			return okResult(), nil
 		}
 		root := RootSpan(SpanEnvironment, string(tier), bootstrapTitle(progress.Updating, plan), progressv1.Phase_PHASE_PROVISION)
-		err = inSpan(sender, root,
-			func(_ *eventStream, progress progress.Log) error {
+		err = inSpan(ctx, sender, root,
+			func(ctx context.Context, _ *eventStream, progress progress.Log) error {
 				return readiness.Apply(ctx, plan, tier, intent, progress)
 			})
 		if err != nil {
@@ -293,7 +293,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 
 	shown, shownErr := PlanFromProto(req.GetConsented())
 	root := RootSpan(SpanEnvironment, string(tier), bootstrapTitle(progress.Removing, shown), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
+	return streamed(ctx, stream, root, func(ctx context.Context, _ *eventStream, progress progress.Log) error {
 		if shownErr != nil {
 			return shownErr
 		}

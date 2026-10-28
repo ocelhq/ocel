@@ -51,7 +51,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		var hold *leaseHold
 		var promoted router.Promotion
 		root := RootSpan(SpanPromotion, req.GetSlug(), rollbackTitle(req), progressv1.Phase_PHASE_PROMOTE)
-		err = inSpan(sender, root, func(_ *eventStream, log progress.Log) (err error) {
+		err = inSpan(ctx, sender, root, func(ctx context.Context, _ *eventStream, log progress.Log) (err error) {
 			if hold, err = h.leases.takeUnderNewToken(ctx, vendor.KeyValues(), production, stackrecords.LeaseRollback); err != nil {
 				return err
 			}
@@ -172,7 +172,7 @@ func rollbackTarget(history []router.HistoryEntry, to, tag string) (router.Promo
 
 func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	root := RootSpan(SpanPromotion, req.GetSlug(), pruneTitle(req), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
+	return streamed(ctx, stream, root, func(ctx context.Context, _ *eventStream, progress progress.Log) error {
 		tier, err := decodeTier(req.GetEnvironment().GetTier())
 		if err != nil {
 			return err

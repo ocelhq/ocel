@@ -124,7 +124,7 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 	if r.hostingMode() != hostingProduction {
 		return nil
 	}
-	return r.spanEvents.run(r.spans.Hostnames, func(u *spanRun) error {
+	return r.spanEvents.run(ctx, r.spans.Hostnames, func(ctx context.Context, u *spanRun) error {
 		var attached, missed []string
 		err := u.phase(func(progress progress.Log) error {
 			attaching := &hostnames{edgeSession: r.edgeSession}

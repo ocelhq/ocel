@@ -14,7 +14,7 @@ import (
 )
 
 func (r *deployRun) promote(ctx context.Context, promotion router.Promotion) error {
-	return r.spanEvents.run(r.spans.Promotion, func(u *spanRun) error {
+	return r.spanEvents.run(ctx, r.spans.Promotion, func(ctx context.Context, u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
 			if err := r.forwardAppPreviews(ctx, progress); err != nil {
 				return err

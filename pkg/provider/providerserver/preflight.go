@@ -49,7 +49,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	vendor := p.Facts().Vendor
 
 	var principal provider.Principal
-	err := steps.credentials(string(vendor), func() (err error) {
+	err := steps.credentials(ctx, string(vendor), func(ctx context.Context) (err error) {
 		principal, err = p.Credentials().Whoami(ctx)
 		return err
 	})
@@ -77,7 +77,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	}
 
 	if len(req.GetContainers()) > 0 {
-		err = steps.run(string(vendor), progress.Reading.Title("the architecture your containers run on"), func() (err error) {
+		err = steps.run(ctx, string(vendor), progress.Reading.Title("the architecture your containers run on"), func(ctx context.Context) (err error) {
 			resp.ContainerArchs, err = containerArchs(ctx, p.Runtime(), req.GetContainers())
 			return err
 		})
@@ -96,7 +96,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	var status bootstrapStatus
 	var own provider.RegistryTarget
 	var ownErr error
-	err = steps.run(string(vendor), progress.Reading.Title(bootstrapName(req.GetRequiredTier())), func() (err error) {
+	err = steps.run(ctx, string(vendor), progress.Reading.Title(bootstrapName(req.GetRequiredTier())), func(ctx context.Context) (err error) {
 		if status, err = readBootstrap(ctx, p, readiness, tier, req, h.skipChecks); err != nil || !status.own.Present {
 			return err
 		}
@@ -133,7 +133,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 	}
 
 	if len(req.GetDomains()) > 0 {
-		err = steps.run(string(readiness.Edge), progress.Checking.Title("who serves "+strings.Join(req.GetDomains(), ", ")), func() (err error) {
+		err = steps.run(ctx, string(readiness.Edge), progress.Checking.Title("who serves "+strings.Join(req.GetDomains(), ", ")), func(ctx context.Context) (err error) {
 			resp.DomainClaims, err = h.domainClaims(ctx, p, tier, req)
 			return err
 		})
@@ -145,7 +145,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 		return nil, err
 	}
 	if req.GetCheckHosts() {
-		_ = steps.run(string(vendor), progress.Checking.Title("the hosts"), func() error {
+		_ = steps.run(ctx, string(vendor), progress.Checking.Title("the hosts"), func(ctx context.Context) error {
 			resp.HostChecks = h.hostChecks(ctx, p, provider.HostCheckRequest{Tier: tier, Edge: readiness.Edge, Hostnames: req.GetHostCheckDomains()})
 			return nil
 		})
@@ -157,13 +157,13 @@ type preflightSteps struct {
 	spans *spanEvents
 }
 
-func (s preflightSteps) run(subject string, title progress.Title, do func() error) error {
+func (s preflightSteps) run(ctx context.Context, subject string, title progress.Title, do func(context.Context) error) error {
 	span := Span{ID: newSpanID(), Title: sanitizeTitle(title), Phase: progressv1.Phase_PHASE_CHECK, Subject: subject}
-	return s.spans.run(span, func(*spanRun) error { return do() })
+	return s.spans.run(ctx, span, func(ctx context.Context, _ *spanRun) error { return do(ctx) })
 }
 
-func (s preflightSteps) credentials(subject string, verify func() error) error {
-	return s.run(subject, progress.Checking.Title("your credentials"), verify)
+func (s preflightSteps) credentials(ctx context.Context, subject string, verify func(context.Context) error) error {
+	return s.run(ctx, subject, progress.Checking.Title("your credentials"), verify)
 }
 
 func bootstrapName(tier environmentv1.Tier) string {
@@ -234,7 +234,7 @@ func (h *handlers) verifyEdgeCredentials(
 		return false, nil
 	}
 	var scope edge.CredentialIdentity
-	err = steps.credentials(string(kind), func() (err error) {
+	err = steps.credentials(ctx, string(kind), func(ctx context.Context) (err error) {
 		scope, err = verify(ctx)
 		return err
 	})
@@ -270,7 +270,7 @@ func verifyDNSCredentials(
 	if edgeCredentialsChecked && vendor == provider.Vendor(front) {
 		return nil
 	}
-	err = steps.credentials(string(vendor), func() error { return writer.VerifyCredentials(ctx) })
+	err = steps.credentials(ctx, string(vendor), func(ctx context.Context) error { return writer.VerifyCredentials(ctx) })
 	if _, asked := provider.QuestionOf(err); asked {
 		return provider.RefusalError(err)
 	}
@@ -317,7 +317,7 @@ func verifyOwnPushAccess(ctx context.Context, steps preflightSteps, p provider.P
 
 func verifyPushAccess(ctx context.Context, steps preflightSteps, p provider.Provider, slug string, target provider.RegistryTarget, containers []*contractv1.ContainerApp, resp *contractv1.PreflightResponse) error {
 	named := strings.TrimSuffix(target.Server+"/"+strings.Trim(target.Namespace, "/"), "/")
-	err := steps.run(target.Server, progress.Checking.Title("push access to "+named), func() error {
+	err := steps.run(ctx, target.Server, progress.Checking.Title("push access to "+named), func(ctx context.Context) error {
 		store, err := imageStoreFor(ctx, p, target)
 		if err != nil || store == nil {
 			return err

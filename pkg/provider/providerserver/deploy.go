@@ -41,7 +41,7 @@ func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, st
 		var run *deployRun
 		var hold *leaseHold
 		defer func() { spans.releaseHold(ctx, hold, releasingSpan(spec)) }()
-		err = spans.run(checkingSpan(spec), func(env *spanRun) error {
+		err = spans.run(ctx, checkingSpan(spec), func(ctx context.Context, env *spanRun) error {
 			return env.phase(func(progress progress.Log) error {
 				if hold, err = mode.claim(ctx, h, spec, req.GetLeaseToken()); err != nil {
 					return err
@@ -230,9 +230,9 @@ func (r *deployRun) reportFailure(result *progressv1.OperationResult) {
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
 	leased := r.hold.context(ctx)
-	if err := r.spanEvents.run(r.spans.Edge, func(u *spanRun) error {
+	if err := r.spanEvents.run(leased, r.spans.Edge, func(ctx context.Context, u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
-			return r.mode.edge(leased, r, progress)
+			return r.mode.edge(ctx, r, progress)
 		})
 	}); err != nil {
 		return nil, err
@@ -260,7 +260,7 @@ func (r *deployRun) confirmHold(ctx context.Context) error {
 	if r.hold == nil {
 		return nil
 	}
-	return r.spanEvents.run(r.spans.Lease, func(u *spanRun) error {
+	return r.spanEvents.run(ctx, r.spans.Lease, func(ctx context.Context, u *spanRun) error {
 		return u.phase(func(progress.Log) error { return r.hold.confirm(ctx) })
 	})
 }
