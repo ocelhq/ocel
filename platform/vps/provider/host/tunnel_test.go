@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/front"
@@ -159,6 +160,29 @@ func TestATunnelRunsAsOcelTunnelTheImageAndCommandItsEdgesConnectorNamesReadingA
 
 func tokenOf(token string) func(context.Context) (string, error) {
 	return func(context.Context) (string, error) { return token, nil }
+}
+
+func TestATunnelsTokenIsReadWithoutWhatItSaysInTheTrace(t *testing.T) {
+	t.Parallel()
+	box := claimingBox(t, routed())
+	reserved, err := box.host().tunnel.Reserve(context.Background(), tunnelEdge, newConnector())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reserved.ID, reserved.Address = "5a6b7c8d-1", "5a6b7c8d-1.cfargotunnel.com"
+
+	omitted := false
+	read := func(ctx context.Context) (string, error) {
+		omitted = content.IsOmitted(ctx)
+		return "the-tunnel-token", nil
+	}
+	if err := box.host().tunnel.Run(context.Background(), reserved, newConnector(), read); err != nil {
+		t.Fatalf("RunTunnel() = %v", err)
+	}
+
+	if !omitted {
+		t.Error("the token was read under a context that records what it says, so its request's response body reaches the run's trace")
+	}
 }
 
 func TestATunnelAlreadyRunningIsLeftRunningAndItsTokenNeverRead(t *testing.T) {

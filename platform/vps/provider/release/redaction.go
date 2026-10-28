@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -21,14 +22,14 @@ func EnvCommand(name string) string {
 }
 
 func (c *Containers) readRedactedLogs(ctx context.Context, elevation ssh.Acting, name, command string) string {
-	logs, err := c.box.Said(ctx, elevation, command)
+	logs, err := c.box.Said(content.Omit(ctx), elevation, command)
 	if err != nil {
 		return "(could not be read: " + err.Error() + ")"
 	}
 	if logs == "" {
 		return ""
 	}
-	read, err := c.box.Stream(ctx, elevation, EnvCommand(name), nil)
+	read, err := c.box.Stream(content.Omit(ctx), elevation, EnvCommand(name), nil)
 	var env []string
 	switch {
 	case err != nil:

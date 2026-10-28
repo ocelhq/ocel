@@ -24,6 +24,11 @@ import (
 
 var ProviderOver = newProvider
 
+var (
+	SystemLookup = systemLookup
+	SystemReach  = systemReach
+)
+
 const (
 	RealtimeGatewayMemoryBytes = realtime.GatewayMemoryBytes
 	RealtimeSocketBytes        = realtime.SocketBytes

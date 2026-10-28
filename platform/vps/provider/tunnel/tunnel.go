@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
@@ -119,7 +120,7 @@ func (c *Container) Run(ctx context.Context, tunnel boxapi.Tunnel, connector edg
 	if strings.TrimSpace(running) == "true "+tunnel.ID {
 		return nil
 	}
-	read, err := token(ctx)
+	read, err := token(content.Omit(ctx))
 	if err != nil {
 		return err
 	}

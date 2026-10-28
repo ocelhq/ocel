@@ -3,10 +3,14 @@ package ssh
 import (
 	"context"
 	"net"
-	"os/exec"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func (s *Session) ForwardPort(ctx context.Context, remote string) (string, func(), error) {
@@ -14,8 +18,17 @@ func (s *Session) ForwardPort(ctx context.Context, remote string) (string, func(
 	if err != nil {
 		return "", nil, refusal.Refuse(refusal.CodeNotReady, "listen on a loopback port to forward to %s from: %s", remote, err)
 	}
+	local := listener.Addr().String()
 	relayCtx, cancel := context.WithCancel(ctx)
-	var connections sync.WaitGroup
+	relayCtx, span := otel.Tracer(scope).Start(relayCtx, "forward ssh port", trace.WithAttributes(
+		attribute.String("ssh.forward.local", local),
+		attribute.String("ssh.forward.remote", remote),
+		attribute.String("ssh.principal", s.dest.Principal()),
+	))
+	var (
+		connections sync.WaitGroup
+		accepted    atomic.Int64
+	)
 	accepting := make(chan struct{})
 	go func() {
 		defer close(accepting)
@@ -24,23 +37,25 @@ func (s *Session) ForwardPort(ctx context.Context, remote string) (string, func(
 			if err != nil {
 				return
 			}
+			accepted.Add(1)
 			connections.Go(func() { s.forwardConnection(relayCtx, conn, remote) })
 		}
 	}()
+	ended := make(chan struct{})
 	go func() {
+		defer close(ended)
 		<-relayCtx.Done()
 		_ = listener.Close()
+		<-accepting
+		connections.Wait()
+		span.SetAttributes(attribute.Int64("ssh.forward.connections", accepted.Load()))
+		span.End()
 	}()
-	var once sync.Once
 	stop := func() {
-		once.Do(func() {
-			cancel()
-			_ = listener.Close()
-			<-accepting
-			connections.Wait()
-		})
+		cancel()
+		<-ended
 	}
-	return listener.Addr().String(), stop, nil
+	return local, stop, nil
 }
 
 func (s *Session) forwardConnection(ctx context.Context, conn net.Conn, remote string) {
@@ -54,7 +69,7 @@ func (s *Session) forwardConnection(ctx context.Context, conn net.Conn, remote s
 		return
 	}
 	defer socket.Close()
-	cmd := exec.CommandContext(ctx, "ssh", append(s.args(), "-W", remote, s.dest.Written)...)
+	cmd := tracing.CommandContext(ctx, "ssh", append(s.args(), "-W", remote, s.dest.Written)...)
 	cmd.Stdin, cmd.Stdout = socket, socket
 	if err := cmd.Start(); err != nil {
 		return

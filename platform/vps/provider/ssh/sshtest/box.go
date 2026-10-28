@@ -12,9 +12,10 @@ import (
 )
 
 type Box struct {
-	Facts  ssh.Facts
-	User   string
-	Answer func(command string) (ssh.Result, bool)
+	Facts      ssh.Facts
+	User       string
+	Answer     func(command string) (ssh.Result, bool)
+	SpanSocket string
 
 	mu  sync.Mutex
 	ran []string
@@ -62,6 +63,8 @@ func (c conn) Preflight(context.Context) (ssh.Facts, error) {
 func (c conn) ForwardPort(context.Context, string) (string, func(), error) {
 	return "", nil, errors.New("this box forwards no port")
 }
+
+func (c conn) ForwardSpans() string { return c.b.SpanSocket }
 
 func (c conn) Run(ctx context.Context, command string) (string, error) {
 	result, err := c.Stream(ctx, command, nil)

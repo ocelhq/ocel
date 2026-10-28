@@ -55,6 +55,8 @@ func (c *loginLeftWithoutItsDocker) ForwardPort(context.Context, string) (string
 	return "", nil, errors.New("this box forwards no port")
 }
 
+func (c *loginLeftWithoutItsDocker) ForwardSpans() string { return "" }
+
 func TestADeployLoginWhoseCheckedDockerIsNotYetInstalledLeavesDockerToTheLoginThatElevates(t *testing.T) {
 	t.Parallel()
 

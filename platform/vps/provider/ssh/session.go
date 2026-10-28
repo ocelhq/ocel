@@ -21,6 +21,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -30,6 +34,8 @@ const (
 	masterIdle     = "60s"
 
 	concurrentCommandLimit = 8
+
+	scope = "github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
 type Session struct {
@@ -40,34 +46,77 @@ type Session struct {
 
 	commandSlotsMade sync.Once
 	commandSlots     chan struct{}
+
+	spansMade sync.Once
+	spans     *spanForward
+
+	openedUnder trace.SpanContext
 }
 
-func Open(ctx context.Context, target Target) (*Session, error) {
+func Open(ctx context.Context, target Target) (_ *Session, err error) {
+	openedUnder := trace.SpanContextFromContext(ctx)
+	ctx, span := otel.Tracer(scope).Start(ctx, "open ssh session",
+		trace.WithAttributes(attribute.String("ssh.destination", target.Destination())))
+	defer func() { tracing.EndSpan(span, err) }()
+
 	dest, err := resolve(ctx, target)
 	if err != nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"ssh cannot make sense of %q: %s", target.Destination(), terse(err))
 	}
-	started := time.Now()
-	keys, err := offered(ctx, dest)
+	anchor, err := anchorHostKey(ctx, dest)
 	if err != nil {
-		return nil, refuseUnanswered(ctx, dest, err, started.Add(connectTimeout))
+		return nil, err
 	}
-	if len(keys) == 0 {
-		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"%s port %d offered no ssh host key", dest.Address, dest.Port)
-	}
-	anchor, trust := classify(dest, keys, recorded(ctx, dest))
-	if trust != nil {
-		return nil, RefuseHostTrust(*trust)
-	}
-
-	session := &Session{target: target, dest: dest, anchor: anchor, control: multiplex()}
-	if _, err := session.Run(ctx, "true"); err != nil {
+	session := &Session{target: target, dest: dest, anchor: anchor, control: multiplex(), openedUnder: openedUnder}
+	if err = session.establishMaster(ctx); err != nil {
 		session.Close()
 		return nil, err
 	}
 	return session, nil
+}
+
+func anchorHostKey(ctx context.Context, dest Destination) (_ HostKey, err error) {
+	ctx, span := otel.Tracer(scope).Start(ctx, "check ssh host key")
+	defer func() { tracing.EndSpan(span, err) }()
+
+	started := time.Now()
+	keys, err := offered(ctx, dest)
+	if err != nil {
+		return HostKey{}, refuseUnanswered(ctx, dest, err, started.Add(connectTimeout))
+	}
+	offers := make([]string, 0, len(keys))
+	for _, key := range keys {
+		offers = append(offers, key.Type+" "+key.Fingerprint)
+	}
+	span.SetAttributes(attribute.StringSlice("ssh.host_key.offered", offers))
+	if len(keys) == 0 {
+		return HostKey{}, refusal.Refuse(refusal.CodeNotReady,
+			"%s port %d offered no ssh host key", dest.Address, dest.Port)
+	}
+	listed := recorded(ctx, dest)
+	span.SetAttributes(
+		attribute.Int("ssh.host_key.recorded", len(listed.keys)),
+		attribute.Bool("ssh.host_key.delegated", listed.delegated),
+	)
+	anchor, trust := classify(dest, keys, listed)
+	if trust != nil {
+		span.SetAttributes(attribute.String("ssh.host_key.trust", string(trust.Reason)))
+		return HostKey{}, RefuseHostTrust(*trust)
+	}
+	span.SetAttributes(
+		attribute.String("ssh.host_key.trust", "trusted"),
+		attribute.String("ssh.host_key.fingerprint", anchor.Fingerprint),
+	)
+	return anchor, nil
+}
+
+func (s *Session) establishMaster(ctx context.Context) (err error) {
+	ctx, span := otel.Tracer(scope).Start(ctx, "start ssh master",
+		trace.WithAttributes(attribute.String("ssh.control_path", s.control)))
+	defer func() { tracing.EndSpan(span, err) }()
+	_, err = s.Run(ctx, "true")
+	return err
 }
 
 func refuseUnanswered(ctx context.Context, dest Destination, scanned error, by time.Time) error {
@@ -144,7 +193,7 @@ const (
 )
 
 func (s *Session) RunLines(ctx context.Context, command string, each func(Line) error) error {
-	release, err := s.takeCommandSlot(ctx)
+	release, waited, err := s.takeCommandSlot(ctx)
 	if err != nil {
 		return err
 	}
@@ -153,7 +202,7 @@ func (s *Session) RunLines(ctx context.Context, command string, each func(Line) 
 	commandCtx, stop := context.WithCancel(ctx)
 	defer stop()
 
-	cmd := s.newSSHCommand(commandCtx, command)
+	cmd := s.newSSHCommand(commandCtx, command, waited)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return s.refuseUnreached(ctx, err, "")
@@ -182,7 +231,7 @@ func (s *Session) RunLines(ctx context.Context, command string, each func(Line) 
 		mu          sync.Mutex
 		callbackErr error
 		readErr     error
-		stderrTail  []byte
+		keptStderr  = tracing.Tail{Limit: keptStderrBytes}
 	)
 	deliver := func(line Line) bool {
 		mu.Lock()
@@ -191,7 +240,7 @@ func (s *Session) RunLines(ctx context.Context, command string, each func(Line) 
 			return false
 		}
 		if line.Pipe == Stderr {
-			stderrTail = keepTail(append(stderrTail, line.Text+"\n"...), keptStderrBytes)
+			_, _ = io.WriteString(&keptStderr, line.Text+"\n")
 		}
 		if err := each(line); err != nil {
 			callbackErr = err
@@ -217,6 +266,8 @@ func (s *Session) RunLines(ctx context.Context, command string, each func(Line) 
 	}
 	readers.Wait()
 	waitErr := cmd.Wait()
+	kept := strings.TrimSpace(keptStderr.WholeLines())
+	code, err := exitStatus(waitErr)
 
 	switch {
 	case callbackErr != nil:
@@ -229,8 +280,6 @@ func (s *Session) RunLines(ctx context.Context, command string, each func(Line) 
 	case ctx.Err() != nil:
 		return ctx.Err()
 	}
-	kept := strings.TrimSpace(string(stderrTail))
-	code, err := exitStatus(waitErr)
 	if err == nil && code != transportFailure {
 		return s.refuseNonZeroExit(command, Result{Stderr: kept, Code: code})
 	}
@@ -256,42 +305,37 @@ func readLines(pipe io.Reader, deliver func(string) bool) error {
 	}
 }
 
-func keepTail(kept []byte, limitBytes int) []byte {
-	if len(kept) <= limitBytes {
-		return kept
-	}
-	kept = kept[len(kept)-limitBytes:]
-	if newline := bytes.IndexByte(kept, '\n'); newline >= 0 && newline < len(kept)-1 {
-		kept = kept[newline+1:]
-	}
-	return kept
-}
-
 func (s *Session) Stream(ctx context.Context, command string, stdin io.Reader) (Result, error) {
-	release, err := s.takeCommandSlot(ctx)
+	release, waited, err := s.takeCommandSlot(ctx)
 	if err != nil {
 		return Result{}, err
 	}
 	defer release()
-	stdout, stderr, code, err := collectOutput(s.newSSHCommand(ctx, command), stdin)
+	stdout, stderr, code, err := collectOutput(s.newSSHCommand(ctx, command, waited), stdin)
 	if err == nil && code != transportFailure {
 		return Result{Stdout: stdout, Stderr: stderr, Code: code}, nil
 	}
 	return Result{}, s.refuseUnreached(ctx, err, stderr)
 }
 
-func (s *Session) takeCommandSlot(ctx context.Context) (func(), error) {
+func (s *Session) takeCommandSlot(ctx context.Context) (func(), time.Duration, error) {
 	s.commandSlotsMade.Do(func() { s.commandSlots = make(chan struct{}, concurrentCommandLimit) })
+	asked := time.Now()
 	select {
 	case s.commandSlots <- struct{}{}:
-		return func() { <-s.commandSlots }, nil
+		return func() { <-s.commandSlots }, time.Since(asked), nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, time.Since(asked), ctx.Err()
 	}
 }
 
-func (s *Session) newSSHCommand(ctx context.Context, command string) *exec.Cmd {
-	return exec.CommandContext(ctx, "ssh", append(s.args(), s.dest.Written, command)...)
+func (s *Session) newSSHCommand(ctx context.Context, command string, waited time.Duration) *tracing.Cmd {
+	cmd := tracing.CommandContext(ctx, "ssh", append(s.args(), s.dest.Written, command)...)
+	cmd.SetAttributes(
+		attribute.String("ssh.principal", s.dest.Principal()),
+		attribute.Int64("ssh.command.slot_wait_ms", waited.Milliseconds()),
+	)
+	return cmd
 }
 
 func (s *Session) refuseNonZeroExit(command string, result Result) error {
@@ -329,11 +373,15 @@ func (r Result) problem(command string) error {
 
 const transportFailure = 255
 
-func (s *Session) Close() error {
+func (s *Session) Close() (err error) {
 	if s.control == "" {
 		return nil
 	}
-	_, err := output(context.Background(), "ssh", append(s.args(), "-O", "exit", s.dest.Written)...)
+	ctx, span := otel.Tracer(scope).Start(trace.ContextWithSpanContext(context.Background(), s.openedUnder), "close ssh session",
+		trace.WithAttributes(attribute.String("ssh.control_path", s.control)))
+	defer func() { tracing.EndSpan(span, err) }()
+	s.closeSpanForward()
+	_, err = output(ctx, "ssh", append(s.args(), "-O", "exit", s.dest.Written)...)
 	if err != nil {
 		if _, stat := os.Stat(s.control); errors.Is(stat, os.ErrNotExist) {
 			return nil
@@ -386,10 +434,10 @@ func output(ctx context.Context, name string, args ...string) (string, error) {
 }
 
 func run(ctx context.Context, stdin io.Reader, name string, args ...string) (string, string, int, error) {
-	return collectOutput(exec.CommandContext(ctx, name, args...), stdin)
+	return collectOutput(tracing.CommandContext(ctx, name, args...), stdin)
 }
 
-func collectOutput(cmd *exec.Cmd, stdin io.Reader) (string, string, int, error) {
+func collectOutput(cmd *tracing.Cmd, stdin io.Reader) (string, string, int, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if stdin != nil {

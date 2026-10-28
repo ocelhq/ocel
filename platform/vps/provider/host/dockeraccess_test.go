@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -212,5 +213,36 @@ func TestEveryBindTheCheckedDockerAllowsSitsUnderDirectoriesTheDeployLoginCannot
 		return item.Kind == machine.KindDir && item.Name == boxapi.StateRoot && item.Owner == machine.RootOwner
 	}) {
 		t.Errorf("%s is not root's, and every bind beneath it is one the deploy login can swap", boxapi.StateRoot)
+	}
+}
+
+func shimRan(t *testing.T, env ...string) string {
+	t.Helper()
+	dir := t.TempDir()
+	shim := filepath.Join(dir, "docker")
+	if err := os.WriteFile(shim, dockerShim(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sudo"), []byte("#!/bin/sh\nfor arg in \"$@\"; do printf '%s\\n' \"$arg\"; done\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run := exec.Command(shim, "run", "--rm", "shop-web")
+	run.Env = append([]string{"PATH=" + dir + ":/usr/bin:/bin"}, env...)
+	said, err := run.Output()
+	if err != nil {
+		t.Fatalf("the shim: %v", err)
+	}
+	return strings.Join(strings.Fields(string(said)), " ")
+}
+
+func TestTheCheckedDockerHandsOcelLiveTheSpanParentAndSocketItWasRunWithAsFlagsSudoKeeps(t *testing.T) {
+	t.Parallel()
+
+	traced := shimRan(t, boxapi.TraceParentEnvVar+"=00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01", boxapi.TraceSocketEnvVar+"=/tmp/ocel-spans.abc/otlp.sock")
+	if want := "-n " + LiveBinary + " docker --traceparent=00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01 --trace-socket=/tmp/ocel-spans.abc/otlp.sock run --rm shop-web"; traced != want {
+		t.Errorf("the shim ran sudo %q, want %q: sudo resets the environment, so the parent and socket cross it as flags the sudoers line's * matches", traced, want)
+	}
+	if untraced := shimRan(t); untraced != "-n "+LiveBinary+" docker run --rm shop-web" {
+		t.Errorf("the shim ran sudo %q with nothing to trace, want docker's argv alone", untraced)
 	}
 }

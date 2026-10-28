@@ -130,6 +130,8 @@ func (s *scripted) ForwardPort(context.Context, string) (string, func(), error) 
 	return "", nil, errors.New("a scripted session forwards no port")
 }
 
+func (s *scripted) ForwardSpans() string { return "" }
+
 func (s *scripted) Preflight(context.Context) (ssh.Facts, error) {
 	return ssh.Facts{Root: true, Systemd: true}, nil
 }

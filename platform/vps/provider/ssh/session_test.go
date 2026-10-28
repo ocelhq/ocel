@@ -15,6 +15,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func TestAMasterThatHasAlreadyIdledOutIsClosedWithoutComplaint(t *testing.T) {
@@ -312,5 +316,158 @@ func TestACommandWaitingForTheSessionGivesUpWhenItsContextEnds(t *testing.T) {
 			t.Errorf("%s() was still waiting for the session two seconds after its context ended", name)
 		}
 		cancel()
+	}
+}
+
+func TestACommandRunOnTheHostIsOneProcessSpanWithItsPrincipalStdinExitStatusAndOutput(t *testing.T) {
+	ctx, spans := tracingtest.Record(t)
+	sshSaying(t, resolved, keyed, "cat >/dev/null; echo installed; echo 'unit failed' >&2; exit 3")
+	box := &Session{target: Target{Host: "203.0.113.10", User: "ubuntu"}, dest: Destination{User: "ubuntu", Written: "203.0.113.10"}}
+
+	result, err := box.Stream(ctx, "install -m 600 /dev/stdin /etc/ocel/env TOKEN=s3cret", strings.NewReader("twelve bytes"))
+	if err != nil || result.Code != 3 {
+		t.Fatalf("Stream() = %+v, %v, want exit 3", result, err)
+	}
+
+	process := spans.Only(t)
+	if process.Name() != "ssh" || process.Status().Code != codes.Error {
+		t.Errorf("span = %q with status %v, want the ssh process failed for a command that exited 3", process.Name(), process.Status().Code)
+	}
+	attrs := tracingtest.Attributes(process)
+	if args := attrs["process.command_args"].AsStringSlice(); len(args) == 0 || args[len(args)-1] != "install -m 600 /dev/stdin /etc/ocel/env TOKEN=s3cret" {
+		t.Errorf("process.command_args = %q, want the command last", args)
+	}
+	for key, want := range map[string]string{
+		"ssh.principal":       "ubuntu@203.0.113.10",
+		"process.stdout.tail": "installed\n",
+		"process.stderr.tail": "unit failed\n",
+	} {
+		if got := attrs[key].AsString(); got != want {
+			t.Errorf("%s = %q, want %q", key, got, want)
+		}
+	}
+	if exported := tracingtest.ExportedText(process); strings.Contains(exported, "s3cret") {
+		t.Errorf("the exported command span carries the token it was given:\n%s", exported)
+	}
+	if got := attrs["process.stdin.bytes"].AsInt64(); got != 12 {
+		t.Errorf("process.stdin.bytes = %d, want the 12 bytes sent", got)
+	}
+	if _, ok := attrs["ssh.command.slot_wait_ms"]; !ok {
+		t.Error("ssh.command.slot_wait_ms unset: the time a command queued for one of the master's sessions is invisible")
+	}
+	if got := attrs["process.exit.code"].AsInt64(); got != 3 {
+		t.Errorf("process.exit.code = %d, want 3", got)
+	}
+}
+
+func TestOpeningASessionIsASpanOverResolvingTheHostDecidingItsKeyAndEstablishingTheMaster(t *testing.T) {
+	ctx, spans := tracingtest.Record(t)
+	knownHosts := filepath.Join(t.TempDir(), "known_hosts")
+	if err := os.WriteFile(knownHosts, []byte(strings.TrimPrefix(keyed, "echo '")[:len(keyed)-len("echo ''")]+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sshSaying(t, "printf 'hostname 203.0.113.10\\nuser ubuntu\\nport 22\\nuserknownhostsfile "+knownHosts+"\\n'; exit 0", keyed, "exit 0")
+
+	session, err := Open(ctx, Target{Host: "box.example.com", User: "ubuntu"})
+	if err != nil {
+		t.Fatalf("Open() = %v", err)
+	}
+	t.Cleanup(func() { session.Close() })
+
+	recorded := spans.Ended()
+	open := tracingtest.SpanNamed(t, recorded, "open ssh session")
+	if got := tracingtest.Attributes(open)["ssh.destination"].AsString(); got != "box.example.com" {
+		t.Errorf("ssh.destination = %q, want the destination as written", got)
+	}
+	resolve := tracingtest.SpanNamed(t, recorded, "resolve ssh destination")
+	for key, want := range map[string]string{"server.address": "203.0.113.10", "user.name": "ubuntu"} {
+		if got := tracingtest.Attributes(resolve)[key].AsString(); got != want {
+			t.Errorf("resolve ssh destination %s = %q, want %q", key, got, want)
+		}
+	}
+	hostKey := tracingtest.Attributes(tracingtest.SpanNamed(t, recorded, "check ssh host key"))
+	if got := hostKey["ssh.host_key.trust"].AsString(); got != "trusted" {
+		t.Errorf("ssh.host_key.trust = %q, want trusted for a key known_hosts lists", got)
+	}
+	if got := hostKey["ssh.host_key.fingerprint"].AsString(); !strings.HasPrefix(got, "SHA256:") {
+		t.Errorf("ssh.host_key.fingerprint = %q, want the anchored key's fingerprint", got)
+	}
+	master := tracingtest.SpanNamed(t, recorded, "start ssh master")
+	if got := tracingtest.Attributes(master)["ssh.control_path"].AsString(); got != session.control {
+		t.Errorf("ssh.control_path = %q, want %q", got, session.control)
+	}
+	for _, step := range []sdktrace.ReadOnlySpan{resolve, tracingtest.SpanNamed(t, recorded, "check ssh host key"), master} {
+		if step.Parent().SpanID() != open.SpanContext().SpanID() {
+			t.Errorf("%s does not sit under open ssh session", step.Name())
+		}
+	}
+	if commands := tracingtest.ChildrenOf(recorded, master); len(commands) != 1 || commands[0].Name() != "ssh" {
+		t.Errorf("start ssh master holds %d spans, want the first command that brings the master up", len(commands))
+	}
+}
+
+func TestAnUnknownHostKeyMarksTheOpenSpanWithTheTrustDecision(t *testing.T) {
+	ctx, spans := tracingtest.Record(t)
+	sshSaying(t, resolved, keyed, "exit 0")
+
+	if _, err := Open(ctx, Target{Host: "box.example.com", User: "ubuntu"}); err == nil {
+		t.Fatal("Open() = nil over a key nobody recorded")
+	}
+
+	recorded := spans.Ended()
+	if got := tracingtest.Attributes(tracingtest.SpanNamed(t, recorded, "check ssh host key"))["ssh.host_key.trust"].AsString(); got != string(UnknownHostKey) {
+		t.Errorf("ssh.host_key.trust = %q, want %q", got, UnknownHostKey)
+	}
+	if open := tracingtest.SpanNamed(t, recorded, "open ssh session"); open.Status().Code != codes.Error {
+		t.Errorf("open ssh session status = %v, want Error", open.Status().Code)
+	}
+}
+
+func TestACommandWhoseOutputIsSecretIsASpanWithoutItsOutput(t *testing.T) {
+	ctx, spans := tracingtest.Record(t)
+	sshSaying(t, resolved, keyed, "echo 'DATABASE_URL=postgres://app:hunter2@db/app'; echo 'hunter2' >&2")
+	box := &Session{target: Target{Host: "203.0.113.10", User: "ubuntu"}, dest: Destination{User: "ubuntu", Written: "203.0.113.10"}}
+
+	if _, err := box.Run(content.Omit(ctx), "docker inspect --format '{{json .Config.Env}}' web"); err != nil {
+		t.Fatal(err)
+	}
+	if err := box.RunLines(content.Omit(ctx), "cat /etc/ocel/env", func(Line) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, span := range spans.Ended() {
+		for key, value := range tracingtest.Attributes(span) {
+			if strings.Contains(value.String(), "hunter2") {
+				t.Errorf("%s span records %s = %q, want nothing a secret-printing command said", span.Name(), key, value.String())
+			}
+		}
+	}
+}
+
+func TestACommandStreamedLineByLineIsOneProcessSpanWithItsOutputAndExitStatus(t *testing.T) {
+	ctx, spans := tracingtest.Record(t)
+	sshSaying(t, resolved, keyed, "echo pulled; echo 'manifest unknown' >&2; exit 1")
+	box := &Session{target: Target{Host: "203.0.113.10", User: "ubuntu"}, dest: Destination{User: "ubuntu", Written: "203.0.113.10"}}
+
+	if err := box.RunLines(ctx, "docker pull web", func(Line) error { return nil }); err == nil {
+		t.Fatal("RunLines() = nil, want the exit status")
+	}
+
+	process := spans.Only(t)
+	if process.Name() != "ssh" {
+		t.Errorf("span = %q, want the ssh process", process.Name())
+	}
+	attrs := tracingtest.Attributes(process)
+	for key, want := range map[string]string{
+		"ssh.principal":       "ubuntu@203.0.113.10",
+		"process.stdout.tail": "pulled\n",
+		"process.stderr.tail": "manifest unknown\n",
+	} {
+		if got := attrs[key].AsString(); got != want {
+			t.Errorf("%s = %q, want %q", key, got, want)
+		}
+	}
+	if got := attrs["process.exit.code"].AsInt64(); got != 1 {
+		t.Errorf("process.exit.code = %d, want 1", got)
 	}
 }

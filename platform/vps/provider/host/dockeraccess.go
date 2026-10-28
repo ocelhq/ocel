@@ -24,7 +24,12 @@ const (
 )
 
 func dockerShim() []byte {
-	return []byte("#!/bin/sh\nexec sudo -n " + LiveBinary + " " + boxapi.DockerCommand + " \"$@\"\n")
+	checked := "exec sudo -n " + LiveBinary + " " + boxapi.DockerCommand
+	return []byte("#!/bin/sh\n" +
+		"if [ -n \"$" + boxapi.TraceParentEnvVar + "\" ] && [ -n \"$" + boxapi.TraceSocketEnvVar + "\" ]; then\n" +
+		"  " + checked + " \"--" + boxapi.TraceParentFlag + "=$" + boxapi.TraceParentEnvVar + "\" \"--" + boxapi.TraceSocketFlag + "=$" + boxapi.TraceSocketEnvVar + "\" \"$@\"\n" +
+		"fi\n" +
+		checked + " \"$@\"\n")
 }
 
 func loginShell() []byte {

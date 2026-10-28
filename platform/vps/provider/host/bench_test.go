@@ -171,6 +171,8 @@ func (w wire) ForwardPort(context.Context, string) (string, func(), error) {
 	return "", nil, errors.New("the bench forwards no port")
 }
 
+func (w wire) ForwardSpans() string { return "" }
+
 func (w wire) Run(ctx context.Context, command string) (string, error) {
 	result, err := w.Stream(ctx, command, nil)
 	if err != nil {

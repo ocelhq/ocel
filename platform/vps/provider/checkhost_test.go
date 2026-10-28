@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -426,3 +427,29 @@ func TestAProxyThatNamedNoSocketAtAllIsNotReadAsACleanNamespace(t *testing.T) {
 }
 
 var adminPort = strconv.Itoa(caddy.AdminPort)
+
+func TestTheHostChecksLookupAndReachAreSpansWithWhatTheyAskedAndGot(t *testing.T) {
+	ctx, spans := tracingtest.Record(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+
+	if _, err := vps.SystemLookup(ctx, "localhost"); err != nil {
+		t.Fatalf("SystemLookup(localhost) = %v", err)
+	}
+	if err := vps.SystemReach(ctx, listener.Addr().String()); err != nil {
+		t.Fatalf("SystemReach() = %v", err)
+	}
+
+	ended := spans.Ended()
+	lookup := tracingtest.Attributes(tracingtest.SpanNamed(t, ended, "look up host"))
+	reach := tracingtest.Attributes(tracingtest.SpanNamed(t, ended, "reach host"))
+	if lookup["dns.question.name"].AsString() != "localhost" || len(lookup["dns.answers"].AsStringSlice()) == 0 {
+		t.Errorf("look up host span = %v, want the hostname asked and the addresses answered", lookup)
+	}
+	if reach["server.address"].AsString() != listener.Addr().String() {
+		t.Errorf("reach host span = %v, want the address dialled", reach)
+	}
+}
