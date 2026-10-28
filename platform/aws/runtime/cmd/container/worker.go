@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/runtime/child"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
-	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
+	"github.com/ocelhq/ocel/platform/aws/runtime/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/runtime/tasks"
 )
 

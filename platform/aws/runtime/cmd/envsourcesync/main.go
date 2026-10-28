@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
-	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
+	"github.com/ocelhq/ocel/platform/aws/runtime/sdkconfig"
 )
 
 const (

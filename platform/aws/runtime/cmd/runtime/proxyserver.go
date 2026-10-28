@@ -19,8 +19,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket/dataplane"
-	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/runtime/realtime"
+	"github.com/ocelhq/ocel/platform/aws/runtime/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/runtime/tasks"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )

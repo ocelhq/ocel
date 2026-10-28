@@ -17,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/appsync"
 
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
-	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
+	"github.com/ocelhq/ocel/platform/aws/runtime/sdkconfig"
 	"github.com/ocelhq/ocel/platform/realtime/token"
 )
 
