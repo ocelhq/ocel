@@ -46,7 +46,7 @@ func WorkerCommand(ctx context.Context, configDir string, roots []Root, served R
 }
 
 func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Root, run *workdir.Run) (*exec.Cmd, error) {
-	bundle, err := bundleNodeWorker(configDir, roots, run.Path(configDir, nodeWorkerEntryFile))
+	bundle, err := bundleNodeWorker(configDir, roots, run.Path(configDir, nodeWorkerEntryFile), node.Bundle.TracedWorkerServerPath)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Ro
 }
 
 func BundleNodeWorker(configDir string, roots []Root, outfile string) error {
-	bundle, err := bundleNodeWorker(configDir, roots, outfile)
+	bundle, err := bundleNodeWorker(configDir, roots, outfile, node.Bundle.WorkerServerPath)
 	if err != nil {
 		return err
 	}
@@ -70,13 +70,13 @@ func BundleNodeWorker(configDir string, roots []Root, outfile string) error {
 	return nil
 }
 
-func bundleNodeWorker(configDir string, roots []Root, outfile string) ([]byte, error) {
-	source, resolveDir, err := RenderNodeWorkerEntry(roots)
+func bundleNodeWorker(configDir string, roots []Root, outfile string, server func(node.Bundle) string) ([]byte, error) {
+	source, resolveDir, err := renderNodeWorkerEntryOfRoots(configDir, roots, server)
 	if err != nil {
 		return nil, err
 	}
 	if source == "" {
-		if source, err = renderNodeWorkerEntry(nil); err != nil {
+		if source, err = renderNodeWorkerEntry(configDir, nil, server); err != nil {
 			return nil, err
 		}
 	}
@@ -90,7 +90,11 @@ func bundleNodeWorker(configDir string, roots []Root, outfile string) ([]byte, e
 	return bundle, nil
 }
 
-func RenderNodeWorkerEntry(roots []Root) (source, resolveDir string, err error) {
+func RenderNodeWorkerEntry(projectDir string, roots []Root) (source, resolveDir string, err error) {
+	return renderNodeWorkerEntryOfRoots(projectDir, roots, node.Bundle.WorkerServerPath)
+}
+
+func renderNodeWorkerEntryOfRoots(projectDir string, roots []Root, server func(node.Bundle) string) (source, resolveDir string, err error) {
 	var files []string
 	for _, root := range roots {
 		if root.Language != language.JS {
@@ -108,24 +112,24 @@ func RenderNodeWorkerEntry(roots []Root) (source, resolveDir string, err error) 
 	if len(files) == 0 {
 		return "", "", nil
 	}
-	source, err = renderNodeWorkerEntry(files)
+	source, err = renderNodeWorkerEntry(projectDir, files, server)
 	if err != nil {
 		return "", "", err
 	}
 	return source, resolveDir, nil
 }
 
-func renderNodeWorkerEntry(files []string) (string, error) {
+func renderNodeWorkerEntry(projectDir string, files []string, server func(node.Bundle) string) (string, error) {
 	installed, err := node.Ensure()
 	if err != nil {
 		return "", err
 	}
 	var entry strings.Builder
-	fmt.Fprintf(&entry, "import { serve } from %q;\n", installed.WorkerServerPath())
+	fmt.Fprintf(&entry, "import { serve } from %q;\n", server(installed))
 	entry.WriteString("import { deliver } from \"ocel/worker\";\n")
 	fmt.Fprintf(&entry, "await serve(deliver, %q, [\n", processenv.WorkerEnvVar)
-	for _, file := range files {
-		fmt.Fprintf(&entry, "  () => import(%q),\n", file)
+	if err := writeModuleImports(&entry, projectDir, files); err != nil {
+		return "", err
 	}
 	entry.WriteString("]);\n")
 	return entry.String(), nil

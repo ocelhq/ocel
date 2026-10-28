@@ -1,4 +1,6 @@
 import { errorMessage, openSpan, reportError } from "../protocol.js";
+import { importModules, type ModuleImport } from "../tracing/spans.js";
+import { flushTracing, inSpan, startTracing } from "../tracing/tracing.js";
 
 declare global {
   var __ocelRegister: Promise<unknown>[] | undefined;
@@ -6,7 +8,8 @@ declare global {
 
 const stage = "discovery";
 
-export async function discover(imports: ReadonlyArray<() => Promise<unknown>>): Promise<void> {
+export async function discover(imports: ReadonlyArray<ModuleImport>): Promise<void> {
+  await startTracing("ocel-discovery");
   const end = openSpan(stage);
   let failed = false;
   const fail = (err: unknown) => {
@@ -19,10 +22,16 @@ export async function discover(imports: ReadonlyArray<() => Promise<unknown>>): 
   process.on("uncaughtException", fail);
   process.on("unhandledRejection", fail);
   try {
-    for (const load of imports) await load();
-    await Promise.all(globalThis.__ocelRegister ?? []);
+    await inSpan("discover resources", { "ocel.import_count": imports.length }, async () => {
+      await importModules(imports, inSpan);
+      const registrations = globalThis.__ocelRegister ?? [];
+      await inSpan("register resources", { "ocel.registration_count": registrations.length }, () =>
+        Promise.all(registrations),
+      );
+    });
     end(true);
   } catch (err) {
     fail(err);
   }
+  await flushTracing();
 }

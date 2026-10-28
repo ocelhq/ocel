@@ -39,6 +39,10 @@ func (b Bundle) WorkerServerPath() string {
 	return filepath.Join(b.dir, "worker", "server.mjs")
 }
 
+func (b Bundle) TracedWorkerServerPath() string {
+	return filepath.Join(b.dir, "worker", "traced-server.mjs")
+}
+
 func (b Bundle) NextAdapterPath() string {
 	return filepath.Join(b.dir, "next-adapter", "next-adapter.mjs")
 }

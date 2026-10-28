@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ func TestEnsure(t *testing.T) {
 		for _, path := range []string{
 			bundle.BuildScriptPath(),
 			bundle.WorkerServerPath(),
+			bundle.TracedWorkerServerPath(),
 			bundle.NextAdapterPath(),
 			filepath.Join(bundle.dir, "next-adapter", "edge-node-entry.cjs"),
 			filepath.Join(bundle.dir, "next-adapter", "next-dispatch.cjs"),
@@ -113,6 +115,22 @@ func TestEnsure(t *testing.T) {
 			t.Errorf("stat the recent bundle = %v, want it kept: another CLI may still run from it", err)
 		}
 	})
+}
+
+func TestTheWorkerServerFunctionsShipLinksNoTracingAndTheLocalOneExportsSpans(t *testing.T) {
+	t.Parallel()
+
+	bundle := ensured(t, t.TempDir())
+	const exporter = "startExport"
+	deployed := readFile(t, bundle.WorkerServerPath())
+	for _, linked := range []string{exporter, "@opentelemetry"} {
+		if strings.Contains(deployed, linked) {
+			t.Errorf("worker/server.mjs contains %q: the server a deployed function bundles carries no tracing", linked)
+		}
+	}
+	if !strings.Contains(readFile(t, bundle.TracedWorkerServerPath()), exporter) {
+		t.Errorf("worker/traced-server.mjs has no %s: the worker ocel runs locally exports its spans", exporter)
+	}
 }
 
 func TestTheVariableEditorPageIsEmbedded(t *testing.T) {

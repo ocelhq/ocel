@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/processenv"
 )
 
@@ -236,6 +237,54 @@ func TestTheNodeWorkerBundleServesFromADirectoryWithNoNodeModulesBesideIt(t *tes
 
 	wantGreeted(t, deliverTo(t, url, greetEnvelope), 1)
 	wantAudited(t, url)
+}
+
+func TestTheNodeWorkerADeployShipsCarriesNoTracingWhileTheLocalWorkerExportsSpans(t *testing.T) {
+	configDir := repoFixture(t, filepath.Join("worker", "node"))
+	roots, err := RootsOf(&project.Project{Dir: configDir, Apps: []project.App{{Name: "web", Path: "."}}})
+	if err != nil {
+		t.Fatalf("RootsOf: %v", err)
+	}
+	const exporter = "startExport"
+
+	deployed := filepath.Join(t.TempDir(), "worker.mjs")
+	if err := BundleNodeWorker(configDir, roots, deployed); err != nil {
+		t.Fatalf("BundleNodeWorker: %v", err)
+	}
+	image, err := os.ReadFile(deployed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, linked := range []string{exporter, "@opentelemetry"} {
+		if bytes.Contains(image, []byte(linked)) {
+			t.Errorf("the worker bundle an image ships contains %q: deployed workload code carries no tracing", linked)
+		}
+	}
+	source, _, err := RenderNodeWorkerEntry(configDir, roots)
+	if err != nil {
+		t.Fatalf("RenderNodeWorkerEntry: %v", err)
+	}
+	installed, err := node.Ensure()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(source, strconv.Quote(installed.WorkerServerPath())) {
+		t.Errorf("the worker entry a function ships imports\n%s\nwant the untraced server %s", source, installed.WorkerServerPath())
+	}
+
+	run := workdir.NewRun()
+	t.Cleanup(func() { _ = run.Remove() })
+	cmd, err := WorkerCommand(context.Background(), configDir, roots, roots[0], run)
+	if err != nil {
+		t.Fatalf("WorkerCommand: %v", err)
+	}
+	local, err := os.ReadFile(cmd.Args[len(cmd.Args)-1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(local, []byte(exporter)) {
+		t.Errorf("the local worker bundle has no %s: a worker run by ocel exports its spans to the run's trace", exporter)
+	}
 }
 
 func TestTheGeneratedGoWorkerServesATaskAndAConsumerWithItsWorkersOnStartAndMiddleware(t *testing.T) {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROTOCOL_PREFIX } from "../protocol.js";
+import { attributes, named, tracedRun, useCollector } from "../tracing/test-collector.js";
 import { discover } from "./runtime.js";
 
 type Events = "uncaughtException" | "unhandledRejection";
@@ -45,16 +46,22 @@ describe("discover", () => {
     const ran: string[] = [];
     let settled = false;
     await discover([
-      async () => {
-        ran.push("a");
-        globalThis.__ocelRegister = [
-          new Promise((resolve) => setTimeout(resolve, 10)).then(() => {
-            settled = true;
-          }),
-        ];
+      {
+        file: "declarations/a.ts",
+        load: async () => {
+          ran.push("a");
+          globalThis.__ocelRegister = [
+            new Promise((resolve) => setTimeout(resolve, 10)).then(() => {
+              settled = true;
+            }),
+          ];
+        },
       },
-      async () => {
-        ran.push("b");
+      {
+        file: "declarations/b.ts",
+        load: async () => {
+          ran.push("b");
+        },
       },
     ]);
 
@@ -70,8 +77,11 @@ describe("discover", () => {
   it("ends the discovery span failed, names the error and fails the process when an import throws", async () => {
     const emitted = captureStdout();
     await discover([
-      async () => {
-        throw new Error("boom");
+      {
+        file: "declarations/boom.ts",
+        load: async () => {
+          throw new Error("boom");
+        },
       },
     ]);
 
@@ -85,5 +95,26 @@ describe("discover", () => {
       expect.objectContaining({ type: "span_end", ok: false }),
     ]);
     expect(process.exitCode).toBe(1);
+  });
+});
+
+useCollector();
+
+describe("discovery under a run's trace", () => {
+  it("names the project file of each module it imports on that module's import span", async () => {
+    const { spans } = await tracedRun(`
+      import { discover } from "@src/discovery/runtime.ts";
+      await discover([
+        { file: "declarations/queues.ts", load: async () => {} },
+        { file: "declarations/buckets.ts", load: async () => {} },
+      ]);
+    `);
+
+    const imports = spans
+      .filter((s) => s.name === "import module")
+      .map((s) => attributes(s)["code.filepath"]);
+    expect(imports).toEqual(["declarations/queues.ts", "declarations/buckets.ts"]);
+    expect(attributes(named(spans, "discover resources"))["ocel.import_count"]).toBe(2);
+    expect(attributes(named(spans, "register resources"))["ocel.registration_count"]).toBe(0);
   });
 });
