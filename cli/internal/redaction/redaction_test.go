@@ -2,9 +2,17 @@ package redaction
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
 func TestHideReplacesEveryValueWhereverItIsSaid(t *testing.T) {
@@ -170,5 +178,34 @@ func TestHideErrorHidesTheMessageAndKeepsTheChain(t *testing.T) {
 	}
 	if NewValues([]string{"ss_live"}).HideError(nil) != nil {
 		t.Error("HideError(nil) != nil")
+	}
+}
+
+func TestEveryValueTheTerminalHidesIsHiddenInTheTraceOfTheRunItIsHiddenIn(t *testing.T) {
+	traced, err := runtrace.Open(t.TempDir(), "ocel deploy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := traced.ContextWithRootSpan(context.Background())
+	values := NewValues([]string{"pk_live_7Hq2xR", "pw5c"})
+	values.HideInTrace(ctx)
+	line := "charging with pk_live_7Hq2xR, pin pw5c"
+
+	_, span := otel.Tracer("test").Start(ctx, "charge")
+	span.SetAttributes(attribute.String("process.stdout.tail", line))
+	span.End()
+	if err := traced.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if shown := values.Hide(line); shown != "charging with [secret], pin [secret]" {
+		t.Errorf("terminal shows %q, want both values hidden", shown)
+	}
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(traced.LogPath()), runtrace.TraceFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "charging with [secret], pin [secret]") {
+		t.Errorf("trace file = %s, want the line with both values redacted", raw)
 	}
 }

@@ -3,6 +3,8 @@ package console
 import (
 	"context"
 	"net/http"
+
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
 
 const clientID = "ocel-cli"
@@ -26,7 +28,7 @@ type DeviceCode struct {
 func (c *Client) RequestDeviceCode(ctx context.Context) (*DeviceCode, error) {
 	var out DeviceCode
 	body := map[string]string{"client_id": clientID}
-	if err := c.send(ctx, http.MethodPost, "/api/auth/device/code", "", body, &out); err != nil {
+	if err := c.send(content.Omit(ctx), http.MethodPost, "/api/auth/device/code", "", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -46,7 +48,7 @@ func (c *Client) PollToken(ctx context.Context, deviceCode string) (*Token, erro
 		"device_code": deviceCode,
 		"client_id":   clientID,
 	}
-	if err := c.send(ctx, http.MethodPost, "/api/auth/device/token", "", body, &out); err != nil {
+	if err := c.send(content.Omit(ctx), http.MethodPost, "/api/auth/device/token", "", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

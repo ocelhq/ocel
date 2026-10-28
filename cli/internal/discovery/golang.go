@@ -4,17 +4,18 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/workdir"
 
 	"github.com/ocelhq/ocel/cli/internal/gomodule"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
-func goCommands(ctx context.Context, configDir string, roots []Root, server Server) ([]*exec.Cmd, error) {
+func goCommands(ctx context.Context, configDir string, roots []Root, server Server) ([]*tracing.Cmd, error) {
 	var modules []string
 	imports := map[string][]string{}
 	for _, root := range roots {
@@ -28,7 +29,7 @@ func goCommands(ctx context.Context, configDir string, roots []Root, server Serv
 		imports[moduleRoot] = append(imports[moduleRoot], pkg)
 	}
 
-	commands := make([]*exec.Cmd, 0, len(modules))
+	commands := make([]*tracing.Cmd, 0, len(modules))
 	for _, moduleRoot := range modules {
 		var source strings.Builder
 		source.WriteString("package main\n\nimport (\n")
@@ -41,9 +42,9 @@ func goCommands(ctx context.Context, configDir string, roots []Root, server Serv
 			return nil, err
 		}
 
-		cmd := exec.Command("go", "run", "-trimpath=false", pkg)
+		cmd := tracing.Command(ctx, "go", "run", "-trimpath=false", pkg)
 		cmd.Dir = moduleRoot
-		cmd.Env = append(os.Environ(), server.Env()...)
+		cmd.Env = slices.Concat(os.Environ(), server.Env())
 		commands = append(commands, cmd)
 	}
 	return commands, nil

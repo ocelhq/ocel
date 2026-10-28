@@ -3,14 +3,19 @@ package run_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
@@ -21,7 +26,7 @@ func TestASpansEventsCarryItsPhaseSubjectAndSpanAndItsParentIsThePhaseSpan(t *te
 	sink := &recording{}
 	run, _ := begin(t, sink)
 
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
+	_, web := run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), "web", progress.Building.Title("web"))
 	web.Say("Bundling")
 	web.Debug("esbuild 0.25")
 	web.Error("the bundle is too large")
@@ -57,8 +62,10 @@ func TestASpanThatSucceedsEndsTitledWithWhatItDidAndOneThatFailsWithNoTitle(t *t
 	run, _ := begin(t, sink)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 
-	build.Child("web", progress.Building.Title("web")).End(nil)
-	build.Child("api", progress.Building.Title("api")).End(errors.New("the bundle is too large"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
+	web.End(nil)
+	_, api := build.Child(t.Context(), "api", progress.Building.Title("api"))
+	api.End(errors.New("the bundle is too large"))
 
 	var titles []string
 	for _, ev := range sink.received() {
@@ -76,7 +83,8 @@ func TestASpanEndedPartiallyIsAnOKWarningTitledWithWhatItGotDone(t *testing.T) {
 	run, _ := begin(t, sink)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 
-	build.Child("web", progress.Forwarding.Title("ports to main")).EndPartial("The build goes without the bindings of main")
+	_, forwarding := build.Child(t.Context(), "web", progress.Forwarding.Title("ports to main"))
+	forwarding.EndPartial("The build goes without the bindings of main")
 
 	for _, ev := range sink.received() {
 		if ended := ev.GetOperation().GetEnded(); ended != nil && ev.GetOperation().GetSubject() == "web" {
@@ -92,7 +100,7 @@ func TestASpanEndedPartiallyIsAnOKWarningTitledWithWhatItGotDone(t *testing.T) {
 func TestEndReportsTheErrorOnTheEndedEventAndTheDurationFromItsStart(t *testing.T) {
 	sink := &recording{}
 	run, clock := begin(t, sink)
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("web", progress.Deploying.Title("web"))
+	_, web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "web", progress.Deploying.Title("web"))
 	started := clock.read()
 
 	clock.advance(3 * time.Second)
@@ -126,7 +134,7 @@ func TestAReservedSpanAnnouncesNothingUntilOpenedAndThenStartsWhenItWasReserved(
 	if got := len(sink.received()); got != before {
 		t.Fatalf("reserving a span sent %d events, want none", got-before)
 	}
-	child := reserved.Open()
+	_, child := reserved.Open(t.Context())
 	child.End(errors.New("node not found on PATH"))
 
 	got := sink.received()[before:]
@@ -147,7 +155,7 @@ func TestAReservedSpanAnnouncesNothingUntilOpenedAndThenStartsWhenItWasReserved(
 func TestASpanThatSucceedsEndsOnceWithAnOKStatus(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("web", progress.Deploying.Title("web"))
+	_, web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "web", progress.Deploying.Title("web"))
 
 	web.End(nil)
 	web.End(errors.New("too late"))
@@ -166,7 +174,7 @@ func TestASpanEndedByAnInterruptIsAWarningNotAnError(t *testing.T) {
 	sink := &recording{}
 	ctx, cancel := context.WithCancel(context.Background())
 	run, _ := beginIn(t, ctx, sink)
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("web", progress.Deploying.Title("web"))
+	_, web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "web", progress.Deploying.Title("web"))
 
 	cancel()
 	web.End(context.Canceled)
@@ -355,8 +363,10 @@ func TestEndingAPhaseEndsItsOpenSpansFirstWithTheSameError(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	deploy.Child("web", progress.Deploying.Title("web")).Child("web", progress.Title{Started: "Uploading web", Ended: "Uploading web"})
-	deploy.Child("api", progress.Deploying.Title("api")).End(nil)
+	_, web := deploy.Child(t.Context(), "web", progress.Deploying.Title("web"))
+	web.Child(t.Context(), "web", progress.Title{Started: "Uploading web", Ended: "Uploading web"})
+	_, api := deploy.Child(t.Context(), "api", progress.Deploying.Title("api"))
+	api.End(nil)
 
 	deploy.End(errors.New("the stack is locked"))
 
@@ -388,10 +398,128 @@ func TestAForwardedProviderEventKeepsEveryFieldItCarried(t *testing.T) {
 		}},
 	}
 
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(op)
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(runtrace.Call{}, op)
 
 	got := sink.received()[len(sink.received())-1]
 	if want := (&streamv1.RunEvent{Operation: op}); !proto.Equal(got, want) {
 		t.Errorf("the forwarded event is not span %s's end carried over field for field", op.GetSpanId())
+	}
+}
+
+type tracedSpan struct {
+	Name         string `json:"name"`
+	SpanID       string `json:"spanId"`
+	ParentSpanID string `json:"parentSpanId"`
+}
+
+func tracedSpans(t *testing.T, dir string) map[string]tracedSpan {
+	t.Helper()
+	raw, err := os.ReadFile(runFile(t, dir, runtrace.TraceFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		ResourceSpans []struct {
+			ScopeSpans []struct {
+				Spans []tracedSpan `json:"spans"`
+			} `json:"scopeSpans"`
+		} `json:"resourceSpans"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]tracedSpan{}
+	for _, resource := range doc.ResourceSpans {
+		for _, scope := range resource.ScopeSpans {
+			for _, s := range scope.Spans {
+				byName[s.Name] = s
+			}
+		}
+	}
+	return byName
+}
+
+func TestASpanStartedFromTheContextARunBeginsWithLandsUnderTheRunsRootSpan(t *testing.T) {
+	bus := run.NewBus(time.Now)
+	dir := t.TempDir()
+	ctx, traced, err := bus.Begin(context.Background(), "ocel deploy", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, call := otel.Tracer("any/package").Start(ctx, "GET example.com")
+	call.End()
+	traced.End(&err)
+
+	spans := tracedSpans(t, dir)
+	if got, want := spans["GET example.com"].ParentSpanID, spans["ocel deploy"].SpanID; got == "" || got != want {
+		t.Errorf("call parent = %q, want the root span %q", got, want)
+	}
+}
+
+func TestASpanStartedFromAContextCarryingAPhaseNestsUnderThatPhase(t *testing.T) {
+	bus := run.NewBus(time.Now)
+	dir := t.TempDir()
+	ctx, traced, err := bus.Begin(context.Background(), "ocel deploy", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provisioning := traced.Phase(progressv1.Phase_PHASE_PROVISION)
+	_, call := otel.Tracer("any/package").Start(run.ContextWithSpan(ctx, provisioning), "pulumi up")
+	call.End()
+	provisioning.End(nil)
+	traced.End(&err)
+
+	spans := tracedSpans(t, dir)
+	if got, want := spans["pulumi up"].ParentSpanID, spans["provision phase"].SpanID; got == "" || got != want {
+		t.Errorf("call parent = %q, want the phase %q", got, want)
+	}
+}
+
+func TestAnOperationCarriedOnAContextOutsideTheRunStillTracesIntoTheRun(t *testing.T) {
+	bus := run.NewBus(time.Now)
+	dir := t.TempDir()
+	_, traced, err := bus.Begin(context.Background(), "ocel deploy", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, building := traced.Phase(progressv1.Phase_PHASE_BUILD).Child(context.Background(), "web", progress.Title{Started: "building web", Ended: "built web"})
+	_, call := otel.Tracer("any/package").Start(ctx, "docker build")
+	call.End()
+	building.End(nil)
+	traced.End(&err)
+
+	if got := run.SpanFromContext(ctx); got != building {
+		t.Errorf("SpanFromContext() = %v, want the operation the context carries", got)
+	}
+	spans := tracedSpans(t, dir)
+	if got, want := spans["docker build"].ParentSpanID, spans["building web"].SpanID; got == "" || got != want {
+		t.Errorf("call parent = %q, want the operation %q", got, want)
+	}
+}
+
+func TestAContextCarryingASpanOfARunWithNoTraceCarriesOnlyTheSpan(t *testing.T) {
+	preamble := run.NewBus(time.Now).Preamble(context.Background())
+	ctx := run.ContextWithSpan(context.Background(), preamble)
+	if got := run.SpanFromContext(ctx); got != preamble {
+		t.Errorf("SpanFromContext() = %v, want the preamble span", got)
+	}
+}
+
+func TestASpanStartedFromAContextCarryingAnOperationNestsUnderThatOperation(t *testing.T) {
+	bus := run.NewBus(time.Now)
+	dir := t.TempDir()
+	ctx, traced, err := bus.Begin(context.Background(), "ocel deploy", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buildingCtx, building := traced.Phase(progressv1.Phase_PHASE_BUILD).Child(ctx, "web", progress.Title{Started: "building web", Ended: "built web"})
+	_, call := otel.Tracer("any/package").Start(buildingCtx, "GET registry")
+	call.End()
+	building.End(nil)
+	traced.End(&err)
+
+	spans := tracedSpans(t, dir)
+	if got, want := spans["GET registry"].ParentSpanID, spans["building web"].SpanID; got == "" || got != want {
+		t.Errorf("call parent = %q, want the operation %q", got, want)
 	}
 }

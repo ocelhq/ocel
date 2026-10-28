@@ -365,14 +365,15 @@ func checkSetup(ctx context.Context, invocation commands.Invocation, cfg *projec
 	return nil
 }
 
-func runStep(check *run.Span, subject string, title progress.Title, work func() error) error {
-	span := check.Child(subject, title)
-	err := work()
+func runStep(ctx context.Context, check *run.Span, subject string, title progress.Title, work func(context.Context) error) error {
+	spanCtx, span := check.Child(ctx, subject, title)
+	err := work(spanCtx)
 	span.End(err)
 	return err
 }
 
 func askAboutTier(ctx context.Context, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier, got *answers) error {
+	ctx = run.ContextWithSpan(ctx, check)
 	name := readiness.TierName(tier)
 	checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
 	read, err := readiness.Read(ctx, provider, cfg, readiness.Request{
@@ -395,7 +396,7 @@ func askAboutTier(ctx context.Context, check *run.Span, provider *providerproces
 	}
 
 	var planned *contractv1.DescribeBootstrapResponse
-	err = runStep(check, provider.Name(), progress.Reading.Title("what "+name+" has set up"), func() error {
+	err = runStep(ctx, check, provider.Name(), progress.Reading.Title("what "+name+" has set up"), func(ctx context.Context) error {
 		return provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: cfg.EdgeSelection()})
 			return err
@@ -413,7 +414,7 @@ func askAboutTier(ctx context.Context, check *run.Span, provider *providerproces
 		return nil
 	}
 	var bound *contractv1.GetHostnameStatusResponse
-	err = runStep(check, provider.Name(), progress.Checking.Title("the "+name+" hostnames"), func() error {
+	err = runStep(ctx, check, provider.Name(), progress.Checking.Title("the "+name+" hostnames"), func(ctx context.Context) error {
 		return provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			bound, err = client.GetHostnameStatus(ctx, &contractv1.HostnameRequest{
 				Slug:       cfg.Slug,

@@ -1,7 +1,6 @@
 package localrpc
 
 import (
-	"context"
 	"crypto/subtle"
 	"crypto/x509"
 	"encoding/base64"
@@ -83,64 +82,6 @@ func FormatUnixAddress(path string) string {
 
 func FormatTCPAddress(port int) string {
 	return fmt.Sprintf("tcp:127.0.0.1:%d", port)
-}
-
-const TraceParentHeader = "traceparent"
-
-type traceParentKey struct{}
-
-func WithTraceParent(ctx context.Context, traceparent string) context.Context {
-	if !IsValidTraceParent(traceparent) {
-		return ctx
-	}
-	return context.WithValue(ctx, traceParentKey{}, traceparent)
-}
-
-func TraceParentFromContext(ctx context.Context) (string, bool) {
-	traceparent, ok := ctx.Value(traceParentKey{}).(string)
-	return traceparent, ok
-}
-
-func IsValidTraceParent(value string) bool {
-	fields := strings.Split(value, "-")
-	if len(fields) != 4 {
-		return false
-	}
-	version, traceID, parentID, flags := fields[0], fields[1], fields[2], fields[3]
-	if !isLowerHex(version, 2) || !isLowerHex(traceID, 32) || !isLowerHex(parentID, 16) || !isLowerHex(flags, 2) {
-		return false
-	}
-	if version == "ff" {
-		return false
-	}
-	if isAllZero(traceID) || isAllZero(parentID) {
-		return false
-	}
-	return true
-}
-
-func isLowerHex(s string, length int) bool {
-	if len(s) != length {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= '0' && r <= '9':
-		case r >= 'a' && r <= 'f':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-func isAllZero(s string) bool {
-	for _, r := range s {
-		if r != '0' {
-			return false
-		}
-	}
-	return true
 }
 
 func ParseAddress(formatted string) (network, address string, err error) {

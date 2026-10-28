@@ -157,7 +157,7 @@ export default { slug: "test-app" };
 		httpServer := &http.Server{Handler: server.Mux()}
 		go httpServer.Serve(listener)
 		defer httpServer.Close()
-		if err := leader.Claim(other, leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
+		if err := leader.Claim(context.Background(), other, leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
 			t.Fatalf("leader.Claim: %v", err)
 		}
 
@@ -199,7 +199,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 
-		if err := leader.Claim(leaderOf(root), leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
+		if err := leader.Claim(context.Background(), leaderOf(root), leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
 			t.Fatalf("leader.Claim: %v", err)
 		}
 

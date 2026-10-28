@@ -9,10 +9,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 func startChild(ctx context.Context, opts Options, env map[string]string) (*childprocess.Child, error) {
-	cmd := exec.Command(opts.Command[0], opts.Command[1:]...)
+	cmd := tracing.Command(ctx, opts.Command[0], opts.Command[1:]...)
 	cmd.Env = applyEnv(os.Environ(), env)
 	cmd.Stdin = opts.Stdin
 	cmd.Stdout = opts.Stdout

@@ -62,7 +62,7 @@ func runEnvUnpublish(ctx context.Context, dependencies Dependencies, cwd, publis
 			return err
 		}
 		var resp *variablestorev1.UnpublishValuesResponse
-		err = runInSpan(run, progressv1.Phase_PHASE_DESTROY, cfg, progress.Removing.Title(describeTierValues(opts)+" "+publisher+" published"), func() (err error) {
+		err = runInSpan(ctx, run, progressv1.Phase_PHASE_DESTROY, cfg, progress.Removing.Title(describeTierValues(opts)+" "+publisher+" published"), func(ctx context.Context) (err error) {
 			resp, err = variableStore.UnpublishValues(ctx, &variablestorev1.UnpublishValuesRequest{
 				Slug:        cfg.Slug,
 				Tier:        opts.tier(),

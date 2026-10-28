@@ -87,11 +87,13 @@ func (b appBuild) end(err error) {
 }
 
 type Processor struct {
-	Span     *run.Span
 	Forward  io.Writer
 	AppBuild func(app string) (log io.Writer, ended func(error))
 	Hide     redaction.Values
 
+	ChildExportsSpans bool
+
+	span       *run.Span
 	forwarding *redaction.Writer
 
 	mu         sync.Mutex
@@ -117,12 +119,13 @@ var errStageFailed = errors.New("the node builder reported this stage failed")
 var errStageAbandoned = errors.New("the node builder never ended this stage")
 
 func (p *Processor) Scan(ctx context.Context, r io.Reader) {
+	p.span = run.SpanFromContext(ctx)
 	defer func() { _ = p.forwarded().Flush() }()
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLineBytes+64*1024)
 	scanner.Split(splitLines)
 	for scanner.Scan() {
-		p.line(scanner.Text())
+		p.line(ctx, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
 		p.mu.Lock()
@@ -163,7 +166,7 @@ func (p *Processor) forwarded() *redaction.Writer {
 	return p.forwarding
 }
 
-func (p *Processor) line(token string) {
+func (p *Processor) line(ctx context.Context, token string) {
 	line, terminated := strings.CutSuffix(token, "\n")
 	if len(line) >= maxLineBytes {
 		if !terminated {
@@ -193,7 +196,7 @@ func (p *Processor) line(token string) {
 	if rec.Type != typeOutput {
 		rec.Message = p.hide(rec.Message)
 	}
-	p.apply(rec)
+	p.apply(ctx, rec)
 }
 
 func (p *Processor) forward(line string) {
@@ -203,7 +206,7 @@ func (p *Processor) forward(line string) {
 	_, _ = io.WriteString(p.forwarded(), line+"\n")
 }
 
-func (p *Processor) apply(rec record) {
+func (p *Processor) apply(ctx context.Context, rec record) {
 	switch rec.Type {
 	case typeLog:
 		p.log(rec)
@@ -211,7 +214,7 @@ func (p *Processor) apply(rec record) {
 		p.output(rec)
 	case typeSpanStart:
 		p.startBuild(rec)
-		p.startSpan(rec)
+		p.startSpan(ctx, rec)
 	case typeSpanEnd:
 		p.endBuild(rec)
 		p.endSpan(rec)
@@ -253,8 +256,8 @@ func (p *Processor) log(rec record) {
 	switch {
 	case found:
 		span.Debug(rec.Message)
-	case p.Span != nil:
-		p.Span.Debug(rec.Message)
+	case p.span != nil:
+		p.span.Debug(rec.Message)
 	}
 }
 
@@ -298,15 +301,19 @@ func (p *Processor) endBuild(rec record) {
 	}
 }
 
-func (p *Processor) startSpan(rec record) {
-	if p.Span == nil || rec.ID == "" {
+func (p *Processor) startSpan(ctx context.Context, rec record) {
+	if p.span == nil || rec.ID == "" {
 		return
 	}
 	var attrs []progress.Attr
 	if rec.App != "" {
 		attrs = append(attrs, progress.Attr{Key: progress.AttrKeyApp, Value: rec.App})
 	}
-	span := p.Span.Trace(rec.App, rec.Stage, attrs...)
+	open := p.span.Trace
+	if p.ChildExportsSpans {
+		open = p.span.ShowOnly
+	}
+	_, span := open(ctx, rec.App, rec.Stage, attrs...)
 
 	p.mu.Lock()
 	if p.spans == nil {

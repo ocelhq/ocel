@@ -26,6 +26,7 @@ import (
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/tracing"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -172,7 +173,7 @@ func waitReady(ctx context.Context, engine docker.Engine, id, endpoint string) e
 		if err != nil {
 			return err
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := tracing.NewClient(0).Do(req)
 		if err != nil {
 			return err
 		}

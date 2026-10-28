@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/pkg/configdoc"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 func executeAndReportRoot(t *testing.T, args ...string) (code int, stdout, stderr string) {
@@ -279,6 +280,23 @@ func TestAnOCELJSONThatIsNotABooleanStillAsksForTheFailureAsADocument(t *testing
 	}
 	if code != 1 || stderr != "" {
 		t.Errorf("exit code = %d, stderr = %q, want 1 and nothing", code, stderr)
+	}
+}
+
+func TestAnOCELTraceThatIsNoTraceModeIsRefusedBeforeTheCommandRunsNamingTheModesThereAre(t *testing.T) {
+	t.Setenv(tracing.ModeEnvVar, "verbose")
+
+	code, stdout, _ := executeAndReportRoot(t, "--json", "promotions", "ls")
+
+	failure := requireOneFailureDocument(t, stdout)
+	message, _ := failure["message"].(string)
+	for _, named := range []string{`OCEL_TRACE="verbose"`, "on", "off", "full"} {
+		if !strings.Contains(message, named) {
+			t.Errorf("error message = %q, want it to name %s", message, named)
+		}
+	}
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
 	}
 }
 

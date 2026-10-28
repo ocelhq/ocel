@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const nodeWorkerEntryFile = "worker.mjs"
@@ -28,7 +28,7 @@ var goWorkerMain string
 //go:embed worker.py
 var pythonWorkerServer string
 
-type workerCommand func(ctx context.Context, configDir string, roots []Root, served Root, run *workdir.Run) (*exec.Cmd, error)
+type workerCommand func(ctx context.Context, configDir string, roots []Root, served Root, run *workdir.Run) (*tracing.Cmd, error)
 
 var workerCommands = map[language.Language]workerCommand{
 	language.JS:     nodeWorkerCommand,
@@ -37,7 +37,7 @@ var workerCommands = map[language.Language]workerCommand{
 	language.Rust:   rustWorkerCommand,
 }
 
-func WorkerCommand(ctx context.Context, configDir string, roots []Root, served Root, run *workdir.Run) (*exec.Cmd, error) {
+func WorkerCommand(ctx context.Context, configDir string, roots []Root, served Root, run *workdir.Run) (*tracing.Cmd, error) {
 	command, ok := workerCommands[served.Language]
 	if !ok {
 		return nil, fmt.Errorf("discovery: %s is a %s folder, and ocel runs no worker from one", served.Dir, served.Language)
@@ -45,7 +45,7 @@ func WorkerCommand(ctx context.Context, configDir string, roots []Root, served R
 	return command(ctx, configDir, roots, served, run)
 }
 
-func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Root, run *workdir.Run) (*exec.Cmd, error) {
+func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Root, run *workdir.Run) (*tracing.Cmd, error) {
 	bundle, err := bundleNodeWorker(configDir, roots, run.Path(configDir, nodeWorkerEntryFile), node.Bundle.TracedWorkerServerPath)
 	if err != nil {
 		return nil, err
@@ -54,8 +54,9 @@ func nodeWorkerCommand(ctx context.Context, configDir string, roots []Root, _ Ro
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command("node", "--enable-source-maps", entry)
+	cmd := tracing.Command(ctx, "node", "--enable-source-maps", entry)
 	cmd.Env = os.Environ()
+	cmd.ExportsSpans = true
 	return cmd, nil
 }
 
@@ -135,12 +136,12 @@ func renderNodeWorkerEntry(projectDir string, files []string, server func(node.B
 	return entry.String(), nil
 }
 
-func goWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root, _ *workdir.Run) (*exec.Cmd, error) {
+func goWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root, _ *workdir.Run) (*tracing.Cmd, error) {
 	moduleRoot, pkg, err := WriteGoWorkerEntry(configDir, roots, served)
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command("go", "run", pkg)
+	cmd := tracing.Command(ctx, "go", "run", pkg)
 	cmd.Dir = moduleRoot
 	cmd.Env = os.Environ()
 	return cmd, nil
@@ -158,7 +159,7 @@ func WriteGoWorkerEntry(configDir string, roots []Root, served Root) (string, st
 	return moduleRoot, pkg, nil
 }
 
-func rustWorkerCommand(ctx context.Context, _ string, _ []Root, served Root, _ *workdir.Run) (*exec.Cmd, error) {
+func rustWorkerCommand(ctx context.Context, _ string, _ []Root, served Root, _ *workdir.Run) (*tracing.Cmd, error) {
 	cmd, _, err := cargoRunCommand(ctx, served)
 	if err != nil {
 		return nil, err
@@ -195,7 +196,7 @@ func writeGoWorkerEntry(configDir string, roots []Root, moduleRoot string) (stri
 	return writeGoEntry(moduleRoot, "worker", strings.Replace(goWorkerMain, "// "+importsMarker+"\n", strings.TrimSuffix(imports.String(), "\t"), 1))
 }
 
-func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root, _ *workdir.Run) (*exec.Cmd, error) {
+func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, served Root, _ *workdir.Run) (*tracing.Cmd, error) {
 	runRoot, err := pythonRunRoot(configDir, served.Dir)
 	if err != nil {
 		return nil, err
@@ -209,7 +210,7 @@ func pythonWorkerCommand(ctx context.Context, configDir string, roots []Root, se
 		return nil, err
 	}
 
-	cmd := exec.Command(PythonInterpreter(runRoot), entry)
+	cmd := tracing.Command(ctx, PythonInterpreter(runRoot), entry)
 	cmd.Dir = runRoot
 	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
 	if importDirs := listImportDirsOutside(runRoot, packages); len(importDirs) > 0 {

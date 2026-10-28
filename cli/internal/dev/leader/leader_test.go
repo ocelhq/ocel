@@ -1,6 +1,7 @@
 package leader
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"net"
@@ -24,7 +25,7 @@ func TestFind(t *testing.T) {
 			t.Fatalf("writeRecord: %v", err)
 		}
 
-		got, found, err := Find(root)
+		got, found, err := Find(context.Background(), root)
 		if err != nil {
 			t.Fatalf("Find: %v", err)
 		}
@@ -42,7 +43,7 @@ func TestFind(t *testing.T) {
 			t.Fatalf("writeRecord: %v", err)
 		}
 
-		if _, found, err := Find(root); err != nil || found {
+		if _, found, err := Find(context.Background(), root); err != nil || found {
 			t.Fatalf("Find found = %v, err = %v, want no leader and no error", found, err)
 		}
 		if got, err := Read(root); err != nil || got != leader {
@@ -59,7 +60,7 @@ func TestFind(t *testing.T) {
 			t.Fatalf("writeRecord: %v", err)
 		}
 
-		if _, found, err := Find(root); err != nil || found {
+		if _, found, err := Find(context.Background(), root); err != nil || found {
 			t.Fatalf("Find found = %v, err = %v, want no leader: a reused port is not the leader that recorded it", found, err)
 		}
 	})
@@ -72,7 +73,7 @@ func TestFind(t *testing.T) {
 			t.Fatalf("writeRecord: %v", err)
 		}
 
-		if _, found, err := Find(root); err != nil || found {
+		if _, found, err := Find(context.Background(), root); err != nil || found {
 			t.Fatalf("Find found = %v, err = %v, want no leader", found, err)
 		}
 	})
@@ -83,7 +84,7 @@ func TestFind(t *testing.T) {
 		root := uniqueRoot(t)
 		writeBareAddress(t, root, answeringLeader(t).Address)
 
-		if _, found, err := Find(root); err != nil || found {
+		if _, found, err := Find(context.Background(), root); err != nil || found {
 			t.Fatalf("Find found = %v, err = %v, want no leader: a record no follower can authenticate with is worth nothing", found, err)
 		}
 	})
@@ -91,7 +92,7 @@ func TestFind(t *testing.T) {
 	t.Run("no record finds no leader", func(t *testing.T) {
 		t.Parallel()
 
-		if _, found, err := Find(uniqueRoot(t)); err != nil || found {
+		if _, found, err := Find(context.Background(), uniqueRoot(t)); err != nil || found {
 			t.Fatalf("Find found = %v, err = %v, want no leader and no error", found, err)
 		}
 	})
@@ -104,7 +105,7 @@ func TestFind(t *testing.T) {
 			t.Fatalf("writeRecord: %v", err)
 		}
 
-		if _, found, err := Find(here); err != nil || found {
+		if _, found, err := Find(context.Background(), here); err != nil || found {
 			t.Fatalf("Find(%q) found = %v, err = %v, want the leader in %q not inherited", here, found, err, elsewhere)
 		}
 	})
@@ -118,7 +119,7 @@ func TestClaim(t *testing.T) {
 
 		root := uniqueRoot(t)
 		leader := Leader{Address: "127.0.0.1:4242", Token: "app-token"}
-		if err := Claim(root, leader); err != nil {
+		if err := Claim(context.Background(), root, leader); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
 		got, err := Read(root)
@@ -135,12 +136,31 @@ func TestClaim(t *testing.T) {
 
 		root := uniqueRoot(t)
 		running := answeringLeader(t)
-		if err := Claim(root, running); err != nil {
+		if err := Claim(context.Background(), root, running); err != nil {
 			t.Fatalf("first Claim: %v", err)
 		}
 
-		if err := Claim(root, Leader{Address: "127.0.0.1:9", Token: "usurper"}); !errors.Is(err, ErrAlreadyRunning) {
+		if err := Claim(context.Background(), root, Leader{Address: "127.0.0.1:9", Token: "usurper"}); !errors.Is(err, ErrAlreadyRunning) {
 			t.Fatalf("second Claim err = %v, want ErrAlreadyRunning", err)
+		}
+		if got, err := Read(root); err != nil || got != running {
+			t.Fatalf("record = %+v, %v, want the running leader %+v", got, err, running)
+		}
+	})
+
+	t.Run("a claim on a cancelled context is refused and leaves a leader that answers its record", func(t *testing.T) {
+		t.Parallel()
+
+		root := uniqueRoot(t)
+		running := answeringLeader(t)
+		if err := Claim(context.Background(), root, running); err != nil {
+			t.Fatalf("first Claim: %v", err)
+		}
+		cancelled, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		if err := Claim(cancelled, root, Leader{Address: "127.0.0.1:9", Token: "usurper"}); !errors.Is(err, ErrAlreadyRunning) {
+			t.Fatalf("Claim on a cancelled context err = %v, want ErrAlreadyRunning", err)
 		}
 		if got, err := Read(root); err != nil || got != running {
 			t.Fatalf("record = %+v, %v, want the running leader %+v", got, err, running)
@@ -156,7 +176,7 @@ func TestClaim(t *testing.T) {
 		}
 
 		leader := Leader{Address: "127.0.0.1:4242", Token: "app-token"}
-		if err := Claim(root, leader); err != nil {
+		if err := Claim(context.Background(), root, leader); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
 		if got, err := Read(root); err != nil || got != leader {
@@ -171,7 +191,7 @@ func TestClaim(t *testing.T) {
 		writeBareAddress(t, root, answeringLeader(t).Address)
 
 		leader := Leader{Address: "127.0.0.1:4242", Token: "app-token"}
-		if err := Claim(root, leader); err != nil {
+		if err := Claim(context.Background(), root, leader); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
 		if got, err := Read(root); err != nil || got != leader {
@@ -198,7 +218,7 @@ func TestClaim(t *testing.T) {
 			)
 			for _, claimant := range claimants {
 				wg.Go(func() {
-					err := Claim(root, claimant)
+					err := Claim(context.Background(), root, claimant)
 					if errors.Is(err, ErrAlreadyRunning) {
 						return
 					}
@@ -225,7 +245,7 @@ func TestReleaseAfterClaim(t *testing.T) {
 
 		root := uniqueRoot(t)
 		first := answeringLeader(t)
-		if err := Claim(root, first); err != nil {
+		if err := Claim(context.Background(), root, first); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
 		if err := Release(root, first.Token); err != nil {
@@ -234,7 +254,7 @@ func TestReleaseAfterClaim(t *testing.T) {
 		if _, err := Read(root); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("Read after Release err = %v, want a not-exist error", err)
 		}
-		if err := Claim(root, answeringLeader(t)); err != nil {
+		if err := Claim(context.Background(), root, answeringLeader(t)); err != nil {
 			t.Fatalf("Claim after Release: %v", err)
 		}
 	})
@@ -244,11 +264,11 @@ func TestReleaseAfterClaim(t *testing.T) {
 
 		root := uniqueRoot(t)
 		first := Leader{Address: deadAddress(t), Token: "first"}
-		if err := Claim(root, first); err != nil {
+		if err := Claim(context.Background(), root, first); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
 		second := answeringLeader(t)
-		if err := Claim(root, second); err != nil {
+		if err := Claim(context.Background(), root, second); err != nil {
 			t.Fatalf("Claim over a leader that stopped answering: %v", err)
 		}
 
@@ -258,7 +278,7 @@ func TestReleaseAfterClaim(t *testing.T) {
 		if got, err := Read(root); err != nil || got != second {
 			t.Fatalf("record after the first leader's release = %+v, %v, want the second leader %+v", got, err, second)
 		}
-		if err := Claim(root, answeringLeader(t)); !errors.Is(err, ErrAlreadyRunning) {
+		if err := Claim(context.Background(), root, answeringLeader(t)); !errors.Is(err, ErrAlreadyRunning) {
 			t.Fatalf("third Claim err = %v, want ErrAlreadyRunning while the second leader answers", err)
 		}
 	})

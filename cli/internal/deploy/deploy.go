@@ -31,9 +31,9 @@ type Dependencies struct {
 	ReadPrebuilt            func(ctx context.Context, cfg *project.Project, archs map[string]string) (build.Output, error)
 	BuildID                 func(projectDir, app string) (string, error)
 	CollectDeclarations     func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
-	OpenBrowser             func(url string) error
+	OpenBrowser             func(ctx context.Context, url string) error
 	ServeVariableEditor     func(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
-	ReadGitBranch           func(dir string) (string, error)
+	ReadGitBranch           func(ctx context.Context, dir string) (string, error)
 	DiscoverPRNumber        func() string
 }
 
@@ -62,7 +62,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		return &clierror.Error{Code: clierror.CodeUsage, Cause: fmt.Errorf("`%s` runs inside an Ocel Cloud job, where the console answers every confirmation, so --yes would consent for a person nobody asked: drop it", target.command())}
 	}
 	cfg := resolved.Project
-	env, err := target.environment(dependencies, cwd)
+	env, err := target.environment(ctx, dependencies, cwd)
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func toCloud(ctx context.Context, dependencies Dependencies, cwd string, resolve
 	}
 	job := commands.CloudJob{Command: target.command(), Tier: target.tier, Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY, Tag: target.tag, NoWait: opts.NoWait, Stderr: stderr}
 	if target.isPreview() {
-		env, err := target.environment(dependencies, cwd)
+		env, err := target.environment(ctx, dependencies, cwd)
 		if err != nil {
 			return err
 		}

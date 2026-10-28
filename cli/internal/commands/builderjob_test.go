@@ -199,7 +199,7 @@ func TestInsideAnOcelCloudJobTheGitContextIsTheOneTheJobWasStartedWith(t *testin
 	if source := job.Source(); source.GetCommit() != "0123abc" || source.GetBranch() != "feature/login" || !source.GetDirty() {
 		t.Errorf("source = %v, want the job's commit, branch and dirty state", source)
 	}
-	if branch, err := job.ReadGitBranch(t.TempDir()); err != nil || branch != "feature/login" {
+	if branch, err := job.ReadGitBranch(t.Context(), t.TempDir()); err != nil || branch != "feature/login" {
 		t.Errorf("branch = %q, %v, want the job's branch", branch, err)
 	}
 	if pr := job.DiscoverPRNumber(); pr != "12" {
@@ -213,7 +213,7 @@ func TestInsideAnOcelCloudJobStartedWithNoGitContextNoBranchSourceOrPullRequestI
 	if source := job.Source(); source != nil {
 		t.Errorf("source = %v, want none for a job started outside git", source)
 	}
-	if _, err := job.ReadGitBranch(t.TempDir()); err == nil || !strings.Contains(err.Error(), "no git branch") {
+	if _, err := job.ReadGitBranch(t.Context(), t.TempDir()); err == nil || !strings.Contains(err.Error(), "no git branch") {
 		t.Errorf("err = %v, want it to say the job names no branch", err)
 	}
 	if pr := job.DiscoverPRNumber(); pr != "" {

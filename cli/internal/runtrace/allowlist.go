@@ -19,8 +19,20 @@ func Attribute(key progress.AttrKey, value string) attribute.KeyValue {
 	return name.String(value)
 }
 
+const droppedSpanCountKey attribute.Key = "ocel.dropped_span_count"
+
+var traceOnlyKeys = []attribute.Key{
+	"ocel.app_count",
+	"ocel.import_count",
+	"ocel.registration_count",
+	"ocel.worker",
+	"ocel.framework",
+	droppedSpanCountKey,
+}
+
 func isAllowed(key attribute.Key) bool {
-	return slices.ContainsFunc(progress.AttrKeys, func(allowed progress.AttrKey) bool { return allowed.Name == string(key) })
+	return slices.Contains(traceOnlyKeys, key) ||
+		slices.ContainsFunc(progress.AttrKeys, func(allowed progress.AttrKey) bool { return allowed.Name == string(key) })
 }
 
 func filterAttributes(attrs []attribute.KeyValue) []attribute.KeyValue {

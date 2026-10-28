@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -33,6 +32,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const sdkPackage = "ocel"
@@ -256,6 +256,7 @@ func configFormat(name string) resultv1.ConfigFormat {
 }
 
 func writeProject(ctx context.Context, dependencies Dependencies, build *run.Span, configPath, slug, provider string, settings []providerSetting, lang sdkLanguage, detected bool) (added string, err error) {
+	ctx = run.ContextWithSpan(ctx, build)
 	projectDir, name := filepath.Dir(configPath), filepath.Base(configPath)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return "", fmt.Errorf("create directory for %s: %w", name, err)
@@ -267,7 +268,7 @@ func writeProject(ctx context.Context, dependencies Dependencies, build *run.Spa
 	}
 	build.Say(fmt.Sprintf("Wrote %s for project %s", name, slug))
 
-	switch wrote, err := ensureStateDirIgnored(projectDir); {
+	switch wrote, err := ensureStateDirIgnored(ctx, projectDir); {
 	case err != nil:
 		build.Warn(fmt.Sprintf("Could not add %s to %s (%v) — add it yourself: ocel keeps build output, run logs and local state there.", stateDirPattern, gitignoreName, err))
 	case wrote:
@@ -479,8 +480,8 @@ func addSDK(ctx context.Context, dependencies Dependencies, build *run.Span, dir
 	argv, pkg := addCommand(dir, lang)
 	command := strings.Join(argv, " ")
 
-	span := build.Child(sdkPackage, progress.Adding.Title(fmt.Sprintf("the SDK to this project with `%s`", command)))
-	err := dependencies.RunPackageManager(ctx, dir, argv, span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
+	spanCtx, span := build.Child(ctx, sdkPackage, progress.Adding.Title(fmt.Sprintf("the SDK to this project with `%s`", command)))
+	err := dependencies.RunPackageManager(spanCtx, dir, argv, span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
 	if err != nil {
 		span.Warn(fmt.Sprintf("Could not add %s — run `%s` yourself.", sdkPackage, command))
 	}
@@ -492,7 +493,7 @@ func addSDK(ctx context.Context, dependencies Dependencies, build *run.Span, dir
 }
 
 func RunPackageManager(ctx context.Context, dir string, argv []string, output io.Writer) error {
-	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd := tracing.Command(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
 	cmd.Stdout = output
 	cmd.Stderr = output

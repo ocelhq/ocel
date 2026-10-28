@@ -66,16 +66,16 @@ func forgetInConsole(ctx context.Context, run *run.Run, cfg *project.Project, op
 	return nil
 }
 
-func forgetRegistered(ctx context.Context, run *run.Run, cfg *project.Project, opts options, access, fingerprint string) (bool, error) {
-	destroying := run.Phase(progressv1.Phase_PHASE_DESTROY)
-	finding := destroying.Child(cfg.Slug, progress.Checking.Title("what the console has registered for "+fingerprint))
-	registered, err := opts.console.FindConnector(ctx, access, fingerprint)
+func forgetRegistered(ctx context.Context, running *run.Run, cfg *project.Project, opts options, access, fingerprint string) (bool, error) {
+	destroying := running.Phase(progressv1.Phase_PHASE_DESTROY)
+	findingCtx, finding := destroying.Child(ctx, cfg.Slug, progress.Checking.Title("what the console has registered for "+fingerprint))
+	registered, err := opts.console.FindConnector(findingCtx, access, fingerprint)
 	finding.End(err)
 	if err != nil || registered == nil {
 		return false, err
 	}
-	removing := destroying.Child(cfg.Slug, progress.Removing.Title("the connector from the console"))
-	err = opts.console.RemoveConnector(ctx, access, registered.GetId())
+	removingCtx, removing := destroying.Child(ctx, cfg.Slug, progress.Removing.Title("the connector from the console"))
+	err = opts.console.RemoveConnector(removingCtx, access, registered.GetId())
 	removing.End(err)
 	if err != nil {
 		return false, fmt.Errorf("forget this connector in the console: %w", err)

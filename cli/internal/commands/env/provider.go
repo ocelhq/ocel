@@ -65,10 +65,10 @@ func runWithEnvProvider(ctx context.Context, dependencies Dependencies, cwd stri
 	})
 }
 
-func runInSpan(run *run.Run, phase progressv1.Phase, cfg *project.Project, title progress.Title, work func() error) error {
-	root := run.Phase(phase)
-	span := root.Child(cfg.Slug, title)
-	err := work()
+func runInSpan(ctx context.Context, running *run.Run, phase progressv1.Phase, cfg *project.Project, title progress.Title, work func(context.Context) error) error {
+	root := running.Phase(phase)
+	spanCtx, span := root.Child(ctx, cfg.Slug, title)
+	err := work(spanCtx)
 	span.End(err)
 	root.End(err)
 	return err

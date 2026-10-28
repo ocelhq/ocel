@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 )
 
@@ -18,7 +18,7 @@ var generatingCommands = map[string][]string{
 
 func readRunLogs(t *testing.T, project clitest.FakeProject) string {
 	t.Helper()
-	logs, err := filepath.Glob(filepath.Join(project.Root, buildoutput.StateDir, "runs", "*"))
+	logs, err := filepath.Glob(filepath.Join(runtrace.RunsDir(project.Root), "*", "*"))
 	if err != nil {
 		t.Fatal(err)
 	}

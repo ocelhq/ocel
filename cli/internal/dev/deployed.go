@@ -38,20 +38,21 @@ func RunDeployed(ctx context.Context, opts Options, deployed Deployed) error {
 		return err
 	}
 	hidden := redaction.NewValues(build.SecretValues(live))
+	hidden.HideInTrace(ctx)
 	stdout, stderr := hidden.Writer(opts.Stdout), hidden.Writer(opts.Stderr)
 	if opts.Stdout == opts.Stderr {
 		stderr = stdout
 	}
 	opts.Stdout, opts.Stderr = stdout, stderr
 	ran := RunProjected(ctx, opts, live)
-	return errors.Join(ran, stdout.Flush(), stderr.Flush(), closeForwards(opts, forwards))
+	return errors.Join(ran, stdout.Flush(), stderr.Flush(), closeForwards(ctx, opts, forwards))
 }
 
-func closeForwards(opts Options, forwards *portforward.Forwards) error {
+func closeForwards(ctx context.Context, opts Options, forwards *portforward.Forwards) error {
 	if forwards == nil {
 		return nil
 	}
-	span := opts.session().Child(opts.Project.Slug, closingForwardsTitle)
+	_, span := opts.session().Child(ctx, opts.Project.Slug, closingForwardsTitle)
 	err := forwards.Close()
 	span.End(err)
 	return err
@@ -112,8 +113,8 @@ func forwardDeployed(ctx context.Context, opts Options, deployed Deployed, uses 
 		return nil, fmt.Errorf("the provider of %s forwards no port to a deployed environment, so a command cannot reach its resources from this machine", cfg.Slug)
 	}
 	declared := portforward.ListDeclared(uses)
-	step := check.Child(cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)))
-	forwards, err := portforward.Open(ctx, deployed.Provider, cfg.Slug, deployed.Environment, uses, check)
+	stepCtx, step := check.Child(ctx, cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)))
+	forwards, err := portforward.Open(stepCtx, deployed.Provider, cfg.Slug, deployed.Environment, uses, check)
 	if err != nil {
 		err = portforward.RefuseUnforwarded("the command", declared, err)
 	}
@@ -129,9 +130,9 @@ func forwardDeployed(ctx context.Context, opts Options, deployed Deployed, uses 
 
 func collectResources(ctx context.Context, opts Options, deployed Deployed, declarations *variables.Declarations) ([]declaration.Resource, error) {
 	cfg := opts.Project
-	collecting := opts.Run.Phase(progressv1.Phase_PHASE_BUILD).Child(cfg.Slug, progress.Collecting.Title("the resources "+cfg.Slug+" declares"))
+	collectingCtx, collecting := opts.Run.Phase(progressv1.Phase_PHASE_BUILD).Child(ctx, cfg.Slug, progress.Collecting.Title("the resources "+cfg.Slug+" declares"))
 	said := collecting.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
-	resources, err := deployed.CollectDeclarations(ctx, cfg, declarations, said, said)
+	resources, err := deployed.CollectDeclarations(collectingCtx, cfg, declarations, said, said)
 	collecting.End(err)
 	return resources, err
 }

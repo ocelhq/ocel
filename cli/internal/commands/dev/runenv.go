@@ -16,7 +16,7 @@ func runDeployed(cmd *cobra.Command, dependencies Dependencies, args []string, n
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
 	}
-	env, err := commands.ResolveDeployedEnvironment(cwd, name, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
+	env, err := commands.ResolveDeployedEnvironment(cmd.Context(), cwd, name, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
 	if err != nil {
 		return err
 	}

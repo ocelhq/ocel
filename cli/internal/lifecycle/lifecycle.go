@@ -64,7 +64,7 @@ func Run(ctx context.Context, c Command) (err error) {
 		env[processenv.LiveDirEnvVar] = dir
 	}
 
-	cmd := newShellCommand(c.Line)
+	cmd := newShellCommand(runCtx, c.Line)
 	cmd.Dir = c.Dir
 	cmd.Env = mergeEnvironment(os.Environ(), env)
 	cmd.Stdout = c.Stdout

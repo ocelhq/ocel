@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -81,7 +82,7 @@ func TestASpanRepaintingOneLineShowsOnlyTheDraftItLeft(t *testing.T) {
 	run, out, _ := groupedRun(t, Presentation{})
 
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	tracked := build.Child("shop", progress.Building.Title("project"))
+	_, tracked := build.Child(t.Context(), "shop", progress.Building.Title("project"))
 	w := tracked.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED)
 	for i := 1; i <= 500; i++ {
 		if _, err := fmt.Fprintf(w, "\rProgress: resolved %d", i); err != nil {
@@ -137,8 +138,8 @@ func TestAnEndedScopeWithoutAUsableEndRunsUntilItReachedTheBus(t *testing.T) {
 			_, run := onABus(t, context.Background(), func() time.Time { return now }, newTranscript(&out, Presentation{}, nil))
 
 			deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-			deploy.Forward(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_DEPLOY, Subject: "web", SpanId: stage, Message: "deploying web", Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}})
-			deploy.Forward(&progressv1.OperationEvent{Time: tc.end, Phase: progressv1.Phase_PHASE_DEPLOY, Subject: "web", SpanId: stage, Body: &progressv1.OperationEvent_Ended{
+			deploy.Forward(runtrace.Call{}, &progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_DEPLOY, Subject: "web", SpanId: stage, Message: "deploying web", Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}})
+			deploy.Forward(runtrace.Call{}, &progressv1.OperationEvent{Time: tc.end, Phase: progressv1.Phase_PHASE_DEPLOY, Subject: "web", SpanId: stage, Body: &progressv1.OperationEvent_Ended{
 				Ended: &progressv1.Ended{Status: progressv1.SpanStatus_SPAN_STATUS_OK, StartTimeUnixNano: start.UnixNano(), Title: "deploying web"},
 			}})
 
@@ -155,7 +156,7 @@ func TestASpansOutputKeepsItsRightHandWhitespace(t *testing.T) {
 
 	const padded = "Route (app)                     Size     First Load JS   "
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Building.Title("web"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
 	output(t, web, padded)
 	web.End(nil)
 

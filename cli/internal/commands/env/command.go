@@ -20,7 +20,7 @@ import (
 
 type Dependencies struct {
 	commands.Invocation
-	OpenBrowser         func(url string) error
+	OpenBrowser         func(ctx context.Context, url string) error
 	ServeVariableEditor func(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
 }
 

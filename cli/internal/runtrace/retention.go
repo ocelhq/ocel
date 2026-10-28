@@ -1,17 +1,20 @@
 package runtrace
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
 
 const retainedRuns = 10
 
-func prune(dir string, keep int, cutoff time.Time) error {
-	entries, err := os.ReadDir(dir)
+var releasedRunFileSuffixes = []string{".ndjson", ".otlp.json", ".otlp.json.partial"}
+
+func prune(runs string, keep int, cutoff time.Time) error {
+	entries, err := os.ReadDir(runs)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -19,56 +22,50 @@ func prune(dir string, keep int, cutoff time.Time) error {
 		return err
 	}
 
-	type group struct {
-		stem   string
-		files  []string
-		newest int64
-	}
-	groups := map[string]*group{}
+	var dirs []runDirectory
+	var errs []error
 	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		stem := name
-		if i := strings.Index(name, "."); i > 0 {
-			stem = name[:i]
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		g, ok := groups[stem]
-		if !ok {
-			g = &group{stem: stem}
-			groups[stem] = g
-		}
-		g.files = append(g.files, filepath.Join(dir, name))
-		if mtime := info.ModTime().UnixNano(); mtime > g.newest {
-			g.newest = mtime
-		}
-	}
-
-	if len(groups) <= keep {
-		return nil
-	}
-
-	ordered := make([]*group, 0, len(groups))
-	for _, g := range groups {
-		ordered = append(ordered, g)
-	}
-	sort.Slice(ordered, func(i, j int) bool { return ordered[i].newest > ordered[j].newest })
-
-	var firstErr error
-	for _, g := range ordered[keep:] {
-		if !time.Unix(0, g.newest).Before(cutoff) {
-			continue
-		}
-		for _, f := range g.files {
-			if err := os.Remove(f); err != nil && firstErr == nil {
-				firstErr = err
+		path := filepath.Join(runs, e.Name())
+		if !e.IsDir() {
+			if isReleasedRunFile(e.Name()) && modifiedBefore(path, cutoff) {
+				errs = append(errs, os.Remove(path))
 			}
+			continue
+		}
+		dirs = append(dirs, runDirectory{path: path, modified: lastModified(path)})
+	}
+
+	if len(dirs) <= keep {
+		return errors.Join(errs...)
+	}
+	slices.SortFunc(dirs, func(a, b runDirectory) int { return b.modified.Compare(a.modified) })
+	for _, dir := range dirs[keep:] {
+		if dir.modified.Before(cutoff) {
+			errs = append(errs, os.RemoveAll(dir.path))
 		}
 	}
-	return firstErr
+	return errors.Join(errs...)
+}
+
+func isReleasedRunFile(name string) bool {
+	return slices.ContainsFunc(releasedRunFileSuffixes, func(suffix string) bool { return strings.HasSuffix(name, suffix) })
+}
+
+func modifiedBefore(path string, cutoff time.Time) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.ModTime().Before(cutoff)
+}
+
+func lastModified(dir string) time.Time {
+	var newest time.Time
+	if info, err := os.Lstat(dir); err == nil {
+		newest = info.ModTime()
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if info, err := e.Info(); err == nil && info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+	}
+	return newest
 }

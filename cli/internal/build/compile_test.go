@@ -316,7 +316,9 @@ func TestARustBuildThatPrintsASecretAndFailsSaysItNowhere(t *testing.T) {
 	}
 	_, cfg := writeRustApp(t, "fn main() {\n    let dir = std::env::var(\"OCEL_LIVE_DIR\").unwrap();\n    let secret = std::fs::read_to_string(std::path::Path::new(&dir).join(\"SESSION_SECRET\")).unwrap();\n    panic!(\"rejected {secret}\");\n}\n")
 	var ended error
-	log := Log{AppLog: func(string) (io.Writer, func(error)) { return io.Discard, func(err error) { ended = err } }}
+	log := Log{AppLog: func(ctx context.Context, _ string) (context.Context, io.Writer, func(error)) {
+		return ctx, io.Discard, func(err error) { ended = err }
+	}}
 
 	builder := nodeOnly{node: func(context.Context, string, []byte, Log) error { return nil }}
 	err := builder.Build(context.Background(), cfg, map[string]AppVariables{"api": {Live: map[string]string{"SESSION_SECRET": "ss_live_secret"}}}, log)

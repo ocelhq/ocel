@@ -43,7 +43,7 @@ func (l lockedWriter) Write(p []byte) (int, error) {
 func (u *appSpans) output() Log {
 	return Log{
 		Shared: lockedWriter{&u.mu, &u.shared},
-		AppLog: func(name string) (io.Writer, func(error)) {
+		AppLog: func(ctx context.Context, name string) (context.Context, io.Writer, func(error)) {
 			u.mu.Lock()
 			defer u.mu.Unlock()
 			if u.logs == nil {
@@ -52,7 +52,7 @@ func (u *appSpans) output() Log {
 			u.opened = append(u.opened, name)
 			log := &strings.Builder{}
 			u.logs[name] = log
-			return lockedWriter{&u.mu, log}, func(err error) {
+			return ctx, lockedWriter{&u.mu, log}, func(err error) {
 				u.mu.Lock()
 				defer u.mu.Unlock()
 				if _, twice := u.ended[name]; twice {
@@ -276,13 +276,13 @@ func (s *stepsSeen) list() []string {
 
 func (s *stepsSeen) output() Log {
 	return Log{
-		AppLog: func(app string) (io.Writer, func(error)) {
+		AppLog: func(ctx context.Context, app string) (context.Context, io.Writer, func(error)) {
 			s.add("open app " + app)
-			return io.Discard, func(error) { s.add("end app " + app) }
+			return ctx, io.Discard, func(error) { s.add("end app " + app) }
 		},
-		Step: func(subject string, title progress.Title) func(error) {
+		Step: func(ctx context.Context, subject string, title progress.Title) (context.Context, func(error)) {
 			s.add("open " + subject + ": " + title.Started)
-			return func(err error) {
+			return ctx, func(err error) {
 				if err != nil {
 					s.add("fail " + title.Started + ": " + err.Error())
 					return
@@ -310,7 +310,7 @@ func TestABuildNamesEveryStepBetweenItsAppsBuilds(t *testing.T) {
 		if err := json.Unmarshal(request, &req); err != nil {
 			return err
 		}
-		_, ended := log.App("web")
+		_, _, ended := log.App(context.Background(), "web")
 		writeFuncConfig(t, filepath.Dir(filepath.Dir(req.Apps[0].OutputDir)), "web", "index.func",
 			buildoutput.FunctionConfig{Framework: buildoutput.Framework{Name: "next"}, EntryFile: "index.handler", App: "web"})
 		ended(nil)

@@ -41,7 +41,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		t.Parallel()
 
 		var quiet bytes.Buffer
-		reportValues(spanWriting(t, &quiet), t.TempDir(), dotfileValues(nil), true)
+		reportValues(t.Context(), spanWriting(t, &quiet), t.TempDir(), dotfileValues(nil), true)
 		if quiet.Len() != 0 {
 			t.Errorf("reportValues wrote %q for a run with no dotfile values, want nothing", quiet.String())
 		}
@@ -52,7 +52,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		}
 
 		var out bytes.Buffer
-		reportValues(spanWriting(t, &out), dir, dotfileValues(map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}), true)
+		reportValues(t.Context(), spanWriting(t, &out), dir, dotfileValues(map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}), true)
 		got := out.String()
 
 		for _, want := range []string{"API_TOKEN", "DATABASE_URL", project.DotenvFileName} {
@@ -80,7 +80,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 		t.Parallel()
 
 		var out bytes.Buffer
-		reportValues(spanWriting(t, &out), gitRepository(t), dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
+		reportValues(t.Context(), spanWriting(t, &out), gitRepository(t), dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
 
 		if got := out.String(); !strings.Contains(got, ".gitignore") {
 			t.Errorf("notice = %q, want it to say the file is not ignored by git", got)
@@ -91,7 +91,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 			t.Fatalf("write .gitignore: %v", err)
 		}
 		var reincluded bytes.Buffer
-		reportValues(spanWriting(t, &reincluded), dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
+		reportValues(t.Context(), spanWriting(t, &reincluded), dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
 		if got := reincluded.String(); !strings.Contains(got, ".gitignore") {
 			t.Errorf("notice = %q, want the warning when a later line re-includes the file", got)
 		}
@@ -105,7 +105,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 			t.Fatalf("write .gitignore: %v", err)
 		}
 		var out bytes.Buffer
-		reportValues(spanWriting(t, &out), dir, valueLayers{
+		reportValues(t.Context(), spanWriting(t, &out), dir, valueLayers{
 			{from: "infisical:p-1/dev", values: map[string]string{"API_TOKEN": "sk-live-must-not-appear"}},
 			{from: project.LocalDotenvFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}},
 		}, true)
@@ -124,7 +124,7 @@ func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) 
 			t.Fatalf("write .gitignore: %v", err)
 		}
 		var ignored bytes.Buffer
-		reportValues(spanWriting(t, &ignored), dir, valueLayers{{from: project.LocalDotenvFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}}}, false)
+		reportValues(t.Context(), spanWriting(t, &ignored), dir, valueLayers{{from: project.LocalDotenvFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}}}, false)
 		if strings.Contains(ignored.String(), ".gitignore") {
 			t.Errorf("notice = %q, want no warning for a file a glob ignores", ignored.String())
 		}
@@ -179,7 +179,7 @@ func TestTheDevValueReportAsksGitWhetherItIgnoresEachFile(t *testing.T) {
 		}
 
 		var out bytes.Buffer
-		reportValues(spanWriting(t, &out), project, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
+		reportValues(t.Context(), spanWriting(t, &out), project, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
 		if strings.Contains(out.String(), ".gitignore") {
 			t.Errorf("notice = %q, want no warning for a file git ignores", out.String())
 		}
@@ -193,7 +193,7 @@ func TestTheDevValueReportAsksGitWhetherItIgnoresEachFile(t *testing.T) {
 		}
 
 		var out bytes.Buffer
-		reportValues(spanWriting(t, &out), dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
+		reportValues(t.Context(), spanWriting(t, &out), dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
 		if got := out.String(); !strings.Contains(got, "cannot tell whether git ignores "+project.DotenvFileName) {
 			t.Errorf("notice = %q, want it to say it cannot tell", got)
 		}

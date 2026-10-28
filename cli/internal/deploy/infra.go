@@ -102,15 +102,15 @@ func (i *infraProvisioning) provision(ctx context.Context, resources []declarati
 		return err
 	}
 	i.sent = req
-	i.startRenewing()
+	i.startRenewing(ctx)
 	return nil
 }
 
-func (i *infraProvisioning) startRenewing() {
+func (i *infraProvisioning) startRenewing(ctx context.Context) {
 	if i.renewing != nil {
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	i.renewing = &leaseRenewal{cancel: cancel, done: make(chan struct{})}
 	go i.renew(ctx, i.renewing.done)
 }
@@ -196,7 +196,7 @@ func (i *infraProvisioning) release(ctx context.Context, r *run.Run, slug string
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abandonTimeout)
 	defer cancel()
 	if i.attempted {
-		_ = releaseIn(r, progressv1.Phase_PHASE_PROVISION, slug, progress.Releasing.Title("this deploy's lease on "+place(i.env)), func() error {
+		_ = releaseIn(ctx, r, progressv1.Phase_PHASE_PROVISION, slug, progress.Releasing.Title("this deploy's lease on "+place(i.env)), func(ctx context.Context) error {
 			return i.providerProcess.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 				_, err := client.AbandonDeploy(ctx, &contractv1.AbandonDeployRequest{Slug: slug, Environment: i.env, LeaseToken: i.leaseToken})
 				return err
@@ -206,15 +206,15 @@ func (i *infraProvisioning) release(ctx context.Context, r *run.Run, slug string
 	if i.mintedAlias == "" {
 		return nil
 	}
-	return releaseIn(r, progressv1.Phase_PHASE_CHECK, slug, progress.Releasing.Title("the unclaimed preview URLs of "+place(i.env)), func() error {
+	return releaseIn(ctx, r, progressv1.Phase_PHASE_CHECK, slug, progress.Releasing.Title("the unclaimed preview URLs of "+place(i.env)), func(ctx context.Context) error {
 		return forgetUnclaimedPreviewAlias(ctx, i.providerProcess, slug, i.env, i.mintedAlias)
 	})
 }
 
-func releaseIn(r *run.Run, phase progressv1.Phase, slug string, title progress.Title, release func() error) error {
+func releaseIn(ctx context.Context, r *run.Run, phase progressv1.Phase, slug string, title progress.Title, release func(context.Context) error) error {
 	root := r.Phase(phase)
-	releasing := root.Child(slug, title)
-	err := release()
+	releasingCtx, releasing := root.Child(ctx, slug, title)
+	err := release(releasingCtx)
 	releasing.End(err)
 	root.End(nil)
 	return err

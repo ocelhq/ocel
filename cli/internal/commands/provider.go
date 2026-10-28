@@ -92,6 +92,7 @@ func (i Invocation) OpenProvider(ctx context.Context, check *run.Span, cfg *proj
 }
 
 func (i Invocation) openChecked(ctx context.Context, check *run.Span, cfg *project.Project, opts OpenOptions) (*providerprocess.Provider, readiness.Preflight, error) {
+	ctx = run.ContextWithSpan(ctx, check)
 	req := opts.request(cfg)
 	if opts.Intent.deploys() {
 		var err error
@@ -120,8 +121,8 @@ func (i Invocation) start(ctx context.Context, check *run.Span, cfg *project.Pro
 	if open := i.CloudSessions.find(check.Run(), cfg, scopes); open != nil {
 		return open.provider, open.identity, "", nil
 	}
-	opening := check.Child(CloudProviderID, progress.Title{Started: "Opening a session on Ocel Cloud", Ended: "Opened a session on Ocel Cloud"})
-	open, err := i.openOnCloud(ctx, check, cfg, opts.Cloud, scopes)
+	openingCtx, opening := check.Child(ctx, CloudProviderID, progress.Title{Started: "Opening a session on Ocel Cloud", Ended: "Opened a session on Ocel Cloud"})
+	open, err := i.openOnCloud(openingCtx, check, cfg, opts.Cloud, scopes)
 	opening.End(err)
 	if err != nil {
 		return nil, nil, "", err
@@ -181,10 +182,10 @@ func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, comm
 	loaded := cfg
 	err = i.Setups.Ensure(ctx, opts.Policy, check, func(ctx context.Context) (err error) {
 		if provider != nil {
-			reading := check.Child(cfg.Slug, progress.Reading.Title("the project's config again"))
+			readingCtx, reading := check.Child(ctx, cfg.Slug, progress.Reading.Title("the project's config again"))
 			provider.Close()
 			provider = nil
-			reloaded, err := i.ResolveTarget(ctx, cfg.Dir)
+			reloaded, err := i.ResolveTarget(readingCtx, cfg.Dir)
 			reading.End(err)
 			if err != nil {
 				return err

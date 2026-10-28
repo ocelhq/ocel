@@ -8,7 +8,9 @@ import (
 
 	"connectrpc.com/connect"
 	"connectrpc.com/validate"
+	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -24,6 +26,7 @@ type transport interface {
 	Cost() (costv1connect.CostServiceClient, error)
 	Facts() *contractv1.ProviderFacts
 	explainLost(err error) error
+	isExportingSpans() bool
 	Close()
 }
 
@@ -35,7 +38,7 @@ type clients struct {
 
 func newClients(httpClient *http.Client, baseURL string, maxMessageBytes int, interceptors ...connect.Interceptor) clients {
 	opts := connect.WithClientOptions(
-		connect.WithInterceptors(append(interceptors, traceParentInterceptor{}, validate.NewInterceptor())...),
+		connect.WithInterceptors(append(interceptors, callSpanInterceptor{}, validate.NewInterceptor())...),
 		connect.WithReadMaxBytes(maxMessageBytes),
 	)
 	return clients{
@@ -61,13 +64,20 @@ func configure(ctx context.Context, client contractv1connect.ProviderServiceClie
 
 type streamCall[Req any] func(contractv1connect.ProviderServiceClient, context.Context, *Req) (*connect.ServerStreamForClient[progressv1.OperationEvent], error)
 
-func stream[Req any](ctx context.Context, t transport, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
+type onCallEvent func(call runtrace.Call, event *progressv1.OperationEvent)
+
+func newTraceCall(t transport, span *trace.SpanContext) runtrace.Call {
+	return runtrace.Call{Span: *span, ExportsSpans: t.isExportingSpans()}
+}
+
+func stream[Req any](ctx context.Context, t transport, rpc string, req *Req, call streamCall[Req], onEvent onCallEvent) (*progressv1.OperationResult, error) {
 	client, err := t.Client()
 	if err != nil {
 		return nil, err
 	}
+	ctx, rpcCall := withCallSlot(ctx)
 	events, callErr := call(client, ctx, req)
-	return driveStream(t, rpc, events, callErr, onEvent)
+	return driveStream(t, rpc, events, callErr, func(event *progressv1.OperationEvent) { onEvent(newTraceCall(t, rpcCall), event) })
 }
 
 func driveStream(t transport, rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
@@ -79,9 +89,7 @@ func driveStream(t transport, rpc string, stream *connect.ServerStreamForClient[
 	refused := false
 	for stream.Receive() {
 		event := stream.Msg()
-		if onEvent != nil {
-			onEvent(event)
-		}
+		onEvent(event)
 		result := event.GetResult()
 		refused = refused || result.GetRefused()
 		if result != nil && !result.GetRefused() {
@@ -118,11 +126,12 @@ func streamError(t transport, rpc string, err error, refused bool) error {
 	return t.explainLost(fmt.Errorf("provider: provider connection lost: %w", err))
 }
 
-func preflight(ctx context.Context, t transport, req *contractv1.PreflightRequest, onProgress func(*progressv1.OperationEvent)) (*contractv1.PreflightResponse, error) {
+func preflight(ctx context.Context, t transport, req *contractv1.PreflightRequest, onProgress onCallEvent) (*contractv1.PreflightResponse, error) {
 	client, err := t.Client()
 	if err != nil {
 		return nil, err
 	}
+	ctx, call := withCallSlot(ctx)
 	stream, err := client.Preflight(ctx, req)
 	if err != nil {
 		return nil, callError(t, "Preflight", err)
@@ -134,7 +143,7 @@ func preflight(ctx context.Context, t transport, req *contractv1.PreflightReques
 		if response := event.GetResponse(); response != nil {
 			return response, nil
 		}
-		onProgress(event.GetProgress())
+		onProgress(newTraceCall(t, call), event.GetProgress())
 	}
 	if err := stream.Err(); err != nil {
 		if connect.IsWireError(err) {

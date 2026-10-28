@@ -12,7 +12,7 @@ func TestAHeartbeatForASpanInNoPhaseNamesTheSpanAlone(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	run.Phase(progressv1.Phase_PHASE_UNSPECIFIED).Child("", progress.Title{Started: "Resolving the app's environment", Ended: "Resolved the app's environment"})
+	run.Phase(progressv1.Phase_PHASE_UNSPECIFIED).Child(t.Context(), "", progress.Title{Started: "Resolving the app's environment", Ended: "Resolved the app's environment"})
 	ticks <- c.now().Add(30 * time.Second)
 
 	want := "INFO  Still running: Resolving the app's environment — 0/1 done, 30s elapsed\n" +

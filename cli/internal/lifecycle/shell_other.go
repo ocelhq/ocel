@@ -3,9 +3,11 @@
 package lifecycle
 
 import (
-	"os/exec"
+	"context"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
-func newShellCommand(line string) *exec.Cmd {
-	return exec.Command("sh", "-c", line)
+func newShellCommand(ctx context.Context, line string) *tracing.Cmd {
+	return tracing.Command(ctx, "sh", "-c", line)
 }

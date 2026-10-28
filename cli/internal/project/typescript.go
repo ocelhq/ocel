@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/workdir"
+	"github.com/ocelhq/ocel/pkg/tracing"
 
 	"github.com/evanw/esbuild/pkg/api"
 
@@ -74,7 +75,7 @@ try {
 		return nil, fmt.Errorf("%s is a TypeScript config, which needs node to read, and node is not on PATH: %w — install node, or write %s or %s instead, which need none", configPath, err, DefaultFileName, YAMLFileName)
 	}
 
-	cmd := exec.Command("node", outfile)
+	cmd := tracing.Command(ctx, "node", outfile)
 	cmd.Env = env.environ()
 	var stdout bytes.Buffer
 	var stderr strings.Builder

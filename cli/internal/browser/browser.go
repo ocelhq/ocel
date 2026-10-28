@@ -1,15 +1,16 @@
 package browser
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/shlex"
+	"github.com/ocelhq/ocel/pkg/tracing"
 	pkgbrowser "github.com/pkg/browser"
 )
 
@@ -19,11 +20,11 @@ const (
 	stillRunningAfter = 2 * time.Second
 )
 
-func OpenURL(url string) error {
-	return open(url, os.Getenv(EnvVar), pkgbrowser.OpenURL)
+func OpenURL(ctx context.Context, url string) error {
+	return open(ctx, url, os.Getenv(EnvVar), pkgbrowser.OpenURL)
 }
 
-func open(url, browsers string, fallback func(url string) error) error {
+func open(ctx context.Context, url, browsers string, fallback func(url string) error) error {
 	var failed []error
 	for _, browser := range filepath.SplitList(browsers) {
 		switch browser = strings.TrimSpace(browser); browser {
@@ -32,7 +33,7 @@ func open(url, browsers string, fallback func(url string) error) error {
 		case "none":
 			return nil
 		}
-		err := run(browser, url)
+		err := run(ctx, browser, url)
 		if err == nil {
 			return nil
 		}
@@ -44,7 +45,7 @@ func open(url, browsers string, fallback func(url string) error) error {
 	return nil
 }
 
-func run(browser, url string) error {
+func run(ctx context.Context, browser, url string) error {
 	words, err := shlex.Split(browser)
 	if err != nil || len(words) == 0 {
 		return fmt.Errorf("$%s names %q, which is no command: %w", EnvVar, browser, err)
@@ -58,7 +59,7 @@ func run(browser, url string) error {
 	if !placed {
 		args = append(args, url)
 	}
-	cmd := exec.Command(words[0], args...)
+	cmd := tracing.Command(ctx, words[0], args...)
 	cmd.Stdout, cmd.Stderr = pkgbrowser.Stdout, pkgbrowser.Stderr
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("$%s names %s: %w", EnvVar, words[0], err)

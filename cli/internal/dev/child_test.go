@@ -151,7 +151,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 
-		if err := leader.Claim(leaderOf(root), leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
+		if err := leader.Claim(context.Background(), leaderOf(root), leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
 			t.Fatalf("leader.Claim: %v", err)
 		}
 

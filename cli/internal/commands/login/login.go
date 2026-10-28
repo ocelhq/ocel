@@ -23,7 +23,7 @@ type Dependencies struct {
 	LoadCredentials   func() (console.Credentials, error)
 	SaveCredentials   func(console.Credentials) (console.CredentialStore, error)
 	DeleteCredentials func() error
-	OpenBrowser       func(url string) error
+	OpenBrowser       func(ctx context.Context, url string) error
 }
 
 func NewCommand(dependencies Dependencies) *cobra.Command {
@@ -82,7 +82,7 @@ func run(ctx context.Context, dependencies Dependencies, force bool, stdin io.Re
 	fmt.Fprintf(prompts, "Code     %s\n", p.Bold(code))
 	fmt.Fprintf(prompts, "Confirm  %s\n\n", p.Link(confirmURL))
 	if dependencies.IsBrowserReachable(stdin) {
-		_ = dependencies.OpenBrowser(confirmURL)
+		_ = dependencies.OpenBrowser(ctx, confirmURL)
 	}
 	fmt.Fprintln(prompts, p.Faint("Waiting for you to confirm the code…"))
 

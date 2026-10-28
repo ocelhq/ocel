@@ -3,6 +3,7 @@ package commands_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
@@ -420,7 +422,7 @@ func TestAnOcelCloudJobThatNeedsInputOpensItsPageOncePerInputAndKeepsWaiting(t *
 	out, err := runJobOnCloud(t, t.Context(), invocation, writeShop(t), commands.CloudJob{
 		Command:     "ocel deploy",
 		Kind:        cloudv1.JobCommand_JOB_COMMAND_DEPLOY,
-		OpenBrowser: func(url string) error { opened = append(opened, url); return nil },
+		OpenBrowser: func(_ context.Context, url string) error { opened = append(opened, url); return nil },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -625,4 +627,95 @@ func TestAnOcelCloudRunDeploysUnderTheActiveOrganizationOrAsksForOne(t *testing.
 			t.Fatal("linked, uploaded or started a job without an organization")
 		}
 	})
+}
+
+type tracedSpan struct {
+	Name         string `json:"name"`
+	SpanID       string `json:"spanId"`
+	ParentSpanID string `json:"parentSpanId"`
+	Attributes   []struct {
+		Key   string `json:"key"`
+		Value struct {
+			StringValue string `json:"stringValue"`
+		} `json:"value"`
+	} `json:"attributes"`
+}
+
+func (s tracedSpan) attribute(key string) string {
+	for _, a := range s.Attributes {
+		if a.Key == key {
+			return a.Value.StringValue
+		}
+	}
+	return ""
+}
+
+func readTracedSpans(t *testing.T, root string) map[string]tracedSpan {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(runtrace.RunsDir(root), "*", runtrace.TraceFileName))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("trace files = %v (err %v), want exactly one", matches, err)
+	}
+	raw, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		ResourceSpans []struct {
+			ScopeSpans []struct {
+				Spans []tracedSpan `json:"spans"`
+			} `json:"scopeSpans"`
+		} `json:"resourceSpans"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]tracedSpan{}
+	for _, resource := range doc.ResourceSpans {
+		for _, scope := range resource.ScopeSpans {
+			for _, s := range scope.Spans {
+				byID[s.SpanID] = s
+			}
+		}
+	}
+	return byID
+}
+
+func TestEachRequestAnOcelCloudRunSendsNestsUnderTheOperationThatSentIt(t *testing.T) {
+	invocation, fake := loggedIn(t)
+	root := writeShop(t)
+	fake.JobReads = []*cloudv1.Job{{Id: clitest.FakeCloudJobID, State: cloudv1.JobState_JOB_STATE_SUCCEEDED}}
+
+	if _, err := runOnCloud(t, invocation, root, "ocel deploy"); err != nil {
+		t.Fatal(err)
+	}
+	spans := readTracedSpans(t, root)
+	sentUnder := map[string]string{}
+	for _, s := range spans {
+		if s.attribute("http.request.method") == "" {
+			continue
+		}
+		url := s.attribute("url.full")
+		parent, ok := spans[s.ParentSpanID]
+		switch {
+		case !ok:
+			t.Errorf("request %s has parent %q, which is not in the trace", url, s.ParentSpanID)
+		case parent.ParentSpanID == "":
+			t.Errorf("request %s nests under the run's root span, want the operation that sent it", url)
+		}
+		for _, path := range []string{"/api/auth/organization/list", "/cloud.v1.UploadService/CommitSource", "/cloud.v1.JobService/StartJob"} {
+			if strings.Contains(url, path) {
+				sentUnder[path] = parent.Name
+			}
+		}
+	}
+	for path, want := range map[string]string{
+		"/api/auth/organization/list":          "Loading your organizations",
+		"/cloud.v1.UploadService/CommitSource": "Committing the source to Ocel Cloud",
+		"/cloud.v1.JobService/StartJob":        "Starting the job on Ocel Cloud",
+	} {
+		if got := sentUnder[path]; got != want {
+			t.Errorf("the request to %s nests under %q, want %q", path, got, want)
+		}
+	}
 }

@@ -203,7 +203,7 @@ func TestAPreviewOnOcelCloudIsTheSameEnvironmentInTheJobAsOnTheMachineThatStarte
 			}
 			started := fake.Started[0]
 			want := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Lifecycle: tc.lifecycle, Identity: tc.identity, Label: tc.label}
-			onLaptop, err := tc.target.environment(laptop, root)
+			onLaptop, err := tc.target.environment(context.Background(), laptop, root)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -225,7 +225,7 @@ func TestAPreviewOnOcelCloudIsTheSameEnvironmentInTheJobAsOnTheMachineThatStarte
 			}
 			builder.BuilderJob = job
 			builder.ReadGitBranch, builder.DiscoverPRNumber = builder.BuilderJob.ReadGitBranch, builder.BuilderJob.DiscoverPRNumber
-			inJob, err := Preview(started.GetPreview().GetName(), started.GetPreview().GetPersistent()).environment(builder, t.TempDir())
+			inJob, err := Preview(started.GetPreview().GetName(), started.GetPreview().GetPersistent()).environment(context.Background(), builder, t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}

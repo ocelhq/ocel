@@ -2,6 +2,7 @@ package runtrace
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,6 +28,8 @@ func (t *Trace) remember(ev *streamv1.RunEvent) {
 		return
 	}
 	parentID, _ := spanID(ev.GetOperation().GetStarted().GetParentSpanId())
+	t.startedMu.Lock()
+	defer t.startedMu.Unlock()
 	phase := strings.ToLower(strings.TrimPrefix(ev.GetOperation().GetPhase().String(), "PHASE_"))
 	name := ev.GetOperation().GetMessage()
 	if name == "" {
@@ -35,13 +38,11 @@ func (t *Trace) remember(ev *streamv1.RunEvent) {
 	if ev.GetOperation().GetPhase() == progressv1.Phase_PHASE_UNSPECIFIED {
 		phase = ""
 	}
-	t.startedMu.Lock()
-	defer t.startedMu.Unlock()
 	t.started[id] = startedSpan{parentID: parentID, name: name, phase: phase}
 }
 
-func (t *Trace) ingestEnded(ev *streamv1.RunEvent) {
-	id, ok := spanID(ev.GetOperation().GetSpanId())
+func (t *Trace) ingestEnded(event *streamv1.RunEvent, providerExportsSpans bool) {
+	id, ok := spanID(event.GetOperation().GetSpanId())
 	if !ok {
 		return
 	}
@@ -50,8 +51,11 @@ func (t *Trace) ingestEnded(ev *streamv1.RunEvent) {
 	delete(t.started, id)
 	t.startedMu.Unlock()
 
-	ended := ev.GetOperation().GetEnded()
-	end := ev.GetOperation().GetTime().AsTime().UTC()
+	ended := event.GetOperation().GetEnded()
+	if providerExportsSpans && recordedByProvider(ended.GetAttributes()) {
+		return
+	}
+	end := event.GetOperation().GetTime().AsTime().UTC()
 	start := end
 	if ns := ended.GetStartTimeUnixNano(); ns > 0 && !time.Unix(0, ns).After(end) {
 		start = time.Unix(0, ns).UTC()
@@ -61,6 +65,13 @@ func (t *Trace) ingestEnded(ev *streamv1.RunEvent) {
 		attrs = append([]attribute.KeyValue{Attribute(progress.AttrKeyPhase, span.phase)}, attrs...)
 	}
 	t.ingestSpan(id, span.parentID, span.name, start, end, ended.GetStatus(), attrs)
+}
+
+func recordedByProvider(attrs []*progressv1.SpanAttribute) bool {
+	return slices.ContainsFunc(attrs, func(a *progressv1.SpanAttribute) bool {
+		key, ok := progressproto.DecodeAttrKey(a.GetKey())
+		return ok && key == progress.AttrKeyRecordedByProvider && a.GetValue() == "true"
+	})
 }
 
 func spanID(raw []byte) (trace.SpanID, bool) {

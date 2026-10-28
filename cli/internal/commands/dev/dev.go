@@ -21,7 +21,7 @@ type Dependencies struct {
 	OpenDocker docker.OpenFunc
 
 	CollectDeclarations func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
-	ReadGitBranch       func(dir string) (string, error)
+	ReadGitBranch       func(ctx context.Context, dir string) (string, error)
 	DiscoverPRNumber    func() string
 }
 

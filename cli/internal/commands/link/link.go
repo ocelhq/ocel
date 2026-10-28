@@ -102,7 +102,7 @@ func runLink(ctx context.Context, dependencies Dependencies, projectDir, project
 	}
 
 	var projects []*consolev1.Project
-	err = lr.wait(progressv1.Phase_PHASE_CHECK, org.Slug, progress.Loading.Title("the projects in "+org.Name), func() (err error) {
+	err = lr.wait(ctx, progressv1.Phase_PHASE_CHECK, org.Slug, progress.Loading.Title("the projects in "+org.Name), func(ctx context.Context) (err error) {
 		projects, err = account.ListProjects(ctx, org)
 		return err
 	})
@@ -137,10 +137,10 @@ type linkRun struct {
 	canAsk  bool
 }
 
-func (c linkRun) wait(phase progressv1.Phase, subject string, title progress.Title, fn func() error) error {
+func (c linkRun) wait(ctx context.Context, phase progressv1.Phase, subject string, title progress.Title, fn func(context.Context) error) error {
 	span := c.run.Phase(phase)
-	child := span.Child(subject, title)
-	err := fn()
+	ctx, child := span.Child(ctx, subject, title)
+	err := fn(ctx)
 	child.End(err)
 	span.End(err)
 	return err
@@ -265,7 +265,7 @@ func createProject(ctx context.Context, lr linkRun, account commands.ConsoleAcco
 	}
 
 	var created *consolev1.Project
-	err := lr.wait(progressv1.Phase_PHASE_PROVISION, projectSlug, progress.Creating.Title("the project in "+org.Name), func() error {
+	err := lr.wait(ctx, progressv1.Phase_PHASE_PROVISION, projectSlug, progress.Creating.Title("the project in "+org.Name), func(ctx context.Context) error {
 		p, createErr := account.Client.CreateProject(ctx, account.Session, name, projectSlug)
 		created = p
 		return createErr
@@ -303,7 +303,7 @@ func promptProjectName(ctx context.Context, lr linkRun, projectDir, lead string)
 
 func pickOrganization(ctx context.Context, lr linkRun, account commands.ConsoleAccount, opts options) (*console.Organization, error) {
 	var orgs []console.Organization
-	err := lr.wait(progressv1.Phase_PHASE_CHECK, consoleHost(account.URL), progress.Loading.Title("your organizations"), func() (err error) {
+	err := lr.wait(ctx, progressv1.Phase_PHASE_CHECK, consoleHost(account.URL), progress.Loading.Title("your organizations"), func(ctx context.Context) (err error) {
 		orgs, err = account.ListOrganizations(ctx)
 		return err
 	})

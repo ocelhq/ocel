@@ -43,7 +43,7 @@ func runEnvRef(ctx context.Context, dependencies Dependencies, cwd, key string, 
 		}
 		var resp *variablestorev1.SetReferenceResponse
 		title := progress.Updating.Title(describeValues([]string{key}, opts) + " to read " + describeCoordinate(target))
-		err = runInSpan(run, progressv1.Phase_PHASE_PROVISION, cfg, title, func() (err error) {
+		err = runInSpan(ctx, run, progressv1.Phase_PHASE_PROVISION, cfg, title, func(ctx context.Context) (err error) {
 			resp, err = variableStore.SetReference(ctx, &variablestorev1.SetReferenceRequest{
 				Tier:       opts.tier(),
 				Coordinate: wireCoordinate(cfg.Slug, key, opts),
@@ -70,7 +70,7 @@ func runEnvRefs(ctx context.Context, dependencies Dependencies, cwd, key string,
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 		}
 		var resp *variablestorev1.ListReferencesResponse
-		err = runInSpan(run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title("the references to "+describeValues([]string{key}, opts)), func() (err error) {
+		err = runInSpan(ctx, run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title("the references to "+describeValues([]string{key}, opts)), func(ctx context.Context) (err error) {
 			resp, err = variableStore.ListReferences(ctx, req)
 			return err
 		})

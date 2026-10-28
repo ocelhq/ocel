@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -21,16 +20,18 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 func spawnFake(t *testing.T, mode string, spec LaunchSpec) (*Process, string) {
 	t.Helper()
 
 	spec = fakeSpec(t, mode, spec)
-	r, err := Spawn(spec)
+	r, err := Spawn(context.Background(), spec)
 	if err != nil {
 		t.Fatalf("Spawn() error = %v", err)
 	}
@@ -71,7 +72,7 @@ func TestSpawn(t *testing.T) {
 	t.Run("a missing binary fails with a distinct error, not a readiness one", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := Spawn(LaunchSpec{BinaryPath: filepath.Join(t.TempDir(), "does-not-exist")})
+		_, err := Spawn(context.Background(), LaunchSpec{BinaryPath: filepath.Join(t.TempDir(), "does-not-exist")})
 		if err == nil {
 			t.Fatal("Spawn() error = nil, want an error for a missing binary")
 		}
@@ -402,7 +403,7 @@ func TestDeploy(t *testing.T) {
 
 		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{
 			Manifest: &contractv1.Manifest{Slug: "acme"},
-		}, contractv1connect.ProviderServiceClient.Deploy, nil)
+		}, contractv1connect.ProviderServiceClient.Deploy, ignoreEvent)
 		if err == nil {
 			t.Fatal("Deploy() error = nil, want the crash reported")
 		}
@@ -473,7 +474,7 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, ignoreEvent)
 
 		var deployErr *OperationFailedError
 		if !errors.As(err, &deployErr) {
@@ -549,7 +550,7 @@ func TestDeploy(t *testing.T) {
 		ctx := context.Background()
 		r, _ := spawnFake(t, "never-ready", LaunchSpec{ReadyTimeout: 50 * time.Millisecond})
 
-		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, nil)
+		err := streamed(ctx, r, "Deploy", &contractv1.DeployRequest{Manifest: &contractv1.Manifest{Slug: "acme"}}, contractv1connect.ProviderServiceClient.Deploy, ignoreEvent)
 		if !errors.Is(err, ErrClientUnavailable) {
 			t.Fatalf("Deploy() error = %v, want ErrClientUnavailable", err)
 		}
@@ -609,7 +610,7 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("Ready() error = %v, want nil", err)
 		}
 
-		err := streamed(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, nil)
+		err := streamed(ctx, r, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap, ignoreEvent)
 
 		var failErr *OperationFailedError
 		if !errors.As(err, &failErr) {
@@ -690,7 +691,7 @@ func TestClose(t *testing.T) {
 func TestTeardownReapIsBounded(t *testing.T) {
 	t.Parallel()
 
-	cmd := exec.Command(os.Args[0])
+	cmd := tracing.Command(context.Background(), os.Args[0])
 	cmd.Env = append(os.Environ(), fakeProviderEnvVar+"=1", fakeProviderModeEnvVar+"=never-ready")
 	child, err := childprocess.Start(context.Background(), cmd, childprocess.Options{Grace: 50 * time.Millisecond, Reap: 100 * time.Millisecond})
 	if err != nil {
@@ -748,9 +749,11 @@ func init() {
 }
 
 func streamed[Req any](ctx context.Context, r *Process, rpc string, req *Req, call streamCall[Req], onEvent func(*progressv1.OperationEvent)) error {
-	_, err := stream(ctx, r, rpc, req, call, onEvent)
+	_, err := stream(ctx, r, rpc, req, call, func(_ runtrace.Call, event *progressv1.OperationEvent) { onEvent(event) })
 	return err
 }
+
+func ignoreEvent(*progressv1.OperationEvent) {}
 
 func TestAProviderThatExitsBeforeItIsReadyReportsProviderUnavailable(t *testing.T) {
 	t.Parallel()
@@ -825,7 +828,7 @@ func TestAProviderBinaryThatCannotStartReportsProviderUnavailable(t *testing.T) 
 	t.Parallel()
 
 	missing := filepath.Join(t.TempDir(), "ocel-provider-absent")
-	_, err := Spawn(LaunchSpec{BinaryPath: missing})
+	_, err := Spawn(context.Background(), LaunchSpec{BinaryPath: missing})
 
 	if got := clierror.NewRunError(fmt.Errorf("spawn provider: %w", err)); got.GetCode() != "provider.unavailable" {
 		t.Fatalf("run error = %s, want provider.unavailable", protojson.Format(got))

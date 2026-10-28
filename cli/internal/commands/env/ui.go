@@ -79,7 +79,7 @@ func serveAndOpenEditor(
 	if !dependencies.IsBrowserReachable(stdin) {
 		return editor, nil
 	}
-	if err := dependencies.OpenBrowser(editor.URL); err != nil {
+	if err := dependencies.OpenBrowser(ctx, editor.URL); err != nil {
 		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
 	}
 	return editor, nil

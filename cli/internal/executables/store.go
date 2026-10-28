@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const OverrideEnvVar = "OCEL_PROVIDERS_DIR"
@@ -75,7 +77,7 @@ func New(version string) (*Store, error) {
 		Platform: Platform{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH},
 		BaseURL:  DefaultBaseURL,
 		Token:    os.Getenv(TokenEnvVar),
-		HTTP:     &http.Client{Timeout: 10 * time.Minute},
+		HTTP:     tracing.NewClient(10 * time.Minute),
 		Sleep:    time.Sleep,
 		Verify:   VerifyChecksums,
 	}, nil

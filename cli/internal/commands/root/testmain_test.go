@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -45,6 +46,7 @@ func TestMain(m *testing.M) {
 	done := clitest.IsolateConfigHome()
 	os.Unsetenv("OCEL_JSON")
 	os.Unsetenv("OCEL_DEBUG")
+	os.Unsetenv(tracing.ModeEnvVar)
 	os.Unsetenv("OCEL_TELEMETRY")
 	os.Unsetenv("DO_NOT_TRACK")
 	clitest.UnsetColorEnv()

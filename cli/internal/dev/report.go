@@ -1,6 +1,7 @@
 package dev
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 func reportUnreadableLines(span *run.Span, values valueLayers) {
@@ -42,7 +44,7 @@ func (v valueLayers) advice(watched bool) string {
 	return fmt.Sprintf("%s is read once, at startup; editing it takes effect on the next `ocel run`.", strings.Join(files, " or "))
 }
 
-func reportValues(span *run.Span, dir string, values valueLayers, watched bool) {
+func reportValues(ctx context.Context, span *run.Span, dir string, values valueLayers, watched bool) {
 	reported := false
 	for _, layer := range values {
 		if len(layer.values) == 0 {
@@ -66,7 +68,7 @@ func reportValues(span *run.Span, dir string, values valueLayers, watched bool) 
 		if !layer.file || len(layer.values) == 0 {
 			continue
 		}
-		switch ignored, err := readGitIgnored(dir, layer.from); {
+		switch ignored, err := readGitIgnored(run.ContextWithSpan(ctx, span), dir, layer.from); {
 		case err != nil:
 			span.Warn(fmt.Sprintf("ocel cannot tell whether git ignores %s (%v). Keep it out of version control — it contains values nothing else may see.", layer.from, err))
 		case !ignored:
@@ -75,8 +77,8 @@ func reportValues(span *run.Span, dir string, values valueLayers, watched bool) 
 	}
 }
 
-func readGitIgnored(dir, name string) (bool, error) {
-	err := exec.Command("git", "-C", dir, "check-ignore", "--quiet", "--", name).Run()
+func readGitIgnored(ctx context.Context, dir, name string) (bool, error) {
+	err := tracing.Command(ctx, "git", "-C", dir, "check-ignore", "--quiet", "--", name).Run()
 	var exit *exec.ExitError
 	switch {
 	case err == nil:

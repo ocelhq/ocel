@@ -1,17 +1,19 @@
 package previewid
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const detachedHead = "HEAD"
 
-func ReadGitBranch(dir string) (string, error) {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+func ReadGitBranch(ctx context.Context, dir string) (string, error) {
+	out, err := tracing.Command(ctx, "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
 		return "", fmt.Errorf("determine current git branch: %w", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -28,9 +30,10 @@ func TestEverySpanARunOpensEndsExactlyOnceBeforeItsResultWhenTheRunFails(t *test
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	check.Child("fake", progress.Checking.Title("credentials")).End(nil)
+	_, credentials := check.Child(t.Context(), "fake", progress.Checking.Title("credentials"))
+	credentials.End(nil)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	deploy.Child("web", progress.Deploying.Title("web"))
+	deploy.Child(t.Context(), "web", progress.Deploying.Title("web"))
 	check.End(nil)
 
 	err := errors.New("the upload was refused")
@@ -71,7 +74,8 @@ func TestASpanOpenedOnAnEndedSpanStillEndsOnceWhenTheRunEnds(t *testing.T) {
 	run, _ := begin(t, sink)
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
 	check.End(nil)
-	check.Child("fake", progress.Checking.Title("credentials")).Say("still here")
+	_, credentials := check.Child(t.Context(), "fake", progress.Checking.Title("credentials"))
+	credentials.Say("still here")
 
 	var err error
 	run.End(&err)
@@ -209,13 +213,13 @@ func TestAnInterruptedRunWarnsOfPartlyCreatedResourcesOnlyOnceAPhaseThatChangesT
 			run.Phase(progressv1.Phase_PHASE_BUILD).Hold(&streamv1.WaitingEvent{})
 		}},
 		{name: "planning", work: func(run *run.Run) {
-			run.Phase(progressv1.Phase_PHASE_PLAN).Child("shop", progress.Planning.Title("changes"))
+			run.Phase(progressv1.Phase_PHASE_PLAN).Child(context.Background(), "shop", progress.Planning.Title("changes"))
 		}},
 		{name: "a phase the command opened to promote", detail: partly, work: func(run *run.Run) {
-			run.Phase(progressv1.Phase_PHASE_PROMOTE).Child("shop", progress.Title{Started: "Promoting d-1", Ended: "Promoting d-1"})
+			run.Phase(progressv1.Phase_PHASE_PROMOTE).Child(context.Background(), "shop", progress.Title{Started: "Promoting d-1", Ended: "Promoting d-1"})
 		}},
 		{name: "a phase the provider reported destroying in", detail: partly, work: func(run *run.Run) {
-			run.Phase(progressv1.Phase_PHASE_CHECK).Forward(&progressv1.OperationEvent{
+			run.Phase(progressv1.Phase_PHASE_CHECK).Forward(runtrace.Call{}, &progressv1.OperationEvent{
 				Phase:  progressv1.Phase_PHASE_DESTROY,
 				SpanId: []byte("span-env"),
 				Body:   &progressv1.OperationEvent_Started{Started: &progressv1.Started{}},
@@ -266,7 +270,7 @@ func TestASucceededRunsSummaryCarriesItsHeadlineAndTheURLNotesAndPropagationItsP
 	sink := &recording{}
 	run, _ := begin(t, sink)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	deploy.Forward(&progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_DEPLOY, Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
+	deploy.Forward(runtrace.Call{}, &progressv1.OperationEvent{Phase: progressv1.Phase_PHASE_DEPLOY, Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{
 		Success:     true,
 		UrlNotes:    []string{"web: https://web.example.com"},
 		Propagation: &progressv1.Propagation{TypicalMs: 3000, Published: true},
@@ -303,7 +307,7 @@ func TestAForwardedProviderEventReachesTheSinksAsARunEventWithItsEnvelope(t *tes
 	run, _ := begin(t, sink)
 	at := time.Date(2026, 9, 27, 12, 0, 5, 0, time.UTC)
 
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(runtrace.Call{}, &progressv1.OperationEvent{
 		Time:    timestamppb.New(at),
 		Level:   progressv1.Level_LEVEL_WARN,
 		Phase:   progressv1.Phase_PHASE_PROVISION,
@@ -327,7 +331,7 @@ func TestAnEventWithNoTimeOrLevelOfItsOwnLandsStampedWithTheMomentItArrivedAtInf
 	run, c := begin(t, sink)
 	c.advance(3 * time.Second)
 
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{Message: "no functions to deploy; deploying infrastructure only"})
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(runtrace.Call{}, &progressv1.OperationEvent{Message: "no functions to deploy; deploying infrastructure only"})
 
 	ev := sink.received()[1]
 	if !ev.GetOperation().GetTime().AsTime().Equal(c.read()) || ev.GetOperation().GetLevel() != progressv1.Level_LEVEL_INFO {
@@ -341,9 +345,9 @@ func TestAProviderLineRewrittenWithCarriageReturnsReachesEverySinkAsTheLastThing
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 
 	for _, message := range []string{"uploading 10%\ruploading 60%\ruploaded", "carriage returned\r", "first of two\r\nsecond of two"} {
-		deploy.Forward(&progressv1.OperationEvent{Message: message, Body: &progressv1.OperationEvent_Output{Output: &progressv1.Output{}}})
+		deploy.Forward(runtrace.Call{}, &progressv1.OperationEvent{Message: message, Body: &progressv1.OperationEvent_Output{Output: &progressv1.Output{}}})
 	}
-	deploy.Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Error: "retrying 1\rgave up"}}})
+	deploy.Forward(runtrace.Call{}, &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: &progressv1.OperationResult{Error: "retrying 1\rgave up"}}})
 
 	got := sink.received()[1:]
 	want := []string{"uploaded", "carriage returned", "first of two\nsecond of two"}
@@ -362,7 +366,7 @@ func TestAForwardedSpanThatEndsBeforeItStartedEndsWhenItArrives(t *testing.T) {
 	run, c := begin(t, sink)
 	started := c.read().Add(-time.Minute)
 
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(runtrace.Call{}, &progressv1.OperationEvent{
 		Time:   timestamppb.New(started.Add(-time.Minute)),
 		SpanId: []byte("span-web"),
 		Body:   &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{StartTimeUnixNano: started.UnixNano()}},
@@ -377,7 +381,7 @@ func TestTheAppsAProvidersOutcomeReportsAreOnTheRunsResult(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
 
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(runtrace.Call{}, &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{
 		Result: &progressv1.OperationResult{Apps: []*progressv1.AppResult{{App: "web"}}},
 	}})
 	var err error
@@ -392,23 +396,38 @@ func TestTheAppsAProvidersOutcomeReportsAreOnTheRunsResult(t *testing.T) {
 	}
 }
 
-func TestARunInAProjectTracesItselfAndPointsItsResultAtItsLog(t *testing.T) {
+type messageLines struct{ w io.Writer }
+
+func (m messageLines) Receive(event *streamv1.RunEvent) {
+	if message := event.GetOperation().GetMessage(); message != "" {
+		_, _ = fmt.Fprintln(m.w, message)
+	}
+}
+
+func (messageLines) Close() error { return nil }
+
+func TestARunInAProjectRendersItsLogTracesItselfAndPointsItsResultAtItsLog(t *testing.T) {
 	sink := &recording{}
 	bus := run.NewBus(time.Now)
 	bus.Attach(sink)
+	bus.LogRunsWith(func(w io.Writer) run.Sink { return messageLines{w} })
 	dir := t.TempDir()
 
-	_, run, err := bus.Begin(context.Background(), "ocel deploy", dir)
+	_, running, err := bus.Begin(context.Background(), "ocel deploy", dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	run.End(&err)
+	running.Phase(progressv1.Phase_PHASE_BUILD).Say("Building project")
+	running.End(&err)
 
-	logPath := sink.received()[0].GetSummary().GetLogPath()
-	if logPath != runFile(t, dir, ".ndjson") {
-		t.Fatalf("log path = %q, want the trace's log under the project", logPath)
+	logPath := sink.received()[len(sink.received())-1].GetSummary().GetLogPath()
+	if logPath != runFile(t, dir, runtrace.LogFileName) {
+		t.Fatalf("log path = %q, want the run's log under the project", logPath)
 	}
-	spans, readErr := os.ReadFile(strings.TrimSuffix(logPath, ".ndjson") + ".otlp.json")
+	if log, readErr := os.ReadFile(logPath); readErr != nil || !strings.Contains(string(log), "Building project") {
+		t.Errorf("the run's log = %q (%v), want each line the run rendered", log, readErr)
+	}
+	spans, readErr := os.ReadFile(runFile(t, dir, runtrace.TraceFileName))
 	if readErr != nil || !strings.Contains(string(spans), "ocel deploy") {
 		t.Fatalf("trace file = %q (%v), want the run's root span", spans, readErr)
 	}
@@ -426,9 +445,9 @@ func TestARunInAProjectNamesItsTraceIDAndItsStartTime(t *testing.T) {
 	}
 	defer traced.End(&err)
 
-	logName := strings.TrimSuffix(filepath.Base(runFile(t, dir, ".ndjson")), ".ndjson")
-	if traced.TraceID() != logName {
-		t.Errorf("TraceID() = %q, want %q: the id the trace's files are named by", traced.TraceID(), logName)
+	runDir := filepath.Base(filepath.Dir(runFile(t, dir, runtrace.EventsFileName)))
+	if len(traced.TraceID()) != 32 || !strings.HasSuffix(runDir, "-"+traced.TraceID()[:8]) {
+		t.Errorf("TraceID() = %q, want the trace ID whose first 8 digits end the run's directory %q", traced.TraceID(), runDir)
 	}
 	if !traced.StartedAt().Equal(started) {
 		t.Errorf("StartedAt() = %v, want %v", traced.StartedAt(), started)
@@ -450,7 +469,7 @@ func TestARunInAProjectLogsEveryEventDebugIncludedUpToItsResultAndNothingAfter(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	logPath := runFile(t, dir, ".ndjson")
+	logPath := runFile(t, dir, runtrace.EventsFileName)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 	build.Debug("engine chatter")
 	build.End(nil)

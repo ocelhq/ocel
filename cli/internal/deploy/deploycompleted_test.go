@@ -441,7 +441,8 @@ func TestADeployCompletionCountsTheResourceActionsTheRunApplied(t *testing.T) {
 		if action != "" {
 			attrs = append(attrs, progress.Attr{Key: progress.AttrKeyResourceAction, Value: action})
 		}
-		provision.Trace("subject", "resource operation", attrs...).End(nil)
+		_, operation := provision.Trace(t.Context(), "subject", "resource operation", attrs...)
+		operation.End(nil)
 	}
 	provision.End(nil)
 	var runErr error
@@ -464,7 +465,7 @@ func TestADeployCompletionTimesEachPhaseFromItsFirstStartToItsLastEnd(t *testing
 	}
 	build := running.Phase(progressv1.Phase_PHASE_BUILD)
 	now = now.Add(2 * time.Second)
-	child := build.Child("api", progress.Title{})
+	_, child := build.Child(t.Context(), "api", progress.Title{})
 	now = now.Add(5 * time.Second)
 	child.End(nil)
 	now = now.Add(time.Second)

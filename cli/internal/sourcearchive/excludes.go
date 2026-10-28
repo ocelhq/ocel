@@ -2,6 +2,7 @@ package sourcearchive
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -10,12 +11,13 @@ import (
 	"slices"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const gitConfigUnset = 1
 
-func readExcludes(root string) ([]gitignore.Pattern, error) {
-	globalFile, err := globalExcludesFile(root)
+func readExcludes(ctx context.Context, root string) ([]gitignore.Pattern, error) {
+	globalFile, err := globalExcludesFile(ctx, root)
 	if err != nil {
 		return nil, err
 	}
@@ -32,8 +34,8 @@ func readExcludes(root string) ([]gitignore.Pattern, error) {
 	return slices.Concat(credentialPatterns, global, local), nil
 }
 
-func globalExcludesFile(root string) (string, error) {
-	read, err := exec.Command("git", "-C", root, "config", "--path", "--get", "core.excludesFile").Output()
+func globalExcludesFile(ctx context.Context, root string) (string, error) {
+	read, err := tracing.Command(ctx, "git", "-C", root, "config", "--path", "--get", "core.excludesFile").Output()
 	var exit *exec.ExitError
 	switch {
 	case err == nil:

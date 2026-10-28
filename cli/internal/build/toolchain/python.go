@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/pythonserver"
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -140,7 +140,7 @@ func (c Compilation) installDependencies(ctx context.Context, platform string) e
 	if err != nil || deps.requirements == "" {
 		return err
 	}
-	cmd := exec.Command(discovery.PythonInterpreter(c.Source), pipArgs(c.FunctionDir, deps.requirements, platform)...)
+	cmd := tracing.Command(ctx, discovery.PythonInterpreter(c.Source), pipArgs(c.FunctionDir, deps.requirements, platform)...)
 	cmd.Dir = c.Source
 	var said bytes.Buffer
 	cmd.Stdout = &said

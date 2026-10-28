@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const pythonOnPath = "python3"
@@ -22,7 +22,7 @@ var pythonProjectFiles = []string{"pyproject.toml", "requirements.txt"}
 
 var pythonInterpreters = []string{".venv/bin/python", "venv/bin/python"}
 
-func pythonCommands(ctx context.Context, configDir string, roots []Root, server Server) ([]*exec.Cmd, error) {
+func pythonCommands(ctx context.Context, configDir string, roots []Root, server Server) ([]*tracing.Cmd, error) {
 	var runRoots []string
 	imports := map[string][]string{}
 	for _, root := range roots {
@@ -40,7 +40,7 @@ func pythonCommands(ctx context.Context, configDir string, roots []Root, server 
 		imports[runRoot] = append(imports[runRoot], pkg)
 	}
 
-	commands := make([]*exec.Cmd, 0, len(runRoots))
+	commands := make([]*tracing.Cmd, 0, len(runRoots))
 	for _, runRoot := range runRoots {
 		var source strings.Builder
 		fmt.Fprintf(&source, "import sys\nfrom importlib import import_module\n\nsys.path.insert(0, %s)\n", strconv.Quote(runRoot))
@@ -52,9 +52,9 @@ func pythonCommands(ctx context.Context, configDir string, roots []Root, server 
 			return nil, err
 		}
 
-		cmd := exec.Command(PythonInterpreter(runRoot), entry)
+		cmd := tracing.Command(ctx, PythonInterpreter(runRoot), entry)
 		cmd.Dir = runRoot
-		cmd.Env = append(append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1"), server.Env()...)
+		cmd.Env = slices.Concat(os.Environ(), []string{"PYTHONDONTWRITEBYTECODE=1"}, server.Env())
 		commands = append(commands, cmd)
 	}
 	return commands, nil

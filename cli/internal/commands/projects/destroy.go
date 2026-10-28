@@ -238,7 +238,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, resolve
 		if _, err := providerprocess.Stream(ctx, removal.provider, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {
 			return destroyed, err
 		}
-		destroyed = append(destroyed, deployreport.NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED, &environmentv1.Environment{Tier: removal.tier}, running.TraceID(), time.Now(), cfg.Dir, os.Getenv))
+		destroyed = append(destroyed, deployreport.NewEnvironmentEvent(ctx, consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED, &environmentv1.Environment{Tier: removal.tier}, running.TraceID(), time.Now(), cfg.Dir, os.Getenv))
 	}
 	running.Succeed(fmt.Sprintf("Destroyed project %s", slug))
 	return destroyed, nil
@@ -254,7 +254,7 @@ func readRemovalTarget(ctx context.Context, invocation commands.Invocation, chec
 	}
 	defer provider.Close()
 
-	span := check.Child(slug, progress.Reading.Title("what "+slug+" is deployed in"))
+	ctx, span := check.Child(ctx, slug, progress.Reading.Title("what "+slug+" is deployed in"))
 	var recorded *contractv1.GetProjectResponse
 	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		recorded, err = client.GetProject(ctx, &contractv1.GetProjectRequest{Slug: slug})
@@ -300,7 +300,7 @@ func asRecorded(cfg *project.Project, target removalTarget) *project.Project {
 }
 
 func planRemoval(ctx context.Context, planning *run.Span, target removalTarget, tier environmentv1.Tier, provider *providerprocess.Provider) (*planv1.ChangePlan, error) {
-	span := planning.Child(target.slug, progress.Enumerating.Title(fmt.Sprintf("what %s has in %s to destroy", target.slug, placeOf(tier))))
+	ctx, span := planning.Child(ctx, target.slug, progress.Enumerating.Title(fmt.Sprintf("what %s has in %s to destroy", target.slug, placeOf(tier))))
 	var plan *planv1.ChangePlan
 	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		plan, err = client.PlanRemoveProject(ctx, &contractv1.ProjectRequest{

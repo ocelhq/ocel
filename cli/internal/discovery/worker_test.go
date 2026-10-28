@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -24,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const greetEnvelope = `{"v":1,"topic":"greet","consumer":"greet","execution":"01JZ8X6Q3V5W7Y9A1C3E5G7J9K-greet",` +
@@ -50,7 +50,7 @@ func freeLoopbackPort(t *testing.T) int {
 	return listener.Addr().(*net.TCPAddr).Port
 }
 
-func startWorker(t *testing.T, cmd *exec.Cmd, worker string) string {
+func startWorker(t *testing.T, cmd *tracing.Cmd, worker string) string {
 	t.Helper()
 	port := freeLoopbackPort(t)
 	cmd.Env = append(cmd.Env, processenv.WorkerEnvVar+"="+worker, "PORT="+strconv.Itoa(port))
@@ -230,7 +230,7 @@ func TestTheNodeWorkerBundleServesFromADirectoryWithNoNodeModulesBesideIt(t *tes
 	if err := BundleNodeWorker(configDir, roots, entry); err != nil {
 		t.Fatalf("BundleNodeWorker: %v", err)
 	}
-	cmd := exec.Command("node", entry)
+	cmd := tracing.Command(context.Background(), "node", entry)
 	cmd.Dir = image
 	cmd.Env = os.Environ()
 	url := startWorker(t, cmd, "worker")
@@ -351,7 +351,7 @@ func TestTheRenderedPythonWorkerEntryImportsFromTheDirectoryItRunsIn(t *testing.
 	if err := os.WriteFile(entryFile, []byte(entry), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("python3", entryFile)
+	cmd := tracing.Command(context.Background(), "python3", entryFile)
 	cmd.Dir = artifact
 	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
 

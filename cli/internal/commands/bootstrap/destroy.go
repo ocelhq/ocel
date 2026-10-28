@@ -52,13 +52,13 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 		return err
 	}
 
-	ctx, run, err := invocation.Events.Begin(ctx, destroyCommand(tier), cfg.Dir)
+	ctx, running, err := invocation.Events.Begin(ctx, destroyCommand(tier), cfg.Dir)
 	if err != nil {
 		return err
 	}
-	defer run.End(&err)
+	defer running.End(&err)
 
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	check := running.Phase(progressv1.Phase_PHASE_CHECK)
 	if notice != "" {
 		check.Warn(notice)
 	}
@@ -69,11 +69,11 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 	}
 	defer provider.Close()
 
-	planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-	span := planning.Child(name, progress.Enumerating.Title(fmt.Sprintf("what removing the %s bootstrap would delete", name)))
+	planning := running.Phase(progressv1.Phase_PHASE_PLAN)
+	enumeratingCtx, span := planning.Child(ctx, name, progress.Enumerating.Title(fmt.Sprintf("what removing the %s bootstrap would delete", name)))
 	var plan *planv1.ChangePlan
-	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		plan, err = client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
+	err = provider.Call(enumeratingCtx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		plan, err = client.PlanRemoveBootstrap(enumeratingCtx, &contractv1.BootstrapScope{
 			Tier: tier,
 			Edge: cfg.EdgeSelection(),
 		})
@@ -84,14 +84,14 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 		return err
 	}
 	if len(plan.GetGroups()) == 0 {
-		run.Succeed(fmt.Sprintf("Nothing to destroy: the %s environment is not bootstrapped", name))
+		running.Succeed(fmt.Sprintf("Nothing to destroy: the %s environment is not bootstrapped", name))
 		return nil
 	}
 	consented := planning.Plan(fmt.Sprintf("This will permanently remove the %s bootstrap", name), plan,
 		&planv1.Note{Text: "Every app already deployed from it keeps running and nothing can describe, update or remove it again. This cannot be undone."})
 	if opts.Dry {
 		planning.Say("Run without --dry to destroy.")
-		run.Succeed(fmt.Sprintf("Planned the removal of the %s bootstrap", name))
+		running.Succeed(fmt.Sprintf("Planned the removal of the %s bootstrap", name))
 		return nil
 	}
 	granted, err := policy.ConfirmPlanByName(ctx, planning, consented, "environment name", plan.GetSubject())
@@ -102,7 +102,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 		return err
 	}
 	if !granted {
-		run.Succeed(fmt.Sprintf("Nothing removed: the %s bootstrap stays", name))
+		running.Succeed(fmt.Sprintf("Nothing removed: the %s bootstrap stays", name))
 		return nil
 	}
 
@@ -124,7 +124,7 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, cfg *projec
 	if _, err := providerprocess.Stream(ctx, provider, "RemoveBootstrap", req, contractv1connect.ProviderServiceClient.RemoveBootstrap); err != nil {
 		return err
 	}
-	run.Succeed(fmt.Sprintf("Removed the %s bootstrap", name))
+	running.Succeed(fmt.Sprintf("Removed the %s bootstrap", name))
 	return nil
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
@@ -41,7 +42,7 @@ import (
 )
 
 func recordBrowser(dependencies *Dependencies, opened *[]string, mu *sync.Mutex) {
-	dependencies.OpenBrowser = func(url string) error {
+	dependencies.OpenBrowser = func(_ context.Context, url string) error {
 		mu.Lock()
 		defer mu.Unlock()
 		*opened = append(*opened, url)
@@ -838,7 +839,7 @@ func parseNano(t *testing.T, s string) int64 {
 
 func readTraceSpans(t *testing.T, root string) []traceSpan {
 	t.Helper()
-	matches, err := filepath.Glob(filepath.Join(root, buildoutput.StateDir, "runs", "*.otlp.json"))
+	matches, err := filepath.Glob(filepath.Join(runtrace.RunsDir(root), "*", runtrace.TraceFileName))
 	if err != nil {
 		t.Fatalf("glob trace files: %v", err)
 	}

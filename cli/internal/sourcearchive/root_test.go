@@ -1,6 +1,7 @@
 package sourcearchive_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -107,7 +108,7 @@ func TestPackUploadsFromTheRootAboveTheProject(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(base, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	archive, err := sourcearchive.Pack(filepath.Join(base, "apps", "web"))
+	archive, err := sourcearchive.Pack(context.Background(), filepath.Join(base, "apps", "web"))
 	if err != nil {
 		t.Fatal(err)
 	}

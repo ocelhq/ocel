@@ -51,7 +51,7 @@ func leaderKey(cfg *project.Project) string {
 
 func Run(ctx context.Context, opts Options, reset bool) error {
 	for range 3 {
-		running, found, err := leader.Find(leaderKey(opts.Project))
+		running, found, err := leader.Find(ctx, leaderKey(opts.Project))
 		if err != nil {
 			return fmt.Errorf("look for a running ocel dev: %w", err)
 		}
@@ -71,7 +71,7 @@ func Run(ctx context.Context, opts Options, reset bool) error {
 }
 
 func RunOnce(ctx context.Context, opts Options, cwd string) error {
-	running, found, err := leader.Find(leaderKey(opts.Project))
+	running, found, err := leader.Find(ctx, leaderKey(opts.Project))
 	if err != nil {
 		return fmt.Errorf("look for a running dev server: %w", err)
 	}
@@ -107,9 +107,9 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 			tally.end(err)
 		}
 	}()
-	startup := opts.session().Child("", environmentTitle)
+	startupCtx, startup := opts.session().Child(ctx, "", environmentTitle)
 	defer func() { startup.End(err) }()
-	source, err := readValueSource(ctx, cfg)
+	source, err := readValueSource(startupCtx, cfg)
 	if err != nil {
 		return err
 	}
@@ -117,15 +117,15 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	if err != nil {
 		return err
 	}
-	reportValues(startup, cfg.Dir, values, true)
+	reportValues(startupCtx, startup, cfg.Dir, values, true)
 
 	if reset {
-		if err := devresources.Reset(ctx, opts.OpenDocker, stateDir(cfg), resourcesName(cfg)); err != nil {
+		if err := devresources.Reset(startupCtx, opts.OpenDocker, stateDir(cfg), resourcesName(cfg)); err != nil {
 			return err
 		}
 	}
 
-	host, err := startHost(ctx, opts, source)
+	host, err := startHost(startupCtx, opts, source)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	background, stopBackground := context.WithCancel(ctx)
 	defer stopBackground()
 
-	if err := leader.Claim(leaderKey(cfg), leader.Leader{Address: host.address, Token: server.AppToken()}); err != nil {
+	if err := leader.Claim(startupCtx, leaderKey(cfg), leader.Leader{Address: host.address, Token: server.AppToken()}); err != nil {
 		return err
 	}
 	claimed = true
@@ -288,9 +288,9 @@ func follow(ctx context.Context, opts Options, running leader.Leader) (err error
 }
 
 func subscribe(ctx context.Context, opts Options, running leader.Leader) (_ *leader.EnvStream, _ map[string]string, err error) {
-	connecting := opts.session().Child("", leaderTitle)
+	connectingCtx, connecting := opts.session().Child(ctx, "", leaderTitle)
 	defer func() { connecting.End(err) }()
-	stream, err := leader.Subscribe(ctx, running)
+	stream, err := leader.Subscribe(connectingCtx, running)
 	if err != nil {
 		return nil, nil, fmt.Errorf("connect to leader: %w", err)
 	}
@@ -307,8 +307,8 @@ func subscribe(ctx context.Context, opts Options, running leader.Leader) (_ *lea
 
 func runStandalone(ctx context.Context, opts Options, cwd string) error {
 	cfg := opts.Project
-	startup := opts.session().Child("", environmentTitle)
-	source, err := readValueSource(ctx, cfg)
+	startupCtx, startup := opts.session().Child(ctx, "", environmentTitle)
+	source, err := readValueSource(startupCtx, cfg)
 	if err != nil {
 		return err
 	}
@@ -317,16 +317,16 @@ func runStandalone(ctx context.Context, opts Options, cwd string) error {
 		return err
 	}
 	reportUnreadableLines(startup, values)
-	reportValues(startup, cfg.Dir, values, false)
+	reportValues(startupCtx, startup, cfg.Dir, values, false)
 
-	host, err := startHost(ctx, opts, source)
+	host, err := startHost(startupCtx, opts, source)
 	if err != nil {
 		return err
 	}
 	defer host.close()
 	host.server.UseValues(values.merged(), variables.DevScope(cfg))
 
-	resolved, err := discoverAndSync(ctx, host.server, cfg, values, targetScope(cfg, cwd), localCommand{name: "run", source: source}, startup)
+	resolved, err := discoverAndSync(startupCtx, host.server, cfg, values, targetScope(cfg, cwd), localCommand{name: "run", source: source}, startup)
 	if err != nil {
 		return err
 	}

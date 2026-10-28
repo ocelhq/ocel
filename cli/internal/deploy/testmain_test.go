@@ -219,7 +219,7 @@ func terminalStdin(dependencies *Dependencies) {
 }
 
 func stubGit(dependencies *Dependencies, branch, pr string) {
-	dependencies.ReadGitBranch = func(string) (string, error) { return branch, nil }
+	dependencies.ReadGitBranch = func(context.Context, string) (string, error) { return branch, nil }
 	dependencies.DiscoverPRNumber = func() string { return pr }
 }
 

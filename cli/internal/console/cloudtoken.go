@@ -11,6 +11,7 @@ import (
 
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
 
 const cloudTokenMargin = time.Minute
@@ -21,7 +22,7 @@ type CloudToken struct {
 }
 
 func (c *Client) IssueCloudToken(ctx context.Context, accessToken, organizationID string, scopes []cloudv1.Scope) (CloudToken, error) {
-	issued, err := c.consoleService(accessToken).IssueCloudToken(ctx, &consolev1.IssueCloudTokenRequest{OrganizationId: organizationID, Scopes: ScopeClaims(scopes)})
+	issued, err := c.consoleService(accessToken).IssueCloudToken(content.Omit(ctx), &consolev1.IssueCloudTokenRequest{OrganizationId: organizationID, Scopes: ScopeClaims(scopes)})
 	if err != nil {
 		return CloudToken{}, fmt.Errorf("have %s issue an Ocel Cloud token: %w", c.baseURL, err)
 	}

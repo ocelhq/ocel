@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"slices"
 	"strings"
 
@@ -19,9 +18,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 type Server struct {
@@ -37,7 +36,7 @@ func (s Server) Env() []string {
 	}
 }
 
-type programCommands func(ctx context.Context, configDir string, roots []Root, server Server) ([]*exec.Cmd, error)
+type programCommands func(ctx context.Context, configDir string, roots []Root, server Server) ([]*tracing.Cmd, error)
 
 var languageCommands = map[language.Language]programCommands{language.Go: goCommands, language.Python: pythonCommands, language.Rust: rustCommands}
 
@@ -91,8 +90,8 @@ func Run(ctx context.Context, configDir string, programs Programs, server Server
 	return postSync(ctx, server)
 }
 
-func commandsFor(ctx context.Context, configDir string, programs Programs, server Server) ([]*exec.Cmd, error) {
-	var commands []*exec.Cmd
+func commandsFor(ctx context.Context, configDir string, programs Programs, server Server) ([]*tracing.Cmd, error) {
+	var commands []*tracing.Cmd
 	if programs.bundle != nil {
 		entry, err := programs.run.Write(configDir, entryFileName, programs.bundle)
 		if err != nil {
@@ -159,16 +158,17 @@ func bundleRoots(configDir string, roots []Root, outfile string) ([]byte, error)
 	return bundle, nil
 }
 
-func nodeCommand(ctx context.Context, entry string, server Server) *exec.Cmd {
-	cmd := exec.Command("node", "--enable-source-maps", entry)
+func nodeCommand(ctx context.Context, entry string, server Server) *tracing.Cmd {
+	cmd := tracing.Command(ctx, "node", "--enable-source-maps", entry)
 	cmd.Env = append(os.Environ(), server.Env()...)
+	cmd.ExportsSpans = true
 	return cmd
 }
 
 const stderrTailBytes = 4 << 10
 
-func runOne(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Writer) error {
-	tail := &childprocess.Tail{Limit: stderrTailBytes}
+func runOne(ctx context.Context, cmd *tracing.Cmd, stdout, stderr io.Writer) error {
+	tail := &tracing.Tail{Limit: stderrTailBytes}
 	cmd.Stderr = io.MultiWriter(stderr, tail)
 
 	reader, writer, err := os.Pipe()
@@ -177,14 +177,13 @@ func runOne(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Writer) error 
 	}
 	cmd.Stdout = writer
 
-	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: stdout}
-
 	child, err := childprocess.Start(ctx, cmd, childprocess.Options{})
 	_ = writer.Close()
 	if err != nil {
 		_ = reader.Close()
 		return fmt.Errorf("discovery failed: %w", err)
 	}
+	proc := &nodeprotocol.Processor{Forward: stdout, ChildExportsSpans: cmd.IsExportingSpans()}
 	proc.Scan(ctx, reader)
 	_ = reader.Close()
 	runErr := child.Wait()
@@ -194,7 +193,7 @@ func runOne(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Writer) error 
 		if msg := proc.Failure(); msg != "" {
 			return fmt.Errorf("discovery failed (%w): %s", runErr, msg)
 		}
-		if msg := tail.String(); msg != "" {
+		if msg := strings.TrimSpace(tail.String()); msg != "" {
 			return fmt.Errorf("discovery failed (%w): %s", runErr, msg)
 		}
 		return fmt.Errorf("discovery failed: %w", runErr)
@@ -208,7 +207,7 @@ func postSync(ctx context.Context, server Server) error {
 		return fmt.Errorf("discovery: sync failed: %w", err)
 	}
 	req.Header.Set("Authorization", localrpc.FormatAuthHeader(server.Token))
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := tracing.NewClient(0).Do(req)
 	if err != nil {
 		return fmt.Errorf("discovery: sync failed: %w", err)
 	}

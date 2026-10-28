@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -82,6 +83,17 @@ func aTerminal(t *testing.T, term string, columns uint16) (tty *os.File, screen 
 }
 
 const liveFrame = "\x1b[?2026h"
+
+func TestRunningACommandLeavesTheStandardLibrarysDefaultTransportInPlace(t *testing.T) {
+	inADeployedProject(t)
+
+	if code, _, stderr := executeAndReportRoot(t, "promotions", "prune", "--yes"); code != 0 {
+		t.Fatalf("ocel promotions prune exited %d: %s", code, stderr)
+	}
+	if _, standard := http.DefaultTransport.(*http.Transport); !standard {
+		t.Errorf("http.DefaultTransport is a %T after a command ran, want the standard library's *http.Transport that Google's credential code asserts", http.DefaultTransport)
+	}
+}
 
 func inADeployedProject(t *testing.T) {
 	t.Helper()

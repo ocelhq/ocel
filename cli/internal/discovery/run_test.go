@@ -3,10 +3,12 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
@@ -132,17 +135,123 @@ export {};
 	deploying.End(&ended)
 
 	trace := readTraceFile(t, dir)
-	if !strings.Contains(trace, `"name": "discovery"`) {
-		t.Errorf("trace = %s, want a span named discovery", trace)
+	if !strings.Contains(trace, `"name":"discover resources"`) {
+		t.Errorf("trace = %s, want a span named discover resources", trace)
 	}
 	if strings.Contains(trace, `"STATUS_CODE_ERROR"`) {
 		t.Errorf("trace = %s, want the discovery span to succeed", trace)
 	}
 }
 
+func TestRunHandsTheDiscoveryChildTheRunsTraceAndRecordsItAsASpan(t *testing.T) {
+	root, prepared := jsFixture(t, `declare global { var __ocelRegister: Promise<unknown>[]; }
+globalThis.__ocelRegister ??= [];
+export {};
+`)
+
+	dir := t.TempDir()
+	ctx, deploying, err := run.NewBus(time.Now).Begin(context.Background(), "ocel deploy", dir)
+	if err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	ctx = run.ContextWithSpan(ctx, deploying.Phase(progressv1.Phase_PHASE_BUILD))
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(ctx, root, prepared, okServer(t), &stdout, &stderr); err != nil {
+		t.Fatalf("Run: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	var ended error
+	deploying.End(&ended)
+
+	spans := readTraceSpans(t, dir)
+	names := map[string]string{}
+	for _, span := range spans {
+		names[span.Name] = span.TraceID
+	}
+	if traceID, found := names["discover resources"]; !found || traceID != deploying.TraceID() {
+		t.Errorf("the child's discover resources span is in trace %q (found %v), want the run's trace %s", traceID, found, deploying.TraceID())
+	}
+	if _, found := names["node"]; !found {
+		t.Errorf("trace spans = %v, want a span for the node child", names)
+	}
+}
+
+func TestRunNamesTheProjectFileOfEachModuleItImportsOnThatModulesImportSpan(t *testing.T) {
+	root := t.TempDir()
+	declared := `declare global { var __ocelRegister: Promise<unknown>[]; }
+globalThis.__ocelRegister ??= [];
+export {};
+`
+	write(t, filepath.Join(root, DefaultRootDirName, "queues.ts"), declared)
+	write(t, filepath.Join(root, DefaultRootDirName, "storage", "buckets.ts"), declared)
+	prepared := prepare(t, root)
+
+	dir := t.TempDir()
+	ctx, deploying, err := run.NewBus(time.Now).Begin(context.Background(), "ocel deploy", dir)
+	if err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	ctx = run.ContextWithSpan(ctx, deploying.Phase(progressv1.Phase_PHASE_BUILD))
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(ctx, root, prepared, okServer(t), &stdout, &stderr); err != nil {
+		t.Fatalf("Run: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	var ended error
+	deploying.End(&ended)
+
+	var files []string
+	for _, span := range readTraceSpans(t, dir) {
+		if span.Name != "import module" {
+			continue
+		}
+		for _, attr := range span.Attributes {
+			if attr.Key == "code.filepath" {
+				files = append(files, attr.Value.StringValue)
+			}
+		}
+	}
+	slices.Sort(files)
+	if want := []string{DefaultRootDirName + "/queues.ts", DefaultRootDirName + "/storage/buckets.ts"}; !slices.Equal(files, want) {
+		t.Errorf("import spans name files %q, want %q", files, want)
+	}
+}
+
+type tracedSpan struct {
+	Name       string `json:"name"`
+	TraceID    string `json:"traceId"`
+	Attributes []struct {
+		Key   string `json:"key"`
+		Value struct {
+			StringValue string `json:"stringValue"`
+		} `json:"value"`
+	} `json:"attributes"`
+}
+
+func readTraceSpans(t *testing.T, projectDir string) []tracedSpan {
+	t.Helper()
+	var doc struct {
+		ResourceSpans []struct {
+			ScopeSpans []struct {
+				Spans []tracedSpan `json:"spans"`
+			} `json:"scopeSpans"`
+		} `json:"resourceSpans"`
+	}
+	if err := json.Unmarshal([]byte(readTraceFile(t, projectDir)), &doc); err != nil {
+		t.Fatalf("parse trace: %v", err)
+	}
+	var spans []tracedSpan
+	for _, resource := range doc.ResourceSpans {
+		for _, scope := range resource.ScopeSpans {
+			spans = append(spans, scope.Spans...)
+		}
+	}
+	return spans
+}
+
 func readTraceFile(t *testing.T, projectDir string) string {
 	t.Helper()
-	traces, err := filepath.Glob(filepath.Join(projectDir, buildoutput.StateDir, "runs", "*.otlp.json"))
+	traces, err := filepath.Glob(filepath.Join(runtrace.RunsDir(projectDir), "*", runtrace.TraceFileName))
 	if err != nil || len(traces) != 1 {
 		t.Fatalf("traces = %v, %v, want the run's one trace", traces, err)
 	}

@@ -31,7 +31,7 @@ func (t tools) images(ctx context.Context, cfg *project.Project, variables map[s
 			return nil, err
 		}
 	}
-	log, err = log.hideLiveValues(apps, variables)
+	log, err = log.hideLiveValues(ctx, apps, variables)
 	if err != nil {
 		return nil, err
 	}
@@ -50,10 +50,10 @@ func (t tools) images(ctx context.Context, cfg *project.Project, variables map[s
 		if described.BuildArgs, err = newImageBuildArgs(app, variables[app.Name]); err != nil {
 			return nil, err
 		}
-		appLog, ended := log.App(app.Name)
-		built, err := t.image(ctx, described, archs[app.Name], image.NewLiveValues(variables[app.Name].Live, variables[app.Name].BindingProxyEnv, hashKey), appLog)
+		appCtx, appLog, ended := log.App(ctx, app.Name)
+		built, err := t.image(appCtx, described, archs[app.Name], image.NewLiveValues(variables[app.Name].Live, variables[app.Name].BindingProxyEnv, hashKey), appLog)
 		if sources, hosts := workers[app.Name]; hosts && err == nil {
-			built, err = t.addWorkerEntry(ctx, cfg, app, built, archs[app.Name], sources, appLog)
+			built, err = t.addWorkerEntry(appCtx, cfg, app, built, archs[app.Name], sources, appLog)
 		}
 		ended(err)
 		if err != nil {
@@ -228,8 +228,8 @@ func RefuseUnbuildableImages(ctx context.Context, span *run.Span, cfg *project.P
 			span.Say(notice)
 		}
 	}
-	checking := span.Child(cfg.Slug, progress.Checking.Title("the container builder on this machine"))
-	err := image.RefuseUnusableDaemon(ctx, slices.Compact(slices.Sorted(slices.Values(imageArchs)))...)
+	checkingCtx, checking := span.Child(ctx, cfg.Slug, progress.Checking.Title("the container builder on this machine"))
+	err := image.RefuseUnusableDaemon(checkingCtx, slices.Compact(slices.Sorted(slices.Values(imageArchs)))...)
 	if err != nil {
 		err = fmt.Errorf("building the container image for %s happens on this machine, before anything is provisioned:\n    %w", english.And(english.Quoted(containers)), err)
 	}

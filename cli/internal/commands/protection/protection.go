@@ -135,8 +135,8 @@ func refuseOpened(t target, slug string, resp *contractv1.GetProtectionResponse)
 
 func readProtection(ctx context.Context, invocation commands.Invocation, cfg *project.Project, command string, t target, reveal bool) (resp *contractv1.GetProtectionResponse, err error) {
 	err = invocation.WithProvider(ctx, cfg, command, openOptions(t.tier()), func(ctx context.Context, p commands.ProviderRun) error {
-		span := p.Check.Child(cfg.Slug, progress.Reading.Title("the "+t.name()+" protection"))
-		resp, err = getProtection(ctx, p, cfg, t.tier(), reveal)
+		spanCtx, span := p.Check.Child(ctx, cfg.Slug, progress.Reading.Title("the "+t.name()+" protection"))
+		resp, err = getProtection(spanCtx, p, cfg, t.tier(), reveal)
 		span.End(err)
 		return err
 	})
@@ -166,8 +166,8 @@ func runStatus(ctx context.Context, invocation commands.Invocation, stdout io.Wr
 	opened := commands.OpenOptions{Intent: commands.UseAccount, Tier: environmentv1.Tier_TIER_PRODUCTION}
 	err = invocation.WithProvider(ctx, cfg, "ocel protection", opened, func(ctx context.Context, p commands.ProviderRun) error {
 		for _, tier := range []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW} {
-			span := p.Check.Child(cfg.Slug, progress.Reading.Title("the "+readiness.TierName(tier)+" protection"))
-			resp, err := getProtection(ctx, p, cfg, tier, false)
+			spanCtx, span := p.Check.Child(ctx, cfg.Slug, progress.Reading.Title("the "+readiness.TierName(tier)+" protection"))
+			resp, err := getProtection(spanCtx, p, cfg, tier, false)
 			span.End(err)
 			if err != nil {
 				return err
@@ -309,9 +309,9 @@ func applyChange(ctx context.Context, invocation commands.Invocation, t target, 
 	err = invocation.WithProvider(ctx, cfg, command, openOptions(t.tier()), func(ctx context.Context, p commands.ProviderRun) error {
 		if change != nil {
 			change.Tier, change.Slug, change.Edge = t.tier(), cfg.Slug, cfg.EdgeSelection()
-			span := p.Check.Child(cfg.Slug, progress.Updating.Title("the recorded "+t.name()+" protection"))
-			err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-				outcome.changed, err = client.ChangeProtection(ctx, change)
+			updatingCtx, span := p.Check.Child(ctx, cfg.Slug, progress.Updating.Title("the recorded "+t.name()+" protection"))
+			err := p.Provider.Call(updatingCtx, func(client contractv1connect.ProviderServiceClient) (err error) {
+				outcome.changed, err = client.ChangeProtection(updatingCtx, change)
 				return err
 			})
 			span.End(err)

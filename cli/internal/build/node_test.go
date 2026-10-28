@@ -13,12 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/progress"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
 func TestAProjectWithNoJavaScriptNeverRunsTheNodeBuildScript(t *testing.T) {
@@ -220,7 +221,7 @@ for (let i = 0; i < 4000; i++) {
 		}
 	})
 
-	t.Run("a span_start/span_end pair for an app produces a span on the run", func(t *testing.T) {
+	t.Run("a span_start/span_end pair for an app is shown on the run and left to the child's own span in the trace", func(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
@@ -248,16 +249,23 @@ emit({type:"span_end",id:"1",ok:true});
 		var ended error
 		building.End(&ended)
 
-		traces, err := filepath.Glob(filepath.Join(dir, buildoutput.StateDir, "runs", "*.otlp.json"))
-		if err != nil || len(traces) != 1 {
-			t.Fatalf("traces = %v, %v, want the run's one trace", traces, err)
+		logs, err := filepath.Glob(filepath.Join(runtrace.RunsDir(dir), "*", runtrace.EventsFileName))
+		if err != nil || len(logs) != 1 {
+			t.Fatalf("logs = %v, %v, want the run's one log", logs, err)
 		}
-		raw, err := os.ReadFile(traces[0])
+		logged, err := os.ReadFile(logs[0])
+		if err != nil {
+			t.Fatalf("read log: %v", err)
+		}
+		if !strings.Contains(string(logged), `"subject":"api"`) || !strings.Contains(string(logged), `"message":"build"`) {
+			t.Errorf("log = %s, want a build span shown for app api", logged)
+		}
+		traced, err := os.ReadFile(filepath.Join(filepath.Dir(logs[0]), runtrace.TraceFileName))
 		if err != nil {
 			t.Fatalf("read trace: %v", err)
 		}
-		if !strings.Contains(string(raw), `"name": "build"`) || !strings.Contains(string(raw), `"stringValue": "api"`) {
-			t.Errorf("trace = %s, want a build span attributed to app api", raw)
+		if strings.Contains(string(traced), `"name":"build"`) {
+			t.Errorf("trace = %s, want the protocol's build span left to the child that traces itself", traced)
 		}
 	})
 }
@@ -311,6 +319,34 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+func TestTheNodeBuildRunsUnderTheBuildNotTheLoadingStepThatEndsAtItsFirstApp(t *testing.T) {
+	root := t.TempDir()
+	writeBuildScript(t, root)
+	cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web"), nextApp("admin", "apps/admin")}}
+	ctx, building, err := run.NewBus(time.Now).Begin(context.Background(), "ocel build", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	phase := building.Phase(progressv1.Phase_PHASE_BUILD)
+	log := Log{Step: func(ctx context.Context, subject string, title progress.Title) (context.Context, func(error)) {
+		ctx, step := phase.Child(ctx, subject, title)
+		return ctx, step.End
+	}}
+
+	var ranUnder *run.Span
+	builder := nodeOnly{node: func(ctx context.Context, _ string, _ []byte, _ Log) error {
+		ranUnder = run.SpanFromContext(ctx)
+		return nil
+	}}
+	if err := builder.Build(run.ContextWithSpan(ctx, phase), cfg, nil, log); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	if ranUnder != phase {
+		t.Errorf("the node build ran under %p, want the build phase %p: the loading step ends when the first app starts", ranUnder, phase)
+	}
 }
 
 func jsString(s string) string {

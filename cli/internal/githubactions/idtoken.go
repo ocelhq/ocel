@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
 
 const (
@@ -37,13 +40,13 @@ func RequestIDToken(ctx context.Context, getenv func(string) string, audience st
 	query.Set("audience", audience)
 	endpoint.RawQuery = query.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	req, err := http.NewRequestWithContext(content.Omit(ctx), http.MethodGet, endpoint.String(), nil)
 	if err != nil {
 		return "", fmt.Errorf("request an ID token from GitHub Actions: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+requestToken)
 	req.Header.Set("Accept", "application/json")
-	client := &http.Client{Timeout: idTokenRequestTimeout}
+	client := tracing.NewClient(idTokenRequestTimeout)
 	resp, err := client.Do(req)
 	if err != nil {
 		var urlErr *url.Error

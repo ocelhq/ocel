@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources/binding"
 	realtimev1 "github.com/ocelhq/ocel/pkg/proto/app/realtime/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 	"github.com/ocelhq/ocel/platform/realtime/proxy"
@@ -94,7 +95,7 @@ func (b *Backend) listen() error {
 		Keys:           b.verifyKey,
 		AllowedOrigins: b.appOrigins,
 	})
-	b.service = proxy.NewService(readRecord(b.readRecord), proxy.NewGatewayTransport(http.DefaultClient, "http://"+b.host+gatewayenv.PublishPath))
+	b.service = proxy.NewService(readRecord(b.readRecord), proxy.NewGatewayTransport(tracing.NewClient(0), "http://"+b.host+gatewayenv.PublishPath))
 	server := &http.Server{Handler: b.gateway}
 	b.server = server
 	go func() { _ = server.Serve(listener) }()

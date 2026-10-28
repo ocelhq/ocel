@@ -978,10 +978,10 @@ func twoAppProject(t *testing.T) (Dependencies, clitest.FakeProject) {
 }
 
 func buildingEach(failing string) func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
-	return func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, out build.Log) (build.Output, error) {
+	return func(ctx context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, out build.Log) (build.Output, error) {
 		_, _ = io.WriteString(out.Shared, "the builder started\n")
 		for _, app := range cfg.Apps {
-			log, ended := out.App(app.Name)
+			_, log, ended := out.App(ctx, app.Name)
 			_, _ = fmt.Fprintf(log, "compiling %s\n", app.Name)
 			if app.Name == failing {
 				err := errors.New(app.Name + " did not compile")
@@ -1166,7 +1166,7 @@ func TestAnAppsOwnBuildFailureEndsNoSecondSpan(t *testing.T) {
 
 func steppingThenBuilding(failing error) func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
 	return func(ctx context.Context, cfg *project.Project, variables map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, out build.Log) (build.Output, error) {
-		ended := out.Step(cfg.Slug, progress.Loading.Title("the build adapters for apps web and api"))
+		_, ended := out.Step(ctx, cfg.Slug, progress.Loading.Title("the build adapters for apps web and api"))
 		ended(failing)
 		if failing != nil {
 			return build.Output{}, failing

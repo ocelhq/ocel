@@ -68,8 +68,8 @@ func (d *deployRun) forwardPorts(ctx context.Context, steps *buildSteps, bound b
 	declared := portforward.ListDeclared(uses)
 
 	var notReady error
-	forwarding := steps.open(cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)))
-	forwards, err := portforward.Open(ctx, d.provider, cfg.Slug, d.infra.env, uses, steps.phase)
+	forwardingCtx, forwarding := steps.open(ctx, cfg.Slug, progress.Forwarding.Title("ports to "+english.And(declared)))
+	forwards, err := portforward.Open(forwardingCtx, d.provider, cfg.Slug, d.infra.env, uses, steps.phase)
 	switch code, refused := provider.RefusedCode(err); {
 	case err != nil && len(preBuildUses) > 0:
 		err = portforward.RefuseUnforwarded(preBuildName, declared, err)

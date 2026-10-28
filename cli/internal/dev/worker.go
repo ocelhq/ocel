@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"net"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -20,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/workdir"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -73,7 +73,7 @@ type workerProcesses struct {
 	opts    Options
 	run     *workdir.Run
 	queue   workerQueue
-	command func(ctx context.Context, configDir string, roots []discovery.Root, served discovery.Root, run *workdir.Run) (*exec.Cmd, error)
+	command func(ctx context.Context, configDir string, roots []discovery.Root, served discovery.Root, run *workdir.Run) (*tracing.Cmd, error)
 	ports   map[string]int
 	running map[string]*workerProcess
 
@@ -171,7 +171,7 @@ func (w *workerProcesses) restart(ctx context.Context, env map[string]string, ch
 	}
 }
 
-func (w *workerProcesses) start(ctx context.Context, cmd *exec.Cmd, name string, port int, env map[string]string) (*workerProcess, error) {
+func (w *workerProcesses) start(ctx context.Context, cmd *tracing.Cmd, name string, port int, env map[string]string) (*workerProcess, error) {
 	workerEnv := maps.Clone(env)
 	workerEnv[hostEnv] = workerHost
 	workerEnv[portEnv] = strconv.Itoa(port)

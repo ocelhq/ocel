@@ -28,27 +28,27 @@ import (
 
 type Log struct {
 	Shared io.Writer
-	AppLog func(app string) (log io.Writer, ended func(error))
-	Step   func(subject string, title progress.Title) (ended func(error))
+	AppLog func(ctx context.Context, app string) (appCtx context.Context, log io.Writer, ended func(error))
+	Step   func(ctx context.Context, subject string, title progress.Title) (stepCtx context.Context, ended func(error))
 
 	hidden       redaction.Values
 	sharedHidden *redaction.Writer
 }
 
-func (l Log) openStep(subject string, title progress.Title) (ended func(error)) {
+func (l Log) openStep(ctx context.Context, subject string, title progress.Title) (context.Context, func(error)) {
 	if l.Step == nil {
-		return func(error) {}
+		return ctx, func(error) {}
 	}
-	opened := l.Step(subject, title)
+	ctx, opened := l.Step(ctx, subject, title)
 	var once sync.Once
-	return func(err error) {
+	return ctx, func(err error) {
 		once.Do(func() { opened(l.hidden.HideError(err)) })
 	}
 }
 
-func (l Log) step(subject string, title progress.Title, do func() error) error {
-	ended := l.openStep(subject, title)
-	err := do()
+func (l Log) step(ctx context.Context, subject string, title progress.Title, do func(context.Context) error) error {
+	ctx, ended := l.openStep(ctx, subject, title)
+	err := do(ctx)
 	ended(err)
 	return err
 }
@@ -58,9 +58,9 @@ func (l Log) endingOnFirstApp(ended func(error)) Log {
 		return l
 	}
 	appLog := l.AppLog
-	l.AppLog = func(app string) (io.Writer, func(error)) {
+	l.AppLog = func(ctx context.Context, app string) (context.Context, io.Writer, func(error)) {
 		ended(nil)
-		return appLog(app)
+		return appLog(ctx, app)
 	}
 	return l
 }
@@ -72,13 +72,13 @@ func (l Log) shared() io.Writer {
 	return l.Shared
 }
 
-func (l Log) App(name string) (io.Writer, func(error)) {
+func (l Log) App(ctx context.Context, name string) (context.Context, io.Writer, func(error)) {
 	if l.AppLog == nil {
-		return l.shared(), func(error) {}
+		return ctx, l.shared(), func(error) {}
 	}
-	w, ended := l.AppLog(name)
+	ctx, w, ended := l.AppLog(ctx, name)
 	hiding := l.hidden.Writer(w)
-	return hiding, func(err error) {
+	return ctx, hiding, func(err error) {
 		_ = hiding.Flush()
 		ended(l.hidden.HideError(err))
 	}
@@ -99,7 +99,7 @@ func (l Log) flushShared() {
 	}
 }
 
-func (l Log) hideLiveValues(apps []project.App, variables map[string]AppVariables) (Log, error) {
+func (l Log) hideLiveValues(ctx context.Context, apps []project.App, variables map[string]AppVariables) (Log, error) {
 	var readable []string
 	for _, a := range apps {
 		live := variables[a.Name].Live
@@ -108,7 +108,9 @@ func (l Log) hideLiveValues(apps []project.App, variables map[string]AppVariable
 		}
 		readable = append(readable, variables[a.Name].SecretValues()...)
 	}
-	return l.hiding(redaction.NewValues(readable)), nil
+	hidden := redaction.NewValues(readable)
+	hidden.HideInTrace(ctx)
+	return l.hiding(hidden), nil
 }
 
 type Output struct {
@@ -187,7 +189,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 		}
 		reading = append(reading, a)
 	}
-	log, err = log.hideLiveValues(reading, variables)
+	log, err = log.hideLiveValues(ctx, reading, variables)
 	if err != nil {
 		return err
 	}
@@ -198,7 +200,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	if err != nil {
 		return err
 	}
-	if err := removePreviousOutput(log, cfg.Slug, outputDir); err != nil {
+	if err := removePreviousOutput(ctx, log, cfg.Slug, outputDir); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
@@ -243,8 +245,8 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 			if err != nil {
 				return err
 			}
-			appLog, ended := log.App(a.Name)
-			err = compile(ctx, cfg, a, outputDir, env, appLog)
+			appCtx, appLog, ended := log.App(ctx, a.Name)
+			err = compile(appCtx, cfg, a, outputDir, env, appLog)
 			ended(err)
 			if err != nil {
 				return err
@@ -313,9 +315,9 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 				traced = append(traced, target)
 				continue
 			}
-			appLog, ended := log.App(a.Name)
+			appCtx, appLog, ended := log.App(ctx, a.Name)
 			target.Log = appLog
-			err = toolchain.Bundle(ctx, target)
+			err = toolchain.Bundle(appCtx, target)
 			ended(err)
 			if err != nil {
 				return err
@@ -326,7 +328,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	}
 
 	if len(req.Apps) > 0 {
-		loading := log.openStep(cfg.Slug, progress.Loading.Title("the build adapters for "+nameApps(req.Apps)))
+		_, loading := log.openStep(ctx, cfg.Slug, progress.Loading.Title("the build adapters for "+nameApps(req.Apps)))
 		err := t.runNodeBuild(ctx, req, log.endingOnFirstApp(loading))
 		loading(err)
 		if err != nil {
@@ -336,16 +338,16 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	variants := toolchain.NewPlatformVariantCache()
 	defer variants.Close()
 	for _, target := range traced {
-		if err := log.step(target.App, checkingPlatformPackages(target.App), func() error {
+		if err := log.step(ctx, target.App, checkingPlatformPackages(target.App), func(ctx context.Context) error {
 			return variants.InstallTraced(ctx, target.App, target.Source, target.FunctionDir, target.Framework.Arch)
 		}); err != nil {
 			return err
 		}
-		describe := func() error { return toolchain.DescribeTrace(ctx, target) }
+		describe := func(ctx context.Context) error { return toolchain.DescribeTrace(ctx, target) }
 		if target.WorkerSource != "" {
-			err = log.step(target.App, buildingWorkerEntry(target.App), describe)
+			err = log.step(ctx, target.App, buildingWorkerEntry(target.App), describe)
 		} else {
-			err = describe()
+			err = describe(ctx)
 		}
 		if err != nil {
 			return err
@@ -356,7 +358,7 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 		if err := addWorkerEntryToFunction(ctx, cfg, a, outputDir, architecture, log); err != nil {
 			return err
 		}
-		if err := log.step(a.Name, checkingPlatformPackages(a.Name), func() error {
+		if err := log.step(ctx, a.Name, checkingPlatformPackages(a.Name), func(ctx context.Context) error {
 			return installTracedPlatformVariants(ctx, variants, cfg, a, outputDir, architecture, newAppHost(host, a).MaxFunctionBytes)
 		}); err != nil {
 			return err
@@ -365,11 +367,11 @@ func (t tools) functions(ctx context.Context, cfg *project.Project, variables ma
 	return nil
 }
 
-func removePreviousOutput(log Log, slug, outputDir string) error {
+func removePreviousOutput(ctx context.Context, log Log, slug, outputDir string) error {
 	if _, err := os.Lstat(outputDir); errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
-	return log.step(slug, progress.Removing.Title("the previous build output in "+buildoutput.Dir), func() error {
+	return log.step(ctx, slug, progress.Removing.Title("the previous build output in "+buildoutput.Dir), func(context.Context) error {
 		if err := os.RemoveAll(outputDir); err != nil {
 			return fmt.Errorf("reset %s: %w", buildoutput.Dir, err)
 		}
@@ -423,7 +425,7 @@ func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a proje
 	if workerSource == "" {
 		return nil
 	}
-	return log.step(a.Name, buildingWorkerEntry(a.Name), func() error {
+	return log.step(ctx, a.Name, buildingWorkerEntry(a.Name), func(ctx context.Context) error {
 		functions, err := readAppFunctions(outputDir, buildoutput.AppRoot(outputDir, a.Name))
 		if err != nil {
 			return err

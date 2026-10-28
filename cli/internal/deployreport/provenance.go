@@ -1,13 +1,14 @@
 package deployreport
 
 import (
-	"os/exec"
+	"context"
 	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/githubactions"
 
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -35,24 +36,24 @@ func ReadTrigger(getenv func(string) string, prNumber string) (*consolev1.Trigge
 	return trigger, ci
 }
 
-func ReadSource(dir string, getenv func(string) string) *consolev1.Source {
-	commit, err := git(dir, "rev-parse", "HEAD")
+func ReadSource(ctx context.Context, dir string, getenv func(string) string) *consolev1.Source {
+	commit, err := git(ctx, dir, "rev-parse", "HEAD")
 	if err != nil {
 		return nil
 	}
 	source := &consolev1.Source{Commit: commit}
-	if branch, err := git(dir, "rev-parse", "--abbrev-ref", "HEAD"); err == nil && branch != detachedHead {
+	if branch, err := git(ctx, dir, "rev-parse", "--abbrev-ref", "HEAD"); err == nil && branch != detachedHead {
 		source.Branch = branch
 	} else {
 		source.Branch = getenv("GITHUB_HEAD_REF")
 	}
-	if status, err := git(dir, "status", "--porcelain", "--untracked-files=no"); err == nil {
+	if status, err := git(ctx, dir, "status", "--porcelain", "--untracked-files=no"); err == nil {
 		source.Dirty = status != ""
 	}
 	return source
 }
 
-func git(dir string, args ...string) (string, error) {
-	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).Output()
+func git(ctx context.Context, dir string, args ...string) (string, error) {
+	out, err := tracing.Command(ctx, "git", append([]string{"-C", dir}, args...)...).Output()
 	return strings.TrimSpace(string(out)), err
 }

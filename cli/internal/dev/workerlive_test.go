@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const liveDockerEnv = "OCEL_LIVE_DOCKER"
@@ -219,7 +220,7 @@ func TestDockerAWorkerStoppedForTheNextPassNeverReportsThatItExited(t *testing.T
 	opts := workerOptions(t, &stdout, &stderr)
 	opts.Project = cfg
 	workers := newWorkerProcesses(opts, resources.Queue())
-	slowToExit := exec.Command("sh", "-c", "setsid sh -c 'echo detached; sleep 3' & exec sleep 60")
+	slowToExit := tracing.Command(context.Background(), "sh", "-c", "setsid sh -c 'echo detached; sleep 3' & exec sleep 60")
 	slowToExit.Env = os.Environ()
 	process, err := workers.start(ctx, slowToExit, "worker", 4000, map[string]string{})
 	if err != nil {

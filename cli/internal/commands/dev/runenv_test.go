@@ -84,7 +84,7 @@ func dependenciesOf(invocation commands.Invocation) Dependencies {
 	return Dependencies{
 		Invocation:          invocation,
 		CollectDeclarations: declaration.Collect,
-		ReadGitBranch:       func(string) (string, error) { return "feature/login", nil },
+		ReadGitBranch:       func(context.Context, string) (string, error) { return "feature/login", nil },
 		DiscoverPRNumber:    func() string { return "" },
 	}
 }

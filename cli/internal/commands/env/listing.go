@@ -39,7 +39,7 @@ func runEnvList(ctx context.Context, dependencies Dependencies, cwd string, opts
 		}
 		var resp *variablestorev1.ListValuesResponse
 		var environments []string
-		err = runInSpan(run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title(describeTierValues(opts)), func() (err error) {
+		err = runInSpan(ctx, run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title(describeTierValues(opts)), func(ctx context.Context) (err error) {
 			if resp, err = variableStore.ListValues(ctx, req); err != nil {
 				return err
 			}

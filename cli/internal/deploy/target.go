@@ -1,6 +1,8 @@
 package deploy
 
 import (
+	"context"
+
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -48,7 +50,7 @@ func (t Target) telemetryTarget() string {
 	return telemetry.DeployTargetProduction
 }
 
-func (t Target) environment(dependencies Dependencies, cwd string) (*environmentv1.Environment, error) {
+func (t Target) environment(ctx context.Context, dependencies Dependencies, cwd string) (*environmentv1.Environment, error) {
 	if !t.isPreview() {
 		return &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION, Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED}, nil
 	}
@@ -56,7 +58,7 @@ func (t Target) environment(dependencies Dependencies, cwd string) (*environment
 	if t.persistent {
 		lifecycle = environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
 	}
-	return resolvePreviewEnvironment(dependencies, cwd, t.name, lifecycle)
+	return resolvePreviewEnvironment(ctx, dependencies, cwd, t.name, lifecycle)
 }
 
 func place(env *environmentv1.Environment) string {
@@ -66,13 +68,13 @@ func place(env *environmentv1.Environment) string {
 	return stackrecords.ProductionEnv
 }
 
-func resolvePreviewEnvironment(dependencies Dependencies, cwd, name string, lifecycle environmentv1.Lifecycle) (*environmentv1.Environment, error) {
+func resolvePreviewEnvironment(ctx context.Context, dependencies Dependencies, cwd, name string, lifecycle environmentv1.Lifecycle) (*environmentv1.Environment, error) {
 	if name != "" {
 		if err := previewid.ValidateLabel(name); err != nil {
 			return nil, err
 		}
 	}
-	env, err := previewid.ResolveEnvironment(cwd, name, lifecycle, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
+	env, err := previewid.ResolveEnvironment(ctx, cwd, name, lifecycle, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
 	if err == nil && name != "" && dependencies.BuilderJob != nil {
 		env.Label = dependencies.BuilderJob.PreviewLabel
 	}

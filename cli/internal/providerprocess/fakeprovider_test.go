@@ -16,6 +16,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/localrpc"
@@ -126,6 +130,17 @@ func runFakeProvider() int {
 		return 0
 	}
 
+	if mode == "flushes-span-on-exit" {
+		go flushSpanOnExit()
+	}
+
+	if mode == "recorded-step" {
+		if _, _, err := providerserver.ExportSpans(context.Background(), "fake-provider"); err != nil {
+			fmt.Fprintln(os.Stderr, "fake provider: export spans:", err)
+			return 1
+		}
+	}
+
 	if mode == "chatty" {
 		fmt.Fprintln(os.Stderr, fakeChattyLine)
 	}
@@ -191,6 +206,20 @@ func runFakeProvider() int {
 	return 0
 }
 
+func flushSpanOnExit() {
+	stopping := make(chan os.Signal, 1)
+	signal.Notify(stopping, syscall.SIGTERM, os.Interrupt)
+	<-stopping
+	time.Sleep(time.Second)
+	ctx, stop, err := providerserver.ExportSpans(context.Background(), "fake-provider")
+	if err == nil {
+		_, span := otel.Tracer("fake").Start(ctx, "flushed on exit")
+		span.End()
+		_ = stop(context.Background())
+	}
+	os.Exit(0)
+}
+
 type fakeProviderServer struct {
 	contractv1connect.UnimplementedProviderServiceHandler
 	mode string
@@ -225,6 +254,38 @@ const fakeOversizedEventBytes = 1 << 16
 
 var fakePlan = &planv1.ChangePlan{Subject: "acme", Groups: []*planv1.ChangeGroup{{Kind: "stack", Name: "acme", Action: planv1.Change_ACTION_CREATE}}}
 
+const fakeRecordedStepName = "create bucket"
+
+var fakeRecordedStepID = []byte{7, 7, 7, 7, 7, 7, 7, 7}
+
+func exportRecordedStep(ctx context.Context) error {
+	if call, ok := connect.CallInfoForHandlerContext(ctx); ok {
+		ctx = propagation.TraceContext{}.Extract(ctx, propagation.HeaderCarrier(call.RequestHeader()))
+	}
+	_, span := otel.Tracer("fake").Start(ctx, fakeRecordedStepName)
+	span.End()
+	flushing, ok := otel.GetTracerProvider().(interface{ ForceFlush(context.Context) error })
+	if !ok {
+		return errors.New("the fake provider exports no spans")
+	}
+	return flushing.ForceFlush(ctx)
+}
+
+func sendRecordedStep(stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	for _, event := range []*progressv1.OperationEvent{
+		{SpanId: fakeRecordedStepID, Message: fakeRecordedStepName, Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}},
+		{SpanId: fakeRecordedStepID, Time: timestamppb.Now(), Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{
+			Status:     progressv1.SpanStatus_SPAN_STATUS_OK,
+			Attributes: []*progressv1.SpanAttribute{{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RECORDED_BY_PROVIDER, Value: "true"}},
+		}}},
+	} {
+		if err := stream.Send(event); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func fakeSaid(message string) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{Level: progressv1.Level_LEVEL_INFO, SpanId: fakeStageID, Message: message}
 }
@@ -236,6 +297,25 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployR
 
 	if err := stream.Send(fakeSaid("step 1")); err != nil {
 		return err
+	}
+	if s.mode == "root-step" {
+		for _, event := range []*progressv1.OperationEvent{
+			{SpanId: fakeStageID, Message: "Provisioning the environment", Body: &progressv1.OperationEvent_Started{Started: &progressv1.Started{}}},
+			{SpanId: fakeStageID, Time: timestamppb.Now(), Body: &progressv1.OperationEvent_Ended{Ended: &progressv1.Ended{Status: progressv1.SpanStatus_SPAN_STATUS_OK}}},
+		} {
+			if err := stream.Send(event); err != nil {
+				return err
+			}
+		}
+	}
+
+	if s.mode == "recorded-step" {
+		if err := exportRecordedStep(ctx); err != nil {
+			return err
+		}
+		if err := sendRecordedStep(stream); err != nil {
+			return err
+		}
 	}
 
 	if req.GetDry() {

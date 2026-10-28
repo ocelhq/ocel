@@ -71,8 +71,8 @@ func hostnameStatus(provider *providerprocess.Provider, req *contractv1.Hostname
 const domainWaitFailures = 4
 
 func awaitDomainStatus(ctx context.Context, check *run.Span, slug string, read func(context.Context) (*contractv1.GetHostnameStatusResponse, error), wait bool, schedule domainWaitSchedule) (*contractv1.GetHostnameStatusResponse, error) {
-	checking := check.Child(slug, progress.Checking.Title("the production hostnames"))
-	resp, err := read(ctx)
+	checkingCtx, checking := check.Child(ctx, slug, progress.Checking.Title("the production hostnames"))
+	resp, err := read(checkingCtx)
 	checking.End(err)
 	if err != nil || !wait || resp.GetReady() {
 		return resp, err
@@ -81,8 +81,8 @@ func awaitDomainStatus(ctx context.Context, check *run.Span, slug string, read f
 		return resp, fmt.Errorf("this project declares no production hostname, so there is nothing to wait for: declare one under domains.production and run `ocel domain add`")
 	}
 
-	span := check.Child(slug, describeWait(declaredHosts(resp)))
-	resp, err = pollDomainStatus(ctx, read, resp, schedule)
+	spanCtx, span := check.Child(ctx, slug, describeWait(declaredHosts(resp)))
+	resp, err = pollDomainStatus(spanCtx, read, resp, schedule)
 	span.End(err)
 	return resp, err
 }

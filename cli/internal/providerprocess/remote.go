@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -76,7 +77,7 @@ func StartRemote(ctx context.Context, cfg *project.Project, span *run.Span, ques
 }
 
 func newRemoteHTTPClient() *http.Client {
-	base := http.DefaultTransport.(*http.Transport).Clone()
+	base := tracing.NewBaseTransport()
 	base.HTTP2 = &http.HTTP2Config{SendPingTimeout: remotePingAfter, PingTimeout: remotePingTimeout}
 	return &http.Client{Transport: base}
 }
@@ -104,5 +105,7 @@ func (t *remoteTransport) Cost() (costv1connect.CostServiceClient, error) {
 func (t *remoteTransport) Facts() *contractv1.ProviderFacts { return t.facts }
 
 func (t *remoteTransport) explainLost(err error) error { return err }
+
+func (t *remoteTransport) isExportingSpans() bool { return false }
 
 func (t *remoteTransport) Close() { t.http.CloseIdleConnections() }

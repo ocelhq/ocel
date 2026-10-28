@@ -34,12 +34,12 @@ func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd s
 
 	return invocation.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
-		run, provider := p.Run, p.Provider
-		planning := run.Phase(progressv1.Phase_PHASE_PLAN)
-		span := planning.Child(cfg.Slug, progress.Enumerating.Title("what releasing the global preview domain would remove"))
+		running, provider := p.Run, p.Provider
+		planning := running.Phase(progressv1.Phase_PHASE_PLAN)
+		enumeratingCtx, span := planning.Child(ctx, cfg.Slug, progress.Enumerating.Title("what releasing the global preview domain would remove"))
 		var plan *planv1.ChangePlan
-		err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-			plan, err = client.PlanRemovePreviewWildcard(ctx, &contractv1.PreviewWildcardRequest{
+		err := provider.Call(enumeratingCtx, func(client contractv1connect.ProviderServiceClient) (err error) {
+			plan, err = client.PlanRemovePreviewWildcard(enumeratingCtx, &contractv1.PreviewWildcardRequest{
 				Tier: environmentv1.Tier_TIER_PREVIEW,
 			})
 			return err
@@ -50,7 +50,7 @@ func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd s
 		}
 		base := plan.GetSubject()
 		if base == "" {
-			run.Succeed("No global preview domain is configured")
+			running.Succeed("No global preview domain is configured")
 			return nil
 		}
 
@@ -62,7 +62,7 @@ func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd s
 			return err
 		}
 		if !granted {
-			run.Succeed(fmt.Sprintf("Nothing released: previews stay on %s", wildcardOf(base)))
+			running.Succeed(fmt.Sprintf("Nothing released: previews stay on %s", wildcardOf(base)))
 			return nil
 		}
 
@@ -70,7 +70,7 @@ func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd s
 		if _, err := providerprocess.Stream(ctx, provider, "RemovePreviewWildcard", req, contractv1connect.ProviderServiceClient.RemovePreviewWildcard); err != nil {
 			return err
 		}
-		run.Succeed(fmt.Sprintf("Released %s", wildcardOf(base)))
+		running.Succeed(fmt.Sprintf("Released %s", wildcardOf(base)))
 		return nil
 	})
 }

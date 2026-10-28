@@ -59,6 +59,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 type flags struct {
@@ -82,7 +83,8 @@ func (f *flags) readFromFlagsOrEnv(cmd *cobra.Command) error {
 	var errVerbose, errJSON error
 	f.verbose, errVerbose = readFlagOrEnvBool(cmd.Flags(), "verbose", commands.DebugEnvVar)
 	f.json, errJSON = readFlagOrEnvBool(cmd.Flags(), "json", commands.JSONEnvVar)
-	return errors.Join(errVerbose, errJSON)
+	_, errTrace := tracing.ParseMode(os.Getenv(tracing.ModeEnvVar))
+	return errors.Join(errVerbose, errJSON, errTrace)
 }
 
 func readFlagOrEnvBool(set *pflag.FlagSet, flag, envVar string) (bool, error) {
@@ -154,6 +156,7 @@ func newCommand() *command {
 		stopInterruptHandler: func() {},
 		startFlush:           startTelemetryFlush,
 	}
+	c.bus.LogRunsWith(terminal.NewRunLog)
 	rootCmd := c.root
 	set := &flags{}
 	invocation, jobErr := newInvocation(c.bus, set)

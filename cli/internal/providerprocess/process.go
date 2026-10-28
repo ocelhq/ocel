@@ -8,13 +8,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
-
-	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
@@ -25,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const DefaultReadyTimeout = 10 * time.Second
@@ -104,7 +103,7 @@ func (e *OperationFailedError) Error() string {
 }
 
 type Process struct {
-	cmd             *exec.Cmd
+	cmd             *tracing.Cmd
 	child           *childprocess.Child
 	stdin           io.Closer
 	identity        *localrpc.Identity
@@ -135,7 +134,7 @@ type Process struct {
 	closeOnce sync.Once
 }
 
-func Spawn(spec LaunchSpec) (*Process, error) {
+func Spawn(ctx context.Context, spec LaunchSpec) (*Process, error) {
 	if spec.BinaryPath == "" {
 		return nil, errors.New("provider: BinaryPath is required")
 	}
@@ -149,12 +148,10 @@ func Spawn(spec LaunchSpec) (*Process, error) {
 	if base == nil {
 		base = os.Environ()
 	}
-	env := make([]string, 0, len(base)+1)
-	env = append(env, base...)
-	env = append(env, localrpc.ClientCertEnvVar+"="+identity.CertificatePEM())
 
-	cmd := exec.Command(spec.BinaryPath, spec.Args...)
-	cmd.Env = env
+	cmd := tracing.Command(ctx, spec.BinaryPath, spec.Args...)
+	cmd.Env = append(slices.Clip(base), localrpc.ClientCertEnvVar+"="+identity.CertificatePEM())
+	cmd.ExportsSpans = true
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -356,6 +353,10 @@ const (
 	exitStderrTail = 20
 )
 
+func (r *Process) isExportingSpans() bool {
+	return r.cmd.IsExportingSpans()
+}
+
 func (r *Process) explainLost(err error) error {
 	select {
 	case <-r.done:
@@ -468,29 +469,4 @@ func (r *Process) record(line string) {
 	defer r.stderrMu.Unlock()
 	r.stderrBuf.WriteString(line)
 	r.stderrBuf.WriteByte('\n')
-}
-
-type traceParentInterceptor struct{}
-
-func (traceParentInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		if traceparent, ok := localrpc.TraceParentFromContext(ctx); ok {
-			req.Header().Set(localrpc.TraceParentHeader, traceparent)
-		}
-		return next(ctx, req)
-	}
-}
-
-func (traceParentInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-		conn := next(ctx, spec)
-		if traceparent, ok := localrpc.TraceParentFromContext(ctx); ok {
-			conn.RequestHeader().Set(localrpc.TraceParentHeader, traceparent)
-		}
-		return conn
-	}
-}
-
-func (traceParentInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
 }

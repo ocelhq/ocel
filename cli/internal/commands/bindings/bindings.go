@@ -184,14 +184,14 @@ func withBindingProvider(ctx context.Context, invocation commands.Invocation, cw
 	}
 	return invocation.WithProvider(ctx, cfg, command, commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: opts.tier()}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
-		run, provider := p.Run, p.Provider
-		phase := run.Phase(step.phase)
-		span := phase.Child(cfg.Slug, step.title)
-		headline, err := drive(ctx, provider, cfg)
+		running, provider := p.Run, p.Provider
+		phase := running.Phase(step.phase)
+		spanCtx, span := phase.Child(ctx, cfg.Slug, step.title)
+		headline, err := drive(spanCtx, provider, cfg)
 		span.End(err)
 		phase.End(err)
 		if err == nil && headline != "" {
-			run.Succeed(headline)
+			running.Succeed(headline)
 		}
 		return err
 	})

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { AWS_CLI_RETRY_ENV, functionLogGroup } from "./aws.mjs";
@@ -13,6 +13,8 @@ import {
   STATE_FILE,
   storageCoordinate,
 } from "./lib.mjs";
+
+const RUN_LOG_FILE = "ocel.log";
 
 const DEFAULT_LOG_WINDOW_MS = 60 * 60 * 1000;
 
@@ -55,10 +57,11 @@ function replay(label, path) {
 
 function replayRuns(dir) {
   const logs = existsSync(dir)
-    ? readdirSync(dir)
-        .filter((name) => name.endsWith(".ndjson"))
-        .map((name) => join(dir, name))
-        .sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs)
+    ? readdirSync(dir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => join(dir, entry.name, RUN_LOG_FILE))
+        .filter((path) => existsSync(path))
+        .sort()
     : [];
   if (logs.length === 0) {
     console.log("=== ocel runs ===\n(no ocel run log)");

@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/agentenv"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const connectRoute = "/api/connect"
@@ -29,7 +30,7 @@ func New(baseURL string) *Client {
 	return &Client{
 		baseURL:   strings.TrimRight(baseURL, "/"),
 		userAgent: composeUserAgent(os.Getenv),
-		http:      &http.Client{Timeout: 30 * time.Second},
+		http:      tracing.NewClient(30 * time.Second),
 	}
 }
 

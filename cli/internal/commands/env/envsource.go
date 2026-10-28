@@ -75,7 +75,7 @@ func deployCommand(opts envOptions) string {
 func runEnvSync(ctx context.Context, dependencies Dependencies, cwd string, opts envOptions, stdout, stderr io.Writer) error {
 	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env sync", []cloudv1.Scope{cloudv1.Scope_SCOPE_VARIABLES_WRITE}, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, _ *contractv1.PreflightResponse) error {
 		var synced *variablestorev1.SyncEnvSourceResponse
-		err := runInSpan(run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeTierValues(opts)+" from their env source"), func() (err error) {
+		err := runInSpan(ctx, run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeTierValues(opts)+" from their env source"), func(ctx context.Context) (err error) {
 			synced, err = variables.Store{Provider: provider, Project: cfg, Tier: opts.tier()}.SyncRegisteredEnvSource(ctx)
 			return err
 		})
@@ -105,7 +105,7 @@ func runEnvSource(ctx context.Context, dependencies Dependencies, cwd string, op
 		}
 		req := &variablestorev1.DescribeEnvSourceRequest{Tier: opts.tier(), Slug: cfg.Slug}
 		var described *variablestorev1.DescribeEnvSourceResponse
-		err = runInSpan(run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title("the env source of "+describeTierValues(opts)), func() (err error) {
+		err = runInSpan(ctx, run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title("the env source of "+describeTierValues(opts)), func(ctx context.Context) (err error) {
 			described, err = variableStore.DescribeEnvSource(ctx, req)
 			return err
 		})
