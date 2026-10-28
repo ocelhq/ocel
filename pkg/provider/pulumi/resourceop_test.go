@@ -1,17 +1,180 @@
 package pulumi
 
 import (
-	"errors"
+	"context"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
+
+func preEvent(urn, resourceType string) events.EngineEvent {
+	return events.EngineEvent{EngineEvent: apitype.EngineEvent{
+		ResourcePreEvent: &apitype.ResourcePreEvent{
+			Metadata: apitype.StepEventMetadata{URN: urn, Type: resourceType, Op: apitype.OpCreate},
+		},
+	}}
+}
+
+func outputsEvent(urn, resourceType string, op apitype.OpType) events.EngineEvent {
+	return events.EngineEvent{EngineEvent: apitype.EngineEvent{
+		ResOutputsEvent: &apitype.ResOutputsEvent{
+			Metadata: apitype.StepEventMetadata{URN: urn, Type: resourceType, Op: op},
+		},
+	}}
+}
+
+func failedEvent(urn, resourceType string, op apitype.OpType) events.EngineEvent {
+	return events.EngineEvent{EngineEvent: apitype.EngineEvent{
+		ResOpFailedEvent: &apitype.ResOpFailedEvent{
+			Metadata: apitype.StepEventMetadata{URN: urn, Type: resourceType, Op: op},
+		},
+	}}
+}
+
+const testURN = "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::my-bucket"
+
+func consumed(steps *resourceSteps, engineEvents ...events.EngineEvent) []resourceOp {
+	at := time.Unix(9000, 0)
+	for _, event := range engineEvents {
+		steps.consume(event, at)
+		at = at.Add(time.Second)
+	}
+	return steps.ops
+}
+
+func TestAFailedOpIsRecordedFromItsPreEventToItsFailure(t *testing.T) {
+	t.Parallel()
+
+	steps := newResourceSteps(context.Background(), nil)
+	base := time.Unix(2000, 0)
+	steps.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
+	steps.consume(failedEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(5*time.Second))
+
+	if len(steps.ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(steps.ops))
+	}
+	s := steps.ops[0]
+	if !s.Failed {
+		t.Error("ops[0].Failed = false, want true")
+	}
+	if !s.Start.Equal(base) || !s.End.Equal(base.Add(5*time.Second)) {
+		t.Errorf("ops[0] Start/End = %v/%v, want %v/%v", s.Start, s.End, base, base.Add(5*time.Second))
+	}
+}
+
+func TestAnUnchangedOpIsNeverRecordedHoweverLongItTook(t *testing.T) {
+	t.Parallel()
+
+	steps := newResourceSteps(context.Background(), nil)
+	base := time.Unix(3000, 0)
+	steps.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
+	steps.consume(outputsEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpSame), base.Add(10*time.Minute))
+
+	if len(steps.ops) != 0 {
+		t.Fatalf("ops = %+v, want none: its step span carries how long it took", steps.ops)
+	}
+}
+
+func TestARecordedOpNeverRetainsTheURN(t *testing.T) {
+	t.Parallel()
+
+	ops := consumed(newResourceSteps(context.Background(), nil),
+		preEvent(testURN, "aws:s3/bucket:Bucket"),
+		failedEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate),
+	)
+	if len(ops) != 1 {
+		t.Fatalf("len(ops) = %d, want 1", len(ops))
+	}
+	s := ops[0]
+	if s.Type != "aws:s3/bucket:Bucket" {
+		t.Errorf("Type = %q, want the type token", s.Type)
+	}
+	if s.Name != "my-bucket" {
+		t.Errorf("Name = %q, want the URN's logical name component", s.Name)
+	}
+	if strings.Contains(s.Type, "prod") || strings.Contains(s.Type, "proj") {
+		t.Fatalf("Type leaked the URN's stack or project: %q", s.Type)
+	}
+	if strings.Contains(s.Name, "prod") || strings.Contains(s.Name, "proj") {
+		t.Fatalf("Name leaked the URN's stack or project: %q", s.Name)
+	}
+}
+
+func TestResourceNameFromURNParsesDefensively(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		urn  string
+		want string
+	}{
+		{"well-formed", testURN, "my-bucket"},
+		{"empty", "", ""},
+		{"not a urn at all", "not-a-urn", ""},
+		{"missing the name component", "urn:pulumi:prod::proj::aws:s3/bucket:Bucket", ""},
+		{"wrong namespace", "urn:notpulumi:prod::proj::aws:s3/bucket:Bucket::my-bucket", ""},
+		{"name embeds the delimiter", "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::weird::name", "weird::name"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := resourceNameFromURN(tc.urn); got != tc.want {
+				t.Errorf("resourceNameFromURN(%q) = %q, want %q", tc.urn, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCapIdentifierBoundsLength(t *testing.T) {
+	t.Parallel()
+
+	short := "aws:s3/bucket:Bucket"
+	if got := capIdentifier(short); got != short {
+		t.Errorf("capIdentifier(%q) = %q, want unchanged", short, got)
+	}
+
+	long := strings.Repeat("x", maxResourceIdentifierLen*2)
+	got := capIdentifier(long)
+	if len(got) != maxResourceIdentifierLen {
+		t.Fatalf("capIdentifier(long) length = %d, want %d", len(got), maxResourceIdentifierLen)
+	}
+
+	multibyte := strings.Repeat("é", maxResourceIdentifierLen)
+	got = capIdentifier(multibyte)
+	if !utf8.ValidString(got) {
+		t.Fatalf("capIdentifier(multibyte) = %q, not valid UTF-8", got)
+	}
+	if len(got) > maxResourceIdentifierLen {
+		t.Fatalf("capIdentifier(multibyte) length = %d, want <= %d", len(got), maxResourceIdentifierLen)
+	}
+}
+
+func TestAResourceOpsNameIsBoundedNeverDynamic(t *testing.T) {
+	t.Parallel()
+
+	seen := map[string]bool{}
+	for op, action := range performedActions {
+		name := resourceOp{Action: action}.progressName()
+		if name != stepName(op) {
+			t.Errorf("%s reports as %q but its step span is %q, want one name for both", op, name, stepName(op))
+		}
+		seen[name] = true
+	}
+	if name := (resourceOp{Action: provider.ActionCreate, Failed: true}).progressName(); name != "resource operation failed" {
+		t.Errorf("a failed create reports as %q, want the fixed failure string", name)
+	}
+	if len(seen) != 4 {
+		t.Errorf("changing ops report under %d names, want the 4 actions'", len(seen))
+	}
+}
 
 type recordedSpan struct {
 	name  string
@@ -42,103 +205,68 @@ func (r *fakeProgress) Span(name string, _, _ time.Time, err error, attrs ...pro
 	r.spans = append(r.spans, recordedSpan{name: name, err: err, attrs: attrs})
 }
 
-func TestTheBatchSpanHasNoResourceIdentityAndTheSlowOpDoes(t *testing.T) {
+func TestAFailedOpIsOneSpanNamingItsResource(t *testing.T) {
 	t.Parallel()
 
 	recorded := &fakeProgress{}
 	start := time.Unix(6000, 0)
-	reportTrace(recorded, engineTrace{
-		ResourceCount: 2,
-		Start:         start,
-		End:           start.Add(5 * time.Second),
-		Failed:        true,
-		Ops: []resourceOp{{
-			Op:     apitype.OpCreate,
-			Type:   "aws:s3/bucket:Bucket",
-			Name:   "my-bucket",
-			Start:  start,
-			End:    start.Add(5 * time.Second),
-			Failed: true,
-		}},
-	}, nil)
+	reportResourceOps(recorded, []resourceOp{{
+		Action: provider.ActionCreate,
+		Type:   "aws:s3/bucket:Bucket",
+		Name:   "my-bucket",
+		Start:  start,
+		End:    start.Add(5 * time.Second),
+		Failed: true,
+	}})
 
-	if len(recorded.spans) != 2 {
-		t.Fatalf("got %d spans, want 2 (batch + the failed op)", len(recorded.spans))
+	if len(recorded.spans) != 1 {
+		t.Fatalf("got %d spans, want the failed op's alone", len(recorded.spans))
 	}
-
-	batch := recorded.spans[0]
-	if batch.name != engineBatchSpanName {
-		t.Fatalf("spans[0].name = %q, want the batch span name", batch.name)
+	got := recorded.spans[0]
+	if got.err == nil {
+		t.Error("the failed op was reported as a success")
 	}
-	for _, a := range batch.attrs {
-		if a.Key == progress.AttrKeyResourceType || a.Key == progress.AttrKeyResourceName {
-			t.Errorf("batch span has resource identity attr %+v; it covers many resources", a)
-		}
+	if v := attrValue(got, progress.AttrKeyResourceType); v != "aws:s3/bucket:Bucket" {
+		t.Errorf("RESOURCE_TYPE = %q, want the type token", v)
 	}
-
-	var sawType, sawName bool
-	for _, a := range recorded.spans[1].attrs {
-		switch a.Key {
-		case progress.AttrKeyResourceType:
-			sawType = true
-			if a.Value != "aws:s3/bucket:Bucket" {
-				t.Errorf("RESOURCE_TYPE = %q, want the type token", a.Value)
-			}
-		case progress.AttrKeyResourceName:
-			sawName = true
-			if a.Value != "my-bucket" {
-				t.Errorf("RESOURCE_NAME = %q, want the logical name", a.Value)
-			}
-			if strings.Contains(a.Value, "urn:pulumi") {
-				t.Fatal("RESOURCE_NAME contained the raw URN")
-			}
-		}
-	}
-	if !sawType {
-		t.Error("slow-op span is missing ATTRIBUTE_KEY_RESOURCE_TYPE")
-	}
-	if !sawName {
-		t.Error("slow-op span is missing ATTRIBUTE_KEY_RESOURCE_NAME")
+	if v := attrValue(got, progress.AttrKeyResourceName); v != "my-bucket" {
+		t.Errorf("RESOURCE_NAME = %q, want the logical name", v)
 	}
 }
 
-func TestASlowOpWhoseURNDidNotParseHasNoResourceIdentity(t *testing.T) {
+func TestEveryReportedOpIsMarkedAsASpanTheProviderRecordsItself(t *testing.T) {
+	t.Parallel()
+
+	bucket := urnOf("aws:s3/bucket:Bucket", "assets")
+	recorded := reported(nil,
+		preEvent(bucket, "aws:s3/bucket:Bucket"), outputsEvent(bucket, "aws:s3/bucket:Bucket", apitype.OpCreate),
+		preEvent(testURN, "aws:s3/bucket:Bucket"), failedEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpUpdate),
+	)
+
+	if len(recorded.spans) != 2 {
+		t.Fatalf("got %d spans, want the create and the failed update", len(recorded.spans))
+	}
+	for _, span := range recorded.spans {
+		if attrValue(span, progress.AttrKeyRecordedByProvider) != "true" {
+			t.Errorf("span %q is not marked recorded by the provider, so the run's trace would hold it twice", span.name)
+		}
+	}
+}
+
+func TestAnOpWhoseURNDidNotParseHasNoResourceIdentity(t *testing.T) {
 	t.Parallel()
 
 	recorded := &fakeProgress{}
 	start := time.Unix(7000, 0)
-	reportTrace(recorded, engineTrace{
-		ResourceCount: 1,
-		Start:         start,
-		End:           start.Add(time.Second),
-		Failed:        true,
-		Ops: []resourceOp{
-			{Op: apitype.OpCreate, Start: start, End: start.Add(time.Second), Failed: true},
-		},
-	}, nil)
-
-	if len(recorded.spans) != 2 {
-		t.Fatalf("got %d spans, want 2", len(recorded.spans))
-	}
-	for _, a := range recorded.spans[1].attrs {
-		if a.Key == progress.AttrKeyResourceType || a.Key == progress.AttrKeyResourceName {
-			t.Errorf("slow-op span has resource identity attr %+v despite an unparseable URN", a)
-		}
-	}
-}
-
-func TestARunThatFailedBeforeTouchingAResourceStillLeavesASpan(t *testing.T) {
-	t.Parallel()
-
-	recorded := &fakeProgress{}
-	start := time.Unix(8000, 0)
-	reportTrace(recorded, engineTrace{Start: start, End: start.Add(time.Second)}, errors.New("plugin failed to start"))
+	reportResourceOps(recorded, []resourceOp{{Action: provider.ActionCreate, Start: start, End: start.Add(time.Second), Failed: true}})
 
 	if len(recorded.spans) != 1 {
 		t.Fatalf("got %d spans, want 1", len(recorded.spans))
 	}
-	if recorded.spans[0].err == nil {
-		t.Error("batch span not recorded as failed")
+	for _, a := range recorded.spans[0].attrs {
+		if a.Key == progress.AttrKeyResourceType || a.Key == progress.AttrKeyResourceName {
+			t.Errorf("span has resource identity attr %+v despite an unparseable URN", a)
+		}
 	}
 }
 
@@ -146,7 +274,7 @@ func TestAQuietSuccessfulRunSaysNothing(t *testing.T) {
 	t.Parallel()
 
 	recorded := &fakeProgress{}
-	reportTrace(recorded, engineTrace{}, nil)
+	reportResourceOps(recorded, nil)
 
 	if len(recorded.spans) != 0 {
 		t.Fatalf("got %d spans, want 0: nothing happened and nothing failed", len(recorded.spans))
@@ -156,14 +284,14 @@ func TestAQuietSuccessfulRunSaysNothing(t *testing.T) {
 func TestATraceThatNeverArrivesReturnsWithinItsGrace(t *testing.T) {
 	t.Parallel()
 
-	result := make(chan engineTrace)
-	done := make(chan engineTrace, 1)
-	go func() { done <- awaitTrace(result, 20*time.Millisecond) }()
+	result := make(chan []resourceOp)
+	done := make(chan []resourceOp, 1)
+	go func() { done <- awaitResourceOps(result, 20*time.Millisecond) }()
 
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("awaitTrace did not return within its grace period")
+		t.Fatal("awaitResourceOps did not return within its grace period")
 	}
 }
 
@@ -173,9 +301,9 @@ func TestAnEventStreamThatIsNeverClosedLeavesTheRunToFinish(t *testing.T) {
 	engineEvents := make(chan events.EngineEvent, 4)
 	engineEvents <- events.EngineEvent{}
 
-	trace := awaitTrace(drainTrace(engineEvents, 0, nil), 50*time.Millisecond)
-	if !reflect.DeepEqual(trace, engineTrace{}) {
-		t.Errorf("got %+v, want a zero-value trace: the channel is unclosed so the builder goroutine never sent a result", trace)
+	ops := awaitResourceOps(drainResourceOps(engineEvents, newResourceSteps(context.Background(), nil)), 50*time.Millisecond)
+	if ops != nil {
+		t.Errorf("got %+v, want nothing: the channel is unclosed so the builder goroutine never sent a result", ops)
 	}
 }
 
@@ -204,7 +332,7 @@ func TestASecretTheEnginePrintsReachesDebugMasked(t *testing.T) {
 
 	recorded := &fakeProgress{}
 	setup := WorkspaceSpec{Secrets: []string{"origin-secret-value"}}
-	err := runReportingResourceOperations(setup, recorded, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
+	err := runReportingResourceOperations(context.Background(), setup, recorded, func(engineEvents chan<- events.EngineEvent, lines *lineLog) error {
 		close(engineEvents)
 		_, err := lines.Write([]byte("~ header: origin-secret-value\nunmasked tail origin-secret-value"))
 		return err
@@ -223,14 +351,8 @@ func TestASecretTheEnginePrintsReachesDebugMasked(t *testing.T) {
 }
 
 func reported(secrets []string, engineEvents ...events.EngineEvent) *fakeProgress {
-	collector := newTraceCollector(time.Hour, secrets)
-	at := time.Unix(9000, 0)
-	for _, ev := range engineEvents {
-		collector.consume(ev, at)
-		at = at.Add(time.Second)
-	}
 	recorded := &fakeProgress{}
-	reportTrace(recorded, collector.result(), nil)
+	reportResourceOps(recorded, consumed(newResourceSteps(context.Background(), secrets), engineEvents...))
 	return recorded
 }
 
@@ -253,7 +375,9 @@ func changes(recorded *fakeProgress) []string {
 	return changed
 }
 
-func urnOf(typ, name string) string { return "urn:pulumi:prod::proj::" + typ + "::" + name }
+func urnOf(resourceType, name string) string {
+	return "urn:pulumi:prod::proj::" + resourceType + "::" + name
+}
 
 func TestEveryResourceTheRunChangedIsReportedWithItsActionHoweverFastItWas(t *testing.T) {
 	t.Parallel()

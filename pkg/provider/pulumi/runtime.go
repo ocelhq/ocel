@@ -10,11 +10,13 @@ import (
 
 	"github.com/blang/semver"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
-const PinnedVersion = "3.146.0"
+const PinnedVersion = "3.259.0"
 
 const cacheDirName = ".ocel"
 
@@ -31,7 +33,9 @@ func (i *installation) install(ctx context.Context, progress progress.Log) (auto
 	return i.command, i.err
 }
 
-func install(ctx context.Context, progress progress.Log) (auto.PulumiCommand, error) {
+func install(ctx context.Context, progress progress.Log) (_ auto.PulumiCommand, err error) {
+	ctx, span := tracer.Start(ctx, "install pulumi runtime", trace.WithAttributes(attribute.String("pulumi.version", PinnedVersion)))
+	defer func() { endEngineSpan(span, err, nil) }()
 	version, err := semver.ParseTolerant(PinnedVersion)
 	if err != nil {
 		return nil, fmt.Errorf("parse pinned Pulumi version: %w", err)
@@ -41,10 +45,12 @@ func install(ctx context.Context, progress progress.Log) (auto.PulumiCommand, er
 	if err != nil {
 		return nil, err
 	}
+	span.SetAttributes(attribute.String("pulumi.root", root))
 	opts := &auto.PulumiCommandOptions{Version: version, Root: root}
 	if command, err := auto.NewPulumiCommand(opts); err == nil {
 		return command, nil
 	}
+	span.SetAttributes(attribute.Bool("pulumi.downloaded", true))
 	if progress != nil {
 		progress.Say(fmt.Sprintf("Downloading the Pulumi runtime %s into %s, once for this machine", PinnedVersion, root))
 	}
