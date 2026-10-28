@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/runs"
 	"github.com/ocelhq/ocel/pkg/topiclimits"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -255,9 +256,9 @@ func claimDatabase(ctx context.Context, tx pgx.Tx, slug string) error {
 
 func clientFor(worker Worker) *http.Client {
 	if len(worker.Header) == 0 {
-		return http.DefaultClient
+		return tracing.NewClient(0)
 	}
-	return &http.Client{Transport: headerTransport{header: worker.Header, next: http.DefaultTransport}}
+	return &http.Client{Transport: headerTransport{header: worker.Header, next: tracing.NewTransport(nil)}}
 }
 
 type headerTransport struct {
