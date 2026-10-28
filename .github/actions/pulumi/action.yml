@@ -1,0 +1,29 @@
+name: pulumi
+description: >-
+  The Pulumi CLI at the version pkg/provider/pulumi pins, checked against its release
+  checksums, installed where the provider installs its runtime and put on PATH.
+
+runs:
+  using: composite
+  steps:
+    - name: Install the pinned Pulumi CLI
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        version=$(sed -n 's/^const PinnedVersion = "\(.*\)"$/\1/p' pkg/provider/pulumi/runtime.go)
+        [ -n "$version" ] || { echo "::error::no Pulumi version pinned in pkg/provider/pulumi/runtime.go"; exit 1; }
+        root="$HOME/.ocel/pulumi/$version"
+        if [ ! -x "$root/bin/pulumi" ]; then
+          download=$(mktemp -d)
+          archive="pulumi-v${version}-linux-x64.tar.gz"
+          checksums="pulumi-${version}-checksums.txt"
+          gh release download "v$version" --repo pulumi/pulumi --dir "$download" --pattern "$archive" --pattern "$checksums"
+          (cd "$download" && grep -F " $archive" "$checksums" | sha256sum --check --strict)
+          mkdir -p "$root/bin"
+          tar -xzf "$download/$archive" -C "$root/bin" --strip-components=1
+          rm -rf "$download"
+        fi
+        "$root/bin/pulumi" version
+        echo "$root/bin" >> "$GITHUB_PATH"

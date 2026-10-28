@@ -245,6 +245,10 @@ jobs:
         if: steps.due.outputs.run == 'true'
         uses: ./.github/actions/binaries
 
+      - name: The pinned Pulumi CLI the aws stack sweep and Pulumi cells run
+        if: steps.due.outputs.run == 'true' && (inputs.target == 'aws' || inputs.target == 'next')
+        uses: ./.github/actions/pulumi
+
       - name: Reclaim what any earlier gcp run left behind
         if: steps.due.outputs.run == 'true' && inputs.cloud && inputs.target == 'gcp'
         run: pnpm --filter @ocel-tests/e2e sweep --target gcp

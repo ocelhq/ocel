@@ -145,6 +145,9 @@ jobs:
             echo "AWS_REGION=$REGION"
           } >> "$GITHUB_ENV"
 
+      - name: The pinned Pulumi CLI the stack sweep runs
+        uses: ./.github/actions/pulumi
+
       - name: Reclaim the cells and namespaces no run is using
         run: pnpm --filter @ocel-tests/e2e sweep --target aws
 

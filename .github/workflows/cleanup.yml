@@ -175,6 +175,9 @@ jobs:
             echo "AWS_REGION=$REGION"
           } >> "$GITHUB_ENV"
 
+      - name: The pinned Pulumi CLI the stack sweep runs
+        uses: ./.github/actions/pulumi
+
       - name: Reclaim the cells and namespaces those runs left provisioned
         env:
           IDS: ${{ needs.reapable.outputs.ids }}
