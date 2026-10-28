@@ -1676,7 +1676,8 @@
                 "ATTRIBUTE_KEY_RESOURCE_TYPE",
                 "ATTRIBUTE_KEY_RESOURCE_NAME",
                 "ATTRIBUTE_KEY_CACHED",
-                "ATTRIBUTE_KEY_RESOURCE_ACTION"
+                "ATTRIBUTE_KEY_RESOURCE_ACTION",
+                "ATTRIBUTE_KEY_RECORDED_BY_PROVIDER"
               ],
               "type": "string"
             },
