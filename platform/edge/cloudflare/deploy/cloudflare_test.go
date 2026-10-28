@@ -14,7 +14,23 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 )
+
+func assertRefusedWithoutContent(t *testing.T, calls *tracingtest.Spans, secrets ...string) {
+	t.Helper()
+	refused := 0
+	spans := calls.Ended()
+	for _, span := range spans {
+		if tracingtest.Attributes(span)["http.response.status_code"].AsInt64() >= 400 {
+			refused++
+		}
+		tracingtest.CheckWithoutBodies(t, span, secrets...)
+	}
+	if refused == 0 {
+		t.Fatalf("no span records a refused call among %d spans", len(spans))
+	}
+}
 
 func testModule() workerModule {
 	return workerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")}

@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 )
 
 func doMetadataFromMultipart(t *testing.T, worker workerScript, do durableObjectWorker, deployedClasses []string) map[string]any {
@@ -1132,4 +1133,16 @@ func TestGenericWorkerReceivesTheHostnamesEachAppAnswersFor(t *testing.T) {
 			t.Error("the stamp stays unchanged while the hostname moves app, so the entry worker is never re-uploaded")
 		}
 	})
+}
+
+func TestARefusedBootstrapSecretIsTracedWithoutItsValue(t *testing.T) {
+	m := &cfMock{zoneID: "zone1", zoneName: "app.com", refusesSecrets: true}
+	p := m.provider(t)
+	ctx, spans := tracingtest.Record(t)
+	secret := strings.Repeat("7c", secretBytes)
+
+	if err := p.putBootstrapSecret(ctx, "acct", sharedStoreScriptName, secret); err == nil {
+		t.Fatal("putBootstrapSecret = nil, want the refusal")
+	}
+	assertRefusedWithoutContent(t, spans, secret)
 }

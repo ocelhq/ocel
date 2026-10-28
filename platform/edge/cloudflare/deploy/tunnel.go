@@ -9,6 +9,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/zero_trust"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
 
 const (
@@ -91,7 +92,7 @@ func (p *cloudflare) readTunnelToken(ctx context.Context, id string) (string, er
 	if err != nil {
 		return "", err
 	}
-	token, err := p.client.ZeroTrust.Tunnels.Cloudflared.Token.Get(ctx, id, zero_trust.TunnelCloudflaredTokenGetParams{AccountID: cf.F(accountID)})
+	token, err := p.client.ZeroTrust.Tunnels.Cloudflared.Token.Get(content.Omit(ctx), id, zero_trust.TunnelCloudflaredTokenGetParams{AccountID: cf.F(accountID)})
 	if err != nil {
 		return "", fmt.Errorf("read the token of the tunnel %s: %w", id, err)
 	}

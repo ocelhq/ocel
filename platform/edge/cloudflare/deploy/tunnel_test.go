@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 )
 
 type tunnelMock struct {
@@ -18,6 +19,7 @@ type tunnelMock struct {
 	takenByRace   bool
 	configured    map[string]any
 	tokenReads    []string
+	refusesToken  bool
 	cleaned       []string
 	deleted       []string
 	connectedOnce bool
@@ -80,6 +82,10 @@ func (m *cfMock) serveTunnels(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /accounts/acct/cfd_tunnel/{id}/token", func(w http.ResponseWriter, r *http.Request) {
 		m.tunnels.tokenReads = append(m.tunnels.tokenReads, r.PathValue("id"))
+		if m.tunnels.refusesToken {
+			answer(w, http.StatusForbidden, "token-for-"+r.PathValue("id"), map[string]any{"code": 10000, "message": "Authentication error"})
+			return
+		}
 		answer(w, http.StatusOK, "token-for-"+r.PathValue("id"))
 	})
 	mux.HandleFunc("DELETE /accounts/acct/cfd_tunnel/{id}/connections", func(w http.ResponseWriter, r *http.Request) {
@@ -180,6 +186,18 @@ func TestTheCloudflareProxyReadsTheTokenATunnelRunsWith(t *testing.T) {
 	if token != "token-for-5a6b7c8d-1" {
 		t.Errorf("ReadToken = %q, want the token Cloudflare holds for the tunnel", token)
 	}
+}
+
+func TestARefusedTunnelTokenReadIsTracedWithoutItsBody(t *testing.T) {
+	m := proxyZoneMock()
+	m.tunnels.refusesToken = true
+	tunnels := tunnelHooks(t, m)
+	ctx, spans := tracingtest.Record(t)
+
+	if _, err := tunnels.ReadToken(ctx, "5a6b7c8d-1"); err == nil {
+		t.Fatal("ReadToken = nil, want the refusal")
+	}
+	assertRefusedWithoutContent(t, spans, "token-for-5a6b7c8d-1")
 }
 
 func TestTheCloudflareProxyDeletesATunnelOnceItsConnectionsAreCleanedUp(t *testing.T) {

@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 )
 
 func (m *cfMock) proxyOn(t *testing.T, origin OriginScope) *Proxy {
@@ -608,4 +609,16 @@ func mintSelfSignedClientCertificate(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+}
+
+func TestARefusedClientCertificateUploadIsTracedWithoutItsPrivateKey(t *testing.T) {
+	m := proxyZoneMock()
+	m.deniedClientCertificates.writes = true
+	certificates := m.proxy(t).Hooks().ClientCertificates
+	ctx, spans := tracingtest.Record(t)
+
+	if _, err := certificates.Ensure(ctx, environment.TierProduction, "shop.app.com"); err == nil {
+		t.Fatal("Ensure = nil, want the refusal")
+	}
+	assertRefusedWithoutContent(t, spans, "PRIVATE KEY")
 }

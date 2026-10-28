@@ -28,6 +28,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 type cfMock struct {
@@ -64,6 +65,7 @@ type cfMock struct {
 	refusedCalls    []string
 	subdomainCalls  []subdomainCall
 	putSecrets      []putSecret
+	refusesSecrets  bool
 	updatedRecords  []string
 
 	clientCertificates []map[string]any
@@ -305,6 +307,11 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	})
 
 	mux.HandleFunc("PUT /accounts/acct/workers/scripts/{name}/secrets", func(w http.ResponseWriter, r *http.Request) {
+		if m.refusesSecrets {
+			_, _ = io.Copy(io.Discard, r.Body)
+			writeAuthenticationError(w)
+			return
+		}
 		script := r.PathValue("name")
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -670,6 +677,7 @@ func (m *cfMock) store() *fake.KeyValues {
 func (m *cfMock) provider(t *testing.T) *cloudflare {
 	srv := m.server(t)
 	return &cloudflare{namespace: "ocel", resolvedOrigin: resolvedOrigin{Origin: Origin{Scope: fixedOrigin(testOrigin).Scope, Records: m.store()}}, client: cf.NewClient(
+		option.WithHTTPClient(tracing.NewClient(0)),
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}

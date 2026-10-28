@@ -14,6 +14,8 @@ import (
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/option"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -39,7 +41,7 @@ func newAPIClient(opts ...option.RequestOption) *cf.Client {
 }
 
 func (p apiRetryPolicy) newClient(opts ...option.RequestOption) *cf.Client {
-	return cf.NewClient(append([]option.RequestOption{option.WithMaxRetries(0), option.WithMiddleware(p.send)}, opts...)...)
+	return cf.NewClient(append([]option.RequestOption{option.WithHTTPClient(&http.Client{Transport: &tracing.Transport{Name: nameAPIMethod}}), option.WithMaxRetries(0), option.WithMiddleware(p.send)}, opts...)...)
 }
 
 func (p apiRetryPolicy) send(req *http.Request, next option.MiddlewareNext) (*http.Response, error) {

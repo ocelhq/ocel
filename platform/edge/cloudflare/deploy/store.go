@@ -14,9 +14,12 @@ import (
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
+
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
 
 var errStoreRequestUnbuildable = errors.New("build releases-store request")
@@ -209,7 +212,7 @@ func (r releasesStore) attempt(ctx context.Context, endpoint, slug, secret, meth
 	if encoded != nil {
 		reader = bytes.NewReader(encoded)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, endpoint+"/"+slug+subpath, reader)
+	req, err := http.NewRequestWithContext(content.Omit(ctx), method, endpoint+"/"+slug+subpath, reader)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errStoreRequestUnbuildable, err)
 	}
@@ -240,5 +243,5 @@ func (r releasesStore) httpClient() *http.Client {
 	if r.client != nil {
 		return r.client
 	}
-	return http.DefaultClient
+	return tracing.NewClient(0)
 }
