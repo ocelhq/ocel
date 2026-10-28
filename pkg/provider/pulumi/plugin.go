@@ -1,6 +1,7 @@
 package pulumi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -12,6 +13,7 @@ import (
 	provider "github.com/pulumi/pulumi-go-provider"
 	rpc "github.com/pulumi/pulumi/sdk/v3/proto/go"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const debugProvidersEnvVar = "PULUMI_DEBUG_PROVIDERS"
@@ -80,9 +82,28 @@ func serveEngine(plugin Plugin, conn net.Conn) {
 		return
 	}
 	serving := grpc.NewServer()
-	rpc.RegisterResourceProviderServer(serving, server)
+	rpc.RegisterResourceProviderServer(serving, &cancelAfterConfigure{ResourceProviderServer: server})
 	_ = serving.Serve(newEngineListener(conn))
 	serving.Stop()
+}
+
+// HACK: pulumi-go-provider (v1.8.0 and main) writes its run info in Configure unlocked while
+// Cancel reads it, and the engine sends Cancel whenever it likes.
+type cancelAfterConfigure struct {
+	rpc.ResourceProviderServer
+	configuring sync.RWMutex
+}
+
+func (s *cancelAfterConfigure) Configure(ctx context.Context, req *rpc.ConfigureRequest) (*rpc.ConfigureResponse, error) {
+	s.configuring.Lock()
+	defer s.configuring.Unlock()
+	return s.ResourceProviderServer.Configure(ctx, req)
+}
+
+func (s *cancelAfterConfigure) Cancel(ctx context.Context, req *emptypb.Empty) (*emptypb.Empty, error) {
+	s.configuring.RLock()
+	defer s.configuring.RUnlock()
+	return s.ResourceProviderServer.Cancel(ctx, req)
 }
 
 const acceptRetryDelay = 10 * time.Millisecond
