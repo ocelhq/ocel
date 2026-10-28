@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,11 +21,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var builtAgent = sync.OnceValues(func() (string, error) {
@@ -45,6 +50,8 @@ type agentHere struct {
 	agent     string
 	stateRoot string
 	tierRoot  string
+	spans     string
+	current   bool
 	ran       []string
 }
 
@@ -67,7 +74,19 @@ func newAgentHere(t *testing.T) *agentHere {
 }
 
 func (h *agentHere) box() *ssh.Box {
-	return ssh.NewBox(func(context.Context) (ssh.Conn, error) { return h, nil }, nil)
+	box := ssh.NewBox(func(context.Context) (ssh.Conn, error) { return h, nil }, nil)
+	box.SendTraceFlagsWhen(func(context.Context) (bool, error) { return h.current, nil })
+	return box
+}
+
+func (h *agentHere) predatingTraceFlags() {
+	h.t.Helper()
+	old := filepath.Join(h.t.TempDir(), "live")
+	script := "#!/bin/sh\nfor arg; do case \"$arg\" in --trace*) echo \"flag provided but not defined: ${arg%%=*}\" >&2; exit 2;; esac; done\nexec " + shell.Quote(h.agent) + " \"$@\"\n"
+	if err := os.WriteFile(old, []byte(script), 0o755); err != nil {
+		h.t.Fatal(err)
+	}
+	h.agent, h.current = old, false
 }
 
 func (h *agentHere) Stream(ctx context.Context, command string, stdin io.Reader) (ssh.Result, error) {
@@ -110,6 +129,8 @@ func (h *agentHere) Destination() ssh.Destination {
 func (h *agentHere) ForwardPort(context.Context, string) (string, func(), error) {
 	return "", nil, errors.New("no port is forwarded here")
 }
+
+func (h *agentHere) ForwardSpans() string { return h.spans }
 
 func TestTheRecordsTheProviderKeepsOnTheBoxConformThroughTheBoxAgent(t *testing.T) {
 	conformance.RunStore(t, boxstore.NewKeyValues(newAgentHere(t).box()))
@@ -185,7 +206,176 @@ func TestAValueTheProviderSealsThroughTheAgentOpensOnTheBoxAndNowhereElse(t *tes
 	if _, err := cipher.Open(context.Background(), environment.TierProduction, seal.BindToProject("other", "variable", "production", "*", "/", "DATABASE_URL"), sealed); err == nil {
 		t.Error("a value sealed for shop opened for other")
 	}
-	if want := shell.Words(boxstore.SealArgv(environment.TierProduction, boxapi.SealVerbSeal, bound)); here.ran[0] != want {
+	if want := shell.Words(boxstore.SealCommand(environment.TierProduction, boxapi.SealVerbSeal, bound).Argv(nil)); here.ran[0] != want {
 		t.Errorf("the seal ran as %q, want %q: the sudoers line names exactly that command", here.ran[0], want)
+	}
+}
+
+type collectedExports struct {
+	mu     sync.Mutex
+	bodies [][]byte
+}
+
+func (c *collectedExports) received() [][]byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([][]byte(nil), c.bodies...)
+}
+
+func spanSocket(t *testing.T) (string, *collectedExports) {
+	t.Helper()
+	base, err := os.MkdirTemp("", "spans")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(base) })
+	dir := filepath.Join(base, "d")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	socket := filepath.Join(dir, "otlp.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &collectedExports{}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		c.mu.Lock()
+		c.bodies = append(c.bodies, body)
+		c.mu.Unlock()
+	})}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() { _ = server.Close() })
+	return socket, c
+}
+
+func TestASealAndARecordWriteUnderASpanHandOcelLiveTheirParentAndSocketWithinTheSudoersLineAndNeverTheToken(t *testing.T) {
+	previous := tracing.ReadCollector()
+	tracing.SetCollector(tracing.Collector{URL: "http://127.0.0.1:4318/v1/traces", Token: "s3cret-collector-token"})
+	t.Cleanup(func() { tracing.SetCollector(previous) })
+	ctx, _ := tracingtest.Record(t)
+	here := newAgentHere(t)
+	socket, exports := spanSocket(t)
+	here.spans, here.current = socket, true
+	if said, err := exec.Command(here.agent, boxapi.SealCommand, "--tier-root", here.tierRoot, string(environment.TierProduction), boxapi.SealVerbInit).CombinedOutput(); err != nil {
+		t.Fatalf("seal init = %v: %s", err, said)
+	}
+	bound := seal.BindToProject("shop", "variable", "production", "*", "/", "DATABASE_URL")
+
+	if _, err := boxstore.NewCipher(here.box()).Seal(ctx, environment.TierProduction, bound, []byte("postgres://ada:hunter2@db")); err != nil {
+		t.Fatalf("Seal() = %v", err)
+	}
+	if _, err := boxstore.NewKeyValues(here.box()).Write(ctx, records.Entry{Key: stackrecords.ProjectKey(environment.TierProduction, "shop"), Value: json.RawMessage(`{"token":"sk_live_hunter2"}`)}); err != nil {
+		t.Fatalf("Write() = %v", err)
+	}
+
+	sudoers := shell.Words([]string{boxapi.LiveBinary, boxapi.SealCommand, string(environment.TierProduction), boxapi.SealVerbSeal}) + " "
+	if sealing := here.ran[0]; !strings.HasPrefix(sealing, sudoers) || !strings.Contains(sealing, "--traceparent=") || !strings.Contains(sealing, "--trace-socket="+socket) {
+		t.Errorf("the seal ran as %q, want the trace flags after %q, where the sudoers line matches anything", sealing, sudoers)
+	}
+	for _, ran := range here.ran {
+		if strings.Contains(ran, "s3cret-collector-token") {
+			t.Errorf("the box ran %q, holding the collector's token", ran)
+		}
+	}
+	run := trace.SpanContextFromContext(ctx).TraceID()
+	exported := bytes.Join(exports.received(), nil)
+	for _, name := range []string{"ocel-live " + boxapi.SealCommand, "ocel-live " + boxapi.RecordsCommand} {
+		if !bytes.Contains(exported, []byte(name)) {
+			t.Errorf("the box exported no span named %q", name)
+		}
+	}
+	if !bytes.Contains(exported, run[:]) {
+		t.Errorf("the box's spans are not in the run's trace %s", run)
+	}
+	for _, secret := range []string{"postgres://ada:hunter2@db", "sk_live_hunter2"} {
+		if bytes.Contains(exported, []byte(secret)) {
+			t.Errorf("the box's spans hold %q", secret)
+		}
+	}
+}
+
+func TestTheBoxSpansOfASealAndARecordNestUnderTheirRunBoxCommandSpan(t *testing.T) {
+	previous := tracing.ReadCollector()
+	tracing.SetCollector(tracing.Collector{URL: "http://127.0.0.1:4318/v1/traces", Token: "s3cret-collector-token"})
+	t.Cleanup(func() { tracing.SetCollector(previous) })
+	ctx, spans := tracingtest.Record(t)
+	here := newAgentHere(t)
+	socket, _ := spanSocket(t)
+	here.spans, here.current = socket, true
+	if said, err := exec.Command(here.agent, boxapi.SealCommand, "--tier-root", here.tierRoot, string(environment.TierProduction), boxapi.SealVerbInit).CombinedOutput(); err != nil {
+		t.Fatalf("seal init = %v: %s", err, said)
+	}
+	bound := seal.BindToProject("shop", "variable", "production", "*", "/", "DATABASE_URL")
+
+	if _, err := boxstore.NewCipher(here.box()).Seal(ctx, environment.TierProduction, bound, []byte("postgres://ada:hunter2@db")); err != nil {
+		t.Fatalf("Seal() = %v", err)
+	}
+	if _, err := boxstore.NewKeyValues(here.box()).Write(ctx, records.Entry{Key: stackrecords.ProjectKey(environment.TierProduction, "shop"), Value: json.RawMessage(`{"parts":["cache"]}`)}); err != nil {
+		t.Fatalf("Write() = %v", err)
+	}
+
+	commands := map[string]bool{}
+	for _, span := range spans.Ended() {
+		if span.Name() == "run box command" {
+			commands[span.SpanContext().SpanID().String()] = true
+		}
+	}
+	for _, ran := range here.ran {
+		_, after, found := strings.Cut(ran, "--traceparent=")
+		if !found {
+			t.Errorf("the box ran %q with no trace parent", ran)
+			continue
+		}
+		parts := strings.Split(strings.Fields(strings.Trim(after, "'"))[0], "-")
+		if len(parts) != 4 || !commands[parts[2]] {
+			t.Errorf("the box ran %q under a parent that is no run box command span of %v: its spans would be the command's siblings", ran, commands)
+		}
+	}
+}
+
+func TestASealAndARecordOnABoxWhoseOcelLivePredatesTraceFlagsRunUntraced(t *testing.T) {
+	previous := tracing.ReadCollector()
+	tracing.SetCollector(tracing.Collector{URL: "http://127.0.0.1:4318/v1/traces", Token: "s3cret-collector-token"})
+	t.Cleanup(func() { tracing.SetCollector(previous) })
+	ctx, _ := tracingtest.Record(t)
+	here := newAgentHere(t)
+	socket, exports := spanSocket(t)
+	here.spans = socket
+	here.predatingTraceFlags()
+	if said, err := exec.Command(here.agent, boxapi.SealCommand, "--tier-root", here.tierRoot, string(environment.TierProduction), boxapi.SealVerbInit).CombinedOutput(); err != nil {
+		t.Fatalf("seal init = %v: %s", err, said)
+	}
+	bound := seal.BindToProject("shop", "variable", "production", "*", "/", "DATABASE_URL")
+	key := stackrecords.ProjectKey(environment.TierProduction, "shop")
+
+	cipher := boxstore.NewCipher(here.box())
+	sealed, err := cipher.Seal(ctx, environment.TierProduction, bound, []byte("postgres://ada:hunter2@db"))
+	if err != nil {
+		t.Fatalf("Seal() = %v, want a box bootstrapped before trace flags to seal as it did", err)
+	}
+	if opened, err := cipher.Open(ctx, environment.TierProduction, bound, sealed); err != nil || string(opened) != "postgres://ada:hunter2@db" {
+		t.Fatalf("Open() = %q, %v", opened, err)
+	}
+	store := boxstore.NewKeyValues(here.box())
+	if _, err := store.Write(ctx, records.Entry{Key: key, Value: json.RawMessage(`{"parts":["cache"]}`)}); err != nil {
+		t.Fatalf("Write() = %v, want a box bootstrapped before trace flags to keep records as it did", err)
+	}
+	if _, err := store.Read(ctx, key); err != nil {
+		t.Fatalf("Read() = %v", err)
+	}
+	for _, ran := range here.ran {
+		if strings.Contains(ran, "--trace") {
+			t.Errorf("the box ran %q, handing trace flags to an ocel-live that refuses them", ran)
+		}
+	}
+	if got := exports.received(); len(got) != 0 {
+		t.Errorf("the box exported %d requests, want none from an ocel-live that takes no trace flags", len(got))
+	}
+
+	here.current = true
+	if _, err := boxstore.NewCipher(here.box()).Seal(ctx, environment.TierProduction, bound, []byte("x")); err == nil {
+		t.Error("the stand-in for an old ocel-live sealed with trace flags, want it to refuse them as the released builds do")
 	}
 }

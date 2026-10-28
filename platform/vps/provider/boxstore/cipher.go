@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -22,11 +23,14 @@ func (s *Cipher) Seal(ctx context.Context, tier environment.Tier, bound seal.Ass
 }
 
 func (s *Cipher) Open(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, sealed []byte) ([]byte, error) {
-	return s.run(ctx, boxapi.SealVerbOpen, tier, bound, sealed)
+	return s.run(content.Omit(ctx), boxapi.SealVerbOpen, tier, bound, sealed)
 }
 
-func SealArgv(tier environment.Tier, verb string, bound seal.AssociatedData) []string {
-	return []string{boxapi.LiveBinary, boxapi.SealCommand, string(tier), verb, string(bound.Bytes())}
+func SealCommand(tier environment.Tier, verb string, bound seal.AssociatedData) ssh.LiveCommand {
+	return ssh.LiveCommand{
+		Fixed: []string{boxapi.LiveBinary, boxapi.SealCommand, string(tier), verb},
+		Rest:  []string{string(bound.Bytes())},
+	}
 }
 
 func (s *Cipher) run(ctx context.Context, verb string, tier environment.Tier, bound seal.AssociatedData, body []byte) ([]byte, error) {
@@ -35,7 +39,7 @@ func (s *Cipher) run(ctx context.Context, verb string, tier environment.Tier, bo
 			"a value bound to %s names no tier", bound.Bytes())
 	}
 	fed := append([]byte(base64.StdEncoding.EncodeToString(body)), '\n')
-	rendered, err := s.box.RunArgv(ctx, ssh.Granted, verb+" a value bound to "+string(bound.Bytes()), SealArgv(tier, verb, bound), bytes.NewReader(fed))
+	rendered, err := s.box.RunLive(ctx, ssh.Granted, verb+" a value bound to "+string(bound.Bytes()), SealCommand(tier, verb, bound), bytes.NewReader(fed))
 	if err != nil {
 		return nil, err
 	}

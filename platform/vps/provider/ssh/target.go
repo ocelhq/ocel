@@ -6,6 +6,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type Target struct {
@@ -58,7 +62,9 @@ func (d Destination) entry() string {
 	return KnownHostsEntry(d.Address, d.KeyAlias, d.Port)
 }
 
-func resolve(ctx context.Context, target Target) (Destination, error) {
+func resolve(ctx context.Context, target Target) (_ Destination, err error) {
+	ctx, span := otel.Tracer(scope).Start(ctx, "resolve ssh destination")
+	defer func() { tracing.EndSpan(span, err) }()
 	rendered, err := output(ctx, "ssh", append(append([]string{"-G"}, target.options()...), target.Destination())...)
 	if err != nil {
 		return Destination{}, err
@@ -91,6 +97,13 @@ func resolve(ctx context.Context, target Target) (Destination, error) {
 			dest.KnownHosts = append(dest.KnownHosts, present(strings.Fields(value))...)
 		}
 	}
+	span.SetAttributes(
+		attribute.String("server.address", dest.Address),
+		attribute.Int("server.port", dest.Port),
+		attribute.String("user.name", dest.User),
+		attribute.String("ssh.host_key.alias", dest.KeyAlias),
+		attribute.StringSlice("ssh.known_hosts", dest.KnownHosts),
+	)
 	return dest, nil
 }
 

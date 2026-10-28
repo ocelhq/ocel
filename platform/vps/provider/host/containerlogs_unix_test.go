@@ -92,6 +92,8 @@ func (l localShell) ForwardPort(context.Context, string) (string, func(), error)
 	return "", nil, errors.New("a local shell forwards no port")
 }
 
+func (l localShell) ForwardSpans() string { return "" }
+
 func (l localShell) Destination() ssh.Destination { return ssh.Destination{} }
 
 const standInDocker = `#!/bin/sh

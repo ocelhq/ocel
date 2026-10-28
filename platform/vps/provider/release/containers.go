@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/docker"
 	"github.com/ocelhq/ocel/platform/vps/provider/envfile"
@@ -273,7 +274,7 @@ func (c *Containers) ReadLogs(ctx context.Context, name string, since, until tim
 	if err != nil {
 		return nil, err
 	}
-	result, err := c.box.Stream(ctx, elevation, logsCommand(name, since, until, limit, contains), nil)
+	result, err := c.box.Stream(content.Omit(ctx), elevation, logsCommand(name, since, until, limit, contains), nil)
 	if err != nil {
 		return nil, err
 	}

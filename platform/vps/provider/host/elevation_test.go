@@ -26,6 +26,8 @@ func (c *sudoless) ForwardPort(context.Context, string) (string, func(), error) 
 	return "", nil, errors.New("a sudoless session forwards no port")
 }
 
+func (c *sudoless) ForwardSpans() string { return "" }
+
 func (c *sudoless) Preflight(context.Context) (ssh.Facts, error) {
 	return ssh.Facts{Systemd: true}, refusal.Refuse(refusal.CodeDenied,
 		"ocel-deploy@box.example can neither act as root nor run sudo without a password, and bootstrap writes as root throughout")

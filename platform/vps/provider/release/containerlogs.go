@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -22,7 +23,7 @@ func (c *Containers) FollowLogs(ctx context.Context, names []string, since time.
 	}
 	newest := make([][2]time.Time, len(names))
 	reported := make([]bool, len(names))
-	return c.box.RunLines(ctx, elevation, followLogsCommand(names, since), func(raw ssh.Line) error {
+	return c.box.RunLines(content.Omit(ctx), elevation, followLogsCommand(names, since), func(raw ssh.Line) error {
 		stderr := raw.Pipe == ssh.Stderr
 		container, text, tagged := cutContainerTag(raw.Text, len(names))
 		if !tagged {

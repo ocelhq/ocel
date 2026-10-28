@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 )
 
 func sshStandingIn(t *testing.T) *Session {
@@ -114,5 +116,40 @@ func TestStoppingAForwardCutsEveryConnectionItCarriesAndStopsListening(t *testin
 	}
 	if _, err := readForwarded(t, local); err == nil {
 		t.Error("the forward still answered once stopped")
+	}
+}
+
+func TestAForwardIsASpanForItsLifetimeWithItsAddressesAndAnSSHProcessPerConnection(t *testing.T) {
+	ctx, spans := tracingtest.Record(t)
+	session := sshStandingIn(t)
+
+	local, stop, err := session.ForwardPort(ctx, "172.18.0.5:5432")
+	if err != nil {
+		t.Fatalf("ForwardPort() error = %v", err)
+	}
+	for range 2 {
+		if _, err := readForwarded(t, local); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stop()
+
+	recorded := spans.Ended()
+	forward := tracingtest.SpanNamed(t, recorded, "forward ssh port")
+	attrs := tracingtest.Attributes(forward)
+	for key, want := range map[string]string{
+		"ssh.forward.local":  local,
+		"ssh.forward.remote": "172.18.0.5:5432",
+		"ssh.principal":      "ubuntu@203.0.113.10",
+	} {
+		if got := attrs[key].String(); got != want {
+			t.Errorf("%s = %q, want %q", key, got, want)
+		}
+	}
+	if got := attrs["ssh.forward.connections"].AsInt64(); got != 2 {
+		t.Errorf("ssh.forward.connections = %d, want the 2 connections accepted", got)
+	}
+	if processes := tracingtest.ChildrenOf(recorded, forward); len(processes) != 2 || processes[0].Name() != "ssh" {
+		t.Errorf("the forward span holds %d spans, want an ssh process for each connection", len(processes))
 	}
 }

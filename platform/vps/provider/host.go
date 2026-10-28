@@ -11,6 +11,7 @@ import (
 func (p *Provider) onHost(dial ssh.Dial) *Provider {
 	box := ssh.NewBox(dial, nil)
 	p.host = host.New(box, p.project, host.Keys{Path: p.options.DeployKey}, pins(p.options.Certificates), p.options.Proxy.Filled())
+	box.SendTraceFlagsWhen(p.host.IsAgentCurrent)
 	p.routing = p.host.Routing()
 	p.tunnel = p.host.Tunnel()
 	p.pins = p.host.Pins()

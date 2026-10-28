@@ -82,6 +82,8 @@ func (b *box) ForwardPort(_ context.Context, remote string) (string, func(), err
 	}, nil
 }
 
+func (b *box) ForwardSpans() string { return "" }
+
 func (b *box) stoppedForwards() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()

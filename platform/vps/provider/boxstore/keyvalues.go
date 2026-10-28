@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
-	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
@@ -30,8 +31,11 @@ func refuseUnbootstrapped(tier environment.Tier) error {
 }
 
 func (s *KeyValues) run(ctx context.Context, tier environment.Tier, unbootstrapped error, stdin io.Reader, argv ...string) (string, error) {
-	command := shell.Words(append([]string{boxapi.LiveBinary, boxapi.RecordsCommand, string(tier)}, argv...))
-	result, err := s.box.Stream(ctx, ssh.RootWhenAble, command, stdin)
+	command := ssh.LiveCommand{
+		Fixed: []string{boxapi.LiveBinary, boxapi.RecordsCommand},
+		Rest:  slices.Concat([]string{string(tier)}, argv),
+	}
+	result, err := s.box.StreamLive(content.Omit(ctx), ssh.RootWhenAble, "records "+argv[0], command, stdin)
 	if err != nil {
 		return "", err
 	}

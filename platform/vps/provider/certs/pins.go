@@ -86,7 +86,7 @@ func (p *Pins) read(ctx context.Context, path string) (boxapi.PinnedPair, error)
 			"pinned certificate %q is outside %s",
 			path, boxapi.PinsDir)
 	}
-	said, err := p.box.RunArgv(ctx, ssh.Granted, "read the certificate pinned at "+boxapi.PinCertificate(path), []string{boxapi.LiveBinary, boxapi.PinCommand, leaf}, nil)
+	said, err := p.box.RunLive(ctx, ssh.Granted, "read the certificate pinned at "+boxapi.PinCertificate(path), ssh.LiveCommand{Fixed: []string{boxapi.LiveBinary, boxapi.PinCommand}, Rest: []string{leaf}}, nil)
 	if err != nil {
 		return boxapi.PinnedPair{}, err
 	}

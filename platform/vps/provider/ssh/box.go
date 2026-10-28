@@ -10,8 +10,12 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Conn interface {
@@ -21,6 +25,7 @@ type Conn interface {
 	Preflight(ctx context.Context) (Facts, error)
 	Destination() Destination
 	ForwardPort(ctx context.Context, remote string) (string, func(), error)
+	ForwardSpans() string
 }
 
 type Dial func(ctx context.Context) (Conn, error)
@@ -56,6 +61,9 @@ type Box struct {
 	login        memo[bool]
 	docker       memo[prefix]
 	arch         memo[string]
+
+	takesTraceFlags func(context.Context) (bool, error)
+	traceFlagsTaken memo[bool]
 }
 
 func NewBox(dial Dial, wait func(context.Context, time.Duration) error) *Box {
@@ -358,9 +366,59 @@ func (b *Box) streamAs(ctx context.Context, p prefix, command string, stdin io.R
 	if err != nil {
 		return Result{}, err
 	}
-	result, err := conn.Stream(ctx, p.wrapping(command), stdin)
+	result, err := conn.Stream(ctx, p.wrapping(exportingSpans(ctx, conn, command)), stdin)
 	result.sudo = p.sudo()
 	return result, err
+}
+
+func (b *Box) TraceFlags(ctx context.Context) []string {
+	conn, err := b.conn(ctx)
+	if err != nil {
+		return nil
+	}
+	parent, socket := spanDestination(ctx, conn)
+	if parent == "" || !b.isTraceFlagsTaken(ctx) {
+		return nil
+	}
+	return []string{"--" + boxapi.TraceParentFlag + "=" + parent, "--" + boxapi.TraceSocketFlag + "=" + socket}
+}
+
+func (b *Box) SendTraceFlagsWhen(takes func(context.Context) (bool, error)) {
+	b.takesTraceFlags = takes
+}
+
+func (b *Box) isTraceFlagsTaken(ctx context.Context) bool {
+	taken, _ := b.traceFlagsTaken.get(func() (bool, error) {
+		if b.takesTraceFlags == nil {
+			return false, nil
+		}
+		takes, err := b.takesTraceFlags(ctx)
+		return err == nil && takes, nil
+	})
+	return taken
+}
+
+func exportingSpans(ctx context.Context, conn Conn, command string) string {
+	parent, socket := spanDestination(ctx, conn)
+	if parent == "" {
+		return command
+	}
+	return "export " + boxapi.TraceParentEnvVar + "=" + shell.Quote(parent) + " " + boxapi.TraceSocketEnvVar + "=" + shell.Quote(socket) + "; " + command
+}
+
+func spanDestination(ctx context.Context, conn Conn) (string, string) {
+	if !trace.SpanContextFromContext(ctx).IsSampled() {
+		return "", ""
+	}
+	parent := tracing.TraceParent(ctx)
+	if parent == "" {
+		return "", ""
+	}
+	socket := conn.ForwardSpans()
+	if socket == "" {
+		return "", ""
+	}
+	return parent, socket
 }
 
 func (b *Box) Assume(ctx context.Context, as Acting) error {
@@ -378,7 +436,13 @@ func (b *Box) Stream(ctx context.Context, as Acting, command string, stdin io.Re
 	return result, err
 }
 
-func (b *Box) Run(ctx context.Context, as Acting, what, command string, stdin io.Reader) (string, error) {
+func startCommandSpan(ctx context.Context, what string) (context.Context, trace.Span) {
+	return otel.Tracer(scope).Start(ctx, "run box command", trace.WithAttributes(attribute.String("vps.command.purpose", what)))
+}
+
+func (b *Box) Run(ctx context.Context, as Acting, what, command string, stdin io.Reader) (_ string, err error) {
+	ctx, span := startCommandSpan(ctx, what)
+	defer func() { tracing.EndSpan(span, err) }()
 	result, err := b.Stream(ctx, as, command, stdin)
 	if err != nil {
 		return "", err
@@ -389,7 +453,9 @@ func (b *Box) Run(ctx context.Context, as Acting, what, command string, stdin io
 	return result.Stdout, nil
 }
 
-func (b *Box) Attempt(ctx context.Context, as Acting, what, command string, stdin io.Reader) (string, string, error) {
+func (b *Box) Attempt(ctx context.Context, as Acting, what, command string, stdin io.Reader) (_, _ string, err error) {
+	ctx, span := startCommandSpan(ctx, what)
+	defer func() { tracing.EndSpan(span, err) }()
 	result, err := b.Stream(ctx, as, command, stdin)
 	if err != nil {
 		return "", "", err
@@ -400,7 +466,28 @@ func (b *Box) Attempt(ctx context.Context, as Acting, what, command string, stdi
 	return result.Stdout, "", nil
 }
 
-func (b *Box) RunArgv(ctx context.Context, as Acting, what string, argv []string, stdin io.Reader) (string, error) {
+type LiveCommand struct {
+	Fixed []string
+	Rest  []string
+}
+
+func (c LiveCommand) Argv(traceFlags []string) []string {
+	return slices.Concat(c.Fixed, traceFlags, c.Rest)
+}
+
+func (b *Box) RunLive(ctx context.Context, as Acting, what string, command LiveCommand, stdin io.Reader) (_ string, err error) {
+	ctx, span := startCommandSpan(ctx, what)
+	defer func() { tracing.EndSpan(span, err) }()
+	return b.runArgv(ctx, as, what, command.Argv(b.TraceFlags(ctx)), stdin)
+}
+
+func (b *Box) StreamLive(ctx context.Context, as Acting, what string, command LiveCommand, stdin io.Reader) (_ Result, err error) {
+	ctx, span := startCommandSpan(ctx, what)
+	defer func() { tracing.EndSpan(span, err) }()
+	return b.Stream(ctx, as, shell.Words(command.Argv(b.TraceFlags(ctx))), stdin)
+}
+
+func (b *Box) runArgv(ctx context.Context, as Acting, what string, argv []string, stdin io.Reader) (string, error) {
 	p, unelevated, err := b.prefixFor(ctx, as)
 	if err != nil {
 		return "", err
@@ -429,7 +516,7 @@ func (b *Box) RunLines(ctx context.Context, as Acting, command string, each func
 	if err != nil {
 		return err
 	}
-	return conn.RunLines(ctx, p.wrapping(command), each)
+	return conn.RunLines(ctx, p.wrapping(exportingSpans(ctx, conn, command)), each)
 }
 
 func (b *Box) Said(ctx context.Context, as Acting, command string) (string, error) {

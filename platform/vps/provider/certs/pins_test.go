@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
@@ -105,4 +106,63 @@ func pinnedLeaf(t *testing.T, hostname string) []byte {
 		t.Fatal(err)
 	}
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: raw})
+}
+
+func TestAPinReadHandsThePinHelperItsRunBoxCommandSpanAndSocketWithinTheSudoersLine(t *testing.T) {
+	ctx, spans := tracingtest.Record(t)
+	pin := boxapi.Pin{Hostname: "shop.example.com", Path: boxapi.PinsDir + "/shop"}
+	leaf := pinnedLeaf(t, pin.Hostname)
+	said, err := json.Marshal(boxapi.PinnedPair{Certificate: string(leaf), KeyMatches: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sudoers := "sudo -n " + shell.Words([]string{boxapi.LiveBinary, boxapi.PinCommand}) + " "
+	box := sshtest.New(func(command string) (ssh.Result, bool) {
+		if strings.HasPrefix(command, sudoers) && strings.HasSuffix(command, " 'shop'") {
+			return ssh.Result{Stdout: string(said) + "\n"}, true
+		}
+		return ssh.Result{}, false
+	})
+	box.Facts, box.User, box.SpanSocket = ssh.Facts{Systemd: true}, boxapi.DeployLogin, "/tmp/ocel-spans.abc/otlp.sock"
+
+	opened := box.Open()
+	opened.SendTraceFlagsWhen(func(context.Context) (bool, error) { return true, nil })
+	if _, err := NewPins(opened, []boxapi.Pin{pin}).Certificate(ctx, pin.Path); err != nil {
+		t.Fatalf("Certificate() = %v", err)
+	}
+	parent := tracingtest.SpanNamed(t, spans.Ended(), "run box command").SpanContext()
+	want := sudoers + shell.Words([]string{
+		"--traceparent=00-" + parent.TraceID().String() + "-" + parent.SpanID().String() + "-01",
+		"--trace-socket=/tmp/ocel-spans.abc/otlp.sock",
+		"shop",
+	})
+	if ran := box.Commands(); ran[len(ran)-1] != want {
+		t.Errorf("the pin helper ran as %q, want %q: the trace flags after `pin`, where the sudoers line matches anything", ran[len(ran)-1], want)
+	}
+}
+
+func TestAPinReadOnABoxWhoseOcelLivePredatesTraceFlagsRunsUntraced(t *testing.T) {
+	ctx, _ := tracingtest.Record(t)
+	pin := boxapi.Pin{Hostname: "shop.example.com", Path: boxapi.PinsDir + "/shop"}
+	said, err := json.Marshal(boxapi.PinnedPair{Certificate: string(pinnedLeaf(t, pin.Hostname)), KeyMatches: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinning := "sudo -n " + shell.Words([]string{boxapi.LiveBinary, boxapi.PinCommand}) + " "
+	box := sshtest.New(func(command string) (ssh.Result, bool) {
+		if !strings.HasPrefix(command, pinning) {
+			return ssh.Result{}, false
+		}
+		if command != pinning+"'shop'" {
+			return ssh.Result{Code: 1, Stderr: "usage: ocel-live pin <name>"}, true
+		}
+		return ssh.Result{Stdout: string(said) + "\n"}, true
+	})
+	box.Facts, box.User, box.SpanSocket = ssh.Facts{Systemd: true}, boxapi.DeployLogin, "/tmp/ocel-spans.abc/otlp.sock"
+	opened := box.Open()
+	opened.SendTraceFlagsWhen(func(context.Context) (bool, error) { return false, nil })
+
+	if _, err := NewPins(opened, []boxapi.Pin{pin}).Certificate(ctx, pin.Path); err != nil {
+		t.Fatalf("Certificate() = %v, want a box bootstrapped before trace flags to read its pin as it did", err)
+	}
 }

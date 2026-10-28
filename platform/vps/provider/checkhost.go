@@ -12,26 +12,45 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
 	reachTimeout  = 10 * time.Second
 	lookupTimeout = 10 * time.Second
+
+	scope = "github.com/ocelhq/ocel/platform/vps/provider"
 )
 
 type Lookup func(ctx context.Context, hostname string) ([]netip.Addr, error)
 
 type Reach func(ctx context.Context, address string) error
 
-func systemLookup(ctx context.Context, hostname string) ([]netip.Addr, error) {
+func systemLookup(ctx context.Context, hostname string) (addrs []netip.Addr, err error) {
+	ctx, span := otel.Tracer(scope).Start(ctx, "look up host", trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(attribute.String("dns.question.name", hostname)))
+	defer func() {
+		answers := make([]string, 0, len(addrs))
+		for _, addr := range addrs {
+			answers = append(answers, addr.String())
+		}
+		span.SetAttributes(attribute.StringSlice("dns.answers", answers))
+		tracing.EndSpan(span, err)
+	}()
 	asking, stop := context.WithTimeout(ctx, lookupTimeout)
 	defer stop()
 	return net.DefaultResolver.LookupNetIP(asking, "ip", hostname)
 }
 
-func systemReach(ctx context.Context, address string) error {
+func systemReach(ctx context.Context, address string) (err error) {
+	ctx, span := otel.Tracer(scope).Start(ctx, "reach host", trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(attribute.String("server.address", address)))
+	defer func() { tracing.EndSpan(span, err) }()
 	conn, err := (&net.Dialer{Timeout: reachTimeout}).DialContext(ctx, "tcp", address)
 	if err != nil {
 		return err
