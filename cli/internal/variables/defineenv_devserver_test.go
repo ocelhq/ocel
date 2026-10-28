@@ -90,7 +90,7 @@ func discover(cfg *project.Project, srv *devserver.Server, stdout, stderr io.Wri
 	if err != nil {
 		return err
 	}
-	prepared, err := discovery.Prepare(cfg.Dir, roots)
+	prepared, err := discovery.Prepare(context.Background(), cfg.Dir, roots, stderr)
 	if err != nil {
 		return err
 	}

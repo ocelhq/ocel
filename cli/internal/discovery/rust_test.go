@@ -3,6 +3,7 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -217,7 +218,7 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 
 	collected, server := declareCollector(t)
 
-	prepared, err := Prepare(configDir, roots)
+	prepared, err := Prepare(context.Background(), configDir, roots, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -287,7 +288,7 @@ func TestRunDeclaresWhatASharedRustCrateDeclares(t *testing.T) {
 
 	collected, server := declareCollector(t)
 
-	prepared, err := Prepare(configDir, roots)
+	prepared, err := Prepare(context.Background(), configDir, roots, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -390,7 +391,7 @@ func TestRunRefusesARustBinaryWithoutOcelMainInsteadOfStartingTheApp(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := Prepare(configDir, []Root{{Dir: configDir, Language: language.Rust}})
+	prepared, err := Prepare(context.Background(), configDir, []Root{{Dir: configDir, Language: language.Rust}}, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -414,7 +415,7 @@ func TestRunShowsTheWarningsOfARustBinaryOnce(t *testing.T) {
 	needsCargo(t)
 	configDir := rustFixture(t, rustBinManifest)
 	write(t, filepath.Join(configDir, "src", "main.rs"), strings.Replace(markedMain, "fn main() {\n", "fn main() {\n    let unread = 1;\n", 1))
-	prepared, err := Prepare(configDir, []Root{{Dir: configDir, Language: language.Rust}})
+	prepared, err := Prepare(context.Background(), configDir, []Root{{Dir: configDir, Language: language.Rust}}, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -465,7 +466,7 @@ func TestRunRefusesARustBinaryThatLinksTheSDKWithoutOcelMain(t *testing.T) {
 		return strings.Replace(main, "#[ocel::main]\n", "", 1)
 	})
 	reuseTheRustFixturesSDKBuild(t)
-	prepared, err := Prepare(configDir, []Root{{Dir: configDir, Language: language.Rust}})
+	prepared, err := Prepare(context.Background(), configDir, []Root{{Dir: configDir, Language: language.Rust}}, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -499,7 +500,7 @@ func TestRunDeclaresWhatARustBinaryThatCallsOcelDiscoverItselfDeclares(t *testin
 		return strings.Replace(main, "#[ocel::main]\nfn main() {\n", "fn main() {\n    if ocel::discover().expect(\"ocel discovery\") {\n        return;\n    }\n", 1)
 	})
 	reuseTheRustFixturesSDKBuild(t)
-	prepared, err := Prepare(configDir, []Root{{Dir: configDir, Language: language.Rust}})
+	prepared, err := Prepare(context.Background(), configDir, []Root{{Dir: configDir, Language: language.Rust}}, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}

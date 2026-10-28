@@ -49,7 +49,10 @@ type Programs struct {
 	run    *workdir.Run
 }
 
-func Prepare(configDir string, roots []Root) (Programs, error) {
+func Prepare(ctx context.Context, configDir string, roots []Root, output io.Writer) (Programs, error) {
+	if err := installMissingDependencies(ctx, configDir, roots, output); err != nil {
+		return Programs{}, err
+	}
 	run := workdir.NewRun()
 	bundle, err := bundleRoots(configDir, roots, run.Path(configDir, entryFileName))
 	if err != nil {

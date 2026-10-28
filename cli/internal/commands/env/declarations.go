@@ -18,7 +18,7 @@ func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *proj
 	var definitions []*resourcesv1.VariableDefinition
 	var groups []*resourcesv1.GroupDefinition
 	err := collecting(run, cfg, func(output io.Writer) error {
-		prepared, err := declaration.Prepare(cfg)
+		prepared, err := declaration.Prepare(ctx, cfg, output)
 		if err != nil {
 			return err
 		}

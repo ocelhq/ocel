@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -197,7 +198,7 @@ await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+p
 `)
 
 	cfg := &project.Project{Slug: "test-app", Dir: root}
-	prepared, err := Prepare(cfg)
+	prepared, err := Prepare(context.Background(), cfg, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}

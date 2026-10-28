@@ -3,6 +3,7 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -35,7 +36,7 @@ func prepare(t *testing.T, root string) Programs {
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}
-	prepared, err := Prepare(root, roots)
+	prepared, err := Prepare(context.Background(), root, roots, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -231,7 +232,7 @@ func TestRunBundlesNothingForARootItCannotDiscover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}
-	prepared, err := Prepare(root, append(roots, Root{Dir: filepath.Join(root, "unknown"), Language: "ruby"}))
+	prepared, err := Prepare(context.Background(), root, append(roots, Root{Dir: filepath.Join(root, "unknown"), Language: "ruby"}), io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -274,10 +275,10 @@ func TestProgramsWithARootOtherThanJSHaveNoFingerprint(t *testing.T) {
 	root := t.TempDir()
 	write(t, filepath.Join(root, "web", "main.ts"), "export {};\n")
 	write(t, filepath.Join(root, "api", "main.go"), "package api\n")
-	prepared, err := Prepare(root, []Root{
+	prepared, err := Prepare(context.Background(), root, []Root{
 		{Dir: filepath.Join(root, "web"), Language: language.JS},
 		{Dir: filepath.Join(root, "api"), Language: language.Go},
-	})
+	}, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}

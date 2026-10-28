@@ -3,6 +3,7 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -105,7 +106,7 @@ func TestRunDeclaresWhatThePythonFixtureDeclares(t *testing.T) {
 
 	collected, server := declareCollector(t)
 
-	prepared, err := Prepare(configDir, roots)
+	prepared, err := Prepare(context.Background(), configDir, roots, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -260,7 +261,7 @@ func TestRunImportsEveryPythonRootThatSharesARunRootInOneProgram(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}
-	prepared, err := Prepare(configDir, roots)
+	prepared, err := Prepare(context.Background(), configDir, roots, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}

@@ -46,22 +46,24 @@ type Asset struct {
 }
 
 type behaviour struct {
-	declaredAs string
-	lockfiles  []string
-	runner     string
-	runtime    string
-	install    func(Location) string
-	build      func(Location) string
-	start      func(Location) string
-	replaces   []string
+	declaredAs    string
+	lockfiles     []string
+	runner        string
+	runtime       string
+	frozenInstall []string
+	install       func(Location) string
+	build         func(Location) string
+	start         func(Location) string
+	replaces      []string
 }
 
 var behaviours = map[PackageManager]behaviour{
 	Pnpm: {
-		declaredAs: "pnpm",
-		lockfiles:  []string{pnpmLock},
-		runner:     "pnpm",
-		runtime:    "node",
+		declaredAs:    "pnpm",
+		lockfiles:     []string{pnpmLock},
+		runner:        "pnpm",
+		runtime:       "node",
+		frozenInstall: []string{"pnpm", "install", "--frozen-lockfile"},
 		install: func(l Location) string {
 			return fmt.Sprintf("pnpm install --frozen-lockfile --filter \"{./%s}...\"", l.Path)
 		},
@@ -70,17 +72,19 @@ var behaviours = map[PackageManager]behaviour{
 		replaces: []string{"pnpm install --frozen-lockfile --prefer-offline", "pnpm install"},
 	},
 	Npm: {
-		declaredAs: "npm",
-		lockfiles:  []string{npmLock, "npm-shrinkwrap.json"},
-		runner:     "npm",
-		runtime:    "node",
-		build:      func(l Location) string { return fmt.Sprintf("npm run build -w %s", l.Path) },
-		start:      func(l Location) string { return fmt.Sprintf("npm run start -w %s", l.Path) },
+		declaredAs:    "npm",
+		lockfiles:     []string{npmLock, "npm-shrinkwrap.json"},
+		runner:        "npm",
+		runtime:       "node",
+		frozenInstall: []string{"npm", "ci"},
+		build:         func(l Location) string { return fmt.Sprintf("npm run build -w %s", l.Path) },
+		start:         func(l Location) string { return fmt.Sprintf("npm run start -w %s", l.Path) },
 	},
 	YarnBerry: {
-		runner:  "yarn",
-		runtime: "node",
-		install: byName(func(l Location) string { return fmt.Sprintf("yarn workspaces focus %s", l.Package.Name) }),
+		runner:        "yarn",
+		runtime:       "node",
+		frozenInstall: []string{"yarn", "install", "--immutable"},
+		install:       byName(func(l Location) string { return fmt.Sprintf("yarn workspaces focus %s", l.Package.Name) }),
 		build: byName(func(l Location) string {
 			return fmt.Sprintf("yarn workspaces foreach -R -t --from %s run build", l.Package.Name)
 		}),
@@ -88,20 +92,22 @@ var behaviours = map[PackageManager]behaviour{
 		replaces: []string{"yarn install --check-cache"},
 	},
 	YarnClassic: {
-		declaredAs: "yarn",
-		lockfiles:  []string{yarnLock},
-		runner:     "yarn",
-		runtime:    "node",
-		build:      byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run build", l.Package.Name) }),
-		start:      byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run start", l.Package.Name) }),
+		declaredAs:    "yarn",
+		lockfiles:     []string{yarnLock},
+		runner:        "yarn",
+		runtime:       "node",
+		frozenInstall: []string{"yarn", "install", "--frozen-lockfile"},
+		build:         byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run build", l.Package.Name) }),
+		start:         byName(func(l Location) string { return fmt.Sprintf("yarn workspace %s run start", l.Package.Name) }),
 	},
 	Bun: {
-		declaredAs: "bun",
-		lockfiles:  []string{bunLock, "bun.lockb"},
-		runner:     "bun",
-		runtime:    "bun",
-		build:      byName(func(l Location) string { return fmt.Sprintf("bun run --filter %s build", l.Package.Name) }),
-		start:      func(l Location) string { return l.inAppDir("bun run start") },
+		declaredAs:    "bun",
+		lockfiles:     []string{bunLock, "bun.lockb"},
+		runner:        "bun",
+		runtime:       "bun",
+		frozenInstall: []string{"bun", "install", "--frozen-lockfile"},
+		build:         byName(func(l Location) string { return fmt.Sprintf("bun run --filter %s build", l.Package.Name) }),
+		start:         func(l Location) string { return l.inAppDir("bun run start") },
 	},
 }
 

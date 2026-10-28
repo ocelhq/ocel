@@ -78,13 +78,13 @@ func discover(ctx context.Context, server *devserver.Server, cfg *project.Projec
 		return err
 	}
 
-	prepared, err := discovery.Prepare(cfg.Dir, roots)
+	stdout, stderr := span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDOUT), span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR)
+	prepared, err := discovery.Prepare(ctx, cfg.Dir, roots, stderr)
 	if err != nil {
 		return err
 	}
 
 	_ = server.TakeSDKRefusal()
-	stdout, stderr := span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDOUT), span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR)
 	err = discovery.Run(run.ContextWithSpan(ctx, span), cfg.Dir, prepared, server.DiscoveryTarget(), stdout, stderr)
 	if refused := server.TakeSDKRefusal(); refused != nil {
 		return refused
