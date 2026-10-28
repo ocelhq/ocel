@@ -50,8 +50,8 @@ func TestTheLiveLineNamesThePhaseTheSpanThatSpokeLastAndItsDoneOverTotal(t *test
 
 	run, live, c := liveRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Building.Title("web"))
-	api := build.Child("api", progress.Building.Title("api"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
+	_, api := build.Child(t.Context(), "api", progress.Building.Title("api"))
 	say(t, web, "Compiled successfully\n")
 	web.End(nil)
 	say(t, api, "\x1b[34m=> [builder 6/6] RUN npm run build\x1b[0m\n")
@@ -71,8 +71,8 @@ func TestASecondSpanSpeakingWithinASecondAndAHalfDoesNotStealTheLine(t *testing.
 
 	run, live, c := liveRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Building.Title("web"))
-	api := build.Child("api", progress.Building.Title("api"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
+	_, api := build.Child(t.Context(), "api", progress.Building.Title("api"))
 	say(t, web, "Creating an optimized production build\n")
 	c.pass(time.Second)
 	say(t, api, "=> [builder 2/6] COPY package.json .\n")
@@ -92,7 +92,7 @@ func TestASpanWithoutOutputShowsItsLatestProgressMessage(t *testing.T) {
 	t.Parallel()
 
 	run, live, _ := liveRun(t)
-	api := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("api", progress.Deploying.Title("api"))
+	_, api := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "api", progress.Deploying.Title("api"))
 	api.Say("Uploading 2 of 4 assets")
 	api.Say("Uploading 3 of 4 assets")
 
@@ -105,7 +105,7 @@ func TestASpansRawOutputOutranksItsProgressMessages(t *testing.T) {
 	t.Parallel()
 
 	run, live, _ := liveRun(t)
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
+	_, web := run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), "web", progress.Building.Title("web"))
 	say(t, web, "Compiled successfully\n")
 	web.Say("Collected 12 routes")
 
@@ -118,7 +118,7 @@ func TestAMultiLineProgressMessageShowsOnlyItsFirstLine(t *testing.T) {
 	t.Parallel()
 
 	run, live, _ := liveRun(t)
-	api := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("api", progress.Deploying.Title("api"))
+	_, api := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "api", progress.Deploying.Title("api"))
 	api.Say("Waiting for the certificate\nDNS has not propagated yet")
 
 	if got, want := shownText(t, live, 80), "      [deploy] ⠋ api: Waiting for the certificate"; got != want {
@@ -130,7 +130,7 @@ func TestDebugOutputNeverReachesTheLiveLine(t *testing.T) {
 	t.Parallel()
 
 	run, live, _ := liveRun(t)
-	api := run.Phase(progressv1.Phase_PHASE_PROVISION).Child("api", progress.Provisioning.Title("api"))
+	_, api := run.Phase(progressv1.Phase_PHASE_PROVISION).Child(t.Context(), "api", progress.Provisioning.Title("api"))
 	api.Say("Applying 12 changes")
 	w := api.Output(progressv1.Level_LEVEL_DEBUG, progressv1.Stream_STREAM_STDERR)
 	if _, err := w.Write([]byte("I0927 engine: refreshing fake:bucket\n")); err != nil {
@@ -148,8 +148,8 @@ func TestWhenTheShownSpanEndsTheLineNamesASpanStillRunning(t *testing.T) {
 
 	run, live, _ := liveRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Building.Title("web"))
-	build.Child("api", progress.Building.Title("api"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
+	build.Child(t.Context(), "api", progress.Building.Title("api"))
 	say(t, web, "Compiled successfully\n")
 	web.End(nil)
 
@@ -163,11 +163,11 @@ func TestASpanThatHasSaidNothingGivesTheLineToOneThatSpeaksAtOnce(t *testing.T) 
 
 	run, live, c := liveRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	build.Child("web", progress.Building.Title("web"))
+	build.Child(t.Context(), "web", progress.Building.Title("web"))
 	if got, want := shownText(t, live, 80), "      [build] ⠋ web: Building web"; got != want {
 		t.Fatalf("before anyone wrote the live line shows\n%q\nwant\n%q", got, want)
 	}
-	api := build.Child("api", progress.Building.Title("api"))
+	_, api := build.Child(t.Context(), "api", progress.Building.Title("api"))
 	c.pass(200 * time.Millisecond)
 	say(t, api, "=> [builder 1/6] FROM node:22-alpine\n")
 
@@ -180,7 +180,7 @@ func TestAWideLineIsCutToOneColumnShortOfTheTerminalByDisplayWidth(t *testing.T)
 	t.Parallel()
 
 	run, live, c := liveRun(t)
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
+	_, web := run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), "web", progress.Building.Title("web"))
 	say(t, web, "✓ 构建完成 🎉 生成了 12 个页面 👍🏽 用时 3.2 秒 and a long English tail after it\n")
 	c.pass(95 * time.Second)
 
@@ -201,7 +201,7 @@ func TestAnEmojiLineFitsATerminalThatCountsEachCodePointsWidth(t *testing.T) {
 
 	run, live, c := liveRun(t)
 	family := "\U0001f468\u200d\U0001f469\u200d\U0001f467"
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Child(family+" web", progress.Building.Title("web"))
+	_, web := run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), family+" web", progress.Building.Title("web"))
 	say(t, web, "👍🏽 built 🧑🏽‍💻 by "+family+" in 3.2s, and a long English tail after it\n")
 	c.pass(95 * time.Second)
 
@@ -220,7 +220,7 @@ func TestAtAnyWidthTheLiveLineKeepsItsSpinnerOrShowsNothing(t *testing.T) {
 	t.Parallel()
 
 	run, live, _ := liveRun(t)
-	run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
+	run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), "web", progress.Building.Title("web"))
 
 	for width := 0; width <= 24; width++ {
 		if got := live.render(width); got != "" && !strings.HasPrefix(got, "      [build] "+spinnerFrame(0)) {
@@ -233,7 +233,7 @@ func TestTheLiveLinesPhaseLinesUpWithTheLinesCommittedAboveIt(t *testing.T) {
 	t.Parallel()
 
 	run, live, _ := liveRun(t)
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("api", progress.Deploying.Title("api"))
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "api", progress.Deploying.Title("api"))
 	committed := line{level: progressv1.Level_LEVEL_INFO, phase: progressv1.Phase_PHASE_DEPLOY, subject: "web", message: "m", status: progressv1.SpanStatus_SPAN_STATUS_OK}.render(Presentation{})
 
 	got := live.render(80)
@@ -249,7 +249,7 @@ func TestASpanThatHasSaidNothingYetShowsWhatItDoesBesideItsSubject(t *testing.T)
 	t.Parallel()
 
 	run, live, _ := liveRun(t)
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("web", progress.Deploying.Title("the serverless app to production"))
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "web", progress.Deploying.Title("the serverless app to production"))
 
 	if got, want := shownText(t, live, 80), "      [deploy] ⠋ web: Deploying the serverless app to production"; got != want {
 		t.Fatalf("the live line shows\n%q\nwant\n%q", got, want)
@@ -260,7 +260,7 @@ func TestASpanWithoutASubjectIsNamedByWhatItDoes(t *testing.T) {
 	t.Parallel()
 
 	run, live, _ := liveRun(t)
-	run.Phase(progressv1.Phase_PHASE_PROVISION).Child("", progress.Title{Started: "Shared infrastructure", Ended: "Shared infrastructure"})
+	run.Phase(progressv1.Phase_PHASE_PROVISION).Child(t.Context(), "", progress.Title{Started: "Shared infrastructure", Ended: "Shared infrastructure"})
 
 	if got, want := shownText(t, live, 80), "      [provision] ⠋ Shared infrastructure"; got != want {
 		t.Fatalf("the live line shows\n%q\nwant\n%q", got, want)
@@ -298,7 +298,7 @@ func TestAPhaseThatHasEndedLeavesNoLiveLine(t *testing.T) {
 
 	run, live, c := liveRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Building.Title("web"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
 	web.End(nil)
 	build.End(nil)
 	c.pass(8 * time.Second)

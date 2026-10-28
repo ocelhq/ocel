@@ -48,7 +48,7 @@ type CloudJob struct {
 	Tag         string
 	Preview     *cloudv1.PreviewTarget
 	NoWait      bool
-	OpenBrowser func(url string) error
+	OpenBrowser func(ctx context.Context, url string) error
 	Stderr      io.Writer
 }
 
@@ -68,8 +68,8 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 
 	check := running.Phase(progressv1.Phase_PHASE_CHECK)
 	account := NewConsoleAccount(t.Cloud.ConsoleURL, t.Cloud.Credentials.AccessToken)
-	loading := check.Child(hostOf(t.Cloud.ConsoleURL), progress.Loading.Title("your organizations"))
-	org, err := pickCloudOrganization(ctx, account, cfg.Dir)
+	loadingCtx, loading := check.Child(ctx, hostOf(t.Cloud.ConsoleURL), progress.Loading.Title("your organizations"))
+	org, err := pickCloudOrganization(loadingCtx, account, cfg.Dir)
 	loading.End(err)
 	if err != nil {
 		check.End(err)
@@ -85,7 +85,7 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 	if t.Derived != "" {
 		check.Say(t.Derived)
 	}
-	link, err := linkCloudProject(ctx, check, account, cfg, org)
+	link, err := linkCloudProject(run.ContextWithSpan(ctx, check), check, account, cfg, org)
 	check.End(err)
 	if err != nil {
 		return err
@@ -93,20 +93,20 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 
 	upload := running.Phase(progressv1.Phase_PHASE_BUILD)
 	jobs := cloud.New(t.Cloud.Offer.APIURL, console.NewCloudTokens(account.Client, account.Session, org.ID, cloudv1.Scope_SCOPE_APPS_READ, cloudv1.Scope_SCOPE_APPS_WRITE))
-	sourceID, projectPath, err := uploadSource(ctx, upload, cfg, jobs)
+	sourceID, projectPath, err := uploadSource(run.ContextWithSpan(ctx, upload), upload, cfg, jobs)
 	upload.End(err)
 	if err != nil {
 		return err
 	}
 
 	phase := running.Phase(jobPhase(job.Kind))
-	starting := phase.Child(cfg.Slug, progress.Title{Started: "Starting the job on Ocel Cloud", Ended: "Started the job on Ocel Cloud"})
-	started, err := jobs.StartJob(ctx, &cloudv1.StartJobRequest{
+	startingCtx, starting := phase.Child(ctx, cfg.Slug, progress.Title{Started: "Starting the job on Ocel Cloud", Ended: "Started the job on Ocel Cloud"})
+	started, err := jobs.StartJob(startingCtx, &cloudv1.StartJobRequest{
 		ProjectId:   link.ProjectID,
 		Slug:        cfg.Slug,
 		Command:     job.Kind,
 		SourceId:    sourceID,
-		Git:         readGitContext(cfg.Dir),
+		Git:         readGitContext(startingCtx, cfg.Dir),
 		Tag:         job.Tag,
 		Preview:     job.Preview,
 		ProjectPath: projectPath,
@@ -126,16 +126,16 @@ func (i Invocation) RunOnCloud(ctx context.Context, t Target, job CloudJob) (err
 		running.Succeed(fmt.Sprintf("Started job %s on Ocel Cloud, and it runs without this terminal: %s", printedID, jobURL))
 		return nil
 	}
-	ended, err = waitForJob(ctx, running, phase, jobs, started, jobURL, cfg.Slug, job)
+	ended, err = waitForJob(run.ContextWithSpan(ctx, phase), running, phase, jobs, started, jobURL, cfg.Slug, job)
 	return err
 }
 
 func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cloud.Client, started *cloudv1.Job, jobURL, slug string, job CloudJob) (*cloudv1.Job, error) {
-	watching := phase.Child(slug, progress.Title{Started: "Waiting for the job on Ocel Cloud", Ended: "Waited for the job on Ocel Cloud"})
+	watchingCtx, watching := phase.Child(ctx, slug, progress.Title{Started: "Waiting for the job on Ocel Cloud", Ended: "Waited for the job on Ocel Cloud"})
 	printedID := terminal.EscapeControls(started.GetId())
 	var opened string
 	resume := func(string) {}
-	ended, err := jobs.WaitForJob(ctx, started.GetId(), func(read *cloudv1.Job) {
+	ended, err := jobs.WaitForJob(watchingCtx, started.GetId(), func(read *cloudv1.Job) {
 		running.SetCloudJob(summarizeJob(read, jobURL))
 		switch state := read.GetState(); {
 		case state == cloudv1.JobState_JOB_STATE_SUCCEEDED:
@@ -157,7 +157,7 @@ func waitForJob(ctx context.Context, running *run.Run, phase *run.Span, jobs *cl
 		}
 		opened = input.GetId()
 		if job.OpenBrowser != nil {
-			_ = job.OpenBrowser(jobURL)
+			_ = job.OpenBrowser(ctx, jobURL)
 		}
 	})
 	resume("this run stopped watching the job")
@@ -286,8 +286,8 @@ func summarizeJob(job *cloudv1.Job, jobURL string) *streamv1.CloudJob {
 	return &streamv1.CloudJob{Id: job.GetId(), Url: jobURL, State: job.GetState(), Result: job.GetResult(), Error: job.GetError()}
 }
 
-func readGitContext(dir string) *cloudv1.GitContext {
-	source := deployreport.ReadSource(dir, os.Getenv)
+func readGitContext(ctx context.Context, dir string) *cloudv1.GitContext {
+	source := deployreport.ReadSource(ctx, dir, os.Getenv)
 	if source == nil {
 		return nil
 	}
@@ -299,8 +299,8 @@ func readGitContext(dir string) *cloudv1.GitContext {
 }
 
 func uploadSource(ctx context.Context, phase *run.Span, cfg *project.Project, uploader *cloud.Client) (sourceID, projectPath string, err error) {
-	reading := phase.Child(cfg.Slug, progress.Reading.Title("the source"))
-	archive, err := sourcearchive.Pack(cfg.Dir)
+	readingCtx, reading := phase.Child(ctx, cfg.Slug, progress.Reading.Title("the source"))
+	archive, err := sourcearchive.Pack(readingCtx, cfg.Dir)
 	if err != nil {
 		reading.End(err)
 		return "", "", err
@@ -310,7 +310,7 @@ func uploadSource(ctx context.Context, phase *run.Span, cfg *project.Project, up
 		total += file.GetSize()
 	}
 	reading.Say(fmt.Sprintf("%s (%s) under %s", english.Count(len(archive.Manifest.GetFiles()), "file"), english.Bytes(total), archive.Root))
-	planned, err := uploader.Plan(ctx, archive)
+	planned, err := uploader.Plan(readingCtx, archive)
 	reading.End(err)
 	if err != nil {
 		return "", "", err
@@ -320,8 +320,8 @@ func uploadSource(ctx context.Context, phase *run.Span, cfg *project.Project, up
 		phase.Say("Ocel Cloud already holds every file")
 	} else {
 		object := fmt.Sprintf("%s (%s) to Ocel Cloud", english.Count(len(planned.Missing), "file"), english.Bytes(planned.TotalBytes))
-		uploading := phase.Child(cfg.Slug, progress.Title{Started: "Uploading " + object, Ended: "Uploaded " + object})
-		err = uploader.Send(ctx, archive, planned, reportUpload(uploading))
+		uploadingCtx, uploading := phase.Child(ctx, cfg.Slug, progress.Title{Started: "Uploading " + object, Ended: "Uploaded " + object})
+		err = uploader.Send(uploadingCtx, archive, planned, reportUpload(uploading))
 		uploading.End(err)
 		if err != nil {
 			return "", "", err
@@ -337,8 +337,8 @@ func uploadSource(ctx context.Context, phase *run.Span, cfg *project.Project, up
 	if projectPath == "." {
 		projectPath = ""
 	}
-	committing := phase.Child(cfg.Slug, progress.Title{Started: "Committing the source to Ocel Cloud", Ended: "Committed the source to Ocel Cloud"})
-	sourceID, err = uploader.Commit(ctx, archive.Manifest)
+	committingCtx, committing := phase.Child(ctx, cfg.Slug, progress.Title{Started: "Committing the source to Ocel Cloud", Ended: "Committed the source to Ocel Cloud"})
+	sourceID, err = uploader.Commit(committingCtx, archive.Manifest)
 	committing.End(err)
 	return sourceID, filepath.ToSlash(projectPath), err
 }
@@ -403,20 +403,20 @@ func linkCloudProject(ctx context.Context, check *run.Span, account ConsoleAccou
 }
 
 func findOrCreateProject(ctx context.Context, check *run.Span, account ConsoleAccount, slug string, org *console.Organization) (*consolev1.Project, error) {
-	find := func() (*consolev1.Project, error) {
+	find := func(ctx context.Context) (*consolev1.Project, error) {
 		projects, err := account.ListProjects(ctx, org)
 		return FindProject(projects, slug), err
 	}
-	loading := check.Child(slug, progress.Loading.Title("the projects in "+org.Name))
-	found, err := find()
+	loadingCtx, loading := check.Child(ctx, slug, progress.Loading.Title("the projects in "+org.Name))
+	found, err := find(loadingCtx)
 	loading.End(err)
 	if err != nil || found != nil {
 		return found, err
 	}
-	creating := check.Child(slug, progress.Creating.Title("the project in "+org.Name))
+	ctx, creating := check.Child(ctx, slug, progress.Creating.Title("the project in "+org.Name))
 	created, err := account.Client.CreateProject(ctx, account.Session, slug, slug)
 	if console.IsConflict(err) {
-		created, err = find()
+		created, err = find(ctx)
 		if err == nil && created == nil {
 			err = errors.New("the console reports the project exists but does not list it")
 		}

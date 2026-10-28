@@ -1,6 +1,7 @@
 package projectinit
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const gitignoreName = ".gitignore"
@@ -30,8 +32,8 @@ const (
 	outsideRepository
 )
 
-func ensureStateDirIgnored(projectDir string) (bool, error) {
-	status := readStateDirIgnoreStatus(projectDir)
+func ensureStateDirIgnored(ctx context.Context, projectDir string) (bool, error) {
+	status := readStateDirIgnoreStatus(ctx, projectDir)
 	if status == ignored {
 		return false, nil
 	}
@@ -66,8 +68,8 @@ func ensureStateDirIgnored(projectDir string) (bool, error) {
 	return true, nil
 }
 
-func readStateDirIgnoreStatus(projectDir string) ignoreStatus {
-	err := exec.Command("git", "-C", projectDir, "check-ignore", "--quiet", "--", stateDirPattern).Run()
+func readStateDirIgnoreStatus(ctx context.Context, projectDir string) ignoreStatus {
+	err := tracing.Command(ctx, "git", "-C", projectDir, "check-ignore", "--quiet", "--", stateDirPattern).Run()
 	var exit *exec.ExitError
 	switch {
 	case err == nil:

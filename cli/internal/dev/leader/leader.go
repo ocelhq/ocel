@@ -17,7 +17,7 @@ var ErrAlreadyRunning = errors.New("another ocel dev already leads this project"
 
 const probeTimeout = 2 * time.Second
 
-func Find(configPath string) (Leader, bool, error) {
+func Find(ctx context.Context, configPath string) (Leader, bool, error) {
 	leader, err := Read(configPath)
 	switch {
 	case errors.Is(err, fs.ErrNotExist), errors.Is(err, ErrMalformed):
@@ -25,10 +25,10 @@ func Find(configPath string) (Leader, bool, error) {
 	case err != nil:
 		return Leader{}, false, fmt.Errorf("read the dev leader record: %w", err)
 	}
-	return leader, isAnswering(leader), nil
+	return leader, isAnswering(ctx, leader), nil
 }
 
-func Claim(configPath string, leader Leader) error {
+func Claim(ctx context.Context, configPath string, leader Leader) error {
 	lock, err := lockRecord(configPath)
 	if err != nil {
 		return err
@@ -44,7 +44,7 @@ func Claim(configPath string, leader Leader) error {
 		}
 	case err != nil:
 		return fmt.Errorf("read the dev leader record: %w", err)
-	case isAnswering(current):
+	case isAnswering(ctx, current):
 		return ErrAlreadyRunning
 	default:
 		if err := removeRecord(configPath); err != nil {
@@ -80,8 +80,8 @@ func Release(configPath, token string) error {
 	return removeRecord(configPath)
 }
 
-func isAnswering(leader Leader) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+func isAnswering(ctx context.Context, leader Leader) bool {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), probeTimeout)
 	defer cancel()
 	stream, err := Subscribe(ctx, leader)
 	if err != nil {

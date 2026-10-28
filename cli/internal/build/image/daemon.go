@@ -15,6 +15,7 @@ import (
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
 
 	"github.com/ocelhq/ocel/pkg/images"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -171,7 +172,7 @@ func (d daemon) addressable(workers []*client.WorkerInfo) ([]*client.WorkerInfo,
 func (d daemon) tag(ctx context.Context, image Image) error {
 	transport := d.Transport()
 	defer transport.CloseIdleConnections()
-	return d.Tag(ctx, &http.Client{Transport: transport}, image.Digest, image.Repository, image.Tag)
+	return d.Tag(ctx, &http.Client{Transport: tracing.NewTransport(transport)}, image.Digest, image.Repository, image.Tag)
 }
 
 func (d daemon) unreachable(err error) error {

@@ -81,7 +81,7 @@ func runEnvPublish(ctx context.Context, dependencies Dependencies, cwd, publishe
 			return err
 		}
 		var resp *variablestorev1.PublishValuesResponse
-		err = runInSpan(run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeTierValues(opts)+" "+publisher+" publishes"), func() (err error) {
+		err = runInSpan(ctx, run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeTierValues(opts)+" "+publisher+" publishes"), func(ctx context.Context) (err error) {
 			resp, err = variableStore.PublishValues(ctx, &variablestorev1.PublishValuesRequest{
 				Slug:        cfg.Slug,
 				Tier:        opts.tier(),

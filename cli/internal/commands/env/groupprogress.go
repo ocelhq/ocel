@@ -29,7 +29,7 @@ func printGroupProgress(ctx context.Context, run *run.Run, store variablestorev1
 		return nil
 	}
 	var listed *variablestorev1.ListValuesResponse
-	err := runInSpan(run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title(describeTierValues(opts)), func() (err error) {
+	err := runInSpan(ctx, run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title(describeTierValues(opts)), func(ctx context.Context) (err error) {
 		listed, err = store.ListValues(ctx, &variablestorev1.ListValuesRequest{Tier: opts.tier(), Slug: cfg.Slug})
 		return err
 	})

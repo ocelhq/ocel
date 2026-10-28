@@ -51,8 +51,8 @@ func startHost(ctx context.Context, opts Options, source valueSource) (*host, er
 				opts.session().Warn(fmt.Sprintf("Stopping the dev resources failed: %v", err))
 			}
 		} else {
-			span := opts.session().Child("", stoppingResourcesTitle)
-			span.End(resources.Close(stopping))
+			spanCtx, span := opts.session().Child(stopping, "", stoppingResourcesTitle)
+			span.End(resources.Close(spanCtx))
 		}
 		_ = httpServer.Close()
 	}}, nil

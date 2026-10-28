@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 func nodeReasons(cfg *project.Project, roots []discovery.Root, rootsErr error) []string {
@@ -40,7 +41,7 @@ func nodeCheck(ctx context.Context, cfg *project.Project, roots []discovery.Root
 	if err != nil {
 		return check{verdict: verdictFail, text: needed + " — and it is not on PATH", fix: "install Node.js and put it on PATH"}, true
 	}
-	out, runErr := exec.CommandContext(ctx, path, "--version").Output()
+	out, runErr := tracing.CommandContext(ctx, path, "--version").Output()
 	found := strings.TrimSpace(string(out))
 	if runErr != nil || found == "" {
 		return check{verdict: verdictPass, text: needed + " — node on PATH"}, true

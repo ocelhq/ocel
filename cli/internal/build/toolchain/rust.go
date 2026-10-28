@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cargo"
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const cargoManifestFile = "Cargo.toml"
@@ -49,7 +50,7 @@ func (c Compilation) compileRust(ctx context.Context) error {
 		return fmt.Errorf("app %q is built from the crate at %s, and a function execs one binary: %w", c.App, source, err)
 	}
 
-	cmd := exec.Command("cargo", "build", "--release",
+	cmd := tracing.Command(ctx, "cargo", "build", "--release",
 		"--manifest-path", crate.ManifestPath, "--bin", bin.Name, "--target", target)
 	cmd.Dir = workspace.Root
 	cmd.Env = c.environ("CARGO_PROFILE_RELEASE_STRIP=symbols")

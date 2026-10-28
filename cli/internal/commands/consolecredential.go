@@ -21,8 +21,8 @@ func (i Invocation) startWithConsoleCredential(ctx context.Context, check *run.S
 		return provider, "", err
 	}
 	tier := readiness.TierName(opts.Tier)
-	issuing := check.Child(providerID(cfg), progress.Title{Started: "Asking the console for a " + tier + " credential", Ended: "The console issued a " + tier + " credential"})
-	credential, err := i.ConsoleCredential.Issue(ctx, consolecredential.Request{Tier: opts.Tier, Vendor: providerID(cfg)}, check.Warn)
+	issuingCtx, issuing := check.Child(ctx, providerID(cfg), progress.Title{Started: "Asking the console for a " + tier + " credential", Ended: "The console issued a " + tier + " credential"})
+	credential, err := i.ConsoleCredential.Issue(issuingCtx, consolecredential.Request{Tier: opts.Tier, Vendor: providerID(cfg)}, check.Warn)
 	if errors.Is(err, consolecredential.ErrNoTarget) {
 		issuing.End(nil)
 		check.Say(fmt.Sprintf("The console binds no target to this project's %s tier, so this deploys with the credentials around it.", tier))
@@ -49,8 +49,8 @@ func (i Invocation) startWithConsoleCredential(ctx context.Context, check *run.S
 }
 
 func (i Invocation) startProvider(ctx context.Context, check *run.Span, cfg *project.Project, launch providerprocess.Launch) (*providerprocess.Provider, error) {
-	loading := check.Child(providerID(cfg), progress.Loading.Title("the provider"))
-	provider, err := providerprocess.Start(ctx, cfg, check, i.Questions, launch)
+	loadingCtx, loading := check.Child(ctx, providerID(cfg), progress.Loading.Title("the provider"))
+	provider, err := providerprocess.Start(loadingCtx, cfg, check, i.Questions, launch)
 	loading.End(err)
 	return provider, err
 }

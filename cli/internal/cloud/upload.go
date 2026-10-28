@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/wireerror"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	"github.com/ocelhq/ocel/pkg/proto/cloud/v1/cloudv1connect"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -52,7 +53,7 @@ type Client struct {
 func New(apiURL string, tokens TokenSource) *Client {
 	c := &Client{
 		apiURL:  strings.TrimRight(apiURL, "/"),
-		http:    &http.Client{},
+		http:    tracing.NewClient(0),
 		headers: Headers{Tokens: tokens},
 		sleep:   sleep,
 	}

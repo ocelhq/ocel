@@ -52,7 +52,7 @@ func runList(ctx context.Context, invocation commands.Invocation, stdout io.Writ
 	var identity *contractv1.Identity
 	err = invocation.WithProvider(ctx, cfg, listCommand, accountOptions(target), func(ctx context.Context, p commands.ProviderRun) error {
 		identity = p.Preflight.Response.GetIdentity()
-		span := p.Check.Child(cfg.Slug, progress.Reading.Title("the projects in this account"))
+		ctx, span := p.Check.Child(ctx, cfg.Slug, progress.Reading.Title("the projects in this account"))
 		err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			listed, err = client.ListProjects(ctx, &contractv1.ListProjectsRequest{})
 			return err

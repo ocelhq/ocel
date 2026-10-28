@@ -17,7 +17,7 @@ import (
 func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *project.Project, provider *providerprocess.Provider, key string, opts envOptions, run *run.Run) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
 	var definitions []*resourcesv1.VariableDefinition
 	var groups []*resourcesv1.GroupDefinition
-	err := collecting(run, cfg, func(output io.Writer) error {
+	err := collecting(ctx, run, cfg, func(ctx context.Context, output io.Writer) error {
 		prepared, err := declaration.Prepare(cfg)
 		if err != nil {
 			return err
@@ -48,10 +48,10 @@ func declaredVariables(ctx context.Context, dependencies Dependencies, cfg *proj
 	return withImpliedDeclarations(cfg, opts, definitions, groups)
 }
 
-func collecting(run *run.Run, cfg *project.Project, collect func(output io.Writer) error) error {
-	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	span := build.Child(cfg.Slug, progress.Collecting.Title("the variables this project declares"))
-	err := collect(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
+func collecting(ctx context.Context, running *run.Run, cfg *project.Project, collect func(ctx context.Context, output io.Writer) error) error {
+	build := running.Phase(progressv1.Phase_PHASE_BUILD)
+	spanCtx, span := build.Child(ctx, cfg.Slug, progress.Collecting.Title("the variables this project declares"))
+	err := collect(spanCtx, span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDERR))
 	build.End(err)
 	return err
 }
@@ -63,7 +63,7 @@ func withImpliedDeclarations(cfg *project.Project, opts envOptions, definitions 
 
 func discoverVariables(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, opts envOptions, run *run.Run) (*variables.Declarations, error) {
 	declarations := projectDeclarations(cfg, provider, opts)
-	err := collecting(run, cfg, func(output io.Writer) error {
+	err := collecting(ctx, run, cfg, func(ctx context.Context, output io.Writer) error {
 		_, err := declaration.Collect(ctx, cfg, declarations, io.Discard, output)
 		return err
 	})

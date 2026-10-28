@@ -70,7 +70,7 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 		for _, pair := range pairs {
 			keys = append(keys, pair.key)
 		}
-		err = runInSpan(run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeValues(keys, opts)), func() error {
+		err = runInSpan(ctx, run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeValues(keys, opts)), func(ctx context.Context) error {
 			return setPairs(ctx, envValues(provider, cfg, opts), pairs, opts, definitions, stdout)
 		})
 		if err != nil {
@@ -146,7 +146,7 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 			Reveal:     opts.reveal,
 		}
 		var resp *variablestorev1.GetValueResponse
-		err = runInSpan(run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title(describeValues([]string{key}, opts)), func() (err error) {
+		err = runInSpan(ctx, run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title(describeValues([]string{key}, opts)), func(ctx context.Context) (err error) {
 			resp, err = variableStore.GetValue(ctx, req)
 			return err
 		})
@@ -214,7 +214,7 @@ func runEnvRemove(ctx context.Context, dependencies Dependencies, cwd, key strin
 		values := envValues(provider, cfg, opts)
 		at := envCoordinate(key, opts)
 		var deleted bool
-		err = runInSpan(run, progressv1.Phase_PHASE_DESTROY, cfg, progress.Removing.Title(describeValues([]string{key}, opts)), func() error {
+		err = runInSpan(ctx, run, progressv1.Phase_PHASE_DESTROY, cfg, progress.Removing.Title(describeValues([]string{key}, opts)), func(ctx context.Context) error {
 			seen, err := values.Version(ctx, at)
 			if err != nil {
 				return err
@@ -268,7 +268,7 @@ func runEnvHistory(ctx context.Context, dependencies Dependencies, cwd, key stri
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
 		}
 		var resp *variablestorev1.ListVersionsResponse
-		err = runInSpan(run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title("the history of "+describeValues([]string{key}, opts)), func() (err error) {
+		err = runInSpan(ctx, run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title("the history of "+describeValues([]string{key}, opts)), func(ctx context.Context) (err error) {
 			resp, err = variableStore.ListVersions(ctx, req)
 			return err
 		})

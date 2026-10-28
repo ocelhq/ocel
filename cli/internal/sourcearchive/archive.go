@@ -3,6 +3,7 @@ package sourcearchive
 import (
 	"bufio"
 	"cmp"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -79,12 +80,12 @@ func (a *Archive) Open(digest string) (io.ReadCloser, error) {
 	return os.Open(file.path)
 }
 
-func Pack(projectDir string) (*Archive, error) {
+func Pack(ctx context.Context, projectDir string) (*Archive, error) {
 	root, err := Root(projectDir)
 	if err != nil {
 		return nil, err
 	}
-	return Walk(root)
+	return Walk(ctx, root)
 }
 
 type entry struct {
@@ -95,7 +96,7 @@ type entry struct {
 	symlink    string
 }
 
-func Walk(root string) (*Archive, error) {
+func Walk(ctx context.Context, root string) (*Archive, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -105,7 +106,7 @@ func Walk(root string) (*Archive, error) {
 		return nil, err
 	}
 	w := walker{root: root, docker: docker}
-	patterns, err := readExcludes(root)
+	patterns, err := readExcludes(ctx, root)
 	if err != nil {
 		return nil, err
 	}

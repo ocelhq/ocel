@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -48,10 +49,15 @@ func start(ctx context.Context, span *run.Span, questions Questions, spec Launch
 	spec.Stdout = processLines{span: span, subject: spec.ProviderName, stream: progressv1.Stream_STREAM_STDOUT}
 	spec.Stderr = processLines{span: span, subject: spec.ProviderName, stream: progressv1.Stream_STREAM_STDERR}
 	questions.run = span.Run()
-	process, err := Spawn(spec)
+	process, err := Spawn(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("spawn provider: %w", err)
 	}
+	flushed := runtrace.KeepOpen(ctx)
+	go func() {
+		<-process.done
+		flushed()
+	}()
 	if err := process.Ready(ctx); err != nil {
 		process.Close()
 		return nil, err
@@ -117,17 +123,17 @@ func Preflight(ctx context.Context, p *Provider, req *contractv1.PreflightReques
 
 func Plan[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req]) (*planv1.ChangePlan, error) {
 	var plan *planv1.ChangePlan
-	_, err := forward(ctx, p, rpc, req, call, func(event *progressv1.OperationEvent) {
+	_, err := forward(ctx, p, rpc, req, call, func(rpcCall runtrace.Call, event *progressv1.OperationEvent) {
 		if shown := event.GetPlan(); shown != nil {
 			plan = shown
 			return
 		}
-		p.span.Forward(event)
+		p.span.Forward(rpcCall, event)
 	})
 	return plan, err
 }
 
-func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req], each func(*progressv1.OperationEvent)) (*progressv1.OperationResult, error) {
+func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, call streamCall[Req], each onCallEvent) (*progressv1.OperationResult, error) {
 	var result *progressv1.OperationResult
 	err := p.callAnswering(ctx, func(t transport) error {
 		var err error
@@ -152,7 +158,7 @@ type processLines struct {
 }
 
 func (w processLines) Write(line []byte) (int, error) {
-	w.span.Forward(&progressv1.OperationEvent{
+	w.span.Forward(runtrace.Call{}, &progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_DEBUG,
 		Phase:   w.span.Phase(),
 		Subject: w.subject,

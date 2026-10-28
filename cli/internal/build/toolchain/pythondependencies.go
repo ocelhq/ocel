@@ -17,6 +17,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -137,7 +138,7 @@ func (c Compilation) exportUvLock(ctx context.Context, scratch string) (pythonDe
 		return pythonDependencies{}, fmt.Errorf("app %q locks its dependencies in %s, and uv is not on PATH to export them for pip: install uv (https://docs.astral.sh/uv/) where ocel builds", c.App, pythonUvLockFile)
 	}
 	requirements := filepath.Join(scratch, pythonRequirementsFile)
-	cmd := exec.Command(uv, "export", "--frozen", "--format", "requirements-txt", "--no-dev", "--no-editable", "--no-hashes", "--no-header", "--no-annotate", "--output-file", requirements)
+	cmd := tracing.Command(ctx, uv, "export", "--frozen", "--format", "requirements-txt", "--no-dev", "--no-editable", "--no-hashes", "--no-header", "--no-annotate", "--output-file", requirements)
 	cmd.Dir = c.Source
 	var said bytes.Buffer
 	cmd.Stdout = &said

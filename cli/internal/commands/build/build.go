@@ -38,8 +38,8 @@ type Dependencies struct {
 	commands.Invocation
 	BuildApps           func(ctx context.Context, cfg *project.Project, variables map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error)
 	CollectDeclarations func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
-	OpenBrowser         func(url string) error
-	ReadGitBranch       func(dir string) (string, error)
+	OpenBrowser         func(ctx context.Context, url string) error
+	ReadGitBranch       func(ctx context.Context, dir string) (string, error)
 	DiscoverPRNumber    func() string
 }
 
@@ -86,7 +86,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 func runBuild(ctx context.Context, dependencies Dependencies, cwd string, opts options, stdin io.Reader) (err error) {
 	var env *environmentv1.Environment
 	if opts.env != "" {
-		if env, err = commands.ResolveDeployedEnvironment(cwd, opts.env, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber); err != nil {
+		if env, err = commands.ResolveDeployedEnvironment(ctx, cwd, opts.env, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber); err != nil {
 			return err
 		}
 	}
@@ -131,8 +131,8 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string, opts o
 	}
 	phase := building.Phase(progressv1.Phase_PHASE_BUILD)
 
-	collecting := phase.Child(cfg.Slug, progress.Collecting.Title("the resources "+cfg.Slug+" declares"))
-	inputs, err := collectInputs(ctx, dependencies, provider, cfg, env, collecting)
+	collectingCtx, collecting := phase.Child(ctx, cfg.Slug, progress.Collecting.Title("the resources "+cfg.Slug+" declares"))
+	inputs, err := collectInputs(collectingCtx, dependencies, provider, cfg, env, collecting)
 	collecting.End(err)
 	if err != nil {
 		return err
@@ -278,12 +278,13 @@ func openOptions(env *environmentv1.Environment) commands.OpenOptions {
 func appBuildLog(phase *run.Span) build.Log {
 	return build.Log{
 		Shared: phase.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED),
-		AppLog: func(app string) (io.Writer, func(error)) {
-			span := phase.Child(app, progress.Building.Title("app "+app))
-			return span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), span.End
+		AppLog: func(ctx context.Context, app string) (context.Context, io.Writer, func(error)) {
+			ctx, span := phase.Child(ctx, app, progress.Building.Title("app "+app))
+			return ctx, span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), span.End
 		},
-		Step: func(subject string, title progress.Title) func(error) {
-			return phase.Child(subject, title).End
+		Step: func(ctx context.Context, subject string, title progress.Title) (context.Context, func(error)) {
+			ctx, span := phase.Child(ctx, subject, title)
+			return ctx, span.End
 		},
 	}
 }

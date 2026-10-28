@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/english"
+	"github.com/ocelhq/ocel/cli/internal/run"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/executables"
@@ -35,13 +36,13 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 		return err
 	}
 
-	ctx, run, err := dependencies.Events.Begin(ctx, "ocel connector add", cfg.Dir)
+	ctx, running, err := dependencies.Events.Begin(ctx, "ocel connector add", cfg.Dir)
 	if err != nil {
 		return err
 	}
-	defer run.End(&err)
+	defer running.End(&err)
 
-	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	check := running.Phase(progressv1.Phase_PHASE_CHECK)
 	provider, described, err := reachTarget(ctx, dependencies, cfg, check)
 	check.End(err)
 	if err != nil {
@@ -49,17 +50,17 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 	}
 	defer provider.Close()
 
-	provisioning := run.Phase(progressv1.Phase_PHASE_PROVISION)
-	adding := provisioning.Child(cfg.Slug, progress.Adding.Title("this target to the console"))
-	registered, err := opts.console.UpsertConnector(ctx, access, described.GetTargetFingerprint(), vendor)
+	provisioning := running.Phase(progressv1.Phase_PHASE_PROVISION)
+	addingCtx, adding := provisioning.Child(ctx, cfg.Slug, progress.Adding.Title("this target to the console"))
+	registered, err := opts.console.UpsertConnector(addingCtx, access, described.GetTargetFingerprint(), vendor)
 	adding.End(err)
 	if err != nil {
 		return fmt.Errorf("record this target in the console: %w", err)
 	}
 
 	platform := executables.Platform{GOOS: described.GetOs(), GOARCH: described.GetArch()}
-	loading := provisioning.Child(cfg.Slug, progress.Loading.Title(fmt.Sprintf("the connector built for %s/%s", platform.GOOS, platform.GOARCH)))
-	binary, err := executables.EnsureConnector(ctx, cfg.Dir, vendor, platform)
+	loadingCtx, loading := provisioning.Child(ctx, cfg.Slug, progress.Loading.Title(fmt.Sprintf("the connector built for %s/%s", platform.GOOS, platform.GOARCH)))
+	binary, err := executables.EnsureConnector(loadingCtx, cfg.Dir, vendor, platform)
 	loading.End(err)
 	if err != nil {
 		return err
@@ -79,7 +80,7 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 		return err
 	}
 
-	installed, err := providerprocess.Stream(ctx, provider, "InstallConnector", &contractv1.InstallConnectorRequest{
+	installed, err := providerprocess.Stream(run.ContextWithSpan(ctx, provisioning), provider, "InstallConnector", &contractv1.InstallConnectorRequest{
 		Binary:     binary,
 		Version:    version.Version,
 		ConfigJson: config,
@@ -94,8 +95,8 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 			"the provider installed the connector and named no address, so the console has nothing to dial"))
 	}
 
-	addressing := provisioning.Child(cfg.Slug, progress.Updating.Title("the console with this connector's address"))
-	paired, err := opts.console.SetConnectorAddress(ctx, access, registered.GetId(), console.ConnectorAddress{
+	addressingCtx, addressing := provisioning.Child(ctx, cfg.Slug, progress.Updating.Title("the console with this connector's address"))
+	paired, err := opts.console.SetConnectorAddress(addressingCtx, access, registered.GetId(), console.ConnectorAddress{
 		URL:       at.GetUrl(),
 		PublicKey: at.GetPublicKey(),
 		Compute:   at.GetCompute(),
@@ -107,7 +108,7 @@ func runAdd(ctx context.Context, dependencies Dependencies, cfg *project.Project
 
 	provisioning.Say(grantsLine(opts.grants()))
 	provisioning.End(nil)
-	run.Succeed(fmt.Sprintf("Installed the connector on %s, which the console dials at %s", paired.GetTarget(), at.GetUrl()))
+	running.Succeed(fmt.Sprintf("Installed the connector on %s, which the console dials at %s", paired.GetTarget(), at.GetUrl()))
 	return nil
 }
 

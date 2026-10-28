@@ -18,6 +18,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -236,7 +237,7 @@ func (p *crossInstall) installInto(ctx context.Context, app, source, functionDir
 			return err
 		}
 	}
-	cmd := exec.Command(npmCommand, npmInstallArgs(cpu)...)
+	cmd := tracing.Command(ctx, npmCommand, npmInstallArgs(cpu)...)
 	cmd.Dir = staging
 	var npmOutput bytes.Buffer
 	cmd.Stdout = &npmOutput

@@ -70,9 +70,9 @@ func (r *Run) End(errp *error) {
 		if r.trace != nil {
 			result.LogPath = r.trace.LogPath()
 		}
-		r.bus.send(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: resultLevel(result)}, Cli: &streamv1.RunEvent_Summary{Summary: result}})
+		r.bus.send(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: resultLevel(result)}, Cli: &streamv1.RunEvent_Summary{Summary: result}}, receiveOutsideCall)
 		if r.trace != nil {
-			r.bus.detach(r.trace)
+			r.bus.detachTrace(r.trace)
 			_ = r.trace.Close()
 		}
 		r.bus.finish(r)
@@ -185,13 +185,13 @@ func askHolding(hold func(*streamv1.WaitingEvent) func(reason string), ask func(
 }
 
 func (r *Run) holdOn(onSpan func(*streamv1.RunEvent) *streamv1.RunEvent, waiting *streamv1.WaitingEvent) (resume func(reason string)) {
-	r.bus.send(onSpan(&streamv1.RunEvent{Cli: &streamv1.RunEvent_Waiting{Waiting: waiting}}))
+	r.bus.send(onSpan(&streamv1.RunEvent{Cli: &streamv1.RunEvent_Waiting{Waiting: waiting}}), receiveOutsideCall)
 	var once sync.Once
 	return func(reason string) {
 		once.Do(func() {
 			r.bus.send(onSpan(&streamv1.RunEvent{Cli: &streamv1.RunEvent_Resumed{
 				Resumed: &streamv1.ResumedEvent{Reason: reason},
-			}}))
+			}}), receiveOutsideCall)
 		})
 	}
 }
@@ -232,7 +232,7 @@ func (r *Run) openLocked(s *Span) *Span {
 		parentID = s.parent.spanID
 	}
 	r.open = append(r.open, s)
-	r.bus.send(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Time: timestamppb.New(s.start),
+	s.send(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Time: timestamppb.New(s.start),
 		Level:   s.level,
 		Phase:   s.phase,
 		Subject: s.subject,
@@ -242,11 +242,11 @@ func (r *Run) openLocked(s *Span) *Span {
 	return s
 }
 
-func (r *Run) beginTrace(parent *Span, subject, name string, attrs []progress.Attr) *Span {
+func (r *Run) beginTrace(parent *Span, subject, name string, shownOnly bool, attrs []progress.Attr) *Span {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	title := progress.Title{Started: name, Ended: name}
-	s := &Span{run: r, parent: parent, phase: parent.phase, subject: subject, spanID: newSpanID(), start: r.bus.now(), title: title, level: progressv1.Level_LEVEL_DEBUG}
+	s := &Span{run: r, parent: parent, phase: parent.phase, subject: subject, spanID: newSpanID(), start: r.bus.now(), title: title, level: progressv1.Level_LEVEL_DEBUG, shownOnly: shownOnly}
 	s.SetAttributes(append([]progress.Attr{{Key: progress.AttrKeySpanName, Value: name}}, attrs...)...)
 	return r.openLocked(s)
 }

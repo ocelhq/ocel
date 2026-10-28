@@ -7,20 +7,21 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"slices"
 
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/ocelhq/ocel/cli/internal/cargo"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const ocelCrate = "ocel-sdk"
 
 const ocelMainMarker = "ocel-main-marker-v1:a97e2b52f933853f5f606937"
 
-func rustCommands(ctx context.Context, configDir string, roots []Root, server Server) ([]*exec.Cmd, error) {
-	commands := make([]*exec.Cmd, 0, len(roots))
+func rustCommands(ctx context.Context, configDir string, roots []Root, server Server) ([]*tracing.Cmd, error) {
+	commands := make([]*tracing.Cmd, 0, len(roots))
 	for _, root := range roots {
 		cmd, err := rustCommand(ctx, configDir, root, server)
 		if err != nil {
@@ -31,16 +32,16 @@ func rustCommands(ctx context.Context, configDir string, roots []Root, server Se
 	return commands, nil
 }
 
-func rustCommand(ctx context.Context, _ string, root Root, server Server) (*exec.Cmd, error) {
+func rustCommand(ctx context.Context, _ string, root Root, server Server) (*tracing.Cmd, error) {
 	cmd, workspaceRoot, err := cargoRunCommand(ctx, root)
 	if err != nil {
 		return nil, err
 	}
-	cmd.Env = append(append(os.Environ(), server.Env()...), "OCEL_SOURCE_ROOT="+workspaceRoot)
+	cmd.Env = slices.Concat(os.Environ(), server.Env(), []string{"OCEL_SOURCE_ROOT=" + workspaceRoot})
 	return cmd, nil
 }
 
-func cargoRunCommand(ctx context.Context, root Root) (*exec.Cmd, string, error) {
+func cargoRunCommand(ctx context.Context, root Root) (*tracing.Cmd, string, error) {
 	binary, err := findRustBinary(ctx, root)
 	if err != nil {
 		return nil, "", err
@@ -48,7 +49,7 @@ func cargoRunCommand(ctx context.Context, root Root) (*exec.Cmd, string, error) 
 	if err := refuseABinaryWithoutOcelMain(ctx, binary); err != nil {
 		return nil, "", err
 	}
-	cmd := exec.Command("cargo", "run", "--quiet", "--manifest-path", binary.crate.ManifestPath, "--bin", binary.bin.Name)
+	cmd := tracing.Command(ctx, "cargo", "run", "--quiet", "--manifest-path", binary.crate.ManifestPath, "--bin", binary.bin.Name)
 	cmd.Dir = binary.workspace.Root
 	return cmd, binary.workspace.Root, nil
 }

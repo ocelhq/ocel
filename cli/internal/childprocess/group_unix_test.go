@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess/childprocesstest"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 func TestSignallingAGroupThatIsAlreadyGone(t *testing.T) {
@@ -59,7 +60,7 @@ func TestSignallingAGroupThatIsAlreadyGone(t *testing.T) {
 
 func TestKillAllKillsEveryProcessOfAChildStillRunning(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "sleep.pid")
-	child, err := Start(context.Background(), exec.Command("sh", "-c", `sleep 60 & echo $! > "$0"; wait`, pidFile), Options{})
+	child, err := Start(context.Background(), tracing.Command(context.Background(), "sh", "-c", `sleep 60 & echo $! > "$0"; wait`, pidFile), Options{})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}

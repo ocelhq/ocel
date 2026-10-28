@@ -33,7 +33,7 @@ func TestAnAttachedCheckoutReadsItsOwnBranchOverGitHubHeadRef(t *testing.T) {
 	dir := createAttachedCheckout(t, "feature/checkout")
 	t.Setenv("GITHUB_HEAD_REF", "feature/login")
 
-	branch, err := ReadGitBranch(dir)
+	branch, err := ReadGitBranch(t.Context(), dir)
 	if err != nil {
 		t.Fatalf("ReadGitBranch: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestADetachedCheckoutReadsItsBranchFromGitHubHeadRef(t *testing.T) {
 	dir := createDetachedCheckout(t)
 	t.Setenv("GITHUB_HEAD_REF", "feature/login")
 
-	branch, err := ReadGitBranch(dir)
+	branch, err := ReadGitBranch(t.Context(), dir)
 	if err != nil {
 		t.Fatalf("ReadGitBranch: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestADetachedCheckoutWithoutGitHubHeadRefIsRefusedAndAsksForAName(t *testin
 	dir := createDetachedCheckout(t)
 	t.Setenv("GITHUB_HEAD_REF", "")
 
-	branch, err := ReadGitBranch(dir)
+	branch, err := ReadGitBranch(t.Context(), dir)
 	if err == nil {
 		t.Fatalf("ReadGitBranch() = %q, want an error", branch)
 	}

@@ -1,6 +1,7 @@
 package deployreport
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -147,9 +148,9 @@ func TestAnEnvironmentEventIsARecordTheConsoleAccepts(t *testing.T) {
 	t.Parallel()
 	inCI := environment(map[string]string{"CI": "true"})
 
-	preview := NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED,
+	preview := NewEnvironmentEvent(context.Background(), consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED,
 		&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-12"}, traceID, finishedAt, t.TempDir(), inCI)
-	destroyed := NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED,
+	destroyed := NewEnvironmentEvent(context.Background(), consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED,
 		&environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}, traceID, finishedAt, t.TempDir(), environment(nil))
 
 	for _, event := range []*consolev1.EnvironmentEvent{preview, destroyed} {

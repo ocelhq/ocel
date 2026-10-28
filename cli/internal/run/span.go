@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/progressproto"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
@@ -18,14 +19,15 @@ import (
 )
 
 type Span struct {
-	run     *Run
-	parent  *Span
-	phase   progressv1.Phase
-	subject string
-	spanID  []byte
-	start   time.Time
-	title   progress.Title
-	level   progressv1.Level
+	run       *Run
+	parent    *Span
+	phase     progressv1.Phase
+	subject   string
+	spanID    []byte
+	start     time.Time
+	title     progress.Title
+	level     progressv1.Level
+	shownOnly bool
 
 	mu         sync.Mutex
 	writers    []*lineWriter
@@ -33,12 +35,26 @@ type Span struct {
 	endOnce    sync.Once
 }
 
-func (s *Span) Child(subject string, title progress.Title) *Span {
-	return s.run.begin(s, subject, title)
+func (s *Span) Child(ctx context.Context, subject string, title progress.Title) (context.Context, *Span) {
+	child := s.run.begin(s, subject, title)
+	return ContextWithSpan(ctx, child), child
 }
 
-func (s *Span) Trace(subject, name string, attrs ...progress.Attr) *Span {
-	return s.run.beginTrace(s, subject, name, attrs)
+func (s *Span) Trace(ctx context.Context, subject, name string, attrs ...progress.Attr) (context.Context, *Span) {
+	traced := s.run.beginTrace(s, subject, name, false, attrs)
+	return ContextWithSpan(ctx, traced), traced
+}
+
+func (s *Span) ShowOnly(ctx context.Context, subject, name string, attrs ...progress.Attr) (context.Context, *Span) {
+	shown := s.run.beginTrace(s, subject, name, true, attrs)
+	return ContextWithSpan(ctx, shown), shown
+}
+
+func (s *Span) send(event *streamv1.RunEvent) *streamv1.RunEvent {
+	if s.shownOnly {
+		return s.run.bus.send(event, (*runtrace.Trace).Log)
+	}
+	return s.run.bus.send(event, receiveOutsideCall)
 }
 
 func (s *Span) SetAttributes(attrs ...progress.Attr) {
@@ -58,8 +74,9 @@ func (s *Span) ReserveChild(subject string, title progress.Title) ReservedChild 
 	return ReservedChild{parent: s, subject: subject, title: title, start: s.run.bus.now()}
 }
 
-func (u ReservedChild) Open() *Span {
-	return u.parent.run.beginAt(u.parent, u.subject, u.title, u.start)
+func (u ReservedChild) Open(ctx context.Context) (context.Context, *Span) {
+	child := u.parent.run.beginAt(u.parent, u.subject, u.title, u.start)
+	return ContextWithSpan(ctx, child), child
 }
 
 func (s *Span) Say(message string) { s.say(progressv1.Level_LEVEL_INFO, message) }
@@ -76,12 +93,12 @@ func (s *Span) Debug(message string) { s.say(progressv1.Level_LEVEL_DEBUG, messa
 func (s *Span) Error(message string) { s.say(progressv1.Level_LEVEL_ERROR, message) }
 
 func (s *Span) say(level progressv1.Level, message string) {
-	s.run.bus.send(s.onSpan(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: level, Message: message}}))
+	s.send(s.onSpan(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: level, Message: message}}))
 }
 
 func (s *Span) Output(level progressv1.Level, stream progressv1.Stream) io.Writer {
 	w := &lineWriter{emit: func(line string) {
-		s.run.bus.send(s.onSpan(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: level,
+		s.send(s.onSpan(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Level: level,
 			Message: line, Body: &progressv1.OperationEvent_Output{Output: &progressv1.Output{Stream: stream}}},
 		}))
 	}}
@@ -115,21 +132,21 @@ func (s *Span) Phase() progressv1.Phase { return s.phase }
 func (s *Span) Plan(headline string, plan *planv1.ChangePlan, notes ...*planv1.Note) *planv1.ChangePlan {
 	drawn := proto.CloneOf(plan)
 	drawn.Headline, drawn.Notes = headline, notes
-	shown := s.run.bus.send(s.onSpan(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Plan{Plan: drawn}}}))
+	shown := s.send(s.onSpan(&streamv1.RunEvent{Operation: &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Plan{Plan: drawn}}}))
 	return proto.CloneOf(shown.GetOperation().GetPlan())
 }
 
 func (s *Span) Identity(identity *streamv1.IdentityEvent) {
 	s.run.identify(identity)
-	s.run.bus.send(s.onSpan(&streamv1.RunEvent{Cli: &streamv1.RunEvent_Identity{Identity: identity}}))
+	s.send(s.onSpan(&streamv1.RunEvent{Cli: &streamv1.RunEvent_Identity{Identity: identity}}))
 }
 
-func (s *Span) Forward(op *progressv1.OperationEvent) {
+func (s *Span) Forward(call runtrace.Call, op *progressv1.OperationEvent) {
 	s.run.enter(op.GetPhase())
 	if result := op.GetResult(); result != nil {
 		s.run.record(result)
 	}
-	s.run.bus.send(&streamv1.RunEvent{Operation: proto.CloneOf(op)})
+	s.run.bus.send(&streamv1.RunEvent{Operation: proto.CloneOf(op)}, func(t *runtrace.Trace, shown *streamv1.RunEvent) { t.Receive(call, shown) })
 }
 
 func (s *Span) End(err error) {
@@ -155,7 +172,7 @@ func (s *Span) End(err error) {
 			}
 		}
 		s.run.close(s)
-		s.run.bus.send(s.onSpan(ev))
+		s.send(s.onSpan(ev))
 	})
 }
 
@@ -190,6 +207,9 @@ func newSpanID() []byte {
 type spanKey struct{}
 
 func ContextWithSpan(ctx context.Context, s *Span) context.Context {
+	if s.run.trace != nil {
+		ctx = s.run.trace.ContextWithSpanID(ctx, s.spanID)
+	}
 	return context.WithValue(ctx, spanKey{}, s)
 }
 

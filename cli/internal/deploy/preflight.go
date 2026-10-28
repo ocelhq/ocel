@@ -33,6 +33,7 @@ type preflightFacts struct {
 }
 
 func runPreflight(ctx context.Context, dependencies Dependencies, policy consent.Policy, check *run.Span, process *providerprocess.Provider, cfg *project.Project, read readiness.Preflight, prebuilt bool, env *environmentv1.Environment) (preflightFacts, error) {
+	ctx = run.ContextWithSpan(ctx, check)
 	resp := read.Response
 	preview := env.GetTier() == environmentv1.Tier_TIER_PREVIEW
 	resolved, archs, err := resolveContainers(ctx, dependencies, check, read, prebuilt)
@@ -74,8 +75,8 @@ func runPreflight(ctx context.Context, dependencies Dependencies, policy consent
 	if err != nil {
 		return preflightFacts{}, err
 	}
-	reading := check.Child(resolved.Slug, progress.Reading.Title("the preview URLs of "+place(env)))
-	ensured, err := ensurePreviewAlias(ctx, process, resolved, env, token, policy.DryRun)
+	readingCtx, reading := check.Child(ctx, resolved.Slug, progress.Reading.Title("the preview URLs of "+place(env)))
+	ensured, err := ensurePreviewAlias(readingCtx, process, resolved, env, token, policy.DryRun)
 	reading.End(err)
 	if err != nil {
 		return preflightFacts{}, err

@@ -493,7 +493,9 @@ func TestNoValueAContainerBuildWasGivenReachesTheLogOrTheError(t *testing.T) {
 	cfg := containerProject(t, "")
 	var logged strings.Builder
 	var ended error
-	log := Log{AppLog: func(string) (io.Writer, func(error)) { return &logged, func(err error) { ended = err } }}
+	log := Log{AppLog: func(ctx context.Context, _ string) (context.Context, io.Writer, func(error)) {
+		return ctx, &logged, func(err error) { ended = err }
+	}}
 
 	_, err := tools{
 		image: func(_ context.Context, _ image.App, _ string, _ image.LiveValues, progress io.Writer) (image.Image, error) {

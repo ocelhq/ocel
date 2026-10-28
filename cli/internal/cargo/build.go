@@ -7,11 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os/exec"
 	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 type Build struct {
@@ -21,7 +21,7 @@ type Build struct {
 }
 
 func (b Build) Run(ctx context.Context) (executable string, err error) {
-	cmd := exec.Command("cargo", "build", "--quiet", "--message-format=json-render-diagnostics", "--manifest-path", b.Crate.ManifestPath, "--bin", b.Bin)
+	cmd := tracing.Command(ctx, "cargo", "build", "--quiet", "--message-format=json-render-diagnostics", "--manifest-path", b.Crate.ManifestPath, "--bin", b.Bin)
 	cmd.Dir = b.Dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

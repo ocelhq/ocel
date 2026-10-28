@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/workdir"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 func workerOptions(t *testing.T, stdout, stderr io.Writer) Options {
@@ -50,8 +50,8 @@ func TestARediscoveryRestartsOnlyTheWorkersWhoseRootsChanged(t *testing.T) {
 	opts := workerOptions(t, &stdout, &stderr)
 	opts.Project = &project.Project{Dir: dir, DiscoveryPaths: []string{"a", "b"}}
 	processes := newWorkerProcesses(opts, &fakeWorkerQueue{workers: workers})
-	processes.command = func(ctx context.Context, _ string, _ []discovery.Root, _ discovery.Root, _ *workdir.Run) (*exec.Cmd, error) {
-		return exec.Command("sleep", "60"), nil
+	processes.command = func(ctx context.Context, _ string, _ []discovery.Root, _ discovery.Root, _ *workdir.Run) (*tracing.Cmd, error) {
+		return tracing.Command(context.Background(), "sleep", "60"), nil
 	}
 	ctx := context.Background()
 	t.Cleanup(func() { processes.close(ctx) })
@@ -93,7 +93,7 @@ func TestAWorkerListensOnLoopbackWhateverHostTheShellOrTheAppExports(t *testing.
 	var stdout, stderr syncBuffer
 	workers := newWorkerProcesses(workerOptions(t, &stdout, &stderr), nil)
 
-	cmd := exec.Command("sh", "-c", `printf %s "$HOST"`)
+	cmd := tracing.Command(context.Background(), "sh", "-c", `printf %s "$HOST"`)
 	cmd.Env = os.Environ()
 	process, err := workers.start(context.Background(), cmd, "worker", 4000, map[string]string{"HOST": "0.0.0.0"})
 	if err != nil {

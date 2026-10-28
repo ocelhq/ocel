@@ -36,8 +36,8 @@ func watchAndResolve(ctx context.Context, server *devserver.Server, cfg *project
 
 	return filewatch.Start(ctx, filewatch.Config{Paths: paths, SkipDir: discovery.IsSkippedDir, Debounce: watchDebounce, OnChange: func(changed []string) {
 		server.ResetDeclarations()
-		change := session.Child("", changeTitle)
-		resolved, err := resolveOnce(ctx, server, cfg, local, change)
+		changeCtx, change := session.Child(ctx, "", changeTitle)
+		resolved, err := resolveOnce(changeCtx, server, cfg, local, change)
 		change.End(err)
 		if err != nil {
 			onFailed(err)

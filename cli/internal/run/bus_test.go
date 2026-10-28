@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -72,11 +72,11 @@ func (c *clock) advance(d time.Duration) {
 	c.now = c.now.Add(d)
 }
 
-func runFile(t *testing.T, projectDir, extension string) string {
+func runFile(t *testing.T, projectDir, name string) string {
 	t.Helper()
-	found, err := filepath.Glob(filepath.Join(projectDir, buildoutput.StateDir, "runs", "*"+extension))
+	found, err := filepath.Glob(filepath.Join(runtrace.RunsDir(projectDir), "*", name))
 	if err != nil || len(found) != 1 {
-		t.Fatalf("run files = %v, %v, want the run's one %s file", found, err, extension)
+		t.Fatalf("run files = %v, %v, want the run's one %s", found, err, name)
 	}
 	return found[0]
 }
@@ -131,7 +131,7 @@ func TestSinksSeeEventsFromConcurrentSpansInTheSameOrder(t *testing.T) {
 	var wg sync.WaitGroup
 	for _, app := range []string{"web", "api", "worker"} {
 		wg.Go(func() {
-			child := deploy.Child(app, progress.Deploying.Title(app))
+			_, child := deploy.Child(t.Context(), app, progress.Deploying.Title(app))
 			for range 50 {
 				child.Say("uploading " + app)
 			}
@@ -176,7 +176,7 @@ func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("web", progress.Deploying.Title("web"))
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "web", progress.Deploying.Title("web"))
 	cancel()
 
 	bus.Interrupt()
@@ -202,6 +202,22 @@ func TestASecondInterruptEndsTheOpenRunAsInterruptedOnEverySinkAndClosesThem(t *
 	}
 }
 
+func TestASecondInterruptClosesTheRunsTraceWithoutWaitingForChildrenToFlush(t *testing.T) {
+	bus := run.NewBus(newClock().read)
+	ctx, _, err := bus.Begin(context.Background(), "ocel deploy", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	release := runtrace.KeepOpen(ctx)
+	t.Cleanup(release)
+
+	start := time.Now()
+	bus.Interrupt()
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("Interrupt() took %s with a child still running, want it not to wait for the child's spans", took)
+	}
+}
+
 func TestATraceSpansDebugDetailReachesEverySinkAsDetailOfItsSubjectAndTheRunsLogOnce(t *testing.T) {
 	sink := &recording{}
 	bus := run.NewBus(time.Now)
@@ -211,9 +227,9 @@ func TestATraceSpansDebugDetailReachesEverySinkAsDetailOfItsSubjectAndTheRunsLog
 	if err != nil {
 		t.Fatal(err)
 	}
-	logPath := runFile(t, dir, ".ndjson")
+	logPath := runFile(t, dir, runtrace.EventsFileName)
 
-	traced := run.Phase(progressv1.Phase_PHASE_BUILD).Trace("web", "build")
+	_, traced := run.Phase(progressv1.Phase_PHASE_BUILD).Trace(t.Context(), "web", "build")
 	traced.Debug("installing dependencies")
 	traced.End(nil)
 	run.End(&err)

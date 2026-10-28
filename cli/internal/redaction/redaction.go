@@ -2,6 +2,7 @@ package redaction
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"slices"
@@ -9,9 +10,10 @@ import (
 	"sync"
 	"unicode"
 	"unicode/utf8"
-)
 
-const placeholder = "[secret]"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/pkg/tracing"
+)
 
 type Values struct {
 	forms   []string
@@ -84,6 +86,10 @@ func javaScriptForm(value string) string {
 	return form.String()
 }
 
+func (v Values) HideInTrace(ctx context.Context) {
+	runtrace.AddSecretValues(ctx, v.forms...)
+}
+
 func (v Values) Hide(text string) string {
 	if len(v.forms) == 0 {
 		return text
@@ -97,7 +103,7 @@ func (v Values) hide(text []byte, settled int) (hidden []byte, held []byte) {
 	i := 0
 	for i < settled {
 		if form, found := v.formAt(text[i:]); found {
-			out.WriteString(placeholder)
+			out.WriteString(tracing.Redacted)
 			i += len(form)
 			continue
 		}

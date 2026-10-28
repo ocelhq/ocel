@@ -37,8 +37,10 @@ func AttachTerminalSink(invocation commands.Invocation, w io.Writer) {
 }
 
 func NewInvocation() commands.Invocation {
+	events := run.NewBus(time.Now)
+	events.LogRunsWith(terminal.NewRunLog)
 	return commands.Invocation{
-		Events:          run.NewBus(time.Now),
+		Events:          events,
 		Presentation:    func(io.Writer) terminal.Presentation { return terminal.Resolve(terminal.Conditions{}) },
 		StdinIsTerminal: func(io.Reader) bool { return false },
 		ConfigPath:      func() string { return os.Getenv(commands.ConfigEnvVar) },

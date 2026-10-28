@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const flushTimeout = 3 * time.Second
@@ -27,7 +29,7 @@ func Flush(ctx context.Context) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, flushTimeout)
 	defer cancel()
-	_ = Send(ctx, &http.Client{Timeout: flushTimeout}, spool, Endpoint, WriteKey)
+	_ = Send(ctx, tracing.NewClient(flushTimeout), spool, Endpoint, WriteKey)
 }
 
 func Send(ctx context.Context, client *http.Client, spool Spool, endpoint, key string) error {

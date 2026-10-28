@@ -61,7 +61,7 @@ func previewUp(t *testing.T, fixture clitest.FakeProject, dependencies Dependenc
 
 func coverEphemeralPreview(t *testing.T, fixture clitest.FakeProject, dependencies Dependencies, opts previewUpOptions) {
 	t.Helper()
-	env, err := opts.target().environment(dependencies, fixture.Root)
+	env, err := opts.target().environment(context.Background(), dependencies, fixture.Root)
 	if err != nil {
 		t.Fatalf("resolve the preview environment: %v", err)
 	}
@@ -201,9 +201,9 @@ func TestPreviewUpSendsThePreviewEnvironmentItsNameAndFlagsDescribe(t *testing.T
 
 	t.Run("a name needs no git", func(t *testing.T) {
 		dependencies := newTestDependencies()
-		dependencies.ReadGitBranch = func(string) (string, error) { return "", errNotARepo }
+		dependencies.ReadGitBranch = func(context.Context, string) (string, error) { return "", errNotARepo }
 
-		env, err := Preview("some-fixture", false).environment(dependencies, "")
+		env, err := Preview("some-fixture", false).environment(context.Background(), dependencies, "")
 		if err != nil {
 			t.Fatalf("the environment of preview some-fixture err = %v, want it to resolve without git", err)
 		}
@@ -214,7 +214,7 @@ func TestPreviewUpSendsThePreviewEnvironmentItsNameAndFlagsDescribe(t *testing.T
 		dependencies := newTestDependencies()
 		dependencies.BuilderJob = &commands.BuilderJob{ID: "job_1", PreviewLabel: "pr-12"}
 
-		env, err := Preview("feature-login-1a2b3c4d", false).environment(dependencies, "")
+		env, err := Preview("feature-login-1a2b3c4d", false).environment(context.Background(), dependencies, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -848,7 +848,7 @@ func TestAPreviewNameFitsASubdomainLabel(t *testing.T) {
 		t.Parallel()
 
 		for _, name := range []string{"up", "rm", "ls", "prune"} {
-			if _, err := resolvePreviewEnvironment(newTestDependencies(), "", name, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL); err != nil {
+			if _, err := resolvePreviewEnvironment(context.Background(), newTestDependencies(), "", name, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL); err != nil {
 				t.Errorf("preview name %q refused: %v, want it accepted: `ocel preview up %s` cannot be read as a subcommand", name, err, name)
 			}
 		}
@@ -857,7 +857,7 @@ func TestAPreviewNameFitsASubdomainLabel(t *testing.T) {
 	t.Run("a name with -- is refused", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := resolvePreviewEnvironment(newTestDependencies(), "", "feature--login", environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL); err == nil {
+		if _, err := resolvePreviewEnvironment(context.Background(), newTestDependencies(), "", "feature--login", environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL); err == nil {
 			t.Error("preview name feature--login accepted, want it refused")
 		}
 	})
@@ -873,11 +873,11 @@ func TestAPreviewNameFitsASubdomainLabel(t *testing.T) {
 			resolve func(string) error
 		}{
 			{"up", func(n string) error {
-				_, err := Preview(n, false).environment(newTestDependencies(), "")
+				_, err := Preview(n, false).environment(context.Background(), newTestDependencies(), "")
 				return err
 			}},
 			{"rm and prune", func(n string) error {
-				_, err := resolvePreviewEnvironment(newTestDependencies(), "", n, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED)
+				_, err := resolvePreviewEnvironment(context.Background(), newTestDependencies(), "", n, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED)
 				return err
 			}},
 		}

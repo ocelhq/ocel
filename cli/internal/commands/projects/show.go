@@ -68,7 +68,7 @@ func runShow(ctx context.Context, invocation commands.Invocation, opts showOptio
 	var identity *contractv1.Identity
 	err = invocation.WithProvider(ctx, cfg, showCommand, accountOptions(target), func(ctx context.Context, p commands.ProviderRun) error {
 		identity = p.Preflight.Response.GetIdentity()
-		span := p.Check.Child(slug, progress.Reading.Title("what Ocel created for "+slug))
+		ctx, span := p.Check.Child(ctx, slug, progress.Reading.Title("what Ocel created for "+slug))
 		err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 			described, err = client.DescribeProject(ctx, req)
 			return err

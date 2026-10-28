@@ -1,6 +1,7 @@
 package runtrace
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func startRun(t *testing.T) *Trace {
 func loggedEvents(t *testing.T, r *Trace) []*streamv1.RunEvent {
 	t.Helper()
 	var out []*streamv1.RunEvent
-	for _, line := range readLines(t, r.LogPath()) {
+	for _, line := range readLines(t, filepath.Join(r.dir, EventsFileName)) {
 		ev := &streamv1.RunEvent{}
 		if err := protojson.Unmarshal([]byte(line), ev); err != nil {
 			t.Fatalf("log line %q is not a run event: %v", line, err)
@@ -44,7 +45,7 @@ func TestEveryEventDebugIncludedLandsInTheRunsNDJSONFileAsARunEvent(t *testing.T
 		{Operation: &progressv1.OperationEvent{Time: at, Level: progressv1.Level_LEVEL_ERROR}, Cli: &streamv1.RunEvent_Summary{Summary: &streamv1.RunSummary{Detail: "boom"}}},
 	}
 	for _, ev := range sent {
-		r.Receive(ev)
+		r.Receive(Call{}, ev)
 	}
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
@@ -87,13 +88,13 @@ func TestAnEndedScopeBecomesASpanInTheTraceWithItsAttributes(t *testing.T) {
 	phase := []byte{2, 2, 2, 2, 2, 2, 2, 2}
 	start := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 
-	r.Receive(started(child, nil, "web"))
-	r.Receive(started(phase, child, "Provisioning"))
-	r.Receive(ended(phase, start, start.Add(2*time.Second), progressv1.SpanStatus_SPAN_STATUS_ERROR,
+	r.Receive(Call{}, started(child, nil, "web"))
+	r.Receive(Call{}, started(phase, child, "Provisioning"))
+	r.Receive(Call{}, ended(phase, start, start.Add(2*time.Second), progressv1.SpanStatus_SPAN_STATUS_ERROR,
 		&progressv1.SpanAttribute{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE, Value: "fake:bucket"},
 		&progressv1.SpanAttribute{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT, Value: "42"},
 	))
-	r.Receive(ended(child, start, start.Add(3*time.Second), progressv1.SpanStatus_SPAN_STATUS_OK))
+	r.Receive(Call{}, ended(child, start, start.Add(3*time.Second), progressv1.SpanStatus_SPAN_STATUS_OK))
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
@@ -134,7 +135,7 @@ func TestAWaitNeverPersistsTheSessionTokenInItsAddress(t *testing.T) {
 	const token = "s3cr3t-session-token"
 	r := startRun(t)
 	waiting := &streamv1.RunEvent{Cli: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{Url: "http://127.0.0.1:41234/#t=" + token}}}
-	r.Receive(waiting)
+	r.Receive(Call{}, waiting)
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
@@ -152,8 +153,8 @@ func TestANonNumericValueForANumericKeyIsKeptAsAString(t *testing.T) {
 	r := startRun(t)
 	id := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 	now := time.Now()
-	r.Receive(started(id, nil, "malformed byte count"))
-	r.Receive(ended(id, now, now, progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED,
+	r.Receive(Call{}, started(id, nil, "malformed byte count"))
+	r.Receive(Call{}, ended(id, now, now, progressv1.SpanStatus_SPAN_STATUS_UNSPECIFIED,
 		&progressv1.SpanAttribute{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES, Value: "not-a-number"}))
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)

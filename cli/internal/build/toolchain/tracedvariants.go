@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 
 	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 type tracedPackage struct {
@@ -180,7 +181,7 @@ func installVariants(ctx context.Context, app, staging string, parent manifest, 
 			return stagedVariants{}, err
 		}
 	}
-	cmd := exec.Command(npmCommand, npmInstallArgs(cpu)...)
+	cmd := tracing.Command(ctx, npmCommand, npmInstallArgs(cpu)...)
 	cmd.Dir = staging
 	var npmOutput bytes.Buffer
 	cmd.Stdout = &npmOutput

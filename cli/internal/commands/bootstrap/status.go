@@ -96,10 +96,10 @@ func RunStatus(ctx context.Context, invocation commands.Invocation, cwd string, 
 	opened := commands.OpenOptions{Intent: commands.ManageBootstrap, Tier: tiers[0]}
 	err = invocation.WithProvider(ctx, cfg, statusCommand, opened, func(ctx context.Context, p commands.ProviderRun) error {
 		for _, tier := range tiers {
-			span := p.Check.Child(readiness.TierName(tier), progress.Reading.Title("the "+readiness.TierName(tier)+" bootstrap"))
+			readingCtx, span := p.Check.Child(ctx, readiness.TierName(tier), progress.Reading.Title("the "+readiness.TierName(tier)+" bootstrap"))
 			var described *contractv1.DescribeBootstrapResponse
-			err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-				described, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
+			err := p.Provider.Call(readingCtx, func(client contractv1connect.ProviderServiceClient) (err error) {
+				described, err = client.DescribeBootstrap(readingCtx, &contractv1.DescribeBootstrapRequest{
 					Tier:      tier,
 					WithParts: true,
 					Edge:      cfg.EdgeSelection(),

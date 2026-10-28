@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/localrpc"
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
 
 type EnvStream struct {
@@ -17,14 +19,14 @@ type EnvStream struct {
 }
 
 func Subscribe(ctx context.Context, leader Leader) (*EnvStream, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+leader.Address+"/env", nil)
+	req, err := http.NewRequestWithContext(content.Omit(ctx), http.MethodGet, "http://"+leader.Address+"/env", nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Authorization", localrpc.FormatAuthHeader(leader.Token))
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := tracing.NewClient(0).Do(req)
 	if err != nil {
 		return nil, err
 	}

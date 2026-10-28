@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
@@ -51,9 +52,11 @@ func TestASpanOnlyTheTraceRecordsIsNeverDrawn(t *testing.T) {
 
 	run, out, _ := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	build.Trace("web", "build").End(errors.New("the node builder reported this stage failed"))
-	web := build.Child("web", progress.Building.Title("app web"))
-	web.Trace("web", "await_human_input").End(nil)
+	_, stage := build.Trace(t.Context(), "web", "build")
+	stage.End(errors.New("the node builder reported this stage failed"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("app web"))
+	_, waiting := web.Trace(t.Context(), "web", "await_human_input")
+	waiting.End(nil)
 	web.End(nil)
 
 	want := "INFO  [build] ✓ web: Built app web in 0s\n"
@@ -67,7 +70,7 @@ func TestASpansOutputPrintsWithItsHeaderWhenTheSpanEndsIndentedFourSpaces(t *tes
 
 	run, out, c := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
+	_, web := build.Child(t.Context(), "web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
 	w := web.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_STDOUT)
 	if _, err := w.Write([]byte("> next build\nCompiled successfully\n")); err != nil {
 		t.Fatalf("Write() = %v", err)
@@ -129,14 +132,14 @@ func TestTwoParallelSpansNeverInterleaveAndTheFirstToEndPrintsFirst(t *testing.T
 	run, out, c := groupedRun(t, Presentation{})
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	start := c.now()
-	deploy.Forward(providerStarted(1, "web", "deployed 12 resources", start))
-	deploy.Forward(providerStarted(2, "api", "deployed 9 resources", start))
-	deploy.Forward(providerOutput(1, "web", "web line 1"))
-	deploy.Forward(providerOutput(2, "api", "api line 1"))
-	deploy.Forward(providerOutput(1, "web", "web line 2"))
-	deploy.Forward(providerOutput(2, "api", "api line 2"))
-	deploy.Forward(providerEnded(2, "api", "deployed 9 resources", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(5*time.Second)))
-	deploy.Forward(providerEnded(1, "web", "deployed 12 resources", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(9*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerStarted(1, "web", "deployed 12 resources", start))
+	deploy.Forward(runtrace.Call{}, providerStarted(2, "api", "deployed 9 resources", start))
+	deploy.Forward(runtrace.Call{}, providerOutput(1, "web", "web line 1"))
+	deploy.Forward(runtrace.Call{}, providerOutput(2, "api", "api line 1"))
+	deploy.Forward(runtrace.Call{}, providerOutput(1, "web", "web line 2"))
+	deploy.Forward(runtrace.Call{}, providerOutput(2, "api", "api line 2"))
+	deploy.Forward(runtrace.Call{}, providerEnded(2, "api", "deployed 9 resources", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(5*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerEnded(1, "web", "deployed 12 resources", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(9*time.Second)))
 
 	want := "INFO  [deploy] ✓ api: deployed 9 resources in 5s (1/2)\n" +
 		"\n" +
@@ -158,10 +161,10 @@ func TestASpanEndingBesideOthersInItsPhaseSaysHowManyOfThemHaveFinished(t *testi
 	run, out, c := groupedRun(t, Presentation{})
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	start := c.now()
-	deploy.Forward(providerStarted(1, "web", "Deploying the serverless app to production", start))
-	deploy.Forward(providerStarted(2, "api", "Deploying the container app to production", start))
-	deploy.Forward(providerEnded(2, "api", "Deployed the container app to production", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(5*time.Second)))
-	deploy.Forward(providerEnded(1, "web", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(9*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerStarted(1, "web", "Deploying the serverless app to production", start))
+	deploy.Forward(runtrace.Call{}, providerStarted(2, "api", "Deploying the container app to production", start))
+	deploy.Forward(runtrace.Call{}, providerEnded(2, "api", "Deployed the container app to production", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(5*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerEnded(1, "web", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(9*time.Second)))
 
 	want := "INFO  [deploy] ✓ api: Deployed the container app to production in 5s (1/2)\n" +
 		"ERROR [deploy] ✗ web: Deploying the serverless app to production failed after 9s (2/2)\n"
@@ -175,9 +178,11 @@ func TestSpansThatRanOneAfterAnotherCarryNoCount(t *testing.T) {
 
 	run, out, c := groupedRun(t, Presentation{})
 	check := run.Phase(progressv1.Phase_PHASE_CHECK)
-	check.Child("console.ocel.dev", progress.Title{Started: "loading your organizations", Ended: "loading your organizations"}).End(nil)
+	_, organizations := check.Child(t.Context(), "console.ocel.dev", progress.Title{Started: "loading your organizations", Ended: "loading your organizations"})
+	organizations.End(nil)
 	c.pass(time.Second)
-	check.Child("acme-inc", progress.Title{Started: "loading the projects in Acme Inc", Ended: "loading the projects in Acme Inc"}).End(nil)
+	_, projects := check.Child(t.Context(), "acme-inc", progress.Title{Started: "loading the projects in Acme Inc", Ended: "loading the projects in Acme Inc"})
+	projects.End(nil)
 
 	want := "INFO  [check] ✓ console.ocel.dev: loading your organizations in 0s\n" +
 		"INFO  [check] ✓ acme-inc: loading the projects in Acme Inc in 0s\n"
@@ -192,12 +197,12 @@ func TestASuccessfulSpansHeaderSaysWhatItDidInThePastTenseAndAFailedOneWhatItWas
 	run, out, c := groupedRun(t, Presentation{})
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	start := c.now()
-	deploy.Forward(providerStarted(1, "web", "Deploying the serverless app to production", start))
-	deploy.Forward(providerEnded(1, "web", "Deployed the serverless app to production", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(48*time.Second)))
-	deploy.Forward(providerStarted(2, "relay", "Attaching production hostname shop.example", start))
-	deploy.Forward(providerEnded(2, "relay", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(3*time.Second)))
-	deploy.Forward(providerStarted(3, "api", "Sending api's image to the registry", start))
-	deploy.Forward(providerEnded(3, "api", "Sent api's image to the registry", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
+	deploy.Forward(runtrace.Call{}, providerStarted(1, "web", "Deploying the serverless app to production", start))
+	deploy.Forward(runtrace.Call{}, providerEnded(1, "web", "Deployed the serverless app to production", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(48*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerStarted(2, "relay", "Attaching production hostname shop.example", start))
+	deploy.Forward(runtrace.Call{}, providerEnded(2, "relay", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(3*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerStarted(3, "api", "Sending api's image to the registry", start))
+	deploy.Forward(runtrace.Call{}, providerEnded(3, "api", "Sent api's image to the registry", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
 
 	want := "INFO  [deploy] ✓ web: Deployed the serverless app to production in 48s\n" +
 		"ERROR [deploy] ✗ relay: Attaching production hostname shop.example failed after 3s\n" +
@@ -213,10 +218,10 @@ func TestASpanThatDidOnlyPartOfItsWorkEndsAtAWarningWithoutACheckmarkAndSaysWhat
 	run, out, c := groupedRun(t, Presentation{})
 	provision := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	start := c.now()
-	provision.Forward(providerStarted(1, "relay", "Attaching production hostnames shop.example and www.shop.example", start))
+	provision.Forward(runtrace.Call{}, providerStarted(1, "relay", "Attaching production hostnames shop.example and www.shop.example", start))
 	ended := providerEnded(1, "relay", "Attached production hostnames shop.example and www.shop.example", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(3*time.Second))
 	ended.Level, ended.GetEnded().Title = progressv1.Level_LEVEL_WARN, "Attached production hostname www.shop.example but not shop.example"
-	provision.Forward(ended)
+	provision.Forward(runtrace.Call{}, ended)
 
 	want := "WARN  [deploy] relay: Attached production hostname www.shop.example but not shop.example in 3s\n"
 	if got := out.String(); got != want {
@@ -229,8 +234,8 @@ func TestOnceASpanHasFailedALaterSuccessfulSpanShowsOnlyItsHeader(t *testing.T) 
 
 	run, out, c := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Building.Title("web"))
-	api := build.Child("api", progress.Building.Title("api"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
+	_, api := build.Child(t.Context(), "api", progress.Building.Title("api"))
 	output(t, web, "web compiled")
 	output(t, api, "api: missing module")
 	c.pass(3 * time.Second)
@@ -253,8 +258,8 @@ func TestASuccessfulSpanAfterAFailureKeepsItsWarningsAndErrorsUnderItsHeader(t *
 
 	run, out, c := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Building.Title("web"))
-	api := build.Child("api", progress.Building.Title("api"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
+	_, api := build.Child(t.Context(), "api", progress.Building.Title("api"))
 	output(t, web, "web compiled")
 	web.Say("bundled 12 routes")
 	web.Warn("next.config.js sets images.unoptimized")
@@ -277,7 +282,7 @@ func TestAFailureReasonThatRunsOverLinesContinuesDeeperThanTheBlocksDetailLines(
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
-	api := run.Phase(progressv1.Phase_PHASE_BUILD).Child("api", progress.Building.Title("api"))
+	_, api := run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), "api", progress.Building.Title("api"))
 	api.Warn("tsconfig.json has no strict mode")
 	c.pass(time.Second)
 	api.End(errors.New("npm run build exited with status 1\nsee the build log above"))
@@ -302,7 +307,7 @@ func debugAndInfoInASpan(t *testing.T, present Presentation) string {
 	run, out, c := groupedRun(t, present)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 	build.Debug("resolved the node toolchain at /usr/bin/node")
-	web := build.Child("web", progress.Building.Title("web"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
 	web.Debug("reusing 3 cached layers")
 	web.Say("bundled 12 routes")
 	if _, err := web.Output(progressv1.Level_LEVEL_DEBUG, progressv1.Stream_STREAM_STDERR).Write([]byte("npm timing ok\n")); err != nil {
@@ -345,8 +350,8 @@ func TestASpanStillOpenWhenTheSinkClosesPrintsWhatItBufferedAsUnfinished(t *test
 	c := &clock{at: time.Unix(1_700_000_000, 0)}
 	_, run := onABus(t, context.Background(), c.now, sink)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	deploy.Forward(providerStarted(1, "api", "deploying api", c.now()))
-	deploy.Forward(providerOutput(1, "api", "updating function api"))
+	deploy.Forward(runtrace.Call{}, providerStarted(1, "api", "deploying api", c.now()))
+	deploy.Forward(runtrace.Call{}, providerOutput(1, "api", "updating function api"))
 	if err := sink.Close(); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
@@ -366,16 +371,16 @@ func TestWhatASpansChildScopesSayBelongsToTheSpansBlock(t *testing.T) {
 	run, out, c := groupedRun(t, Presentation{})
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	start := c.now()
-	deploy.Forward(providerStarted(1, "web", "deployed 4 resources", start))
+	deploy.Forward(runtrace.Call{}, providerStarted(1, "web", "deployed 4 resources", start))
 	child := providerStarted(2, "web", "Uploading", start)
 	child.GetStarted().ParentSpanId = []byte{1, 0, 0, 0, 0, 0, 0, 1}
-	deploy.Forward(child)
-	deploy.Forward(providerOutput(2, "web", "creating bucket assets"))
-	deploy.Forward(providerEnded(2, "web", "Uploaded", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
+	deploy.Forward(runtrace.Call{}, child)
+	deploy.Forward(runtrace.Call{}, providerOutput(2, "web", "creating bucket assets"))
+	deploy.Forward(runtrace.Call{}, providerEnded(2, "web", "Uploaded", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
 	if got := out.String(); got != "" {
 		t.Fatalf("printed before the span ended: %q", got)
 	}
-	deploy.Forward(providerEnded(1, "web", "deployed 4 resources", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(2*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerEnded(1, "web", "deployed 4 resources", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(2*time.Second)))
 
 	want := "INFO  [deploy] ✓ web: deployed 4 resources in 2s\n" +
 		"\n" +
@@ -408,8 +413,8 @@ func TestThirtySecondsOfSilencePrintsAHeartbeatNamingWhatIsStillRunning(t *testi
 
 	run, sink, ticks, out, c := heartbeatRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	build.Child("web", progress.Building.Title("web"))
-	build.Child("api", progress.Building.Title("api"))
+	build.Child(t.Context(), "web", progress.Building.Title("web"))
+	build.Child(t.Context(), "api", progress.Building.Title("api"))
 	start := c.now()
 	ticks <- start.Add(29 * time.Second)
 	ticks <- start.Add(30 * time.Second)
@@ -426,7 +431,7 @@ func TestTheNextHeartbeatComesSixtySecondsLater(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("api", progress.Title{Started: "deploying api", Ended: "deploying api"})
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "api", progress.Title{Started: "deploying api", Ended: "deploying api"})
 	start := c.now()
 	ticks <- start.Add(30 * time.Second)
 	ticks <- start.Add(89 * time.Second)
@@ -445,8 +450,8 @@ func TestAPrintedLineRestartsTheSilence(t *testing.T) {
 
 	run, sink, ticks, out, c := heartbeatRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Building.Title("web"))
-	build.Child("api", progress.Building.Title("api"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
+	build.Child(t.Context(), "api", progress.Building.Title("api"))
 	start := c.now()
 	c.pass(30 * time.Second)
 	web.End(nil)
@@ -465,7 +470,7 @@ func TestSilenceWithNothingRunningPrintsNoHeartbeat(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
+	_, web := run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), "web", progress.Building.Title("web"))
 	c.pass(time.Second)
 	web.End(nil)
 	ticks <- c.now().Add(5 * time.Minute)
@@ -480,7 +485,7 @@ func TestNoHeartbeatPrintsWhileTheRunWaitsOnSomeone(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
+	run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), "web", progress.Building.Title("web"))
 	run.Hold(&streamv1.WaitingEvent{})
 	ticks <- c.now().Add(5 * time.Minute)
 
@@ -494,7 +499,7 @@ func TestTheSilenceRestartsWhenTheRunResumes(t *testing.T) {
 	t.Parallel()
 
 	run, sink, ticks, out, c := heartbeatRun(t)
-	run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Building.Title("web"))
+	run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), "web", progress.Building.Title("web"))
 	resume := run.Hold(&streamv1.WaitingEvent{})
 	start := c.now()
 	c.pass(2 * time.Minute)
@@ -514,7 +519,7 @@ func TestInGitHubActionsASuccessfulBlockIsACollapsedGroup(t *testing.T) {
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
+	_, web := build.Child(t.Context(), "web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
 	output(t, web, "Compiled successfully")
 	c.pass(34 * time.Second)
 	web.End(nil)
@@ -535,7 +540,7 @@ func TestInGitHubActionsWithColourAGroupTitleIsStillPlainText(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true, Color: true})
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
+	_, web := run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), "web", progress.Title{Started: "built 12 routes", Ended: "built 12 routes"})
 	output(t, web, "Compiled successfully")
 	c.pass(34 * time.Second)
 	web.End(nil)
@@ -550,8 +555,8 @@ func TestInGitHubActionsAFailedBlockStaysExpandedAndALaterSuccessKeepsItsBodyFol
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Building.Title("web"))
-	api := build.Child("api", progress.Building.Title("api"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
+	_, api := build.Child(t.Context(), "api", progress.Building.Title("api"))
 	output(t, web, "web compiled")
 	output(t, api, "api: missing module")
 	c.pass(3 * time.Second)
@@ -600,7 +605,7 @@ func TestInGitHubActionsNoLineOfAMessageCanStartAWorkflowCommandButVerbatimToolO
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	web := build.Child("web", progress.Building.Title("web"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
 	web.Warn("tsc reported\n\t::error::forged in a detail\n##[error]forged the old way")
 	output(t, web, "::error file=app.ts,line=3::Type 'string' is not assignable")
 	c.pass(time.Second)
@@ -625,7 +630,7 @@ func TestInGitHubActionsAGroupTitleCannotStartAWorkflowCommand(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{GitHubActions: true})
-	web := run.Phase(progressv1.Phase_PHASE_BUILD).Child("web", progress.Title{Started: "built 100% of routes\n::error::forged", Ended: "built 100% of routes\n::error::forged"})
+	_, web := run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), "web", progress.Title{Started: "built 100% of routes\n::error::forged", Ended: "built 100% of routes\n::error::forged"})
 	output(t, web, "Compiled successfully")
 	c.pass(time.Second)
 	web.End(nil)
@@ -710,7 +715,7 @@ func providerChild(span, parent byte, subject, message string, at time.Time) *pr
 }
 
 func forwardResource(scope *run.Span, span, parent byte, subject string, action provider.ChangeAction, typ, name string, status progressv1.SpanStatus, at time.Time) {
-	scope.Forward(providerChild(span, parent, subject, "resource operation", at))
+	scope.Forward(runtrace.Call{}, providerChild(span, parent, subject, "resource operation", at))
 	ended := providerEnded(span, subject, "resource operation", status, at, at.Add(time.Second))
 	ended.GetEnded().Attributes = []*progressv1.SpanAttribute{
 		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS, Value: "1000"},
@@ -718,7 +723,7 @@ func forwardResource(scope *run.Span, span, parent byte, subject string, action 
 		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME, Value: name},
 		{Key: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_ACTION, Value: string(action)},
 	}
-	scope.Forward(ended)
+	scope.Forward(runtrace.Call{}, ended)
 }
 
 func TestADeployBlockCountsAndListsTheResourcesItChangedAndNeverOneItLeftAlone(t *testing.T) {
@@ -727,8 +732,8 @@ func TestADeployBlockCountsAndListsTheResourcesItChangedAndNeverOneItLeftAlone(t
 	run, out, c := groupedRun(t, Presentation{})
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	start := c.now()
-	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
-	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
+	deploy.Forward(runtrace.Call{}, providerStarted(1, "web", "Deploying web", start))
+	deploy.Forward(runtrace.Call{}, providerChild(2, 1, "web", "Deploying", start))
 	ok := progressv1.SpanStatus_SPAN_STATUS_OK
 	forwardResource(deploy, 3, 2, "web", provider.ActionCreate, "fake:bucket", "assets", ok, start)
 	forwardResource(deploy, 4, 2, "web", provider.ActionUpdate, "fake:role", "api", ok, start)
@@ -736,10 +741,10 @@ func TestADeployBlockCountsAndListsTheResourcesItChangedAndNeverOneItLeftAlone(t
 	forwardResource(deploy, 6, 2, "web", provider.ActionDelete, "fake:queue", "old", ok, start)
 	forwardResource(deploy, 7, 2, "web", provider.ActionReplace, "fake:function", "handler", ok, start)
 	slow := providerChild(8, 2, "web", "resource operation", start)
-	deploy.Forward(slow)
-	deploy.Forward(providerEnded(8, "web", "resource operation", ok, start, start.Add(40*time.Second)))
-	deploy.Forward(providerEnded(2, "web", "Deployed", ok, start, start.Add(41*time.Second)))
-	deploy.Forward(providerEnded(1, "web", "Deployed web", ok, start, start.Add(42*time.Second)))
+	deploy.Forward(runtrace.Call{}, slow)
+	deploy.Forward(runtrace.Call{}, providerEnded(8, "web", "resource operation", ok, start, start.Add(40*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerEnded(2, "web", "Deployed", ok, start, start.Add(41*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerEnded(1, "web", "Deployed web", ok, start, start.Add(42*time.Second)))
 
 	want := "INFO  [deploy] ✓ web: Deployed web in 42s — 5 resources: 2 created, 1 updated, 1 replaced, 1 deleted\n" +
 		"      + assets (fake:bucket) created\n" +
@@ -758,11 +763,11 @@ func TestWithColourABlockGraysItsTimingItsDetailAndWhatEachResourceIsButNotItsSi
 	run, out, c := groupedRun(t, Presentation{Color: true})
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	start := c.now()
-	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
-	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
+	deploy.Forward(runtrace.Call{}, providerStarted(1, "web", "Deploying web", start))
+	deploy.Forward(runtrace.Call{}, providerChild(2, 1, "web", "Deploying", start))
 	forwardResource(deploy, 3, 2, "web", provider.ActionCreate, "fake:bucket", "assets", progressv1.SpanStatus_SPAN_STATUS_OK, start)
-	deploy.Forward(providerEnded(2, "web", "Deployed", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
-	deploy.Forward(providerEnded(1, "web", "Deployed web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(8*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerEnded(2, "web", "Deployed", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(time.Second)))
+	deploy.Forward(runtrace.Call{}, providerEnded(1, "web", "Deployed web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(8*time.Second)))
 
 	for _, want := range []string{
 		" \x1b[1mweb\x1b[22m: Deployed web\x1b[90m in 8s\x1b[0m — 1 resource created\n",
@@ -778,7 +783,7 @@ func TestWithColourASpansProgressMessageIsGrayUnderItsHeader(t *testing.T) {
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{Color: true})
-	web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("web", progress.Deploying.Title("web"))
+	_, web := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "web", progress.Deploying.Title("web"))
 	web.Say("Uploading function web's artifact (1.2 MiB)")
 	web.Warn("the bundle is over 50 MiB")
 	web.End(nil)
@@ -799,12 +804,12 @@ func TestAResourceThatFailedWithoutChangingIsListedAndCountedAsFailed(t *testing
 	run, out, c := groupedRun(t, Presentation{})
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	start := c.now()
-	deploy.Forward(providerStarted(1, "web", "Deploying web", start))
-	deploy.Forward(providerChild(2, 1, "web", "Deploying", start))
+	deploy.Forward(runtrace.Call{}, providerStarted(1, "web", "Deploying web", start))
+	deploy.Forward(runtrace.Call{}, providerChild(2, 1, "web", "Deploying", start))
 	forwardResource(deploy, 3, 2, "web", "", "fake:parameter", "config", progressv1.SpanStatus_SPAN_STATUS_OK, start)
 	forwardResource(deploy, 4, 2, "web", "", "fake:role", "runner", progressv1.SpanStatus_SPAN_STATUS_ERROR, start)
-	deploy.Forward(providerEnded(2, "web", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(4*time.Second)))
-	deploy.Forward(providerEnded(1, "web", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(5*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerEnded(2, "web", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(4*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerEnded(1, "web", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(5*time.Second)))
 
 	want := "ERROR [deploy] ✗ web: Deploying web failed after 5s — 1 resource failed\n" +
 		"      ✗ runner (fake:role) failed\n"
@@ -818,20 +823,20 @@ func failedDeploy(t *testing.T, present Presentation) string {
 	run, out, c := groupedRun(t, present)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
 	start := c.now()
-	deploy.Forward(providerStarted(1, "", "Environment", start))
-	deploy.Forward(providerChild(2, 1, "", "Provisioning", start))
+	deploy.Forward(runtrace.Call{}, providerStarted(1, "", "Environment", start))
+	deploy.Forward(runtrace.Call{}, providerChild(2, 1, "", "Provisioning", start))
 	engine := providerOutput(2, "", "+  fake:bucket logs creating (0s) error: BucketAlreadyExists")
 	engine.Level = progressv1.Level_LEVEL_DEBUG
 	engine.GetOutput().Stream = progressv1.Stream_STREAM_UNSPECIFIED
-	deploy.Forward(engine)
+	deploy.Forward(runtrace.Call{}, engine)
 	forwardResource(deploy, 3, 2, "", provider.ActionCreate, "fake:bucket", "assets", progressv1.SpanStatus_SPAN_STATUS_OK, start)
 	forwardResource(deploy, 4, 2, "", provider.ActionCreate, "fake:bucket", "logs", progressv1.SpanStatus_SPAN_STATUS_ERROR, start)
-	deploy.Forward(providerEvent(2, "", &progressv1.OperationEvent{
+	deploy.Forward(runtrace.Call{}, providerEvent(2, "", &progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_ERROR,
 		Message: "logs (fake:bucket): creating bucket (logs): BucketAlreadyExists",
 	}))
-	deploy.Forward(providerEnded(2, "", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(9*time.Second)))
-	deploy.Forward(providerEnded(1, "", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(10*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerEnded(2, "", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(9*time.Second)))
+	deploy.Forward(runtrace.Call{}, providerEnded(1, "", "", progressv1.SpanStatus_SPAN_STATUS_ERROR, start, start.Add(10*time.Second)))
 	return out.String()
 }
 
@@ -865,7 +870,7 @@ func productionRun(t *testing.T) (*run.Run, *bytes.Buffer, *clock) {
 }
 
 func forwardOutcome(run *run.Run, outcome *progressv1.OperationResult) {
-	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(&progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: outcome}})
+	run.Phase(progressv1.Phase_PHASE_DEPLOY).Forward(runtrace.Call{}, &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: outcome}})
 }
 
 func ended(run *run.Run, err error) {
@@ -925,8 +930,8 @@ func TestASpanStillOpenWhenTheResultArrivesPrintsAsUnfinishedAboveTheSummary(t *
 	c := &clock{at: time.Unix(1_700_000_000, 0)}
 	_, run := onABus(t, context.Background(), c.now, sink)
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	deploy.Forward(providerStarted(1, "api", "deploying api", c.now()))
-	deploy.Forward(providerOutput(1, "api", "updating function api"))
+	deploy.Forward(runtrace.Call{}, providerStarted(1, "api", "deploying api", c.now()))
+	deploy.Forward(runtrace.Call{}, providerOutput(1, "api", "updating function api"))
 	c.pass(12 * time.Second)
 	ended(run, errors.New("the provider exited"))
 	if err := sink.Close(); err != nil {
@@ -947,6 +952,7 @@ func TestTheSummaryEndsWithTheNotesOnItsUrlsAndWhereTheRunsLogIs(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
+	logPath := runtrace.RunsDir("/srv/shop") + "/2026-10-28T09-14-03Z-preview-up-0af3c2d1/" + runtrace.LogFileName
 	sink := newTranscript(&out, Presentation{}, nil)
 	sink.Receive(resultEvent(&streamv1.RunSummary{
 		Success:     true,
@@ -955,14 +961,14 @@ func TestTheSummaryEndsWithTheNotesOnItsUrlsAndWhereTheRunsLogIs(t *testing.T) {
 		Apps:        []*progressv1.AppResult{{App: "web", Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED, Urls: []string{"https://pr-12.acme.example.com"}}},
 		UrlNotes:    []string{"web: the custom domain shop.acme.com is not attached to previews"},
 		Propagation: &progressv1.Propagation{TypicalMs: 5000, Published: true},
-		LogPath:     "/var/ocel-runs/0af3.ndjson",
+		LogPath:     logPath,
 	}))
 
 	want := "✓ Preview pr-12 is up in 41s\n" +
 		"  web  https://pr-12.acme.example.com\n" +
 		"  web: the custom domain shop.acme.com is not attached to previews\n" +
 		"  propagates within ~5 s\n" +
-		"  Log: /var/ocel-runs/0af3.ndjson\n"
+		"  Log: " + logPath + "\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -1000,7 +1006,7 @@ func TestACancelledRunsSummarySaysSoAndWhatToRerunAfterAVerbatimBlockWithOneBlan
 	c := &clock{at: time.Unix(1_700_000_000, 0)}
 	_, run := onABus(t, ctx, c.now, newTranscript(&out, Presentation{}, nil))
 	deploy := run.Phase(progressv1.Phase_PHASE_DEPLOY)
-	web := deploy.Child("web", progress.Title{Started: "deploying web", Ended: "deploying web"})
+	_, web := deploy.Child(t.Context(), "web", progress.Title{Started: "deploying web", Ended: "deploying web"})
 	output(t, web, "creating function web")
 	web.End(nil)
 	c.pass(12 * time.Second)
@@ -1204,7 +1210,7 @@ func TestRecordsToAddAtTheDNSProviderAreAGateHeadedByTheirLevelAndPhase(t *testi
 
 	run, out, _ := groupedRun(t, Presentation{Width: defaultColumns})
 	provision := run.Phase(progressv1.Phase_PHASE_PROVISION)
-	provision.Forward(&progressv1.OperationEvent{
+	provision.Forward(runtrace.Call{}, &progressv1.OperationEvent{
 		Level:   progressv1.Level_LEVEL_WARN,
 		Phase:   progressv1.Phase_PHASE_PROVISION,
 		Subject: "relay",
@@ -1235,7 +1241,7 @@ func TestTheVariablesGateIsSetApartByBlankLinesAndTheResumeIsALineNamingItsSpan(
 	run, out, _ := groupedRun(t, Presentation{})
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
 	build.Say("building 1 app")
-	tracked := build.Child("acme", progress.Building.Title("project"))
+	_, tracked := build.Child(t.Context(), "acme", progress.Building.Title("project"))
 	resume := tracked.Hold(&streamv1.WaitingEvent{Url: "http://127.0.0.1:5555/#t=abc", Missing: missingStripeKey()})
 	resume("the page was answered")
 	tracked.End(nil)
@@ -1263,7 +1269,7 @@ func TestAnOcelCloudJobWaitingForValuesListsThemAndItsPageTheMomentItWaitsAndThe
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{})
-	watching := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("shop", progress.Title{Started: "Waiting for the job", Ended: "Waited for the job"})
+	_, watching := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "shop", progress.Title{Started: "Waiting for the job", Ended: "Waited for the job"})
 	watching.Say("Building web")
 	resume := watching.Hold(&streamv1.WaitingEvent{
 		Url:     "https://console.test/cloud/jobs/job_1",
@@ -1300,7 +1306,7 @@ func TestAnOcelCloudJobAskingAQuestionShowsItAndWhereToAnswerItTheMomentItWaits(
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{})
-	watching := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child("shop", progress.Title{Started: "Waiting for the job", Ended: "Waited for the job"})
+	_, watching := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "shop", progress.Title{Started: "Waiting for the job", Ended: "Waited for the job"})
 	watching.Hold(&streamv1.WaitingEvent{
 		Url: "https://console.test/cloud/jobs/job_1",
 		Input: &cloudv1.JobInput{Id: "in_1", Need: &cloudv1.JobInput_Confirmation{Confirmation: &cloudv1.Confirmation{
@@ -1345,7 +1351,8 @@ func TestARunThatFailedBeforeAnyChangingPhaseSaysNothingChangedAndWhatProduction
 
 	run, out, _ := productionRun(t)
 	build := run.Phase(progressv1.Phase_PHASE_BUILD)
-	build.Child("web", progress.Building.Title("web")).End(errors.New("npm run build exited with status 1"))
+	_, web := build.Child(t.Context(), "web", progress.Building.Title("web"))
+	web.End(errors.New("npm run build exited with status 1"))
 	ended(run, errors.New("building web: npm run build exited with status 1"))
 
 	want := "ERROR [build] ✗ web: Building web failed after 0s: npm run build exited with status 1\n" +
@@ -1361,7 +1368,8 @@ func TestARunThatFailedOnceAChangingPhaseStartedClaimsNothingChanged(t *testing.
 	t.Parallel()
 
 	run, out, _ := productionRun(t)
-	run.Phase(progressv1.Phase_PHASE_PROVISION).Child("", progress.Title{Started: "Environment", Ended: "Environment"}).End(errors.New("the stack is locked"))
+	_, environment := run.Phase(progressv1.Phase_PHASE_PROVISION).Child(t.Context(), "", progress.Title{Started: "Environment", Ended: "Environment"})
+	environment.End(errors.New("the stack is locked"))
 	ended(run, errors.New("the stack is locked"))
 
 	if got := out.String(); strings.Contains(got, "nothing was changed") || strings.Contains(got, "still serves") {

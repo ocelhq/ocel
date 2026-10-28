@@ -4,12 +4,12 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/language"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 //go:embed reach.py
@@ -73,7 +73,7 @@ func pythonSearchDirs(roots []discovery.Root) []string {
 func walkPythonImports(ctx context.Context, app, dir string, search []string) (pythonWalk, error) {
 	program := discovery.PythonInterpreter(dir)
 
-	cmd := exec.Command(program, append([]string{"-", dir}, search...)...)
+	cmd := tracing.Command(ctx, program, append([]string{"-", dir}, search...)...)
 	cmd.Stdin = strings.NewReader(pythonReachScript)
 	decoder, _, err := runJSON(ctx, cmd)
 	if err != nil {

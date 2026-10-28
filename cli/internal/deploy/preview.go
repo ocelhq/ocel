@@ -90,7 +90,7 @@ func RemovePreview(ctx context.Context, dependencies Dependencies, cwd, name str
 	}
 	cfg := target.Project
 
-	env, err := resolvePreviewEnvironment(dependencies, cwd, name, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED)
+	env, err := resolvePreviewEnvironment(ctx, dependencies, cwd, name, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED)
 	if err != nil {
 		return err
 	}
@@ -99,9 +99,9 @@ func RemovePreview(ctx context.Context, dependencies Dependencies, cwd, name str
 
 	var removed *consolev1.EnvironmentEvent
 	err = dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}, ConsoleCredential: true}, func(ctx context.Context, p commands.ProviderRun) error {
-		run, check, provider := p.Run, p.Check, p.Provider
-		reading := check.Child(cfg.Slug, progress.Reading.Title("preview "+env.GetIdentity()))
-		recorded, err := readPreview(ctx, provider, cfg.Slug, env)
+		running, check, provider := p.Run, p.Check, p.Provider
+		readingCtx, reading := check.Child(ctx, cfg.Slug, progress.Reading.Title("preview "+env.GetIdentity()))
+		recorded, err := readPreview(readingCtx, provider, cfg.Slug, env)
 		reading.End(err)
 		if err != nil {
 			return err
@@ -119,7 +119,7 @@ func RemovePreview(ctx context.Context, dependencies Dependencies, cwd, name str
 				return err
 			}
 			if !proceed {
-				run.Succeed(fmt.Sprintf("Nothing torn down: preview %s stays", env.GetIdentity()))
+				running.Succeed(fmt.Sprintf("Nothing torn down: preview %s stays", env.GetIdentity()))
 				return nil
 			}
 		}
@@ -140,8 +140,8 @@ func RemovePreview(ctx context.Context, dependencies Dependencies, cwd, name str
 		if _, err := providerprocess.Stream(ctx, provider, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment); err != nil {
 			return err
 		}
-		removed = deployreport.NewEnvironmentEvent(consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED, env, run.TraceID(), time.Now(), cfg.Dir, os.Getenv)
-		run.Succeed(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
+		removed = deployreport.NewEnvironmentEvent(ctx, consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED, env, running.TraceID(), time.Now(), cfg.Dir, os.Getenv)
+		running.Succeed(fmt.Sprintf("Tore down preview %s of %s", env.GetIdentity(), cfg.Slug))
 		return nil
 	})
 	if removed != nil {
@@ -199,7 +199,7 @@ func previewListResult(previews []*contractv1.PreviewEnvironment) *resultv1.Prev
 func listPreviews(ctx context.Context, dependencies Dependencies, target commands.Target) (previews []*contractv1.PreviewEnvironment, err error) {
 	err = dependencies.WithProvider(ctx, target.Project, "ocel preview ls", commands.OpenOptions{Cloud: target.Cloud}, func(ctx context.Context, p commands.ProviderRun) error {
 		slug := target.Project.Slug
-		reading := p.Check.Child(slug, progress.Reading.Title("the previews of "+slug))
+		ctx, reading := p.Check.Child(ctx, slug, progress.Reading.Title("the previews of "+slug))
 		err := p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 			listed, err := client.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: slug})
 			previews = listed.GetEnvironments()
@@ -213,7 +213,7 @@ func listPreviews(ctx context.Context, dependencies Dependencies, target command
 }
 
 func PrunePreview(ctx context.Context, dependencies Dependencies, cwd, name string, keep int, yes bool, stdout io.Writer, stdin io.Reader) error {
-	env, err := resolvePreviewEnvironment(dependencies, cwd, name, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED)
+	env, err := resolvePreviewEnvironment(ctx, dependencies, cwd, name, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED)
 	if err != nil {
 		return err
 	}

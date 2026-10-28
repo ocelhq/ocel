@@ -156,7 +156,7 @@ func promote(ctx context.Context, phase *run.Span, provider *providerprocess.Pro
 		Edge:            cfg.EdgeSelection(),
 		ProjectRegistry: registry,
 	}
-	return providerprocess.Stream(ctx, provider, "Rollback", req, contractv1connect.ProviderServiceClient.Rollback)
+	return providerprocess.Stream(run.ContextWithSpan(ctx, phase), provider, "Rollback", req, contractv1connect.ProviderServiceClient.Rollback)
 }
 
 func rolledReleases(result *progressv1.OperationResult) map[string]string {

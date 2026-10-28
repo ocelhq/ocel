@@ -5,11 +5,11 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -28,7 +28,7 @@ func (e Entrypoint) Command() []string {
 }
 
 func (e Entrypoint) DefinesApp(ctx context.Context, interpreter, dir string) (bool, error) {
-	cmd := exec.Command(interpreter, append([]string{"-I", File, definesAppFlag}, e.arguments()...)...)
+	cmd := tracing.Command(ctx, interpreter, append([]string{"-I", File, definesAppFlag}, e.arguments()...)...)
 	cmd.Dir = dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

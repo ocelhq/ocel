@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/language"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 type Declaration struct {
@@ -208,7 +208,7 @@ func isVendored(rel string) bool {
 	return slices.Contains(strings.Split(rel, "/"), "node_modules")
 }
 
-func runJSON(ctx context.Context, cmd *exec.Cmd) (*json.Decoder, string, error) {
+func runJSON(ctx context.Context, cmd *tracing.Cmd) (*json.Decoder, string, error) {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

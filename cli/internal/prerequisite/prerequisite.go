@@ -45,6 +45,7 @@ func IsDeclined(err error) bool {
 }
 
 func (s Setups) Ensure(ctx context.Context, policy consent.Policy, span *run.Span, check func(context.Context) error) error {
+	ctx = run.ContextWithSpan(ctx, span)
 	set := map[Kind]bool{}
 	for {
 		err := check(ctx)

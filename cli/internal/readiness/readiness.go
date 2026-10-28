@@ -44,7 +44,7 @@ type Request struct {
 }
 
 func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provider, cfg *project.Project, req Request) (Preflight, error) {
-	read, err := Read(ctx, provider, cfg, req)
+	read, err := Read(run.ContextWithSpan(ctx, span), provider, cfg, req)
 	if err == nil && req.Identity != nil {
 		read.Response.Identity = req.Identity
 	}

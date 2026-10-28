@@ -8,6 +8,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"slices"
@@ -17,6 +19,10 @@ import (
 	"testing/fstest"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -329,6 +335,30 @@ func TestASessionServesThePageOnLoopbackBehindAToken(t *testing.T) {
 			t.Errorf("GET / = %d, want the embedded page — it contains no secrets and must load before the token is read", resp.StatusCode)
 		}
 	})
+}
+
+func TestASessionsTokenIsRedactedInTheTraceOfTheRunItIsServedIn(t *testing.T) {
+	traced, err := runtrace.Open(t.TempDir(), "ocel env")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := traced.ContextWithRootSpan(context.Background())
+	s := serveUnder(t, ctx, newFakeStore(), discovered(t, newFakeStore(), def("API_URL")))
+
+	_, span := otel.Tracer("test").Start(ctx, "open browser")
+	span.SetAttributes(attribute.String("process.stdout.tail", "opening "+s.Token))
+	span.End()
+	if err := traced.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(traced.LogPath()), runtrace.TraceFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), s.Token) {
+		t.Errorf("the run's trace file holds the session token:\n%s", raw)
+	}
 }
 
 func TestOnlyARequestWithTheSessionTokenReachesTheAPI(t *testing.T) {

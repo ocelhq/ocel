@@ -55,6 +55,8 @@ Pass `--json` (or set `OCEL_JSON=1` once) on every command you run.
   `bootstrap`, `projects destroy`) prints one JSON event per line and ends with a `summary`
   event holding `success`, the apps and URLs, `error` on failure, and `assumed`.
 - `ocel schema <command>` prints the JSON Schema of a command's output.
+- The `summary`'s `logPath` is the run's `ocel.log`: the run as a human would see it, debug lines
+  included. Read it when an `error` does not say enough.
 
 An `error` has a stable `code`, a `message`, often a `hint` and a `docsUrl`. Act on the
 `hint` first: it is the exact command or flag that resolves the error. When the hint is not

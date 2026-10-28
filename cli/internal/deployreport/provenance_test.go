@@ -1,6 +1,7 @@
 package deployreport
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -86,7 +87,7 @@ func TestTheSourceOfACommittedCheckoutNamesItsCommitAndBranch(t *testing.T) {
 	gitIn(t, dir, "commit", "-q", "-m", "first")
 	head := gitIn(t, dir, "rev-parse", "HEAD")
 
-	source := ReadSource(dir, environment(nil))
+	source := ReadSource(context.Background(), dir, environment(nil))
 
 	if source.GetCommit()+"\n" != head || source.GetBranch() != "main" || source.GetDirty() {
 		t.Errorf("source = %v, want commit %q on main, clean", source, head)
@@ -98,7 +99,7 @@ func TestTheSourceOfACommittedCheckoutNamesItsCommitAndBranch(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("changed"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if !ReadSource(dir, environment(nil)).GetDirty() {
+	if !ReadSource(context.Background(), dir, environment(nil)).GetDirty() {
 		t.Error("dirty = false after an edit, want true")
 	}
 }
@@ -109,7 +110,7 @@ func TestTheSourceOfADetachedCheckoutNamesTheBranchGitHubRanItFor(t *testing.T) 
 	gitIn(t, dir, "commit", "-q", "--allow-empty", "-m", "first")
 	gitIn(t, dir, "checkout", "-q", "--detach")
 
-	source := ReadSource(dir, environment(map[string]string{"GITHUB_HEAD_REF": "feature"}))
+	source := ReadSource(context.Background(), dir, environment(map[string]string{"GITHUB_HEAD_REF": "feature"}))
 
 	if source.GetBranch() != "feature" {
 		t.Errorf("branch = %q, want feature", source.GetBranch())
@@ -119,7 +120,7 @@ func TestTheSourceOfADetachedCheckoutNamesTheBranchGitHubRanItFor(t *testing.T) 
 func TestTheSourceOfADirectoryOutsideGitIsNone(t *testing.T) {
 	t.Parallel()
 
-	if source := ReadSource(t.TempDir(), environment(nil)); source != nil {
+	if source := ReadSource(context.Background(), t.TempDir(), environment(nil)); source != nil {
 		t.Errorf("source = %v, want none", source)
 	}
 }

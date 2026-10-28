@@ -92,7 +92,7 @@ func dependenciesFor(stderr io.Writer, branch string) Dependencies {
 	clitest.AttachTerminalSink(invocation, stderr)
 	return Dependencies{
 		Invocation:       invocation,
-		ReadGitBranch:    func(string) (string, error) { return branch, nil },
+		ReadGitBranch:    func(context.Context, string) (string, error) { return branch, nil },
 		DiscoverPRNumber: func() string { return "" },
 		Now:              logsNow,
 	}
@@ -585,7 +585,9 @@ func TestLogsReadsTheNamedPreviewWithEnvironment(t *testing.T) {
 
 	got := runWith(project, func(stderr io.Writer) Dependencies {
 		deps := dependenciesFor(stderr, "")
-		deps.ReadGitBranch = func(string) (string, error) { return "", fmt.Errorf("the branch must not be read for a named preview") }
+		deps.ReadGitBranch = func(context.Context, string) (string, error) {
+			return "", fmt.Errorf("the branch must not be read for a named preview")
+		}
 		return deps
 	}, opts)
 

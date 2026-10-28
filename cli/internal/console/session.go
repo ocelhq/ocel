@@ -3,6 +3,8 @@ package console
 import (
 	"context"
 	"net/http"
+
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
 
 type Session struct {
@@ -18,7 +20,7 @@ type Session struct {
 
 func (c *Client) GetSession(ctx context.Context, accessToken string) (*Session, error) {
 	var out *Session
-	if err := c.send(ctx, http.MethodGet, "/api/auth/get-session", accessToken, nil, &out); err != nil {
+	if err := c.send(content.Omit(ctx), http.MethodGet, "/api/auth/get-session", accessToken, nil, &out); err != nil {
 		return nil, err
 	}
 	return out, nil

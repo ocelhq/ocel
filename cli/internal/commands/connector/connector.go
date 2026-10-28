@@ -154,7 +154,7 @@ func reachTarget(ctx context.Context, dependencies Dependencies, cfg *project.Pr
 	if err != nil {
 		return nil, nil, err
 	}
-	reading := check.Child(cfg.Slug, progress.Reading.Title("the target"))
+	ctx, reading := check.Child(ctx, cfg.Slug, progress.Reading.Title("the target"))
 	var described *contractv1.DescribeConnectorTargetResponse
 	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		described, err = client.DescribeConnectorTarget(ctx, &contractv1.DescribeConnectorTargetRequest{})

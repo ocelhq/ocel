@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/english"
+	"github.com/ocelhq/ocel/pkg/tracing"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -126,7 +126,7 @@ func (w Workspace) Members() []Package {
 
 func Metadata(ctx context.Context, dir string, opts ...string) (Workspace, error) {
 	args := append([]string{"metadata", "--format-version", "1"}, opts...)
-	cmd := exec.Command("cargo", args...)
+	cmd := tracing.Command(ctx, "cargo", args...)
 	cmd.Dir = dir
 
 	var stdout, stderr bytes.Buffer

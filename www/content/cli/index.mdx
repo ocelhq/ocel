@@ -48,3 +48,35 @@ npm install ocel
 ```bash
 ocel --version
 ```
+
+## Run logs
+
+Every run in a project keeps its record in a directory of its own under `.ocel/runs/`, named for
+when it started (UTC), its command and the start of its trace ID:
+
+```text
+.ocel/runs/2026-10-28T09-14-03Z-preview-up-4bf92f35/
+  ocel.log          the run as the terminal shows it, debug lines included, each stamped with its UTC time
+  events.ndjson     every event of the run, one JSON object per line
+  trace.otlp.json   the run's trace, as OTLP/JSON
+```
+
+`ocel.log` is written as the run goes, so a run that is killed or hangs still leaves it, and it
+hides every value the terminal hides. The summary at the end of a run names it. All three files
+are written whatever the output format, `--json` included.
+
+The directories sort by start time. The ten newest are kept, and older ones are deleted whole.
+
+### Tracing
+
+`OCEL_TRACE` sets what the trace records:
+
+| Value | Trace |
+| --- | --- |
+| `on`, or unset | Every step, request and process of the run, with credentials redacted. A request's bodies are kept only when it fails, and an environment variable's value only when its name is known not to hold a secret. |
+| `full` | Also the bodies of requests that succeed, up to 8 KiB of text each, and the value of every environment variable a process is handed whose name does not say it is secret. Redaction still applies. |
+| `off` | Nothing: no `trace.otlp.json`, and no spans sent to `OTEL_EXPORTER_OTLP_ENDPOINT` either. `events.ndjson` is still written. |
+
+Any other value is refused before the command runs. With `OTEL_EXPORTER_OTLP_ENDPOINT` or
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` set, and the trace not off, each run's spans also go to that
+collector, with their attributes limited to the ones that hold no free text.

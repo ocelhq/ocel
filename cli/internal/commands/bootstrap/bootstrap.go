@@ -291,8 +291,8 @@ func planChanges(ctx context.Context, planning *run.Span, provider *providerproc
 	tier := readiness.TierName(req.GetTier())
 	dry := proto.CloneOf(req)
 	dry.Dry = true
-	span := planning.Child(tier, progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", tier)))
-	plan, err := providerprocess.Plan(ctx, provider, "Bootstrap", dry, contractv1connect.ProviderServiceClient.Bootstrap)
+	spanCtx, span := planning.Child(ctx, tier, progress.Planning.Title(fmt.Sprintf("the changes to the %s bootstrap", tier)))
+	plan, err := providerprocess.Plan(spanCtx, provider, "Bootstrap", dry, contractv1connect.ProviderServiceClient.Bootstrap)
 	span.End(err)
 	return plan, err
 }
@@ -325,7 +325,7 @@ func applyPlan(ctx context.Context, provider *providerprocess.Provider, req *con
 
 func describeBootstrap(ctx context.Context, check *run.Span, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) (*contractv1.DescribeBootstrapResponse, error) {
 	name := readiness.TierName(tier)
-	span := check.Child(name, progress.Reading.Title("the parts of the "+name+" bootstrap"))
+	ctx, span := check.Child(ctx, name, progress.Reading.Title("the parts of the "+name+" bootstrap"))
 	var planned *contractv1.DescribeBootstrapResponse
 	err := provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
 		planned, err = client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess/childprocesstest"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 func readPID(t *testing.T, path string) int {
@@ -43,7 +44,7 @@ func TestStoppingAChildAsksItToExitBeforeKillingIt(t *testing.T) {
 
 	dir := t.TempDir()
 	marker, ready := filepath.Join(dir, "cleaned-up"), filepath.Join(dir, "ready")
-	cmd := exec.Command("sh", "-c", `trap 'touch "$0"; exit 0' TERM; touch "$1"; while :; do sleep 0.05; done`, marker, ready)
+	cmd := tracing.Command(context.Background(), "sh", "-c", `trap 'touch "$0"; exit 0' TERM; touch "$1"; while :; do sleep 0.05; done`, marker, ready)
 	child, err := Start(context.Background(), cmd, Options{})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -62,7 +63,7 @@ func TestStoppingAChildThatIgnoresTheRequestKillsItOnceTheGraceRunsOut(t *testin
 
 	dir := t.TempDir()
 	ready := filepath.Join(dir, "ready")
-	cmd := exec.Command("sh", "-c", `trap '' TERM; touch "$0"; while :; do sleep 0.05; done`, ready)
+	cmd := tracing.Command(context.Background(), "sh", "-c", `trap '' TERM; touch "$0"; while :; do sleep 0.05; done`, ready)
 	child, err := Start(context.Background(), cmd, Options{Grace: 200 * time.Millisecond})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -87,7 +88,7 @@ func TestRunEndsTheChildsWholeGroupWhenItsContextEnds(t *testing.T) {
 
 	pidFile := filepath.Join(t.TempDir(), "sleep.pid")
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.Command("sh", "-c", `sleep 60 & echo $! > "$0"; wait`, pidFile)
+	cmd := tracing.Command(context.Background(), "sh", "-c", `sleep 60 & echo $! > "$0"; wait`, pidFile)
 	ran := make(chan error, 1)
 	go func() { ran <- Run(ctx, cmd) }()
 	pid := readPID(t, pidFile)
@@ -110,7 +111,7 @@ func TestStoppingAChildWhosePipeOutlivesItReturnsOnceItsReapRunsOut(t *testing.T
 
 	dir := t.TempDir()
 	ready, pidFile := filepath.Join(dir, "ready"), filepath.Join(dir, "grandchild.pid")
-	cmd := exec.Command("sh", "-c", `setsid sh -c 'echo $$ > "$1"; exec sleep 30' sh "$1" & trap '' TERM; touch "$0"; while :; do sleep 0.05; done`, ready, pidFile)
+	cmd := tracing.Command(context.Background(), "sh", "-c", `setsid sh -c 'echo $$ > "$1"; exec sleep 30' sh "$1" & trap '' TERM; touch "$0"; while :; do sleep 0.05; done`, ready, pidFile)
 	cmd.Stdout = &strings.Builder{}
 	child, err := Start(context.Background(), cmd, Options{Grace: 1500 * time.Millisecond, Reap: 100 * time.Millisecond})
 	if err != nil {

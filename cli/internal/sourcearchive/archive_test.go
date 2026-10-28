@@ -1,6 +1,7 @@
 package sourcearchive_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -207,7 +208,7 @@ func TestWalkUploadsWhatGitWouldTrackAndTheFilesABuildNeeds(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			write(t, root, tt.files)
-			archive, err := sourcearchive.Walk(root)
+			archive, err := sourcearchive.Walk(context.Background(), root)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -221,7 +222,7 @@ func TestWalkUploadsWhatGitWouldTrackAndTheFilesABuildNeeds(t *testing.T) {
 func TestWalkRecordsEachFileByDigestAndOpensItsBytes(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, map[string]string{"a.txt": "same", "b/c.txt": "same", "d.txt": "different"})
-	archive, err := sourcearchive.Walk(root)
+	archive, err := sourcearchive.Walk(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +268,7 @@ func TestWalkRecordsTheExecutableBit(t *testing.T) {
 	if err := os.Chmod(filepath.Join(root, "run.sh"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	archive, err := sourcearchive.Walk(root)
+	archive, err := sourcearchive.Walk(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +293,7 @@ func TestWalkRecordsASymlinkInsideTheRootAsASymlink(t *testing.T) {
 	if err := os.Symlink(filepath.Join(root, "apps", "web", "index.ts"), filepath.Join(root, "apps", "entry.ts")); err != nil {
 		t.Fatal(err)
 	}
-	archive, err := sourcearchive.Walk(root)
+	archive, err := sourcearchive.Walk(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +328,7 @@ func TestWalkRefusesASymlinkThatEscapesTheRoot(t *testing.T) {
 			if err := os.Symlink(target, filepath.Join(root, "src", "link")); err != nil {
 				t.Fatal(err)
 			}
-			_, err := sourcearchive.Walk(root)
+			_, err := sourcearchive.Walk(context.Background(), root)
 			if err == nil || !strings.Contains(err.Error(), "src/link") || !strings.Contains(err.Error(), "outside") {
 				t.Fatalf("err = %v, want a refusal naming src/link", err)
 			}
@@ -344,7 +345,7 @@ func TestWalkSkipsAnIgnoredSymlinkThatEscapesTheRoot(t *testing.T) {
 	if err := os.Symlink("/etc", filepath.Join(root, "link")); err != nil {
 		t.Fatal(err)
 	}
-	archive, err := sourcearchive.Walk(root)
+	archive, err := sourcearchive.Walk(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +373,7 @@ func TestWalkRefusesAFileOverTheCeilingAndNamesIt(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, map[string]string{"a.ts": "x"})
 	sparse(t, filepath.Join(root, "data", "dump.sql"), sourcearchive.MaxFileBytes+1)
-	_, err := sourcearchive.Walk(root)
+	_, err := sourcearchive.Walk(context.Background(), root)
 	if refusalCode(err) != clierror.CodeCloudSourceInvalid || !strings.Contains(err.Error(), "data/dump.sql") || !strings.Contains(err.Error(), "512.0 MiB") {
 		t.Fatalf("err = %v, want a refusal naming data/dump.sql and the ceiling", err)
 	}
@@ -384,7 +385,7 @@ func TestWalkRefusesASourceOverTheTotalCeilingAndNamesTheBiggestFiles(t *testing
 	for i, name := range []string{"one.bin", "two.bin", "three.bin", "four.bin", "five.bin"} {
 		sparse(t, filepath.Join(root, "blobs", name), sourcearchive.MaxFileBytes-int64(i))
 	}
-	_, err := sourcearchive.Walk(root)
+	_, err := sourcearchive.Walk(context.Background(), root)
 	if refusalCode(err) != clierror.CodeCloudSourceInvalid || !strings.Contains(err.Error(), "2.0 GiB") || !strings.Contains(err.Error(), "blobs/one.bin") || strings.Contains(err.Error(), "a.ts") {
 		t.Fatalf("err = %v, want a refusal naming the ceiling and the five biggest files", err)
 	}
@@ -396,7 +397,7 @@ func TestWalkSkipsSpecialFiles(t *testing.T) {
 	if err := mkfifo(filepath.Join(root, "pipe")); err != nil {
 		t.Skip("no mkfifo: ", err)
 	}
-	archive, err := sourcearchive.Walk(root)
+	archive, err := sourcearchive.Walk(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +452,7 @@ func TestWalkHonoursTheUsersGlobalGitExcludes(t *testing.T) {
 			}
 			root := t.TempDir()
 			write(t, root, tt.files)
-			archive, err := sourcearchive.Walk(root)
+			archive, err := sourcearchive.Walk(context.Background(), root)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -469,7 +470,7 @@ func TestWalkRefusesWhenGitCannotReadItsOwnConfig(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	root := t.TempDir()
 	write(t, root, map[string]string{"main.go": "x"})
-	_, err := sourcearchive.Walk(root)
+	_, err := sourcearchive.Walk(context.Background(), root)
 	if err == nil || !strings.Contains(err.Error(), "core.excludesFile") || !strings.Contains(err.Error(), "bad config") {
 		t.Fatalf("err = %v, want git's own complaint about its config", err)
 	}
@@ -499,7 +500,7 @@ func TestWalkRefusesASourceOcelCloudWouldNotAcceptBeforeAnyUpload(t *testing.T) 
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			write(t, root, tt.files)
-			_, err := sourcearchive.Walk(root)
+			_, err := sourcearchive.Walk(context.Background(), root)
 			if code := refusalCode(err); code != clierror.CodeCloudSourceInvalid {
 				t.Fatalf("err = %v (code %q), want %s", err, code, clierror.CodeCloudSourceInvalid)
 			}

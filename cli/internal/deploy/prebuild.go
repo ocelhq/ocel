@@ -58,13 +58,14 @@ func (d *deployRun) runPreBuild(ctx context.Context, command project.LifecycleCo
 		maps.Copy(live, values[command.App].Live)
 	}
 
-	span := d.phase.Child(cfg.Slug, progress.Running.Title(preBuildName))
+	spanCtx, span := d.phase.Child(ctx, cfg.Slug, progress.Running.Title(preBuildName))
 	if forwards == nil && unforwardable > 0 && !d.forwardsPorts {
 		span.Say(fmt.Sprintf("The provider forwards no port, so %s goes without the bindings of the resources %s declares", preBuildName, cfg.Slug))
 	}
 	hidden := redaction.NewValues(build.AppVariables{Live: live, BindingProxyEnv: forwards.BindingProxyEnv(portforward.WholeProject)}.SecretValues())
+	hidden.HideInTrace(ctx)
 	out := hidden.Writer(span.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
-	err := lifecycle.Run(ctx, lifecycle.Command{
+	err := lifecycle.Run(spanCtx, lifecycle.Command{
 		Line:    command.Command,
 		Dir:     filepath.Join(cfg.Dir, command.Path),
 		Env:     env,

@@ -50,7 +50,7 @@ func TestABrowserCommandWithoutAPlaceholderGetsTheURLAsItsLastArgument(t *testin
 	command, argv := recorder(t, "browser")
 	var fell fallback
 
-	if err := open(pageURL, command+" --new-window", fell.open); err != nil {
+	if err := open(t.Context(), pageURL, command+" --new-window", fell.open); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := received(t, argv), []string{"--new-window", pageURL}; !slices.Equal(got, want) {
@@ -64,7 +64,7 @@ func TestABrowserCommandWithoutAPlaceholderGetsTheURLAsItsLastArgument(t *testin
 func TestABrowserCommandGetsTheURLWhereItsPlaceholderIsAndADoubledPercentAsOne(t *testing.T) {
 	command, argv := recorder(t, "browser")
 
-	if err := open(pageURL, command+" --url=%s '100%% sure'", (&fallback{}).open); err != nil {
+	if err := open(t.Context(), pageURL, command+" --url=%s '100%% sure'", (&fallback{}).open); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := received(t, argv), []string{"--url=" + pageURL, "100% sure"}; !slices.Equal(got, want) {
@@ -77,7 +77,7 @@ func TestTheFirstBrowserInTheListThatOpensThePageIsTheOnlyOneRun(t *testing.T) {
 	second, secondArgv := recorder(t, "second")
 	list := strings.Join([]string{filepath.Join(t.TempDir(), "missing"), "false", first, second}, string(os.PathListSeparator))
 
-	if err := open(pageURL, list, (&fallback{}).open); err != nil {
+	if err := open(t.Context(), pageURL, list, (&fallback{}).open); err != nil {
 		t.Fatal(err)
 	}
 	if got := received(t, firstArgv); !slices.Equal(got, []string{pageURL}) {
@@ -91,7 +91,7 @@ func TestTheFirstBrowserInTheListThatOpensThePageIsTheOnlyOneRun(t *testing.T) {
 func TestWhenNoBrowserInTheListOpensThePageTheDefaultOpenerDoes(t *testing.T) {
 	var fell fallback
 
-	if err := open(pageURL, "false"+string(os.PathListSeparator)+filepath.Join(t.TempDir(), "missing"), fell.open); err != nil {
+	if err := open(t.Context(), pageURL, "false"+string(os.PathListSeparator)+filepath.Join(t.TempDir(), "missing"), fell.open); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(fell.opened, []string{pageURL}) {
@@ -102,7 +102,7 @@ func TestWhenNoBrowserInTheListOpensThePageTheDefaultOpenerDoes(t *testing.T) {
 func TestWithNoBrowserSetTheDefaultOpenerOpensThePage(t *testing.T) {
 	var fell fallback
 
-	if err := open(pageURL, "", fell.open); err != nil {
+	if err := open(t.Context(), pageURL, "", fell.open); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(fell.opened, []string{pageURL}) {
@@ -113,7 +113,7 @@ func TestWithNoBrowserSetTheDefaultOpenerOpensThePage(t *testing.T) {
 func TestABrowserOfTrueOrNoneOpensNothing(t *testing.T) {
 	for _, browser := range []string{"true", "none"} {
 		var fell fallback
-		if err := open(pageURL, browser, fell.open); err != nil {
+		if err := open(t.Context(), pageURL, browser, fell.open); err != nil {
 			t.Fatalf("BROWSER=%s: %v", browser, err)
 		}
 		if len(fell.opened) != 0 {

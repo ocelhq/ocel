@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -64,6 +66,29 @@ func startFake(t *testing.T, ctx context.Context, mode string, span *run.Span, q
 	}
 	t.Cleanup(p.Close)
 	return p
+}
+
+func TestASpanAProviderFlushesAsItIsTornDownAfterItsRunEndsIsInTheRunsTrace(t *testing.T) {
+	dir := t.TempDir()
+	ctx, traced, err := run.NewBus(time.Now).Begin(context.Background(), "ocel deploy", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := startFake(t, ctx, "flushes-span-on-exit", traced.Phase(progressv1.Phase_PHASE_DEPLOY), Questions{})
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		p.Close()
+	}()
+	traced.End(&err)
+
+	spans := tracedSpans(t, tracePathOf(t, dir, traced))
+	flushed, kept := spans["flushed on exit"]
+	if !kept {
+		t.Fatal("the trace lost the span the provider flushed as it was torn down")
+	}
+	if process := spans[filepath.Base(os.Args[0])]; process.SpanID == "" || flushed.ParentSpanID != process.SpanID {
+		t.Errorf("the provider's span has parent %q, want its process span %q", flushed.ParentSpanID, process.SpanID)
+	}
 }
 
 func TestAStartedProvidersStreamEventsReachTheSpan(t *testing.T) {

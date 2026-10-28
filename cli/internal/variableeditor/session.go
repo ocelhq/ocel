@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -105,6 +106,7 @@ func Serve(ctx context.Context, opts Options) (*Session, error) {
 		listener: listener,
 		done:     make(chan struct{}),
 	}
+	runtrace.AddSecretValues(ctx, s.Token)
 	s.URL = fmt.Sprintf("http://%s/#t=%s", listener.Addr().String(), s.Token)
 	s.server = &http.Server{Handler: s.handler()}
 

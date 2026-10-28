@@ -19,6 +19,7 @@ type Transcript struct {
 	w            io.Writer
 	present      Presentation
 	verbatimText func(string) string
+	streams      bool
 
 	mu            sync.Mutex
 	spans         spanTree[spanBlock]
@@ -80,6 +81,7 @@ func (s *Transcript) Receive(ev *streamv1.RunEvent) {
 	case isTraceOnly(ev):
 	case ev.GetOperation().GetStarted() != nil:
 		s.spans.open(span, ev, ev.GetOperation().GetTime().AsTime(), &spanBlock{opened: ev})
+		s.streamStarted(span, ev)
 	case ev.GetOperation().GetEnded() != nil:
 		s.end(span, ev)
 	case ev.GetWaiting() != nil:
@@ -105,8 +107,15 @@ func (s *Transcript) Receive(ev *streamv1.RunEvent) {
 	}
 }
 
+func (s *Transcript) streamStarted(span string, event *streamv1.RunEvent) {
+	if !s.streams || s.spans.tracked[span] == nil {
+		return
+	}
+	s.print(s.standalone(event))
+}
+
 func (s *Transcript) within(span string, inSpan, standalone blockLine) {
-	if tracked := s.spans.ownerOf(span); tracked != nil {
+	if tracked := s.spans.ownerOf(span); tracked != nil && !s.streams {
 		tracked.body = append(tracked.body, inSpan)
 		return
 	}
@@ -178,7 +187,12 @@ func (s *Transcript) endResource(span string, ev *streamv1.RunEvent) {
 		return
 	}
 	tracked.resources.count(change)
-	tracked.body = append(tracked.body, blockLine{text: continuationIndent + change.render(s.present)})
+	changed := blockLine{text: continuationIndent + change.render(s.present)}
+	if s.streams {
+		s.print(changed)
+		return
+	}
+	tracked.body = append(tracked.body, changed)
 }
 
 func (s *Transcript) dnsRecords(ev *streamv1.RunEvent) {

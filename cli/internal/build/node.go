@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
-	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 type nodeBuildRequest struct {
@@ -76,9 +76,10 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 		return fmt.Errorf("node not found on PATH: %w", err)
 	}
 
-	captured := &childprocess.Tail{Limit: capturedOutputBytes}
+	captured := &tracing.Tail{Limit: capturedOutputBytes}
 
-	cmd := exec.Command("node", scriptPath)
+	cmd := tracing.Command(ctx, "node", scriptPath)
+	cmd.ExportsSpans = true
 	cmd.Stdin = bytes.NewReader(request)
 
 	reader, writer, err := os.Pipe()
@@ -88,17 +89,16 @@ func runNode(ctx context.Context, scriptPath string, request []byte, log Log) er
 	cmd.Stdout, cmd.Stderr = writer, writer
 
 	appBuild := func(app string) (io.Writer, func(error)) {
-		w, ended := log.App(app)
+		_, w, ended := log.App(ctx, app)
 		return io.MultiWriter(w, captured), ended
 	}
-	proc := &nodeprotocol.Processor{Span: run.SpanFromContext(ctx), Forward: io.MultiWriter(log.shared(), captured), AppBuild: appBuild, Hide: log.hidden}
-
 	child, startErr := childprocess.Start(ctx, cmd, childprocess.Options{})
 	_ = writer.Close()
 	if startErr != nil {
 		_ = reader.Close()
 		return fmt.Errorf("the node build failed: %w", startErr)
 	}
+	proc := &nodeprotocol.Processor{Forward: io.MultiWriter(log.shared(), captured), AppBuild: appBuild, Hide: log.hidden, ChildExportsSpans: cmd.IsExportingSpans()}
 	proc.Scan(ctx, reader)
 	_ = reader.Close()
 	runErr := child.Wait()

@@ -44,6 +44,7 @@ func targetScope(cfg *project.Project, cwd string) variables.Scope {
 }
 
 func discoverAndSync(ctx context.Context, server *devserver.Server, cfg *project.Project, values valueLayers, scope variables.Scope, local localCommand, span *run.Span) (map[string]string, error) {
+	ctx = run.ContextWithSpan(ctx, span)
 	if err := discover(ctx, server, cfg, span); err != nil {
 		return nil, refusedSync(server, err)
 	}

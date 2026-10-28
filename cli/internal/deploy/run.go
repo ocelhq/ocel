@@ -111,7 +111,7 @@ func (d *deployRun) tier() environmentv1.Tier {
 
 func (d *deployRun) buildManifest(ctx context.Context, phase *run.Span) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
 	d.phase = phase
-	d.span = phase.Child(d.cfg.Slug, buildTitle(d.cfg, d.prebuilt))
+	ctx, d.span = phase.Child(ctx, d.cfg.Slug, buildTitle(d.cfg, d.prebuilt))
 	switch {
 	case d.preBuild != nil && d.prebuilt:
 		sayPrebuiltSkipsPreBuild(d.span, *d.preBuild, d.tier())
@@ -209,9 +209,9 @@ func (d *deployRun) readDeclarations(ctx context.Context) (*variables.Declaratio
 }
 
 func (d *deployRun) attempt(ctx context.Context, declarations *variables.Declarations, retry int) (*contractv1.Manifest, []*bindingsv1.Binding, error) {
-	attempt := d.span.Trace(d.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
+	attemptCtx, attempt := d.span.Trace(ctx, d.cfg.Slug, "build", progress.Attr{Key: progress.AttrKeyRetryCount, Value: strconv.Itoa(retry)})
 	d.declarations = declarations
-	manifest, inline, err := d.collectBuildAndAssemble(run.ContextWithSpan(ctx, attempt))
+	manifest, inline, err := d.collectBuildAndAssemble(attemptCtx)
 	attempt.End(err)
 	return manifest, inline, err
 }
@@ -240,12 +240,12 @@ func (d *deployRun) fill(ctx context.Context, declarations *variables.Declaratio
 	defer editor.Close()
 
 	resume := d.span.Hold(&streamv1.WaitingEvent{Missing: refusal.Variables(), Url: editor.URL})
-	if err := d.dependencies.OpenBrowser(editor.URL); err != nil {
+	if err := d.dependencies.OpenBrowser(ctx, editor.URL); err != nil {
 		d.span.Warn("Couldn't open your browser automatically — open the link above yourself.")
 	}
 
-	waiting := d.span.Trace(d.cfg.Slug, "await_human_input")
-	waitErr := editor.Wait(ctx)
+	waitingCtx, waiting := d.span.Trace(ctx, d.cfg.Slug, "await_human_input")
+	waitErr := editor.Wait(waitingCtx)
 	waiting.End(waitErr)
 
 	switch {
@@ -271,8 +271,8 @@ func (d *deployRun) ensureVariablesKey(ctx context.Context, refusal *variables.M
 
 func (d *deployRun) fillOnCloud(ctx context.Context, declarations *variables.Declarations, refusal *variables.MissingError) error {
 	for {
-		waiting := d.span.Trace(d.cfg.Slug, "await_human_input")
-		resolved, err := d.job.Resolve(ctx, d.span, refusal.Needed(), refusal.Variables())
+		waitingCtx, waiting := d.span.Trace(ctx, d.cfg.Slug, "await_human_input")
+		resolved, err := d.job.Resolve(waitingCtx, d.span, refusal.Needed(), refusal.Variables())
 		waiting.End(err)
 		if err != nil {
 			return err

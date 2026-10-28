@@ -30,7 +30,7 @@ const (
 
 type Dependencies struct {
 	commands.Invocation
-	ReadGitBranch    func(dir string) (string, error)
+	ReadGitBranch    func(ctx context.Context, dir string) (string, error)
 	DiscoverPRNumber func() string
 	Now              func() time.Time
 }
@@ -108,7 +108,7 @@ type logsQuery struct {
 var errStopAfterElapsed = errors.New("--for elapsed")
 
 func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []string, opts logsOptions, stdout, stderr io.Writer) error {
-	query, mode, err := opts.resolve(dependencies, cwd)
+	query, mode, err := opts.resolve(ctx, dependencies, cwd)
 	if err != nil {
 		return err
 	}
@@ -123,10 +123,10 @@ func runLogs(ctx context.Context, dependencies Dependencies, cwd string, apps []
 	mode.json = present.Format == terminal.FormatJSON
 	open := commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: query.request.GetEnvironment().GetTier(), Cloud: target.Cloud}
 	return dependencies.WithProvider(ctx, cfg, "ocel logs", open, func(ctx context.Context, p commands.ProviderRun) error {
-		reading := p.Check.Child(cfg.Slug, progress.Reading.Title("the logs of "+cfg.Slug))
+		readingCtx, reading := p.Check.Child(ctx, cfg.Slug, progress.Reading.Title("the logs of "+cfg.Slug))
 		out := newOutput(stdout, present, mode, newNotices(stderr, dependencies.Presentation(stderr).Palette(), p.Check.Warn))
 		out.caughtUp = func() { p.Check.End(nil) }
-		err := query.read(ctx, p.Provider, out)
+		err := query.read(readingCtx, p.Provider, out)
 		reading.End(err)
 		return err
 	})
@@ -176,7 +176,7 @@ func parseStopAfter(value string) (time.Duration, error) {
 	return stopAfter, nil
 }
 
-func (o logsOptions) resolve(dependencies Dependencies, cwd string) (logsQuery, outputMode, error) {
+func (o logsOptions) resolve(ctx context.Context, dependencies Dependencies, cwd string) (logsQuery, outputMode, error) {
 	mode := outputMode{raw: o.raw, tail: o.tail}
 	if o.level != "" {
 		level, ok := logview.ParseLevel(o.level)
@@ -224,7 +224,7 @@ func (o logsOptions) resolve(dependencies Dependencies, cwd string) (logsQuery, 
 		}
 		request.Until = timestamppb.New(until)
 	}
-	if request.Environment, err = o.resolveEnvironment(dependencies, cwd); err != nil {
+	if request.Environment, err = o.resolveEnvironment(ctx, dependencies, cwd); err != nil {
 		return logsQuery{}, outputMode{}, err
 	}
 	query.request = request
@@ -244,7 +244,7 @@ func parseMoment(now time.Time, flag, value string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("%s %q is neither a duration such as 15m nor an RFC3339 time such as 2026-01-05T12:00:00Z", flag, value)
 }
 
-func (o logsOptions) resolveEnvironment(dependencies Dependencies, cwd string) (*environmentv1.Environment, error) {
+func (o logsOptions) resolveEnvironment(ctx context.Context, dependencies Dependencies, cwd string) (*environmentv1.Environment, error) {
 	if !o.preview {
 		if o.environment != "" {
 			return nil, errors.New("--environment names a preview environment, so pass --preview with it")
@@ -256,5 +256,5 @@ func (o logsOptions) resolveEnvironment(dependencies Dependencies, cwd string) (
 			return nil, err
 		}
 	}
-	return previewid.ResolveEnvironment(cwd, o.environment, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
+	return previewid.ResolveEnvironment(ctx, cwd, o.environment, environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
 }

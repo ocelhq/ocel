@@ -27,9 +27,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/filewatch"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 
@@ -621,7 +621,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 
-		if err := leader.Claim(leaderOf(root), leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
+		if err := leader.Claim(context.Background(), leaderOf(root), leader.Leader{Address: listener.Addr().String(), Token: server.AppToken()}); err != nil {
 			t.Fatalf("leader.Claim: %v", err)
 		}
 
@@ -822,8 +822,8 @@ func TestDevLeavesNothingBehind(t *testing.T) {
 		var claimAtStop error
 		successor := leader.Leader{Address: "127.0.0.1:9", Token: "successor"}
 		engine := stopWatchingEngine{Engine: &dockertest.Engine{}, onStop: func() {
-			_, foundAtStop, _ = leader.Find(leaderOf(root))
-			claimAtStop = leader.Claim(leaderOf(root), successor)
+			_, foundAtStop, _ = leader.Find(context.Background(), leaderOf(root))
+			claimAtStop = leader.Claim(context.Background(), leaderOf(root), successor)
 		}}
 		deps := devDeps()
 		deps.OpenDocker = func(context.Context) (docker.Engine, error) { return engine, nil }
@@ -845,7 +845,7 @@ func TestDevLeavesNothingBehind(t *testing.T) {
 			t.Fatalf("leader.Read after exit = %v, want the leader record released", err)
 		}
 
-		if err := leader.Claim(leaderOf(root), successor); err != nil {
+		if err := leader.Claim(context.Background(), leaderOf(root), successor); err != nil {
 			t.Fatalf("leader.Claim after exit: %v", err)
 		}
 	})
@@ -1122,7 +1122,7 @@ func TestDevReportsThroughItsRun(t *testing.T) {
 			t.Fatalf("runDev err = %v; stderr=%s", err, stderr.String())
 		}
 
-		logs, err := filepath.Glob(filepath.Join(root, buildoutput.StateDir, "runs", "*.ndjson"))
+		logs, err := filepath.Glob(filepath.Join(runtrace.RunsDir(root), "*", runtrace.EventsFileName))
 		if err != nil || len(logs) != 1 {
 			t.Fatalf("run logs = %v (%v), want one", logs, err)
 		}

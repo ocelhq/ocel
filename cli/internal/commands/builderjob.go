@@ -64,7 +64,7 @@ func (j *BuilderJob) Source() *consolev1.Source {
 	return &consolev1.Source{Commit: j.Git.GetCommit(), Branch: j.Git.GetBranch(), Dirty: j.Git.GetDirty()}
 }
 
-func (j *BuilderJob) ReadGitBranch(string) (string, error) {
+func (j *BuilderJob) ReadGitBranch(context.Context, string) (string, error) {
 	if j.Git.GetBranch() == "" {
 		return "", fmt.Errorf("job %s on Ocel Cloud was started with no git branch, so no branch names this preview: name it, as in `ocel preview up <name>`", j.ID)
 	}

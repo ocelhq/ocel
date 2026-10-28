@@ -3,6 +3,7 @@ package build
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"maps"
@@ -13,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
@@ -20,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -645,12 +649,63 @@ func TestBuildNamesEachStepTheBuildNamesOutsideItsAppsUnderBuild(t *testing.T) {
 
 	root := writeServerlessProject(t)
 	dependencies := newTestDependencies()
-	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, log build.Log) (build.Output, error) {
-		log.Step(cfg.Slug, progress.Loading.Title("the build adapters for app web"))(nil)
+	dependencies.BuildApps = func(ctx context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, log build.Log) (build.Output, error) {
+		_, ended := log.Step(ctx, cfg.Slug, progress.Loading.Title("the build adapters for app web"))
+		ended(nil)
 		return build.Output{}, nil
 	}
 
 	said := builtSaying(t, dependencies, root)
 
 	assertReportedUnder(t, said, "test-app: Loaded the build adapters for app web in ", "build")
+}
+
+func TestASpanTheBuildOfAnAppStartsNestsUnderThatAppsOperation(t *testing.T) {
+	t.Parallel()
+
+	root := writeServerlessProject(t)
+	dependencies := newTestDependencies()
+	dependencies.BuildApps = func(ctx context.Context, _ *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, log build.Log) (build.Output, error) {
+		appCtx, _, ended := log.App(ctx, "web")
+		_, compiling := otel.Tracer("test").Start(appCtx, "go build web")
+		compiling.End()
+		ended(nil)
+		return build.Output{}, nil
+	}
+
+	builtSaying(t, dependencies, root)
+
+	matches, err := filepath.Glob(filepath.Join(runtrace.RunsDir(root), "*", runtrace.TraceFileName))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("trace files = %v (err %v), want exactly one", matches, err)
+	}
+	raw, err := os.ReadFile(matches[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		ResourceSpans []struct {
+			ScopeSpans []struct {
+				Spans []struct {
+					Name         string `json:"name"`
+					SpanID       string `json:"spanId"`
+					ParentSpanID string `json:"parentSpanId"`
+				} `json:"spans"`
+			} `json:"scopeSpans"`
+		} `json:"resourceSpans"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	names, parents := map[string]string{}, map[string]string{}
+	for _, resource := range doc.ResourceSpans {
+		for _, scope := range resource.ScopeSpans {
+			for _, s := range scope.Spans {
+				names[s.SpanID], parents[s.Name] = s.Name, s.ParentSpanID
+			}
+		}
+	}
+	if got := names[parents["go build web"]]; got != "Building app web" {
+		t.Errorf("the span the build of web started nests under %q, want %q", got, "Building app web")
+	}
 }

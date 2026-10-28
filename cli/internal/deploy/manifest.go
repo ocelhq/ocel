@@ -58,7 +58,7 @@ func (d *deployRun) collectBuildAndAssemble(ctx context.Context) (*contractv1.Ma
 		return nil, nil, err
 	}
 	var assembled *contractv1.Manifest
-	if err := steps.run(d.cfg.Slug, progress.Assembling.Title("the deploy manifest of "+d.cfg.Slug), func() (err error) {
+	if err := steps.run(ctx, d.cfg.Slug, progress.Assembling.Title("the deploy manifest of "+d.cfg.Slug), func() (err error) {
 		assembled, err = d.assemble(c, built)
 		return err
 	}); err != nil || assembled == nil {
@@ -178,25 +178,25 @@ func (d *deployRun) build(ctx context.Context, steps *buildSteps, c collected, s
 	deliverRecords(records, values)
 	if runsPreBuild {
 		if err := d.runPreBuild(ctx, *d.preBuild, forwards, records[portforward.WholeProject], values, len(bound.preBuild.Forwarded)); err != nil {
-			return build.Output{}, errors.Join(err, closeForwards(steps, cfg.Slug, forwards))
+			return build.Output{}, errors.Join(err, closeForwards(ctx, steps, cfg.Slug, forwards))
 		}
 	}
 	var built build.Output
-	err = steps.run(cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
+	err = steps.run(ctx, cfg.Slug, progress.Building.Title(appList(cfg)), func() (err error) {
 		built, err = d.dependencies.BuildApps(ctx, cfg, values, d.containerArchs, c.workers, d.host, steps.log())
 		if err != nil {
 			return err
 		}
 		return variables.RecordClientValues(cfg.Dir, d.env, c.clients)
 	})
-	return built, errors.Join(err, closeForwards(steps, cfg.Slug, forwards))
+	return built, errors.Join(err, closeForwards(ctx, steps, cfg.Slug, forwards))
 }
 
-func closeForwards(steps *buildSteps, slug string, forwards *portforward.Forwards) error {
+func closeForwards(ctx context.Context, steps *buildSteps, slug string, forwards *portforward.Forwards) error {
 	if forwards == nil {
 		return nil
 	}
-	releasing := steps.open(slug, progress.Releasing.Title("the forwarded ports"))
+	_, releasing := steps.open(ctx, slug, progress.Releasing.Title("the forwarded ports"))
 	err := forwards.Close()
 	releasing.End(err)
 	return err
@@ -271,14 +271,14 @@ func (b *buildSteps) takeLoose() []byte {
 	return taken
 }
 
-func (b *buildSteps) open(subject string, title progress.Title) *run.Span {
+func (b *buildSteps) open(ctx context.Context, subject string, title progress.Title) (context.Context, *run.Span) {
 	_, _ = b.shared.Write(b.takeLoose())
-	return b.phase.Child(subject, title)
+	return b.phase.Child(ctx, subject, title)
 }
 
-func (b *buildSteps) openReporting(subject string, title progress.Title) (*run.Span, func(error)) {
-	child := b.open(subject, title)
-	return child, func(err error) {
+func (b *buildSteps) openReporting(ctx context.Context, subject string, title progress.Title) (context.Context, *run.Span, func(error)) {
+	ctx, child := b.open(ctx, subject, title)
+	return ctx, child, func(err error) {
 		if err != nil {
 			b.mu.Lock()
 			b.failed = true
@@ -291,18 +291,18 @@ func (b *buildSteps) openReporting(subject string, title progress.Title) (*run.S
 func (b *buildSteps) log() build.Log {
 	return build.Log{
 		Shared: b,
-		AppLog: func(app string) (io.Writer, func(error)) {
-			child, ended := b.openReporting(app, progress.Building.Title("app "+app))
-			return child.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), ended
+		AppLog: func(ctx context.Context, app string) (context.Context, io.Writer, func(error)) {
+			ctx, child, ended := b.openReporting(ctx, app, progress.Building.Title("app "+app))
+			return ctx, child.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED), ended
 		},
-		Step: func(subject string, title progress.Title) func(error) {
-			_, ended := b.openReporting(subject, title)
-			return ended
+		Step: func(ctx context.Context, subject string, title progress.Title) (context.Context, func(error)) {
+			ctx, _, ended := b.openReporting(ctx, subject, title)
+			return ctx, ended
 		},
 	}
 }
 
-func (b *buildSteps) run(subject string, title progress.Title, step func() error) error {
+func (b *buildSteps) run(ctx context.Context, subject string, title progress.Title, step func() error) error {
 	reserved := b.phase.ReserveChild(subject, title)
 	b.mu.Lock()
 	b.failed = false
@@ -316,7 +316,7 @@ func (b *buildSteps) run(subject string, title progress.Title, step func() error
 		_, _ = b.shared.Write(loose)
 		return err
 	}
-	child := reserved.Open()
+	_, child := reserved.Open(ctx)
 	_, _ = child.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED).Write(loose)
 	child.End(err)
 	return err

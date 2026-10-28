@@ -187,9 +187,11 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 
 		var shared, app bytes.Buffer
-		log := Log{Shared: &shared, AppLog: func(string) (io.Writer, func(error)) { return &app, func(error) {} }}
+		log := Log{Shared: &shared, AppLog: func(ctx context.Context, _ string) (context.Context, io.Writer, func(error)) {
+			return ctx, &app, func(error) {}
+		}}
 		builder := nodeOnly{node: func(_ context.Context, _ string, _ []byte, log Log) error {
-			appLog, ended := log.App("web")
+			_, appLog, ended := log.App(context.Background(), "web")
 			_, _ = io.WriteString(log.Shared, "booting with sk_live_sensitive\n")
 			_, _ = io.WriteString(appLog, "signing with ss_live_secret\n")
 			ended(nil)
@@ -220,9 +222,11 @@ func TestABuildReadsItsEncryptedValuesFromALiveDirAndNeverFromItsEnvironment(t *
 		cfg := &project.Project{Dir: root, Apps: []project.App{nextApp("web", "apps/web")}}
 
 		var shared, app bytes.Buffer
-		log := Log{Shared: &shared, AppLog: func(string) (io.Writer, func(error)) { return &app, func(error) {} }}
+		log := Log{Shared: &shared, AppLog: func(ctx context.Context, _ string) (context.Context, io.Writer, func(error)) {
+			return ctx, &app, func(error) {}
+		}}
 		builder := nodeOnly{node: func(_ context.Context, _ string, _ []byte, log Log) error {
-			appLog, ended := log.App("web")
+			_, appLog, ended := log.App(context.Background(), "web")
 			_, _ = io.WriteString(log.Shared, "booting with sk_live_sen")
 			_, _ = io.WriteString(log.Shared, "sitive, ready")
 			_, _ = io.WriteString(appLog, "signing with ss_live_")

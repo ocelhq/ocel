@@ -5,8 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os/exec"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const GracePeriod = 2 * time.Second
@@ -21,7 +22,7 @@ type Options struct {
 }
 
 type Child struct {
-	cmd        *exec.Cmd
+	cmd        *tracing.Cmd
 	group      *processGroup
 	done       chan struct{}
 	exited     chan error
@@ -31,7 +32,7 @@ type Child struct {
 	reap       time.Duration
 }
 
-func Start(ctx context.Context, cmd *exec.Cmd, opts Options) (*Child, error) {
+func Start(ctx context.Context, cmd *tracing.Cmd, opts Options) (*Child, error) {
 	child := &Child{
 		cmd:        cmd,
 		done:       make(chan struct{}),
@@ -41,12 +42,12 @@ func Start(ctx context.Context, cmd *exec.Cmd, opts Options) (*Child, error) {
 		reap:       cmp.Or(opts.Reap, opts.Grace, GracePeriod),
 	}
 	if cmd.Cancel != nil {
-		return nil, fmt.Errorf("start %s: it was made with exec.CommandContext, and only Start may stop it when its context ends", cmd.Path)
+		return nil, fmt.Errorf("start %s: it was made with tracing.CommandContext, and only Start may stop it when its context ends", cmd.Path)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	group, err := newProcessGroup(cmd, !opts.Terminal)
+	group, err := newProcessGroup(cmd.Cmd, !opts.Terminal)
 	if err != nil {
 		return nil, fmt.Errorf("start %s: %w", cmd.Path, err)
 	}
@@ -61,7 +62,7 @@ func Start(ctx context.Context, cmd *exec.Cmd, opts Options) (*Child, error) {
 		child.terminal.restore()
 		return nil, err
 	}
-	if err := group.attach(cmd); err != nil {
+	if err := group.attach(cmd.Cmd); err != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		group.release()
@@ -72,7 +73,7 @@ func Start(ctx context.Context, cmd *exec.Cmd, opts Options) (*Child, error) {
 	go func() {
 		err := cmd.Wait()
 		if !child.isTerminal {
-			_ = group.kill(cmd)
+			_ = group.kill(cmd.Cmd)
 		}
 		group.release()
 		child.terminal.restore()
@@ -92,7 +93,7 @@ func Start(ctx context.Context, cmd *exec.Cmd, opts Options) (*Child, error) {
 	return child, nil
 }
 
-func Run(ctx context.Context, cmd *exec.Cmd) error {
+func Run(ctx context.Context, cmd *tracing.Cmd) error {
 	child, err := Start(ctx, cmd, Options{})
 	if err != nil {
 		return err
@@ -127,11 +128,11 @@ func (c *Child) Stop() {
 }
 
 func (c *Child) terminate() error {
-	return c.group.terminate(c.cmd)
+	return c.group.terminate(c.cmd.Cmd)
 }
 
 func (c *Child) kill() error {
-	return c.group.kill(c.cmd)
+	return c.group.kill(c.cmd.Cmd)
 }
 
 func (c *Child) hasExited() bool {

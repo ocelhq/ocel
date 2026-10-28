@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/githubactions"
 	"github.com/ocelhq/ocel/cli/internal/githubactions/githubactionstest"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 )
 
 func idTokenEnv(requestURL string) func(string) string {
@@ -78,4 +80,20 @@ func TestAnIDTokenResponseWithoutATokenIsAnError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAnIDTokenRequestIsASpanThatNeverRecordsTheTokenItWasRefusedOrHanded(t *testing.T) {
+	t.Parallel()
+	ctx, spans := tracingtest.Record(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"value":"eyJhbGciOiJSUzI1NiJ9.minted-oidc-token"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	if _, err := githubactions.RequestIDToken(ctx, idTokenEnv(server.URL), "https://console.example.com"); err == nil {
+		t.Fatal("githubactions.RequestIDToken() = nil, want the refusal")
+	}
+
+	tracingtest.CheckWithoutBodies(t, spans.Only(t), "minted-oidc-token")
 }

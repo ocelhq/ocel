@@ -13,7 +13,7 @@ import (
 )
 
 func (p ProviderRun) NewAttempt(ctx context.Context, parent *run.Span, kind consolev1.DeploymentKind, cfg *project.Project, env *environmentv1.Environment, prNumber string) *deployreport.Attempt {
-	reading := parent.Child(cfg.Slug, progress.Reading.Title("the target and the source checkout"))
+	ctx, reading := parent.Child(ctx, cfg.Slug, progress.Reading.Title("the target and the source checkout"))
 	defer reading.End(nil)
 	trigger, ci := deployreport.ReadTrigger(os.Getenv, prNumber)
 	return &deployreport.Attempt{
@@ -26,15 +26,15 @@ func (p ProviderRun) NewAttempt(ctx context.Context, parent *run.Span, kind cons
 		StartedAt:   p.Run.StartedAt(),
 		Trigger:     trigger,
 		CI:          ci,
-		Source:      p.readSource(cfg.Dir),
+		Source:      p.readSource(ctx, cfg.Dir),
 	}
 }
 
-func (p ProviderRun) readSource(dir string) *consolev1.Source {
+func (p ProviderRun) readSource(ctx context.Context, dir string) *consolev1.Source {
 	if p.job != nil {
 		return p.job.Source()
 	}
-	return deployreport.ReadSource(dir, os.Getenv)
+	return deployreport.ReadSource(ctx, dir, os.Getenv)
 }
 
 func (p ProviderRun) providerName(cfg *project.Project) string {
