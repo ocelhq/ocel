@@ -85,7 +85,7 @@ func appOutcome(app string, err error) *progressv1.AppResult {
 }
 
 func (r *deployRun) provisionInfra(ctx context.Context, undeclared []*contractv1.ManifestResource) error {
-	return r.spanEvents.run(r.spans.Infra, func(u *spanRun) error {
+	return r.spanEvents.run(ctx, r.spans.Infra, func(ctx context.Context, u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
 			stack, held, err := r.infraStack(ctx, undeclared)
 			if err != nil {
@@ -199,7 +199,7 @@ func (r *deployRun) planBindings(ctx context.Context, stack provider.StackSpec) 
 
 func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.AppEntry) (appProvisioned, error) {
 	var provisioned appProvisioned
-	err := r.spanEvents.run(r.spans.Apps[entry.App], func(u *spanRun) error {
+	err := r.spanEvents.run(ctx, r.spans.Apps[entry.App], func(ctx context.Context, u *spanRun) error {
 		return u.phase(func(progress progress.Log) error {
 			release, err := r.appStackOf(ctx, entry)
 			if err != nil {

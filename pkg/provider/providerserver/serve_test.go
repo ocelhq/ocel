@@ -14,6 +14,7 @@ import (
 	"time"
 
 	connect "connectrpc.com/connect"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -161,6 +162,32 @@ func (stubProvider) Facts() provider.Facts { return provider.Facts{Vendor: "stub
 
 func (stubProvider) Hooks() provider.Hooks { return provider.Hooks{} }
 
+func TestServingLeavesTheStandardLibrarysDefaultTransportInPlace(t *testing.T) {
+	identity, err := localrpc.NewIdentity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(localrpc.ClientCertEnvVar, identity.CertificatePEM())
+	read, written, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdin := os.Stdin
+	os.Stdin = read
+	t.Cleanup(func() {
+		os.Stdin = stdin
+		_ = read.Close()
+	})
+	_ = written.Close()
+
+	if err := Serve(Config{Version: "test", New: func(context.Context, provider.Settings) (provider.Provider, error) { return stubProvider{}, nil }}); err != nil {
+		t.Fatalf("Serve() = %v", err)
+	}
+	if _, standard := http.DefaultTransport.(*http.Transport); !standard {
+		t.Errorf("http.DefaultTransport is a %T after serving, want the standard library's *http.Transport that Google's credential code asserts", http.DefaultTransport)
+	}
+}
+
 func TestStdinReachingEOFCancelsTheServeContext(t *testing.T) {
 	t.Parallel()
 
@@ -265,14 +292,42 @@ func TestServeReturnsWithinItsWindowWhenACallIgnoresCancellation(t *testing.T) {
 	}
 }
 
+func TestACallServedCarriesTheTraceTheProviderWasStartedUnder(t *testing.T) {
+	t.Parallel()
+
+	traceID, _ := trace.TraceIDFromHex("4bf92f3577b34da6a3ce929d0e0e4736")
+	spanID, _ := trace.SpanIDFromHex("00f067aa0ba902b7")
+	handed := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled}))
+	seen := make(chan trace.SpanContext, 1)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- trace.SpanContextFromContext(r.Context())
+	})
+
+	_, _, address := startServeUnder(t, handed, handler, time.Second)
+	resp, err := http.Get("http://" + address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+
+	if got := <-seen; got.TraceID() != traceID || got.SpanID() != spanID {
+		t.Errorf("call context carries %s/%s, want the provider's handed parent so its spans reach the run's trace", got.TraceID(), got.SpanID())
+	}
+}
+
 func startServe(t *testing.T, handler http.Handler, window time.Duration) (<-chan error, context.CancelFunc, string) {
+	t.Helper()
+	return startServeUnder(t, context.Background(), handler, window)
+}
+
+func startServeUnder(t *testing.T, base context.Context, handler http.Handler, window time.Duration) (<-chan error, context.CancelFunc, string) {
 	t.Helper()
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("net.Listen() error = %v", err)
 	}
-	ctx, stop := context.WithCancel(context.Background())
+	ctx, stop := context.WithCancel(base)
 	t.Cleanup(stop)
 	returned := make(chan error, 1)
 	go func() { returned <- serve(ctx, ln, handler, window, func() {}) }()

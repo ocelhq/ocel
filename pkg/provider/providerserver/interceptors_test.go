@@ -5,41 +5,35 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/localrpc"
+	"go.opentelemetry.io/otel/trace"
 )
 
-func TestExtractTraceParent(t *testing.T) {
-	t.Parallel()
+func TestARequestsTraceparentBecomesTheRemoteParentOfTheCallsContext(t *testing.T) {
+	header := http.Header{}
+	header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
 
-	t.Run("stores a traceparent header into the context", func(t *testing.T) {
-		t.Parallel()
-		header := http.Header{}
-		header.Set(localrpc.TraceParentHeader, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-		ctx := extractTraceParent(context.Background(), header)
-		got, ok := localrpc.TraceParentFromContext(ctx)
-		if !ok {
-			t.Fatalf("TraceParentFromContext() ok = false, want true")
-		}
-		if got != "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" {
-			t.Fatalf("TraceParentFromContext() = %q", got)
-		}
-	})
+	parent := trace.SpanContextFromContext(extractTraceParent(context.Background(), header))
+	if got := parent.TraceID().String(); got != "4bf92f3577b34da6a3ce929d0e0e4736" {
+		t.Errorf("trace id = %s, want the header's", got)
+	}
+	if got := parent.SpanID().String(); got != "00f067aa0ba902b7" {
+		t.Errorf("span id = %s, want the header's", got)
+	}
+	if !parent.IsRemote() || !parent.IsSampled() {
+		t.Errorf("parent = %+v, want a remote sampled parent", parent)
+	}
+}
 
-	t.Run("a request with no traceparent header leaves the context untouched", func(t *testing.T) {
-		t.Parallel()
-		ctx := extractTraceParent(context.Background(), http.Header{})
-		if _, ok := localrpc.TraceParentFromContext(ctx); ok {
-			t.Fatalf("TraceParentFromContext() ok = true, want false")
-		}
-	})
-
-	t.Run("a malformed traceparent header is rejected rather than propagated", func(t *testing.T) {
-		t.Parallel()
-		header := http.Header{}
-		header.Set(localrpc.TraceParentHeader, "not-a-traceparent")
-		ctx := extractTraceParent(context.Background(), header)
-		if _, ok := localrpc.TraceParentFromContext(ctx); ok {
-			t.Fatalf("TraceParentFromContext() ok = true, want false")
-		}
-	})
+func TestARequestWithAMissingOrMalformedTraceparentHasNoParent(t *testing.T) {
+	for name, value := range map[string]string{"missing": "", "malformed": "not-a-traceparent"} {
+		t.Run(name, func(t *testing.T) {
+			header := http.Header{}
+			if value != "" {
+				header.Set("traceparent", value)
+			}
+			if parent := trace.SpanContextFromContext(extractTraceParent(context.Background(), header)); parent.IsValid() {
+				t.Errorf("parent = %+v, want none", parent)
+			}
+		})
+	}
 }

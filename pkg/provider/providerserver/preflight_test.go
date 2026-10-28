@@ -10,6 +10,8 @@ import (
 	"time"
 
 	connect "connectrpc.com/connect"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -17,11 +19,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/processenv"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 )
 
 func TestPreflightReportsWhoThisRunIsAndWhatItIncludes(t *testing.T) {
@@ -575,4 +580,90 @@ func TestPreflightFallsBackToTheSiblingTier(t *testing.T) {
 	if resp.GetBootstrap().GetPresent() {
 		t.Error("Preflight() reports a preview bootstrap that was never installed")
 	}
+}
+
+type tracedCredentials struct {
+	provider.Credentials
+}
+
+func (c tracedCredentials) Whoami(ctx context.Context) (provider.Principal, error) {
+	_, span := otel.Tracer("vendor").Start(ctx, "sts.GetCallerIdentity")
+	defer span.End()
+	return c.Credentials.Whoami(ctx)
+}
+
+type tracedVendor struct {
+	*fake.Provider
+}
+
+func (p tracedVendor) Credentials() provider.Credentials {
+	return tracedCredentials{p.Provider.Credentials()}
+}
+
+func TestWorkInsideAPreflightStepIsTracedUnderThatStepInEachCallersTrace(t *testing.T) {
+	recording, recorded := tracingtest.Record(t)
+	traceID := trace.SpanContextFromContext(recording).TraceID().String()
+
+	client := servedBy(t, tracedVendor{fake.NewProvider(fake.Options{Region: "nowhere"})})
+	nestedUnder := map[string]string{}
+	for _, caller := range []string{"00f067aa0ba902b7", "1111111111111111"} {
+		ctx, call := connect.NewClientContext(context.Background())
+		call.RequestHeader().Set("traceparent", "00-"+traceID+"-"+caller+"-01")
+		_, events, err := preflightWithSteps(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
+		if err != nil {
+			t.Fatalf("Preflight() error = %v", err)
+		}
+		var step []byte
+		for _, event := range events {
+			if event.GetStarted() != nil && strings.Contains(event.GetMessage(), "credentials") {
+				step = event.GetSpanId()
+			}
+		}
+		if step == nil {
+			t.Fatalf("Preflight() started no step checking the credentials: %v", events)
+		}
+		callerID, _ := trace.SpanIDFromHex(caller)
+		nestedUnder[caller] = tracing.StepSpanID(callerID, step).String()
+	}
+	if nestedUnder["00f067aa0ba902b7"] == nestedUnder["1111111111111111"] {
+		t.Fatal("one step in two calls has one span ID in the trace")
+	}
+
+	var parents []string
+	for _, span := range recorded.Ended() {
+		if span.Name() != "sts.GetCallerIdentity" {
+			continue
+		}
+		parents = append(parents, span.Parent().SpanID().String())
+	}
+	want := []string{nestedUnder["00f067aa0ba902b7"], nestedUnder["1111111111111111"]}
+	if !slices.Equal(parents, want) {
+		t.Errorf("the vendor's calls nest under %v, want each call's step checking the credentials %v", parents, want)
+	}
+}
+
+func TestEachCallIsAServerSpanUnderTheCallersClientSpan(t *testing.T) {
+	recording, recorded := tracingtest.Record(t)
+	traceID := trace.SpanContextFromContext(recording).TraceID().String()
+
+	client := servedBy(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
+	ctx, call := connect.NewClientContext(context.Background())
+	call.RequestHeader().Set("traceparent", "00-"+traceID+"-00f067aa0ba902b7-01")
+	if _, _, err := preflightWithSteps(ctx, client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION}); err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+
+	for _, span := range recorded.Ended() {
+		if span.Name() != strings.TrimPrefix(contractv1connect.ProviderServicePreflightProcedure, "/") {
+			continue
+		}
+		if span.SpanKind() != trace.SpanKindServer {
+			t.Errorf("the call's span is a %s span, want a server span", span.SpanKind())
+		}
+		if got := span.Parent().SpanID().String(); got != "00f067aa0ba902b7" {
+			t.Errorf("the call's span nests under %s, want the caller's client span", got)
+		}
+		return
+	}
+	t.Fatal("the call is not a span")
 }

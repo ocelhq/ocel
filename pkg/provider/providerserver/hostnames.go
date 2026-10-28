@@ -47,7 +47,7 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	title := progress.Attaching.Title(namedList("production hostname", "production hostnames", requestedHosts(req)))
 	root := RootSpan(SpanEdge, req.GetSlug(), title, progressv1.Phase_PHASE_PROVISION)
-	return streamed(ctx, stream, root, func(sender *eventStream, progress progress.Log) error {
+	return streamed(ctx, stream, root, func(ctx context.Context, sender *eventStream, progress progress.Log) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
@@ -385,7 +385,7 @@ func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameR
 		title = progress.Detaching.Title(req.GetHost() + " from production")
 	}
 	root := RootSpan(SpanEdge, req.GetSlug(), title, progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
+	return streamed(ctx, stream, root, func(ctx context.Context, _ *eventStream, progress progress.Log) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err

@@ -132,7 +132,7 @@ func (h *handlers) GetEnvironment(ctx context.Context, req *contractv1.GetEnviro
 func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	root := RootSpan(SpanEnvironment, req.GetEnvironment().GetIdentity(),
 		progress.Removing.Title("the preview environment of "+req.GetSlug()), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
+	return streamed(ctx, stream, root, func(ctx context.Context, _ *eventStream, progress progress.Log) error {
 		pointer, err := envName(req.GetEnvironment())
 		if err != nil {
 			return err

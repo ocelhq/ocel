@@ -252,7 +252,7 @@ func (r *deployRun) reclaimOwnRelease(ctx context.Context) {
 	defer stop()
 	span := RootSpan("reclaim/"+r.spec.PromotionID, environmentSubject(r.spec.Tier, r.spec.Env),
 		progress.Reclaiming.Title("what this failed deploy provisioned"), progressv1.Phase_PHASE_DESTROY)
-	_ = r.spanEvents.run(span, func(*spanRun) error {
+	_ = r.spanEvents.run(ctx, span, func(ctx context.Context, _ *spanRun) error {
 		progress := newSpanLog(r.sender, span)
 		if err := r.reclaimProvisioned(ctx, progress); err != nil {
 			progress.Warn(fmt.Sprintf("Promotion %s did not land, and reclaiming what its deploy provisioned failed, so what was not reclaimed stays until this environment is destroyed: %v",

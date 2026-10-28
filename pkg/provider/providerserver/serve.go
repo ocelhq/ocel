@@ -58,15 +58,28 @@ func Serve(config Config) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	ctx, stopExporting, err := ExportSpans(ctx, filepath.Base(os.Args[0]))
+	if err != nil {
+		return fmt.Errorf("export provider spans: %w", err)
+	}
+	defer func() {
+		flushed, cancel := context.WithTimeout(context.Background(), spanFlushWindow)
+		defer cancel()
+		_ = stopExporting(flushed)
+	}()
+
 	return serve(cancelWhenStdinCloses(ctx, os.Stdin), ln, newMux(config), shutdownWindow, func() {
 		fmt.Println(localrpc.FormatReadinessLine(config.Version, addr, identity.CertificateDER()))
 	})
 }
 
-const shutdownWindow = 10 * time.Second
+const (
+	shutdownWindow  = 10 * time.Second
+	spanFlushWindow = 2 * time.Second
+)
 
 func serve(ctx context.Context, ln net.Listener, handler http.Handler, window time.Duration, announce func()) error {
-	calls, cancelCalls := context.WithCancel(context.Background())
+	calls, cancelCalls := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancelCalls()
 	srv := &http.Server{Handler: handler, BaseContext: func(net.Listener) context.Context { return calls }}
 
@@ -112,7 +125,7 @@ func newMux(config Config) *http.ServeMux {
 	mux := http.NewServeMux()
 	asked := newQuestions()
 	interceptors := connect.WithInterceptors(
-		traceInterceptor(),
+		callSpanInterceptor{},
 		validate.NewInterceptor(),
 		asked,
 	)

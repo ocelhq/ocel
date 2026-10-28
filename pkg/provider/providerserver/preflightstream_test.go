@@ -21,14 +21,19 @@ func preflightWithSteps(ctx context.Context, client contractv1connect.ProviderSe
 	}
 	defer stream.Close()
 	var events []*progressv1.OperationEvent
+	var resp *contractv1.PreflightResponse
 	for stream.Receive() {
-		if resp := stream.Msg().GetResponse(); resp != nil {
-			return resp, events, nil
+		if got := stream.Msg().GetResponse(); got != nil {
+			resp = got
+			continue
 		}
 		events = append(events, stream.Msg().GetProgress())
 	}
 	if err := stream.Err(); err != nil {
 		return nil, events, err
 	}
-	return nil, events, errors.New("the Preflight stream closed without a response")
+	if resp == nil {
+		return nil, events, errors.New("the Preflight stream closed without a response")
+	}
+	return resp, events, nil
 }

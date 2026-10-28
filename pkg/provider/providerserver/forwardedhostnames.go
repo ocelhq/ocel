@@ -29,7 +29,7 @@ func (h *handlers) refuseUnreadyForwards(ctx context.Context, steps preflightSte
 	if err != nil || len(forwarded) == 0 {
 		return provider.RefusalError(err)
 	}
-	err = steps.run(string(front.Kind()), progress.Checking.Title("forwarding to the origin for "+strings.Join(forwarded, ", ")), func() error {
+	err = steps.run(ctx, string(front.Kind()), progress.Checking.Title("forwarding to the origin for "+strings.Join(forwarded, ", ")), func(ctx context.Context) error {
 		for _, hostname := range forwarded {
 			if err := certificates.RefuseUnready(ctx, tier, hostname); err != nil {
 				return err

@@ -229,7 +229,7 @@ func (h *handlers) PublishProtection(ctx context.Context, req *contractv1.Publis
 	root := RootSpan(SpanEdge, slug, progress.Updating.Title("the "+string(tier)+" protection of "+slug), progressv1.Phase_PHASE_PROVISION)
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		outcome := &progressv1.ProtectionPublished{}
-		err := inSpan(sender, root, func(_ *eventStream, log progress.Log) error {
+		err := inSpan(ctx, sender, root, func(ctx context.Context, _ *eventStream, log progress.Log) error {
 			return h.publishProtection(ctx, p, tier, req, outcome, log)
 		})
 		switch {

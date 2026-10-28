@@ -87,7 +87,7 @@ func decodeWildcard(entry records.Entry) (stackrecords.Wildcard, error) {
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	root := RootSpan(SpanEdge, string(environment.TierPreview),
 		progress.Serving.Title("every project's previews on "+edge.PreviewWildcard(req.GetBaseDomain())), progressv1.Phase_PHASE_PROVISION)
-	return streamed(ctx, stream, root, func(sender *eventStream, progress progress.Log) error {
+	return streamed(ctx, stream, root, func(ctx context.Context, sender *eventStream, progress progress.Log) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
 		if err != nil {
 			return err
@@ -549,7 +549,7 @@ func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	root := RootSpan(SpanEdge, string(environment.TierPreview), progress.Releasing.Title("the global preview domain"), progressv1.Phase_PHASE_DESTROY)
-	return streamed(ctx, stream, root, func(_ *eventStream, progress progress.Log) error {
+	return streamed(ctx, stream, root, func(ctx context.Context, _ *eventStream, progress progress.Log) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
 			return err
