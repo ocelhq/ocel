@@ -3,6 +3,7 @@ package discovery
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -18,8 +19,8 @@ func Bundle(configDir string, files []string, outfile string) ([]byte, error) {
 	var entry strings.Builder
 	fmt.Fprintf(&entry, "import { discover } from %q;\n", installed.DiscoveryRuntimePath())
 	entry.WriteString("await discover([\n")
-	for _, f := range files {
-		fmt.Fprintf(&entry, "  () => import(%q),\n", f)
+	if err := writeModuleImports(&entry, configDir, files); err != nil {
+		return nil, err
 	}
 	entry.WriteString("]);\n")
 	bundle, err := bundleTo(configDir, outfile, "ocel-discovery-entry.ts", entry.String())
@@ -27,6 +28,17 @@ func Bundle(configDir string, files []string, outfile string) ([]byte, error) {
 		return nil, fmt.Errorf("bundle discovery entry failed:\n%w", err)
 	}
 	return bundle, nil
+}
+
+func writeModuleImports(entry *strings.Builder, projectDir string, files []string) error {
+	for _, file := range files {
+		inProject, err := filepath.Rel(projectDir, file)
+		if err != nil {
+			return fmt.Errorf("name %s within the project: %w", file, err)
+		}
+		fmt.Fprintf(entry, "  { file: %q, load: () => import(%q) },\n", filepath.ToSlash(inProject), file)
+	}
+	return nil
 }
 
 func bundleTo(resolveDir, outfile, sourcefile, source string) ([]byte, error) {

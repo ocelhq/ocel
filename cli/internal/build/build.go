@@ -416,7 +416,7 @@ func addWorkerEntryToFunction(ctx context.Context, cfg *project.Project, a proje
 	if err != nil {
 		return err
 	}
-	workerSource, workerResolveDir, err := discovery.RenderNodeWorkerEntry(roots)
+	workerSource, workerResolveDir, err := discovery.RenderNodeWorkerEntry(cfg.Dir, roots)
 	if err != nil {
 		return fmt.Errorf("app %q: %w", a.Name, err)
 	}
@@ -494,7 +494,7 @@ func nodeTarget(cfg *project.Project, a project.App, outputDir string) (toolchai
 	if err != nil {
 		return toolchain.Target{}, err
 	}
-	workerSource, workerResolveDir, err := discovery.RenderNodeWorkerEntry(roots)
+	workerSource, workerResolveDir, err := discovery.RenderNodeWorkerEntry(cfg.Dir, roots)
 	if err != nil {
 		return toolchain.Target{}, fmt.Errorf("app %q: %w", a.Name, err)
 	}

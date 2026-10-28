@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwind from "@tailwindcss/postcss";
@@ -9,6 +11,17 @@ import { runtimeFiles } from "../../frameworks/next/adapter/scripts/runtime-file
 const platformDir = dirname(fileURLToPath(import.meta.url));
 const root = dirname(dirname(platformDir));
 const dist = join(platformDir, "dist");
+
+const openTelemetryESModules = {
+  name: "opentelemetry-es-modules",
+  setup(build) {
+    build.onResolve({ filter: /^@opentelemetry\/[^/]+$/ }, (args) => {
+      const manifest = createRequire(args.importer).resolve(`${args.path}/package.json`);
+      const { module } = JSON.parse(readFileSync(manifest, "utf8"));
+      return module ? { path: join(dirname(manifest), module) } : undefined;
+    });
+  },
+};
 
 async function bundle(entry, outfile, options) {
   const result = await Bun.build({
@@ -31,17 +44,25 @@ await bundle(join(platformDir, "src/build/main.ts"), join(dist, "build/main.cjs"
   format: "cjs",
   external: ["nock", "mock-aws-s3", "aws-sdk"],
   loader: { ".html": "text", ".node": "file" },
+  plugins: [openTelemetryESModules],
 });
 
 await bundle(join(platformDir, "src/discovery/runtime.ts"), join(dist, "discovery/runtime.mjs"), {
   target: "node",
   format: "esm",
+  plugins: [openTelemetryESModules],
 });
 
 await bundle(join(platformDir, "src/worker/server.ts"), join(dist, "worker/server.mjs"), {
   target: "node",
   format: "esm",
 });
+
+await bundle(
+  join(platformDir, "src/worker/traced-server.ts"),
+  join(dist, "worker/traced-server.mjs"),
+  { target: "node", format: "esm", plugins: [openTelemetryESModules] },
+);
 
 await bundle(
   join(root, "frameworks/next/adapter/src/next-adapter.mts"),

@@ -1,6 +1,7 @@
 import { request } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ModuleImport } from "../tracing/spans.js";
 import { type Deliver, serve } from "./server.js";
 
 const workerVar = "OCEL_TEST_WORKER";
@@ -21,7 +22,7 @@ afterEach(async () => {
   for (const close of closers.splice(0)) await close();
 });
 
-async function served(deliver: Deliver, imports: ReadonlyArray<() => Promise<unknown>> = []) {
+async function served(deliver: Deliver, imports: ReadonlyArray<ModuleImport> = []) {
   const server = await serve(deliver, workerVar, imports);
   closers.push(
     () =>
@@ -81,7 +82,10 @@ describe("serve", () => {
     const ran: string[] = [];
     const url = await served(
       async () => ({ status: 200, body: JSON.stringify(ran) }),
-      [async () => ran.push("a"), async () => ran.push("b")],
+      [
+        { file: "workers/a.ts", load: async () => ran.push("a") },
+        { file: "workers/b.ts", load: async () => ran.push("b") },
+      ],
     );
 
     expect(await (await fetch(url, { method: "POST", body: "{}" })).json()).toEqual(["a", "b"]);
@@ -117,7 +121,9 @@ describe("serve", () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const load = vi.fn(async () => {});
 
-    await expect(serve(vi.fn<Deliver>(), workerVar, [load])).rejects.toThrow("exited");
+    await expect(
+      serve(vi.fn<Deliver>(), workerVar, [{ file: "workers/media.ts", load }]),
+    ).rejects.toThrow("exited");
 
     expect(exit).toHaveBeenCalledWith(1);
     expect(errors).toHaveBeenCalledWith(

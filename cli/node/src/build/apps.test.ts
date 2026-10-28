@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PROTOCOL_PREFIX } from "../protocol.js";
+import { attributes, parentSpanID, tracedRun, useCollector } from "../tracing/test-collector.js";
 import { type Adapters, type AppBuild, buildApps } from "./apps.js";
 
 interface SeenRecord {
@@ -194,5 +195,51 @@ describe("buildApps", () => {
 
     expect(adapters.calls).toEqual(["sveltekit:shop"]);
     expect(seen.filter((r) => r.type === "span_end").map((r) => r.ok)).toEqual([false, true]);
+  });
+});
+
+useCollector();
+
+describe("building apps under a run's trace", () => {
+  it("records each app it builds under its own span, with what that app's build spawned beneath it", async () => {
+    const { code, spans } = await tracedRun(`
+      import { execFile } from "node:child_process";
+      import { buildApps } from "@src/build/apps.ts";
+      import { flushTracing, startTracing } from "@src/tracing/tracing.ts";
+      await startTracing("ocel-build");
+      const spawned = (app) =>
+        new Promise((resolve) => execFile(process.execPath, ["-e", "setTimeout(() => {}, 50)", app.name], () => resolve()));
+      await buildApps(
+        [
+          { framework: "next", name: "web", cwd: "/srv/web" },
+          { framework: "sveltekit", name: "admin", cwd: "/srv/admin" },
+        ],
+        { next: spawned, sveltekit: spawned, node: async () => {} },
+        2,
+      );
+      await flushTracing();
+    `);
+
+    expect(code).toBe(0);
+    const builds = spans.filter((s) => s.name === "build app");
+    expect(builds.map(attributes)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          "ocel.app": "web",
+          "ocel.framework": "next",
+          "app.directory": "/srv/web",
+        }),
+        expect.objectContaining({ "ocel.app": "admin", "ocel.framework": "sveltekit" }),
+      ]),
+    );
+    for (const build of builds) {
+      expect(build.parentSpanId).toBe(parentSpanID);
+      const app = attributes(build)["ocel.app"];
+      const child = spans.find(
+        (s) =>
+          s.name === "node" && (attributes(s)["process.command_args"] as string[]).at(-1) === app,
+      );
+      expect(child?.parentSpanId).toBe(build.spanId);
+    }
   });
 });

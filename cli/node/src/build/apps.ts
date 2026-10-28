@@ -3,6 +3,7 @@ import type { BuildLog } from "@framework/node-build/script";
 import type { TraceRequest } from "@framework/node-build/trace";
 import type { SvelteKitBuild } from "@framework/sveltekit-build";
 import { printOutput, withSpan } from "../protocol.js";
+import { inSpan } from "../tracing/tracing.js";
 
 export type AppBuild =
   | ({ framework: "next" } & NextBuild)
@@ -29,7 +30,17 @@ export async function buildApps(
       for (const app of sameDir) {
         if (failure) return;
         try {
-          await withSpan("build", app.name, () => buildApp(app, adapters));
+          await withSpan("build", app.name, () =>
+            inSpan(
+              "build app",
+              {
+                "ocel.app": app.name,
+                "ocel.framework": app.framework,
+                "app.directory": app.cwd,
+              },
+              () => buildApp(app, adapters),
+            ),
+          );
         } catch (err) {
           failure ??= { err };
         }

@@ -4,6 +4,7 @@ import { buildNext } from "@framework/next-build";
 import { traceFunction } from "@framework/node-build/trace";
 import { buildSvelteKit } from "@framework/sveltekit-build";
 import { reportFailure } from "../protocol.js";
+import { flushTracing, inSpan, startTracing } from "../tracing/tracing.js";
 import { type AppBuild, buildApps } from "./apps.js";
 
 const MAX_CONCURRENT_BUILDS = 4;
@@ -25,7 +26,12 @@ async function main(): Promise<void> {
     "next-adapter",
     "next-adapter.mjs",
   );
-  const req = await readRequest();
+  await startTracing("ocel-build");
+  const req = await inSpan("read build request", {}, async (span) => {
+    const read = await readRequest();
+    span.setAttributes({ "ocel.app_count": read.apps.length });
+    return read;
+  });
   await buildApps(
     req.apps,
     {
@@ -37,7 +43,9 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((err) => {
-  reportFailure(err);
-  process.exitCode = 1;
-});
+main()
+  .catch((err) => {
+    reportFailure(err);
+    process.exitCode = 1;
+  })
+  .finally(flushTracing);
