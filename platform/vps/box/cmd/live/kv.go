@@ -20,10 +20,19 @@ func recordsCommand(argv []string, stdin io.Reader, stdout, errs io.Writer) int 
 	flags := flag.NewFlagSet(recordsNamed, flag.ContinueOnError)
 	flags.SetOutput(errs)
 	stateRoot := flags.String("state-root", boxapi.StateRoot, "where each tier keeps its records")
+	var export spanExport
+	export.register(flags)
 	if err := flags.Parse(argv); err != nil {
 		return boxapi.ExitRefused
 	}
-	printed, err := runRecords(recordstore.KeyValues{Root: *stateRoot}, flags.Args(), stdin)
+	ctx, end := export.start(context.Background(), recordsNamed, flags.Args())
+	code := printRecords(ctx, recordstore.KeyValues{Root: *stateRoot}, flags.Args(), stdin, stdout, errs)
+	end(code)
+	return code
+}
+
+func printRecords(ctx context.Context, store recordstore.KeyValues, args []string, stdin io.Reader, stdout, errs io.Writer) int {
+	printed, err := runRecords(ctx, store, args, stdin)
 	switch {
 	case errors.Is(err, records.ErrNotFound):
 		return boxapi.ExitNotFound
@@ -44,7 +53,7 @@ func recordsCommand(argv []string, stdin io.Reader, stdout, errs io.Writer) int 
 	return 0
 }
 
-func runRecords(store recordstore.KeyValues, args []string, stdin io.Reader) ([]any, error) {
+func runRecords(ctx context.Context, store recordstore.KeyValues, args []string, stdin io.Reader) ([]any, error) {
 	if len(args) < 2 {
 		return nil, errors.New("usage: " + recordsNamed + " <tier> get <path> | list <partition dir> [<under>] | cas")
 	}
@@ -52,7 +61,6 @@ func runRecords(store recordstore.KeyValues, args []string, stdin io.Reader) ([]
 	if !isTier(tier) {
 		return nil, fmt.Errorf("%s is not a valid tier", tier)
 	}
-	ctx := context.Background()
 	switch verb {
 	case boxapi.RecordsVerbGet:
 		if len(rest) != 1 {

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/platform/vps/box/agent"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/dockerpolicy"
@@ -26,13 +27,23 @@ const (
 	signalledExit = 128
 )
 
+const dockerNamed = "ocel-live " + boxapi.DockerCommand
+
 func dockerCommand(argv []string, errs *os.File) int {
+	export, argv := leadingSpanExport(argv)
+	ctx, end := export.start(context.Background(), dockerNamed, argv)
+	code := runDocker(ctx, argv, errs)
+	end(code)
+	return code
+}
+
+func runDocker(ctx context.Context, argv []string, errs *os.File) int {
 	policy, docker, err := openPolicy()
 	if err != nil {
 		fmt.Fprintln(errs, "ocel-live docker: "+err.Error())
 		return refusedExit
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	defer stop()
 	if len(argv) > 0 && argv[0] == boxapi.DockerPullAs {
 		return pullAs(ctx, docker, argv[1:], errs)
@@ -99,7 +110,7 @@ func dockerEnv() []string {
 }
 
 func ranDocker(ctx context.Context, docker string, inv dockerpolicy.Invocation, errs *os.File) int {
-	run := exec.Command(docker, inv.Argv...)
+	run := tracing.Command(context.WithoutCancel(ctx), docker, inv.Argv...)
 	run.Env, run.Dir = dockerEnv(), "/"
 	run.Stdin, run.Stdout, run.Stderr = os.Stdin, os.Stdout, errs
 	if inv.Stdin != nil {
@@ -112,7 +123,7 @@ func ranDocker(ctx context.Context, docker string, inv dockerpolicy.Invocation, 
 	return waited(ctx, run, errs)
 }
 
-func waited(ctx context.Context, run *exec.Cmd, errs *os.File) int {
+func waited(ctx context.Context, run *tracing.Cmd, errs *os.File) int {
 	if err := run.Start(); err != nil {
 		fmt.Fprintln(errs, "ocel-live docker: "+err.Error())
 		return refusedExit
@@ -153,13 +164,13 @@ func pullAs(ctx context.Context, docker string, argv []string, errs *os.File) in
 		return refusedExit
 	}
 	defer os.RemoveAll(config)
-	login := exec.Command(docker, "--config", config, "login", "--username", username, "--password-stdin", server)
+	login := tracing.Command(context.WithoutCancel(ctx), docker, "--config", config, "login", "--username", username, "--password-stdin", server)
 	login.Env, login.Dir = dockerEnv(), "/"
 	login.Stdin, login.Stdout, login.Stderr = os.Stdin, errs, errs
 	if code := waited(ctx, login, errs); code != 0 {
 		return code
 	}
-	pull := exec.Command(docker, "--config", config, "pull", image)
+	pull := tracing.Command(context.WithoutCancel(ctx), docker, "--config", config, "pull", image)
 	pull.Env, pull.Dir = dockerEnv(), "/"
 	pull.Stdout, pull.Stderr = os.Stdout, errs
 	return waited(ctx, pull, errs)

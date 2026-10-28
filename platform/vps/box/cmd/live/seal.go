@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"flag"
@@ -51,10 +52,28 @@ func runSeal(tierRoot string, args []string, stdin io.Reader) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("unknown verb %s", verb)
 	}
-	if len(rest) != 1 {
+	var export spanExport
+	traced := flag.NewFlagSet(sealNamed+" "+verb, flag.ContinueOnError)
+	traced.SetOutput(io.Discard)
+	export.register(traced)
+	if err := traced.Parse(rest); err != nil {
+		return nil, err
+	}
+	if rest = traced.Args(); len(rest) != 1 {
 		return nil, fmt.Errorf("%s takes the associated data as one argument", verb)
 	}
-	key, err := sealkey.Read(tierRoot, environment.Tier(tier))
+	_, end := export.start(context.Background(), sealNamed, []string{tier, verb, rest[0]})
+	written, err := sealOrOpen(tierRoot, environment.Tier(tier), verb, []byte(rest[0]), stdin)
+	if err != nil {
+		end(boxapi.ExitRefused)
+		return nil, err
+	}
+	end(0)
+	return written, nil
+}
+
+func sealOrOpen(tierRoot string, tier environment.Tier, verb string, bound []byte, stdin io.Reader) ([]byte, error) {
+	key, err := sealkey.Read(tierRoot, tier)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +86,7 @@ func runSeal(tierRoot string, args []string, stdin io.Reader) ([]byte, error) {
 		return nil, errors.New("stdin is not base64")
 	}
 	if verb == boxapi.SealVerbSeal {
-		return sealkey.SealBytes(key, []byte(rest[0]), body)
+		return sealkey.SealBytes(key, bound, body)
 	}
-	return sealkey.OpenBytes(key, []byte(rest[0]), body)
+	return sealkey.OpenBytes(key, bound, body)
 }
