@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 type Client struct {
@@ -21,7 +23,7 @@ type Client struct {
 }
 
 var DefaultClient = Client{
-	HTTP:     http.DefaultClient,
+	HTTP:     tracing.NewClient(0),
 	Attempts: 6,
 	Base:     500 * time.Millisecond,
 	Ceiling:  30 * time.Second,

@@ -20,6 +20,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/envsource"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -352,6 +354,56 @@ func cell(folder, key string) variablestore.Cell { return variablestore.Cell{Fol
 
 func signedIn(server *httptest.Server, path string, write envsource.WritePolicy) envsource.Source {
 	return envsource.NewInfisical(infisicalAt(server, path, write), envsource.UniversalCredential("client-id", "client-secret"), server.Client())
+}
+
+func TestInfisicalKeepsWhatItIsSentAndAnswersOutOfTheTraceOfATracedClientEvenWhenACallFails(t *testing.T) {
+	ctx, recorded := tracingtest.Record(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"API_KEY=web-key-7f3a is not yours"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	source := envsource.NewInfisical(infisicalAt(server, "/", envsource.WriteNever), envsource.UniversalCredential("client-id", "client-secret"), tracing.NewClient(0))
+	if _, err := source.Read(ctx, []string{""}); err == nil {
+		t.Fatal("Read() = nil, want Infisical's refusal")
+	}
+
+	if len(recorded.Ended()) == 0 {
+		t.Fatal("no span was recorded, want Infisical's requests traced")
+	}
+	for _, span := range recorded.Ended() {
+		if exported := tracingtest.ExportedText(span); strings.Contains(exported, "web-key-7f3a") || strings.Contains(exported, "client-secret") || strings.Contains(exported, ".body=") {
+			t.Errorf("span %q exports\n%s\nwant what Infisical is sent and answers left out of the trace", span.Name(), exported)
+		}
+	}
+}
+
+func TestInfisicalGivenNoClientSpansEachRequestWithoutWhatItIsSentOrAnswers(t *testing.T) {
+	ctx, recorded := tracingtest.Record(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message":"API_KEY=web-key-7f3a is not yours"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	source := envsource.NewInfisical(infisicalAt(server, "/", envsource.WriteNever), envsource.AccessToken("developer-token-91c2"), nil)
+	if _, err := source.Read(ctx, []string{""}); err == nil {
+		t.Fatal("Read() = nil, want Infisical's refusal")
+	}
+
+	var refused []string
+	for _, span := range recorded.Ended() {
+		if tracingtest.Attributes(span)["http.response.status_code"].AsInt64() == http.StatusForbidden {
+			refused = append(refused, span.Name())
+		}
+		tracingtest.CheckWithoutBodies(t, span, "web-key-7f3a", "developer-token-91c2")
+	}
+	if len(refused) == 0 {
+		t.Fatalf("spans = %d, none answered 403; want each request to Infisical a span", len(recorded.Ended()))
+	}
 }
 
 func TestInfisicalReadsEachFolderUnderItsPathWithImportsBeneathItsOwnValues(t *testing.T) {

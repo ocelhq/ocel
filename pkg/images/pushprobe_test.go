@@ -12,7 +12,31 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 )
+
+func TestTheTokenARegistryHandsOutNeverReachesTheTrace(t *testing.T) {
+	ctx, recorded := tracingtest.Record(t)
+	target := pushRegistry(t, &uploads{}, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "/v2/acme/web/blobs/uploads/session-1")
+		w.WriteHeader(http.StatusAccepted)
+	})
+
+	if err := images.ProbePushAccess(ctx, target, "web"); err != nil {
+		t.Fatalf("ProbePushAccess() error = %v", err)
+	}
+
+	if len(recorded.Ended()) == 0 {
+		t.Fatal("no span was recorded, want the probe's registry requests traced")
+	}
+	for _, span := range recorded.Ended() {
+		exported := tracingtest.ExportedText(span)
+		fetchesToken := strings.Contains(exported, "/token")
+		if strings.Contains(exported, "pushes") || fetchesToken && strings.Contains(exported, ".body=") {
+			t.Errorf("span %q exports\n%s\nwant the registry's token out of the trace", span.Name(), exported)
+		}
+	}
+}
 
 type uploads struct {
 	mu        sync.Mutex
@@ -121,7 +145,7 @@ func TestPushAccessSurvivesAnotherClientClosingTheDefaultTransportsIdleConnectio
 			case <-stop:
 				return
 			default:
-				http.DefaultTransport.(*http.Transport).CloseIdleConnections()
+				http.DefaultTransport.(interface{ CloseIdleConnections() }).CloseIdleConnections()
 			}
 		}
 	}()

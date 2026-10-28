@@ -17,6 +17,7 @@ import (
 
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -84,7 +85,7 @@ func beatFor(spec Spec) (*beat, error) {
 		identity:     spec.Identity,
 		keyPath:      spec.KeyPath,
 		configPath:   spec.ConfigPath,
-		client:       &http.Client{Timeout: 20 * time.Second},
+		client:       tracing.NewClient(20 * time.Second),
 		every:        beatEvery,
 		out:          os.Stdout,
 	}, nil

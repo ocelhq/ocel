@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/containerimage"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -123,7 +124,7 @@ func InspectBuiltImage(ctx context.Context, repository, digest string) (ImageIns
 	}
 	transport := host.Transport()
 	defer transport.CloseIdleConnections()
-	return host.Inspect(ctx, &http.Client{Transport: transport}, repository+":"+naming.DigestTag(digest))
+	return host.Inspect(ctx, &http.Client{Transport: tracing.NewTransport(transport)}, repository+":"+naming.DigestTag(digest))
 }
 
 func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []byte) (v1.Image, func(), error) {
@@ -135,7 +136,7 @@ func WrapFromDaemon(ctx context.Context, repository, digest string, runtime []by
 	defer transport.CloseIdleConnections()
 
 	ref := repository + ":" + naming.DigestTag(digest)
-	stream, err := host.Export(ctx, &http.Client{Transport: transport}, ref)
+	stream, err := host.Export(ctx, &http.Client{Transport: tracing.NewTransport(transport)}, ref)
 	if err != nil {
 		return nil, nil, err
 	}

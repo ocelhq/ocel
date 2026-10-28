@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 func ProbePushAccess(ctx context.Context, target provider.RegistryTarget, repository string) error {
@@ -19,9 +20,9 @@ func ProbePushAccess(ctx context.Context, target provider.RegistryTarget, reposi
 		return err
 	}
 	named := server + "/" + repo
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport := tracing.NewBaseTransport()
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: registryTimeout}
+	client := &http.Client{Transport: tracing.NewTransport(transport), Timeout: registryTimeout}
 	endpoint := registryScheme(server) + "://" + server + "/v2/" + repo + "/blobs/uploads/"
 
 	resp, err := startUpload(ctx, client, endpoint, "")
