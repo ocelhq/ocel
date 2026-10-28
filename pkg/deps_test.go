@@ -40,6 +40,7 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/seal",
 	"github.com/ocelhq/ocel/pkg/stackrecords",
 	"github.com/ocelhq/ocel/pkg/topiclimits",
+	"github.com/ocelhq/ocel/pkg/tracing",
 }
 
 func buildsOnProvider(pkg string) []string {
