@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -255,7 +256,7 @@ type infisical struct {
 
 func NewInfisical(options InfisicalOptions, credential Credential, client *http.Client) Source {
 	if client == nil {
-		client = &http.Client{Timeout: infisicalRequestTimeout}
+		client = tracing.NewClient(infisicalRequestTimeout)
 	}
 	return &infisical{options: options, client: &infisicalClient{host: options.Host, http: client, credential: credential}}
 }

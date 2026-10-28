@@ -16,10 +16,13 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+
 	"github.com/ocelhq/ocel/pkg/progress"
 )
 
@@ -64,7 +67,7 @@ func (r registryStore) Has(ctx context.Context, push provider.ImagePush) (bool, 
 	if err != nil {
 		return false, err
 	}
-	client := &http.Client{Timeout: registryTimeout}
+	client := tracing.NewClient(registryTimeout)
 	endpoint := registryScheme(server) + "://" + server + "/v2/" + repository + "/manifests/" + url.PathEscape(tag)
 
 	var wait time.Duration
@@ -204,7 +207,7 @@ func (r registryStore) bearer(ctx context.Context, client *http.Client, params m
 	}
 	query.Set("scope", scope)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, realm+"?"+query.Encode(), nil)
+	req, err := http.NewRequestWithContext(content.Omit(ctx), http.MethodGet, realm+"?"+query.Encode(), nil)
 	if err != nil {
 		return "", err
 	}
@@ -315,7 +318,7 @@ func (r registryStore) Push(ctx context.Context, push provider.ImagePush, progre
 	}
 	transport := host.Transport()
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport}
+	client := &http.Client{Transport: tracing.NewTransport(transport)}
 
 	server, repository, tag, err := splitImageRef(push.ImageRef)
 	if err != nil {

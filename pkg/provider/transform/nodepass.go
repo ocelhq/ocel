@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 //go:generate pnpm --dir ../../.. exec turbo run build --filter=@pkg/transform-runner
@@ -160,7 +161,7 @@ func (p NodePass) runNode(ctx context.Context, bundle string, payload []byte) ([
 	}
 	defer reader.Close()
 
-	cmd := exec.CommandContext(ctx, "node", bundle)
+	cmd := tracing.CommandContext(ctx, "node", bundle)
 	cmd.Stdin = bytes.NewReader(payload)
 	cmd.Stdout = os.Stderr
 	var stderr strings.Builder

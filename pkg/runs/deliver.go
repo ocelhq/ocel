@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"sync"
 	"time"
 
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 var errRunGone = errors.New("the run this message names no longer exists")
@@ -369,7 +369,7 @@ func (e *Engine) attempt(ctx context.Context, deployed deployedConsumer, claims 
 	worker := e.worker(deployed.consumer.Worker)
 	client := worker.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = tracing.NewClient(0)
 	}
 	answer := PostEnvelope(ctx, attemptCtx, client, worker.URL, posted)
 	stopWatching()

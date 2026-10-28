@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -49,7 +51,7 @@ func (r registryStore) removePackageVersion(ctx context.Context, tag name.Tag) e
 	if !nested {
 		return fmt.Errorf("%s names no package under a GitHub owner", tag)
 	}
-	api := gitHubPackages{client: &http.Client{Timeout: registryTimeout}, token: r.target.Password}
+	api := gitHubPackages{client: tracing.NewClient(registryTimeout), token: r.target.Password}
 	for _, scope := range []string{"orgs/", "users/"} {
 		packagePath := strings.TrimSuffix(r.packagesAPI, "/") + "/" + scope + url.PathEscape(owner) + "/packages/container/" + url.PathEscape(packageName)
 		found, err := api.findVersion(ctx, packagePath, tag.TagStr())

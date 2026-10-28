@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
 
 const (
@@ -125,7 +127,7 @@ func (c *infisicalClient) send(ctx context.Context, method, target, token string
 		payload = encoded
 	}
 	for attempt := 1; ; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, method, c.host+target, bytes.NewReader(payload))
+		req, err := http.NewRequestWithContext(content.Omit(ctx), method, c.host+target, bytes.NewReader(payload))
 		if err != nil {
 			return err
 		}

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/tracing"
 
 	"github.com/containerd/errdefs"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -48,7 +49,7 @@ func (daemonStore) Remove(ctx context.Context, imageRef string) error {
 	}
 	transport := host.Transport()
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport}
+	client := &http.Client{Transport: tracing.NewTransport(transport)}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, "http://docker/images/"+imageRef, nil)
 	if err != nil {

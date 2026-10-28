@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -148,7 +149,7 @@ func (l *Net) request(ctx context.Context, scheme, hostname string, addresses []
 	}
 	client := &http.Client{
 		Timeout: probeTimeout,
-		Transport: &http.Transport{
+		Transport: tracing.NewTransport(&http.Transport{
 			TLSClientConfig:   config,
 			DisableKeepAlives: true,
 			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
@@ -162,7 +163,7 @@ func (l *Net) request(ctx context.Context, scheme, hostname string, addresses []
 				}
 				return nil, failed
 			},
-		},
+		}),
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	asked, err := http.NewRequestWithContext(ctx, http.MethodGet, scheme+"://"+hostname+edge.LivenessProbePath, nil)

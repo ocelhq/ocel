@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/dotenv"
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -123,7 +124,7 @@ func folderArgument(folder string) string {
 func runCommand(ctx context.Context, dir string, argv []string) ([]byte, error) {
 	running, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(running, argv[0], argv[1:]...)
+	cmd := tracing.CommandContext(content.Omit(running), argv[0], argv[1:]...)
 	cmd.Dir = dir
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &boundedBuffer{buffer: &stdout, remainingBytes: commandOutputBytes}
