@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	locksDirName        = "locks"
-	buildOutputLockName = "output"
-	lockRetry           = 250 * time.Millisecond
+	locksDirName              = "locks"
+	buildOutputLockName       = "output"
+	dependencyInstallLockName = "dependencies"
+	lockRetry                 = 250 * time.Millisecond
 )
 
 func lock(ctx context.Context, projectDir, name string, waiting func()) (release func(), err error) {
@@ -42,4 +43,8 @@ func lock(ctx context.Context, projectDir, name string, waiting func()) (release
 
 func LockBuildOutput(ctx context.Context, projectDir string, waiting func()) (release func(), err error) {
 	return lock(ctx, projectDir, buildOutputLockName, waiting)
+}
+
+func LockDependencyInstall(ctx context.Context, projectDir string, waiting func()) (release func(), err error) {
+	return lock(ctx, projectDir, dependencyInstallLockName, waiting)
 }

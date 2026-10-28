@@ -3,6 +3,7 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -113,7 +114,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 
 	collected, server := declareCollector(t)
 
-	prepared, err := Prepare(configDir, roots)
+	prepared, err := Prepare(context.Background(), configDir, roots, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -169,7 +170,7 @@ func TestRunNamesTheDeclaringFileByItsPathWhenGOFLAGSTrimsPaths(t *testing.T) {
 		t.Fatalf("Roots: %v", err)
 	}
 	collected, server := declareCollector(t)
-	prepared, err := Prepare(configDir, roots)
+	prepared, err := Prepare(context.Background(), configDir, roots, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -195,7 +196,7 @@ func TestRunReportsWhatAGoRootThatDoesNotCompileSaid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}
-	prepared, err := Prepare(configDir, roots)
+	prepared, err := Prepare(context.Background(), configDir, roots, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -220,7 +221,7 @@ func TestRunImportsEveryGoRootThatSharesAModuleInOneProgram(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}
-	prepared, err := Prepare(configDir, roots)
+	prepared, err := Prepare(context.Background(), configDir, roots, io.Discard)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}

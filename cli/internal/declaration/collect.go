@@ -13,16 +13,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/localrpc"
 )
 
-func Prepare(cfg *project.Project) (discovery.Programs, error) {
+func Prepare(ctx context.Context, cfg *project.Project, output io.Writer) (discovery.Programs, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return discovery.Programs{}, err
 	}
-	return discovery.Prepare(cfg.Dir, roots)
+	return discovery.Prepare(ctx, cfg.Dir, roots, output)
 }
 
 func Collect(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]Resource, error) {
-	prepared, err := Prepare(cfg)
+	prepared, err := Prepare(ctx, cfg, stderr)
 	if err != nil {
 		return nil, err
 	}
