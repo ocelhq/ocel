@@ -171,7 +171,11 @@ func jsonValueEnd(s string, start int, quote string) (int, bool) {
 	case start < len(s) && (s[start] == '{' || s[start] == '['):
 		return jsonContainerEnd(s, start, quote), true
 	}
-	return start, false
+	end := start + strings.IndexAny(s[start:], ",}]\"\\\r\n")
+	if end < start {
+		end = len(s)
+	}
+	return end, end > start
 }
 
 func jsonStringEnd(s string, i int, quote string) int {
