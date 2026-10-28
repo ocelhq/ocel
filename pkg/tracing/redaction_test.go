@@ -225,6 +225,33 @@ func TestASecretNamedJSONValueIsRedactedAndItsNeighboursKept(t *testing.T) {
 	}
 }
 
+func TestASecretNamedJSONValueIsRedactedWhateverItsType(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"a number", `{"password":123456,"user":"ada"}`, `{"password":"` + Redacted + `","user":"ada"}`},
+		{"a negative exponent number", `{"api_key": -12.5e+3 ,"port":8080}`, `{"api_key": "` + Redacted + `","port":8080}`},
+		{"a boolean", `{"token":true,"verbose":false}`, `{"token":"` + Redacted + `","verbose":false}`},
+		{"null", `{"session":null}`, `{"session":"` + Redacted + `"}`},
+		{"the last value of an array", `{"items":[{"pin":1,"password":42}],"count":1}`, `{"items":[{"pin":1,"password":"` + Redacted + `"}],"count":1}`},
+		{"a number on its own line", "{\n  \"password\": 123456\n}", "{\n  \"password\": \"" + Redacted + "\"\n}"},
+		{"an unquoted word", `{"password":hunter2}`, `{"password":"` + Redacted + `"}`},
+		{"a head cut inside the number", `{"name":"web","password":12345`, `{"name":"web","password":"` + Redacted + `"`},
+		{
+			"a number in JSON quoted inside a log line",
+			`stdout: "{\"password\":123456,\"user\":\"ada\"}"`,
+			`stdout: "{\"password\":\"` + Redacted + `\",\"user\":\"ada\"}"`,
+		},
+		{
+			"a number closing JSON quoted inside a log line",
+			`stdout: "{\"user\":\"ada\",\"password\":123456}"`,
+			`stdout: "{\"user\":\"ada\",\"password\":\"` + Redacted + `\"}"`,
+		},
+	} {
+		if got := RedactText(tc.in); got != tc.want {
+			t.Errorf("%s: RedactText(%q)\n got %q\nwant %q", tc.name, tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestAURLFragmentLosesEveryValueItNamesAndKeepsAPlainAnchor(t *testing.T) {
 	const token = "q3Z-v_8kR2mNpX4sT7uW9yA1bC5dE6fG0hJ2kL3mN4o"
 	for _, tc := range []struct{ in, want string }{
