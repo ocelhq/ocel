@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/platform/realtime/gateway"
 	"github.com/ocelhq/ocel/platform/realtime/gatewayenv"
 )
@@ -166,7 +167,7 @@ func readyAddress(listen string) string {
 }
 
 func probeReady(address string) error {
-	client := &http.Client{Timeout: readyTimeout}
+	client := tracing.NewClient(readyTimeout)
 	answer, err := client.Get("http://" + address + readyPath)
 	if err != nil {
 		return fmt.Errorf("the realtime gateway does not answer on %s: %w", address, err)

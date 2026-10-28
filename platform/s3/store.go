@@ -9,9 +9,14 @@ import (
 	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go/middleware"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
 
 type Store struct {
@@ -26,9 +31,27 @@ func (s Store) Client() *s3.Client {
 	return s3.NewFromConfig(aws.Config{
 		Region:       s.Region,
 		BaseEndpoint: aws.String(s.Endpoint),
+		HTTPClient:   objectContentClient{transport: tracing.NewTransport(awshttp.NewBuildableClient().GetTransport())},
 		Credentials: credentials.NewStaticCredentialsProvider(
 			s.AccessKeyID, s.SecretAccessKey, ""),
 	}, func(o *s3.Options) { o.UsePathStyle = s.PathStyle })
+}
+
+var operationsWithObjectContent = map[string]bool{
+	"GetObject":  true,
+	"PutObject":  true,
+	"UploadPart": true,
+}
+
+type objectContentClient struct {
+	transport http.RoundTripper
+}
+
+func (c objectContentClient) Do(req *http.Request) (*http.Response, error) {
+	if operationsWithObjectContent[middleware.GetOperationName(req.Context())] {
+		req = req.WithContext(content.Omit(req.Context()))
+	}
+	return c.transport.RoundTrip(req)
 }
 
 func (s Store) Presigner() *s3.PresignClient {
@@ -82,7 +105,7 @@ type HTTPPoster struct {
 func (p HTTPPoster) Post(ctx context.Context, url string, body []byte) error {
 	client := p.Client
 	if client == nil {
-		client = http.DefaultClient
+		client = tracing.NewClient(0)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
