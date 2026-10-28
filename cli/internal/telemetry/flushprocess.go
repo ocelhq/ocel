@@ -17,7 +17,7 @@ func StartFlush(executable string, resolution Resolution) bool {
 		return false
 	}
 	err = childprocess.StartDetached(func() *exec.Cmd {
-		cmd := exec.Command(executable, "telemetry", "flush")
+		cmd := exec.Command(executable, "telemetry", "flush") //nolint:forbidigo // the flush outlives the CLI and every run trace it could be recorded in
 		cmd.Dir = os.TempDir()
 		return cmd
 	})

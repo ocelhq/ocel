@@ -3,6 +3,7 @@ linters:
   default: standard
   enable:
     - errorlint
+    - forbidigo
     - gocritic
     - misspell
     - nolintlint
@@ -11,6 +12,15 @@ linters:
     errcheck:
       exclude-functions:
         - (*net/http.Server).Serve
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^exec\.Command(Context)?$
+          pkg: ^os/exec$
+          msg: start processes with tracing.Command or tracing.CommandContext, so each is a span in the run's trace
+        - pattern: ^http\.(DefaultClient|Get|Head|Post|PostForm)$
+          pkg: ^net/http$
+          msg: send requests through tracing.NewClient or a client whose Transport is tracing.NewTransport, so each is a span in the run's trace
   exclusions:
     presets:
       - std-error-handling
@@ -18,6 +28,22 @@ linters:
       - path: _test\.go
         linters:
           - errcheck
+          - forbidigo
+      - path: ^(sdk|tests|scripts|cli/testdata)/
+        linters:
+          - forbidigo
+      - path: ^(pkg/tracing|pkg/enginetest|pkg/internal/depstest|pkg/cloudconformance|pkg/provider/conformance|cli/internal/clitest|cli/internal/incustest)/
+        linters:
+          - forbidigo
+      - path: ^pkg/runtime/child/child\.go$
+        linters:
+          - forbidigo
+      - path: ^platform/((aws|gcp)/runtime|vps/box/(cmd/(connector|container|switchboard)|switchboard|queues|live))/
+        linters:
+          - forbidigo
+      - path: ^platform/aws/provider/resources/bucket/dataplane/uploadcompleter\.go$
+        linters:
+          - forbidigo
 formatters:
   enable:
     - gofmt
