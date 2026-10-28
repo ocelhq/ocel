@@ -20,7 +20,7 @@ import (
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 	variables "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
-	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
+	"github.com/ocelhq/ocel/platform/aws/runtime/sdkconfig"
 )
 
 type storeSource struct {

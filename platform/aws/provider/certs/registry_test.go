@@ -1,11 +1,18 @@
 package certs
 
 import (
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	awsacm "github.com/aws/aws-sdk-go-v2/service/acm"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 )
 
 func TestIssuerFor(t *testing.T) {
@@ -57,5 +64,40 @@ func TestACMHTTPClient(t *testing.T) {
 	mine := &http.Client{Timeout: time.Second}
 	if got := (Deps{HTTP: mine}).http(); got != mine {
 		t.Error("an injected client was ignored")
+	}
+}
+
+func TestAnACMCallsHTTPExchangeIsOneSpanWhetherOrNotItsClientIsTraced(t *testing.T) {
+	for name, client := range map[string]*http.Client{
+		"the default client": nil,
+		"a traced client":    {Transport: tracing.NewTransport(nil)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, recorded := tracingtest.Record(t)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/x-amz-json-1.1")
+				_, _ = io.WriteString(w, `{"CertificateSummaryList":[]}`)
+			}))
+			t.Cleanup(server.Close)
+
+			acm := ACMFor(CloudFrontRegion, Deps{HTTP: client, AWS: aws.Config{
+				Region:       "eu-west-2",
+				BaseEndpoint: aws.String(server.URL),
+				Credentials:  credentials.NewStaticCredentialsProvider("AKIDEXAMPLE", "example-secret", ""),
+			}})
+			if _, err := acm.API.ListCertificates(ctx, &awsacm.ListCertificatesInput{}); err != nil {
+				t.Fatalf("ListCertificates: %v", err)
+			}
+
+			exchanges := 0
+			for _, s := range recorded.Ended() {
+				if s.InstrumentationScope().Name == tracing.Scope {
+					exchanges++
+				}
+			}
+			if exchanges != 1 {
+				t.Errorf("one ListCertificates call made %d HTTP spans, want 1", exchanges)
+			}
+		})
 	}
 }

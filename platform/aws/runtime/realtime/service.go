@@ -5,7 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
+	"github.com/ocelhq/ocel/platform/aws/runtime/sdkconfig"
 	"github.com/ocelhq/ocel/platform/realtime/proxy"
 )
 

@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
 
 const (
@@ -51,7 +52,7 @@ func newACM(deps Deps, region string) ACM {
 	return ACM{
 		API: acm.NewFromConfig(deps.AWS, func(o *acm.Options) {
 			o.Region = region
-			o.HTTPClient = deps.http()
+			o.HTTPClient = sdkconfig.NewTracedClient(deps.http())
 		}),
 		ManagedBy: deps.Namespace,
 		Tier:      deps.Tier,
