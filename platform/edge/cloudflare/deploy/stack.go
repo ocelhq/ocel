@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
 
 const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
@@ -361,7 +362,7 @@ func (p *cloudflare) putDurableObjectScript(ctx context.Context, up upload, do d
 }
 
 func (p *cloudflare) putBootstrapSecret(ctx context.Context, accountID, scriptName, value string) error {
-	_, err := p.client.Workers.Scripts.Secrets.Update(ctx, scriptName, workers.ScriptSecretUpdateParams{
+	_, err := p.client.Workers.Scripts.Secrets.Update(content.Omit(ctx), scriptName, workers.ScriptSecretUpdateParams{
 		AccountID: cf.F(accountID),
 		Body: workers.ScriptSecretUpdateParamsBodyWorkersBindingKindSecretText{
 			Name: cf.F(bootstrapSecretBinding),

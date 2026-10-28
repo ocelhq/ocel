@@ -19,6 +19,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/tracing"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 )
 
 const (
@@ -391,6 +393,23 @@ func TestAPointerMoveCarryingAnotherRecordForAServedReleaseIsUnservedAndNamesThe
 	if moves := len(store.moved()); moves != 1 {
 		t.Errorf("the store took %d moves, want 1: a refused move is not retried", moves)
 	}
+}
+
+func TestARefusedPointerMoveIsTracedWithoutTheEnvItCarries(t *testing.T) {
+	server, _ := fakeStoreFor(t, "s3cr3t")
+	p := &cloudflare{}
+	state := testState(server.URL, "s3cr3t")
+	movePointer(t, p, state, pointerMoveOf("promo-1", "", router.ReleaseRecord{App: "web", Release: "b1", BuildID: "build-1"}))
+	p.store.client = &http.Client{Transport: tracing.NewTransport(&http.Transport{DisableKeepAlives: true})}
+	ctx, spans := tracingtest.Record(t)
+
+	carried := router.ReleaseRecord{App: "web", Release: "b1", BuildID: "build-2", Secrets: router.ReleaseSecrets{
+		Env: map[string]string{"STRIPE_PRICE": "price-held-in-env-1234"}, PurgeSecret: "purge-held-5678",
+	}}
+	if err := routerStackOn(p, state).MovePointer(ctx, pointerMoveOf("promo-2", "", carried), progress.Discard()); err == nil {
+		t.Fatal("MovePointer = nil, want the store's refusal of another record for a served release")
+	}
+	assertRefusedWithoutContent(t, spans, "price-held-in-env-1234", "purge-held-5678")
 }
 
 func TestRemovingAPointerLeavesNothingServedOnIt(t *testing.T) {

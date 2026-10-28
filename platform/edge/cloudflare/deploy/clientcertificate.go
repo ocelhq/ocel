@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
 
 const (
@@ -249,7 +250,7 @@ func (p *cloudflare) ensureOwnClientCertificate(ctx context.Context, owner certi
 	if err != nil {
 		return zoneClientCertificate{}, zoneClientCertificates{}, err
 	}
-	uploaded, err := p.client.OriginTLSClientAuth.Hostnames.Certificates.New(ctx, origin_tls_client_auth.HostnameCertificateNewParams{
+	uploaded, err := p.client.OriginTLSClientAuth.Hostnames.Certificates.New(content.Omit(ctx), origin_tls_client_auth.HostnameCertificateNewParams{
 		ZoneID:      cf.F(zone.zoneID),
 		Certificate: cf.F(certificate),
 		PrivateKey:  cf.F(key),
