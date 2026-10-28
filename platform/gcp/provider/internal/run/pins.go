@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge/gate"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -181,7 +182,7 @@ func withoutRollback(current *run.GoogleCloudRunV2Service, revision string) (map
 
 const WarmTimeout = 20 * time.Second
 
-var warmClient = &http.Client{Timeout: WarmTimeout}
+var warmClient = tracing.NewClient(WarmTimeout)
 
 func (p *Services) Warm(ctx context.Context, service, revision, path string) error {
 	clients, services, err := p.OpenRun(ctx)

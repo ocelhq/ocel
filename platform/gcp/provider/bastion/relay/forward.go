@@ -13,6 +13,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const handshakeTimeout = 30 * time.Second
@@ -120,6 +121,7 @@ func (l Link) connect(ctx context.Context) (net.Conn, error) {
 	defer cancel()
 	query := url.Values{TargetParam: {l.Target}}
 	socket, resp, err := websocket.Dial(ctx, l.URL+Path+"?"+query.Encode(), &websocket.DialOptions{
+		HTTPClient: tracing.NewClient(0),
 		HTTPHeader: http.Header{"Authorization": {"Bearer " + token}},
 	})
 	if err != nil {

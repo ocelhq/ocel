@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"time"
 
+	"golang.org/x/oauth2/google"
+
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
-	"golang.org/x/oauth2/google"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const CloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
@@ -21,7 +23,7 @@ const credentialHint = "authenticate with Google Cloud: run `gcloud auth applica
 
 const tokenInfoTimeout = 10 * time.Second
 
-var tokenInfoClient = &http.Client{Timeout: tokenInfoTimeout}
+var tokenInfoClient = &http.Client{Transport: ports.NewGoogleTransport(nil), Timeout: tokenInfoTimeout}
 
 type TokenSource interface {
 	Token(ctx context.Context) (string, error)

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/edge/gate"
+	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
@@ -38,7 +39,7 @@ func (p *HTTPS) ProbeGate(ctx context.Context, hostname, address string) (bool, 
 	defer transport.CloseIdleConnections()
 	client := &http.Client{
 		Timeout:       run.WarmTimeout,
-		Transport:     transport,
+		Transport:     tracing.NewTransport(transport),
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	answered, err := client.Do(asked)

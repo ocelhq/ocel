@@ -1,12 +1,21 @@
-package gcloud
+package gcloud_test
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
+	runv1 "google.golang.org/api/run/v1"
+	run "google.golang.org/api/run/v2"
+	sqladmin "google.golang.org/api/sqladmin/v1"
+
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -24,7 +33,7 @@ func TestAFailedProjectNumberReadIsAskedAgainByTheNextCaller(t *testing.T) {
 		w.Write([]byte(`{"projectId":"acme-prod","projectNumber":"123456789"}`))
 	}))
 	t.Cleanup(server.Close)
-	c := &Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}
+	c := &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: server.URL}
 	const domain = "@gcp-sa-pubsub.iam.gserviceaccount.com"
 
 	if _, err := c.ReadServiceAgent(context.Background(), domain); err == nil {
@@ -48,7 +57,7 @@ func TestAFailedProjectNumberReadIsAskedAgainByTheNextCaller(t *testing.T) {
 func TestLoggingOpensOneSharedClientAgainstTheEmulator(t *testing.T) {
 	t.Parallel()
 
-	c := &Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: "http://127.0.0.1:1"}
+	c := &gcloud.Clients{Names: names.New("ocel", "acme-prod"), Region: "europe-west1", Endpoint: "http://127.0.0.1:1"}
 
 	first, err := c.Logging()
 	if err != nil {
@@ -61,5 +70,72 @@ func TestLoggingOpensOneSharedClientAgainstTheEmulator(t *testing.T) {
 	}
 	if first != second {
 		t.Error("Logging opened a second client, want the first remembered")
+	}
+}
+
+const sensitiveValue = "correct-horse-battery-staple"
+
+func refuseEchoing(w http.ResponseWriter, r *http.Request) {
+	sent, _ := io.ReadAll(r.Body)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	_, _ = w.Write([]byte(`{"error":{"code":400,"message":"invalid request: ` + strings.ReplaceAll(string(sent), `"`, `'`) + `"}}`))
+}
+
+func TestACallThatFailsIsTracedWithoutTheSecretItCarries(t *testing.T) {
+	for _, call := range []struct {
+		name string
+		send func(ctx context.Context, c *gcloud.Clients) error
+	}{
+		{"a service update", func(ctx context.Context, c *gcloud.Clients) error {
+			services, err := c.Run()
+			if err != nil {
+				return err
+			}
+			_, err = services.Projects.Locations.Services.Patch(c.ServicePath("web"), &run.GoogleCloudRunV2Service{
+				Template: &run.GoogleCloudRunV2RevisionTemplate{Containers: []*run.GoogleCloudRunV2Container{{
+					Env: []*run.GoogleCloudRunV2EnvVar{{Name: "SESSION_KEY", Value: sensitiveValue}},
+				}}},
+			}).Context(ctx).Do()
+			return err
+		}},
+		{"a v1 service replacement", func(ctx context.Context, c *gcloud.Clients) error {
+			services, err := c.RunV1()
+			if err != nil {
+				return err
+			}
+			_, err = services.Namespaces.Services.ReplaceService("namespaces/"+googletest.Project+"/services/web", &runv1.Service{
+				Spec: &runv1.ServiceSpec{Template: &runv1.RevisionTemplate{Spec: &runv1.RevisionSpec{Containers: []*runv1.Container{{
+					Env: []*runv1.EnvVar{{Name: "SESSION_KEY", Value: sensitiveValue}},
+				}}}}},
+			}).Context(ctx).Do()
+			return err
+		}},
+		{"a Cloud SQL password change", func(ctx context.Context, c *gcloud.Clients) error {
+			instances, err := c.SQL()
+			if err != nil {
+				return err
+			}
+			_, err = instances.Users.Update(googletest.Project, "web", &sqladmin.User{Password: sensitiveValue}).Name("postgres").Context(ctx).Do()
+			return err
+		}},
+	} {
+		t.Run(call.name, func(t *testing.T) {
+			googletest.UseUserCredential(t)
+			googletest.ServeAsGoogle(t, refuseEchoing)
+			ctx, spans := tracingtest.Record(t)
+
+			if err := call.send(ctx, &gcloud.Clients{Names: googletest.Names, Region: googletest.Region}); err == nil {
+				t.Fatal("the call succeeded, want Google's refusal")
+			}
+
+			for _, span := range spans.Ended() {
+				for _, keyValue := range span.Attributes() {
+					if strings.Contains(keyValue.Value.String(), sensitiveValue) {
+						t.Errorf("span %s holds %s = %s, a secret the call carried", span.Name(), keyValue.Key, keyValue.Value.String())
+					}
+				}
+			}
+		})
 	}
 }

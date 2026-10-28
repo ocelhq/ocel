@@ -4,18 +4,21 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 	pubsub "google.golang.org/api/pubsub/v1"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const quotaProjectHeader = "X-Goog-User-Project"
@@ -63,17 +66,31 @@ func serviceAccountCredentials(t *testing.T) {
 func billedProjectOf(t *testing.T, quotaProject string) string {
 	t.Helper()
 	var billed string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		billed = r.Header.Get(quotaProjectHeader)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/token" {
+			_, _ = w.Write([]byte(`{"access_token":"ya29.stub","token_type":"Bearer","expires_in":3600}`))
+			return
+		}
+		billed = r.Header.Get(quotaProjectHeader)
 		_, _ = w.Write([]byte(`{"name":"projects/acme-prod/topics/orders"}`))
 	}))
 	defer server.Close()
+	redirected := tracing.NewBaseTransport()
+	redirected.Proxy = nil
+	redirected.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	redirected.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+	original := http.DefaultTransport
+	http.DefaultTransport = redirected
+	defer func() { http.DefaultTransport = original }()
 
-	options := append(NewRESTOptions("", quotaProject),
-		option.WithEndpoint(server.URL),
-		option.WithTokenSource(oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "ya29.stub"})))
-	service, err := pubsub.NewService(context.Background(), options...)
+	options, err := newRESTOptions(context.Background(), "", quotaProject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := pubsub.NewService(context.Background(), append(options, option.WithEndpoint(server.URL))...)
 	if err != nil {
 		t.Fatal(err)
 	}

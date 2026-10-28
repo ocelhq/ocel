@@ -38,14 +38,11 @@ type Store struct {
 }
 
 func Open(ctx context.Context, endpoint, quotaProject string) (Store, error) {
-	store := Store{Endpoint: endpoint, Client: http.DefaultClient}
-	if endpoint == "" {
-		client, err := ports.NewHTTPClient(ctx, quotaProject)
-		if err != nil {
-			return Store{}, fmt.Errorf("find the Google credentials Cloud Storage is reached with: %w", err)
-		}
-		store.Client = client
+	client, err := ports.NewHTTPClient(ctx, endpoint, quotaProject)
+	if err != nil {
+		return Store{}, fmt.Errorf("find the Google credentials Cloud Storage is reached with: %w", err)
 	}
+	store := Store{Endpoint: endpoint, Client: client}
 	signing, err := iamcredentials.NewService(ctx, option.WithHTTPClient(store.Client))
 	if err != nil {
 		return Store{}, fmt.Errorf("open the IAM credentials client a bucket's URLs are signed through: %w", err)
