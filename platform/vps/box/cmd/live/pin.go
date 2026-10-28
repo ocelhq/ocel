@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -20,6 +22,20 @@ func pinCommand(argv []string, stdout, errs io.Writer) int {
 }
 
 func printPin(dir string, argv []string, stdout, errs io.Writer) int {
+	flags := flag.NewFlagSet(pinNamed, flag.ContinueOnError)
+	flags.SetOutput(errs)
+	var export spanExport
+	export.register(flags)
+	if err := flags.Parse(argv); err != nil {
+		return boxapi.ExitRefused
+	}
+	_, end := export.start(context.Background(), pinNamed, flags.Args())
+	code := printPair(dir, flags.Args(), stdout, errs)
+	end(code)
+	return code
+}
+
+func printPair(dir string, argv []string, stdout, errs io.Writer) int {
 	pair, err := readPin(dir, argv)
 	if err == nil {
 		encoder := json.NewEncoder(stdout)

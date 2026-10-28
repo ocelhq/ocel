@@ -22,10 +22,13 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/images"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/vps/box/recordstore"
 	"github.com/ocelhq/ocel/platform/vps/box/sealkey"
@@ -249,7 +252,7 @@ func (s *Server) containerOf(pid int) (string, error) {
 
 type Docker struct {
 	host      images.DockerHost
-	transport *http.Transport
+	transport http.RoundTripper
 }
 
 func NewDocker() (*Docker, error) {
@@ -257,7 +260,11 @@ func NewDocker() (*Docker, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Docker{host: host, transport: host.Transport()}, nil
+	return &Docker{host: host, transport: &tracing.Transport{Base: host.Transport(), Name: dockerRequestName}}, nil
+}
+
+func dockerRequestName(req *http.Request) (string, []attribute.KeyValue, bool) {
+	return "docker " + req.Method + " " + req.URL.Path, nil, true
 }
 
 func (d *Docker) ReadContainer(ctx context.Context, container string) (Container, error) {
