@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
 const (
@@ -44,7 +46,7 @@ func serveAsGoogle(t *testing.T, answerToken func(http.ResponseWriter), handler 
 		handler(w, r)
 	}))
 	t.Cleanup(server.Close)
-	redirected := http.DefaultTransport.(*http.Transport).Clone()
+	redirected := tracing.NewBaseTransport()
 	redirected.Proxy = nil
 	redirected.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	redirected.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {

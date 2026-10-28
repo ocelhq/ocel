@@ -28,7 +28,7 @@ const (
 func ProveIdentity(ctx context.Context, audience string) (envsource.IdentityProof, error) {
 	credentials, err := idtoken.NewCredentials(&idtoken.Options{
 		Audience: audience,
-		Client:   &http.Client{Transport: retriedTransport{base: http.DefaultTransport}, Timeout: tokenTimeout},
+		Client:   newTokenClient(),
 	})
 	if err != nil {
 		if isUserLogin(ctx) {
@@ -58,6 +58,10 @@ func refusedCode(err error) int {
 		return refused.Response.StatusCode
 	}
 	return 0
+}
+
+func newTokenClient() *http.Client {
+	return &http.Client{Transport: retriedTransport{base: NewGoogleTransport(http.DefaultTransport)}, Timeout: tokenTimeout}
 }
 
 type retriedTransport struct {

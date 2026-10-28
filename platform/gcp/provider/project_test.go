@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges"
@@ -98,6 +99,28 @@ func TestTheAmbientProjectIsReadFromGcloudWhenNothingElseNamesOne(t *testing.T) 
 
 	if got := targeted(t, provider.Options{"region": "europe-west1"}); got != "gcloud-config-prod" {
 		t.Errorf("the run targets %q, want the project gcloud's config names", got)
+	}
+}
+
+func TestReadingTheProjectFromGcloudIsASpanWithWhatGcloudSaid(t *testing.T) {
+	withoutAnAmbientProject(t)
+	withGcloudNaming(t, "gcloud-config-prod")
+	ctx, spans := tracingtest.Record(t)
+	p, err := gcp.New(ctx, provider.Settings{Options: provider.Options{"region": "europe-west1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := p.(*gcp.Provider).Project(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	ran := spans.Only(t)
+	if ran.Name() != "gcloud" {
+		t.Fatalf("reading the project made span %q, want gcloud", ran.Name())
+	}
+	if said := tracingtest.Attributes(ran)["process.stdout.tail"]; !strings.Contains(said.AsString(), "gcloud-config-prod") {
+		t.Errorf("the gcloud span recorded stdout %q, want the project it named", said.AsString())
 	}
 }
 

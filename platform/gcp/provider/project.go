@@ -12,6 +12,7 @@ import (
 	"golang.org/x/oauth2/google"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -67,7 +68,7 @@ func gcloudProject(ctx context.Context) (string, error) {
 	if _, err := exec.LookPath("gcloud"); err != nil {
 		return "", nil
 	}
-	said, err := exec.CommandContext(ctx, "gcloud", "config", "get-value", "project").Output()
+	said, err := tracing.CommandContext(ctx, "gcloud", "config", "get-value", "project").Output()
 	if err != nil {
 		var exited *exec.ExitError
 		if errors.As(err, &exited) && len(bytes.TrimSpace(exited.Stderr)) > 0 {

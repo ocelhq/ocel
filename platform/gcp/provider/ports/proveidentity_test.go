@@ -24,6 +24,7 @@ import (
 
 	"cloud.google.com/go/auth"
 
+	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 )
 
@@ -305,5 +306,32 @@ func TestARequestGoogleThrottlesOrFailsIsSentAgainWithItsBodyAndARefusalIsNot(t 
 				}
 			}
 		})
+	}
+}
+
+func TestATokenExchangeIsASpanThatRecordsNeitherTheGrantNorTheToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id_token":"eyJminted"}`))
+	}))
+	defer server.Close()
+	ctx, spans := tracingtest.Record(t)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL, strings.NewReader("assertion=eyJgrant"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := newTokenClient().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+
+	for _, keyValue := range spans.Only(t).Attributes() {
+		if value := keyValue.Value.String(); strings.Contains(value, "eyJ") {
+			t.Errorf("the exchange's span holds %s = %s, a credential it carried", keyValue.Key, value)
+		}
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
 
@@ -34,7 +35,7 @@ func (p *HTTPS) Warm(ctx context.Context, url, address, cookie string) error {
 		}
 	}
 	defer transport.CloseIdleConnections()
-	answered, err := (&http.Client{Timeout: run.WarmTimeout, Transport: transport}).Do(asked)
+	answered, err := (&http.Client{Timeout: run.WarmTimeout, Transport: tracing.NewTransport(transport)}).Do(asked)
 	if err != nil {
 		return fmt.Errorf("warm %s: %w", url, err)
 	}

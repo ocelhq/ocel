@@ -129,7 +129,7 @@ func (c *Clients) TierFirestore(tier environment.Tier) (*firestore.Client, error
 
 func (c *Clients) Databases() (*firestoreadmin.Service, error) {
 	return Opened(c, &c.databases, "Firestore admin", func() (*firestoreadmin.Service, error) {
-		return firestoreadmin.NewService(context.Background(), NewRESTOptions(c.Endpoint, c.QuotaProject())...)
+		return NewRESTService(context.Background(), firestoreadmin.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
@@ -148,7 +148,7 @@ func (c *Clients) KMS() (*kms.KeyManagementClient, error) {
 
 func (c *Clients) PubSub() (*pubsub.Service, error) {
 	return Opened(c, &c.pubsub, "Pub/Sub", func() (*pubsub.Service, error) {
-		return pubsub.NewService(context.Background(), NewRESTOptions(c.Endpoint, c.QuotaProject())...)
+		return NewRESTService(context.Background(), pubsub.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
@@ -160,31 +160,56 @@ func (c *Clients) CloudTasks() (*cloudtasks.Client, error) {
 
 func (c *Clients) Scheduler() (*cloudscheduler.Service, error) {
 	return Opened(c, &c.scheduler, "Cloud Scheduler", func() (*cloudscheduler.Service, error) {
-		return cloudscheduler.NewService(context.Background(), NewRESTOptions(c.Endpoint, c.QuotaProject())...)
+		return NewRESTService(context.Background(), cloudscheduler.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
-func NewHTTPClient(ctx context.Context, quotaProject string) (*http.Client, error) {
-	client, _, err := htransport.NewClient(ctx, append(newQuotaProjectOptions(quotaProject), option.WithScopes(CloudPlatformScope))...)
-	return client, err
+func NewHTTPClient(ctx context.Context, endpoint, quotaProject string) (*http.Client, error) {
+	google, _, err := htransport.NewClient(ctx, option.WithoutAuthentication(), option.WithTelemetryDisabled())
+	if err != nil {
+		return nil, err
+	}
+	traced := NewGoogleTransport(google.Transport)
+	if endpoint != "" {
+		return &http.Client{Transport: traced}, nil
+	}
+	authenticated, err := htransport.NewTransport(ctx, traced,
+		append(newQuotaProjectOptions(quotaProject), option.WithScopes(CloudPlatformScope), option.WithTelemetryDisabled())...)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Client{Transport: authenticated}, nil
 }
 
-func NewRESTOptions(endpoint, quotaProject string) []option.ClientOption {
-	if endpoint == "" {
-		return newQuotaProjectOptions(quotaProject)
+func newRESTOptions(ctx context.Context, endpoint, quotaProject string) ([]option.ClientOption, error) {
+	client, err := NewHTTPClient(ctx, endpoint, quotaProject)
+	if err != nil {
+		return nil, err
 	}
-	return []option.ClientOption{option.WithEndpoint(endpoint), option.WithoutAuthentication()}
+	if endpoint != "" {
+		return []option.ClientOption{option.WithEndpoint(endpoint), option.WithHTTPClient(client)}, nil
+	}
+	return []option.ClientOption{option.WithHTTPClient(client)}, nil
+}
+
+func NewRESTService[T any](ctx context.Context, newService func(context.Context, ...option.ClientOption) (T, error), endpoint, quotaProject string, more ...option.ClientOption) (T, error) {
+	options, err := newRESTOptions(ctx, endpoint, quotaProject)
+	if err != nil {
+		var nothing T
+		return nothing, err
+	}
+	return newService(ctx, append(options, more...)...)
 }
 
 func NewGRPCOptions(endpoint, quotaProject string) []option.ClientOption {
 	if endpoint == "" {
-		return newQuotaProjectOptions(quotaProject)
+		return append(newQuotaProjectOptions(quotaProject), newRPCSpanOptions()...)
 	}
-	return []option.ClientOption{
+	return append([]option.ClientOption{
 		option.WithEndpoint(HostPort(endpoint)),
 		option.WithoutAuthentication(),
 		option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
-	}
+	}, newRPCSpanOptions()...)
 }
 
 type emulatorOwner struct{}
@@ -217,16 +242,9 @@ func IsLoopback(endpoint string) bool {
 
 func NewStorageOptions(ctx context.Context, endpoint, quotaProject string) ([]option.ClientOption, error) {
 	if endpoint != "" {
-		return []option.ClientOption{
-			option.WithEndpoint(endpoint + "/storage/v1/"),
-			option.WithoutAuthentication(),
-		}, nil
+		endpoint += "/storage/v1/"
 	}
-	client, err := NewHTTPClient(ctx, quotaProject)
-	if err != nil {
-		return nil, err
-	}
-	return []option.ClientOption{option.WithHTTPClient(client)}, nil
+	return newRESTOptions(ctx, endpoint, quotaProject)
 }
 
 func newQuotaProjectOptions(quotaProject string) []option.ClientOption {
