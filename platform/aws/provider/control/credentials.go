@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	awsconnector "github.com/ocelhq/ocel/platform/aws/provider/connector"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials/ssocreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -119,6 +121,7 @@ func deployStatements(s iam.Scope) []iam.Statement {
 		cloudfront.Credential(s),
 		apigateway.Credential(s),
 		dns.Credential(s),
+		awsconnector.Credential(s),
 		alb.Credential(s),
 		credential.Postgres(s),
 		credential.Bucket(s),

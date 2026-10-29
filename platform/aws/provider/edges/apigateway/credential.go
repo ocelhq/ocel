@@ -9,6 +9,11 @@ func Credential(s iam.Scope) []iam.Statement {
 			Resources: []string{iam.AnyResource},
 		},
 		{
+			Actions:   []string{"iam:PassRole"},
+			Resources: []string{s.EdgeInvokeRole},
+			Condition: iam.PassedTo(iam.APIGatewayPrincipal),
+		},
+		{
 			Actions:   []string{"apigateway:DELETE", "apigateway:PATCH"},
 			Resources: []string{iam.RestAPIResourcesARN},
 			Condition: s.TaggedForItsTier(),

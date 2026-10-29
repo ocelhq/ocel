@@ -15,7 +15,6 @@ func Function(s iam.Scope) []iam.Statement {
 				"lambda:CreateFunctionUrlConfig",
 				"lambda:DeleteFunction",
 				"lambda:DeleteFunctionUrlConfig",
-				"lambda:GetFunction",
 				"lambda:GetFunctionConfiguration",
 				"lambda:GetFunctionUrlConfig",
 				"lambda:GetPolicy",
@@ -30,6 +29,11 @@ func Function(s iam.Scope) []iam.Statement {
 			},
 			Resources: s.FunctionARNs(),
 			Condition: s.TaggedForItsTier(),
+		},
+		{
+			Actions:   []string{"lambda:GetFunction", "lambda:GetFunctionCodeSigningConfig", "lambda:ListVersionsByFunction"},
+			Resources: s.FunctionARNs(),
+			Condition: s.TaggedForItsTierWhereItExists(),
 		},
 		{
 			Actions:   []string{"lambda:TagResource"},

@@ -1,6 +1,7 @@
 package control
 
 import (
+	"encoding/json"
 	"path"
 	"slices"
 	"strconv"
@@ -13,12 +14,20 @@ import (
 
 func ConnectorStatements(ns account.Namespace, variablesKey string) []iam.Statement {
 	var statements []iam.Statement
+	seen := map[string]bool{}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		for _, statement := range deployStatements(scopeOf(ns, tier, variablesKey)) {
-			if served := servedBy(statement.Actions); len(served) > 0 {
-				statement.Actions = served
-				statements = append(statements, statement)
+			served := servedBy(statement.Actions)
+			if len(served) == 0 {
+				continue
 			}
+			statement.Actions = served
+			rendered, err := json.Marshal(iam.Statements([]iam.Statement{statement}))
+			if err == nil && seen[string(rendered)] {
+				continue
+			}
+			seen[string(rendered)] = true
+			statements = append(statements, statement)
 		}
 	}
 	return statements

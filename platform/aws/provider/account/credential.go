@@ -50,6 +50,11 @@ func AccessCredential(s iam.Scope) []iam.Statement {
 			Condition: iam.InCallerAccount(),
 		},
 		{
+			Actions:   []string{"s3:PutObjectTagging"},
+			Resources: []string{s.ArtifactObjects},
+			Condition: iam.InCallerAccount(),
+		},
+		{
 			Actions:   []string{"s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"},
 			Resources: s.BootstrapBuckets,
 			Condition: iam.InCallerAccount(),
