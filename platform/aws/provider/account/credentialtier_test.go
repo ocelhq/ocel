@@ -38,6 +38,10 @@ var hostnamesTheUserNames = []string{
 	iam.DomainNameARN,
 }
 
+var stacksBothTiersRead = []string{
+	"arn:aws:cloudformation:*:*:stack/" + naming.MustUntieredOcelName(string(defaultNamespace), "connector") + "/*",
+}
+
 var resourcesAWSOwns = []string{
 	bastion.PortForwardingDocumentARN,
 	quotas.VPC.ARN(),
@@ -122,7 +126,8 @@ func witnessesOf(t *testing.T, tier environment.Tier) []witness {
 func isOfNoTier(w witness) bool {
 	switch {
 	case w.resource == iam.AnyResource && readOnly(w.action),
-		slices.Contains(hostnamesTheUserNames, w.resource) && readOnly(w.action):
+		slices.Contains(hostnamesTheUserNames, w.resource) && readOnly(w.action),
+		slices.Contains(stacksBothTiersRead, w.resource) && readOnly(w.action):
 		return true
 	case slices.Contains(actionsAWSGivesNoScopingKey, w.action),
 		slices.Contains(actionsOnWhatBothTiersShare, w.action):

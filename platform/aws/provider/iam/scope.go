@@ -26,6 +26,8 @@ type Scope struct {
 	BootstrapStacks     []string
 	BootstrapChangeSets []string
 	BootstrapRoles      []string
+	EdgeInvokeRole      string
+	ArtifactObjects     string
 	PartRoles           []string
 	DeployPolicies      string
 
@@ -182,6 +184,10 @@ func (s Scope) RetaggedOnlyAsItsTier() map[string]any {
 
 func (s Scope) TaggedOnCreateForItsTier() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + naming.EnvTierTagKey: string(s.Tier)}}
+}
+
+func (s Scope) TaggedForItsTierWhereItExists() map[string]any {
+	return map[string]any{"StringEqualsIfExists": map[string]any{"aws:ResourceTag/" + naming.EnvTierTagKey: string(s.Tier)}}
 }
 
 func (s Scope) TaggedForItsTier() map[string]any {

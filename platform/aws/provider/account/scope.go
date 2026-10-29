@@ -44,6 +44,7 @@ func (n Namespace) Scope(tier environment.Tier) iam.Scope {
 		AppBoundaryPolicy: policyARN(n.AppBoundaryNameFor(tier)),
 		AppRoles:          "arn:aws:iam::*:role" + n.AppRolePathFor(tier) + "*",
 		BootstrapRoles:    []string{"arn:aws:iam::*:role" + n.bootstrapRolePathFor(tier) + "*", "arn:aws:iam::*:role/" + n.EdgeInvokeRoleName(tier)},
+		EdgeInvokeRole:    "arn:aws:iam::*:role/" + n.EdgeInvokeRoleName(tier),
 		PartRoles: []string{
 			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + sync.Role,
 			"arn:aws:iam::*:role" + n.AppRolePathFor(tier) + sync.ScheduleRole,
@@ -96,9 +97,7 @@ func (n Namespace) Scope(tier environment.Tier) iam.Scope {
 		s.RuntimeLayers = append(s.RuntimeLayers, layer)
 		s.RuntimeLayerVersions = append(s.RuntimeLayerVersions, layer+":*")
 	}
-	for _, kind := range edgeKinds() {
-		prefix, _ := n.EdgeParamPrefix(tier, kind)
-		s.EdgeParameters = append(s.EdgeParameters, iam.ParameterARNPrefix+prefix+"/*")
-	}
+	s.ArtifactObjects = "arn:aws:s3:::" + n.BootstrapBucketName(tier, naming.StorageArtifacts, anyBucketTag) + "/*"
+	s.EdgeParameters = []string{iam.ParameterARNPrefix + n.path("edge", tier) + "/*"}
 	return s
 }
