@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -24,6 +25,7 @@ func (p *Provider) connectorAPIs() awsconnector.APIs {
 		Objects: s3.NewFromConfig(p.Config),
 		SSM:     ssm.NewFromConfig(p.Config),
 		Lambda:  lambda.NewFromConfig(p.Config),
+		Logs:    cloudwatchlogs.NewFromConfig(p.Config),
 		Region:  p.Config.Region,
 	}
 }
