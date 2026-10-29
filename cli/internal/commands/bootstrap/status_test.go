@@ -3,13 +3,19 @@ package bootstrap
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/pricecache/pricecachetest"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
@@ -39,10 +45,13 @@ func statusProject(t *testing.T) (clitest.FakeProject, commands.Invocation) {
 		Name:      "containers",
 		UsedBy:    []string{"api"},
 		Resources: []provider.PhysicalResource{{Kind: "Fake::Cluster", ID: "ocel-containers-production", Location: "nowhere-1", ConsoleURL: "https://console.fake.invalid/clusters/ocel-containers-production"}},
-		Shape: &provider.PartShape{Vendor: string(fake.Vendor), Resources: []pricing.Shaped{
+		Inventory: &provider.PartInventory{Vendor: string(fake.Vendor), Resources: []pricing.Item{
 			{Name: "containers", Type: fake.TypeContainer, Properties: map[string]any{}},
 		}},
 	})
+	prices := pricecachetest.Serve(t, clitest.FakePriceCard(t))
+	t.Setenv(console.URLEnvVar, prices.URL)
+	invocation.Prices.CachePath = filepath.Join(t.TempDir(), "answers.json")
 	return project, invocation
 }
 
@@ -91,6 +100,36 @@ func TestBootstrapStatusShowsOneRowPerPartWithWhoAddedItWhoUsesItItsIdleCostAndI
 	}
 	if strings.Contains(out, "ocel-containers-production") {
 		t.Errorf("output names a resource without --resources:\n%s", out)
+	}
+}
+
+func TestBootstrapStatusShowsNoIdleCostItCannotPriceAndStillSucceeds(t *testing.T) {
+	project, invocation := statusProject(t)
+	prices := pricecachetest.Serve(t, clitest.FakePriceCard(t))
+	prices.RefuseNext(connect.NewError(connect.CodeFailedPrecondition, errors.New("closed")))
+	t.Setenv(console.URLEnvVar, prices.URL)
+
+	out := runStatus(t, invocation, project.Root, production, StatusOptions{})
+
+	if got, want := strings.Join(rowOf(t, out, "containers"), " "), "containers deploy api · 2026-10-10 api — creating"; got != want {
+		t.Errorf("containers row = %q, want %q: an unreachable catalog leaves the idle cost unknown, never $0", got, want)
+	}
+}
+
+func TestBootstrapStatusOfflinePricesIdleCostsFromTheCacheAlone(t *testing.T) {
+	project, invocation := statusProject(t)
+	prices := pricecachetest.Serve(t, clitest.FakePriceCard(t))
+	t.Setenv(console.URLEnvVar, prices.URL)
+	runStatus(t, invocation, project.Root, production, StatusOptions{})
+	asked := len(prices.Calls())
+
+	out := runStatus(t, invocation, project.Root, production, StatusOptions{Offline: true})
+
+	if got := rowOf(t, out, "containers"); !strings.Contains(strings.Join(got, " "), "$7.30/mo") {
+		t.Errorf("containers row = %q, want the cached idle cost", got)
+	}
+	if offline := len(prices.Calls()) - asked; offline != 0 {
+		t.Errorf("the console was asked %d times, want none offline", offline)
 	}
 }
 

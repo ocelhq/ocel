@@ -7,7 +7,7 @@ description: "Show every part of a bootstrap: who added it, who uses it, what it
 ocel bootstrap status [production|preview] [flags]
 ```
 
-Reads both environments unless one is named. `--resources` lists what each part holds.
+Reads both environments unless one is named. `--resources` lists what each part holds. The idle cost is priced against the console's price catalog, or the cached prices alone with `--offline`, and shows — when a price is missing.
 
 ## Arguments
 
@@ -19,6 +19,7 @@ Reads both environments unless one is named. `--resources` lists what each part 
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
+| `--offline` | `bool` | `false` | Price idle costs from cached answers only, never asking the console |
 | `--resources` | `bool` | `false` | List the resources each part holds |
 
 Every command also takes the [global flags](/docs/cli#global-flags).

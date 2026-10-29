@@ -59,6 +59,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/pricing/ruleset"
 	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
@@ -240,7 +241,8 @@ func newCommand() *command {
 
 	rootCmd.AddCommand(bootstrap.NewCommand(invocation))
 	rootCmd.AddCommand(permissions.NewCommand(invocation))
-	rootCmd.AddCommand(cost.NewCommand(cost.Dependencies{Invocation: invocation, ReadFunctions: build.ReadFunctions, CollectDeclarations: declaration.Collect}))
+	costCmd := cost.NewCommand(cost.Dependencies{Invocation: invocation, ReadFunctions: build.ReadFunctions, CollectDeclarations: declaration.Collect})
+	rootCmd.AddCommand(costCmd)
 	rootCmd.AddCommand(doctor.NewCommand(invocation))
 	rootCmd.AddCommand(schema.NewCommand(invocation))
 	rootCmd.AddCommand(skillcommand.NewCommand(invocation))
@@ -260,7 +262,7 @@ func newCommand() *command {
 	linkDependencies := link.Dependencies{Invocation: invocation, LoadCredentials: console.LoadCredentials}
 	loginCmd, logoutCmd, linkCmd := login.NewCommand(loginDependencies), login.NewLogoutCommand(loginDependencies), link.NewCommand(linkDependencies)
 	connectorCmd := connector.NewCommand(connector.Dependencies{Invocation: invocation, LoadCredentials: console.LoadCredentials})
-	readsConsoleURL(rootCmd, loginCmd, logoutCmd, linkCmd, connectorCmd)
+	readsConsoleURL(append([]*cobra.Command{rootCmd, loginCmd, logoutCmd, linkCmd, connectorCmd}, costCmd.Commands()...)...)
 	addConsoleCommands(rootCmd, loginCmd, logoutCmd, linkCmd, link.NewUnlinkCommand(linkDependencies), connectorCmd)
 
 	installHelpStyle(rootCmd, func() bool { return set.json })
@@ -304,6 +306,7 @@ func newInvocation(bus *run.Bus, set *flags) (commands.Invocation, error) {
 		CloudOffer:        console.NewCloudOffers(console.LoadCredentials, console.SaveCredentials).Resolve,
 		CloudSessions:     commands.NewCloudSessions(),
 		BuilderJob:        job,
+		Prices:            commands.Prices{Table: ruleset.Table()},
 	}
 	if invocation.BuilderJob != nil {
 		invocation.Console, invocation.ConsoleCredential, invocation.CloudOffer = deployreport.Console{}, consolecredential.Console{}, nil

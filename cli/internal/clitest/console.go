@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
+	"github.com/ocelhq/ocel/cli/internal/pricecache/pricecachetest"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
 )
@@ -25,7 +26,8 @@ const FixtureConsoleTargetID = "0199c3a2-5b7e-7c4d-8a1f-2e3d4c5b6a80"
 type FakeConsole struct {
 	consolev1connect.UnimplementedTargetServiceHandler
 
-	URL string
+	URL    string
+	Prices *pricecachetest.Console
 
 	Credential        *consolev1.IssueCredentialResponse
 	CredentialRefusal *connect.Error
@@ -41,13 +43,14 @@ type FakeConsole struct {
 
 func ServeConsole(t *testing.T) *FakeConsole {
 	t.Helper()
-	fake := &FakeConsole{}
+	fake := &FakeConsole{Prices: pricecachetest.New(nil)}
 	validated := connect.WithInterceptors(connectvalidate.NewInterceptor())
 	path, handler := consolev1connect.NewDeploymentServiceHandler(fake, validated)
 	targetsPath, targets := consolev1connect.NewTargetServiceHandler(fake)
 	mux := http.NewServeMux()
 	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
 	mux.Handle("/api/connect"+targetsPath, http.StripPrefix("/api/connect", targets))
+	fake.Prices.Mount(mux)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	fake.URL = srv.URL

@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
@@ -80,8 +81,16 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		var attempt *deployreport.Attempt
 		var apps []*consolev1.App
 		var succeeded *consolev1.Deployment
+		var estimate *deployEstimate
+		var estimated *costv1.Estimate
 		defer func() {
 			report = attempt.Report(time.Now(), apps, succeeded, err)
+			if report != nil {
+				report.Estimate = estimated
+			}
+			if succeeded != nil && report.GetEstimate() != nil {
+				_ = deployreport.Write(attempt.Project.Dir, report)
+			}
 			run.SetDeploymentReport(report)
 		}()
 		facts, err := runPreflight(ctx, dependencies, policy, check, provider, p.Project, p.Preflight, opts.Prebuilt, env)
@@ -108,6 +117,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 			return err
 		}
 		defer releaseOutput()
+		defer func() { estimated = estimate.finish(succeeded != nil) }()
 		manifest, inline, err := d.buildManifest(ctx, phase)
 		phase.End(err)
 		if prerequisite.IsDeclined(err) {
@@ -133,6 +143,9 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 			return showDeployPlan(ctx, run, provider, req, "Proposed changes to "+place(env), cfg.Slug, place(env), describePlannedPreBuild(d.preBuild, opts.Prebuilt))
 		}
 
+		if attempt != nil {
+			estimate = startEstimate(ctx, dependencies, phase, provider, cfg, manifest, env)
+		}
 		infra.stopRenewing()
 		out, err := streamDeploy(ctx, provider, req)
 		var unread error
