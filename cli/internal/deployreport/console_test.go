@@ -31,18 +31,24 @@ const consoleProjectID = "0199c3a2-5b7e-7c4d-8a1f-2e3d4c5b6a79"
 type fakeConsole struct {
 	consolev1connect.UnimplementedDeploymentServiceHandler
 
-	mu      sync.Mutex
-	reports []*consolev1.ReportRequest
-	starts  []*consolev1.StartRequest
-	events  []*consolev1.RecordEnvironmentEventRequest
-	auth    []string
-	answer  error
-	hang    chan struct{}
+	mu        sync.Mutex
+	reports   []*consolev1.ReportRequest
+	starts    []*consolev1.StartRequest
+	events    []*consolev1.RecordEnvironmentEventRequest
+	auth      []string
+	answer    error
+	transient int
+	hang      chan struct{}
 }
 
 func (f *fakeConsole) Report(ctx context.Context, req *consolev1.ReportRequest) (*consolev1.ReportResponse, error) {
 	f.mu.Lock()
 	f.reports = append(f.reports, req)
+	if f.transient > 0 {
+		f.transient--
+		f.mu.Unlock()
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("unexpected EOF"))
+	}
 	f.mu.Unlock()
 	if f.hang != nil {
 		select {
@@ -588,5 +594,31 @@ func TestAStartTheConsoleNeverAnswersStopsWhenTheRunIsInterrupted(t *testing.T) 
 	signedIn(apiURL).StartDeployment(ctx, linkedTree(t, apiURL), productionStart())
 	if waited := time.Since(began); waited > 2*time.Second {
 		t.Fatalf("Start held the run %s after it was interrupted, want it to stop at once", waited)
+	}
+}
+
+func TestAReportTheConsoleCouldNotTakeIsSentAgainUntilItIsRecorded(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{transient: 2}
+	apiURL := serveConsole(t, fake)
+	var stderr bytes.Buffer
+
+	signedIn(apiURL).ReportDeployment(context.Background(), linkedTree(t, apiURL), productionDeployment(), &stderr)
+
+	if len(fake.reports) != 3 || stderr.Len() != 0 || fake.reports[0].GetDeployment().GetId() != fake.reports[2].GetDeployment().GetId() {
+		t.Fatalf("sent %d reports with stderr %q, want the same deployment sent until it was recorded, and no warning", len(fake.reports), stderr.String())
+	}
+}
+
+func TestAReportTheConsoleRefusesIsNotSentAgain(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{answer: connect.NewError(connect.CodePermissionDenied, errors.New("this project is not yours"))}
+	apiURL := serveConsole(t, fake)
+	var stderr bytes.Buffer
+
+	signedIn(apiURL).ReportDeployment(context.Background(), linkedTree(t, apiURL), productionDeployment(), &stderr)
+
+	if len(fake.reports) != 1 || !strings.Contains(stderr.String(), "not yours") {
+		t.Fatalf("sent %d reports with stderr %q, want one attempt and the refusal said", len(fake.reports), stderr.String())
 	}
 }
