@@ -66,6 +66,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	}
 
 	cfg := deploy.Config{
+		CredentialEnv:  p.WebIdentityEnv(),
 		Namespace:      string(p.Namespace),
 		Region:         p.Config.Region,
 		BackendURL:     stateBackendURL(deployed.Buckets[naming.StorageState], scope.Slug),

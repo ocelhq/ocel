@@ -29,6 +29,8 @@ import (
 )
 
 type Config struct {
+	CredentialEnv map[string]string
+
 	Namespace     string
 	Region        string
 	BackendURL    string
