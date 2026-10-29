@@ -47,8 +47,21 @@ type Run struct {
 	assumed     []*streamv1.Assumption
 	remoteJobs  []*streamv1.RemoteJob
 	report      *consolev1.Deployment
+	beforeStop  []func()
 
 	endOnce sync.Once
+}
+
+func (r *Run) BeforeForcedStop(release func()) (forget func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.beforeStop = append(r.beforeStop, release)
+	at := len(r.beforeStop) - 1
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.beforeStop[at] = nil
+	}
 }
 
 func (r *Run) End(errp *error) {
@@ -94,6 +107,14 @@ func (r *Run) StartedAt() time.Time {
 }
 
 func (r *Run) interrupt() {
+	r.mu.Lock()
+	releases := slices.Clone(r.beforeStop)
+	r.mu.Unlock()
+	for _, release := range slices.Backward(releases) {
+		if release != nil {
+			release()
+		}
+	}
 	err := context.Canceled
 	r.End(&err)
 }

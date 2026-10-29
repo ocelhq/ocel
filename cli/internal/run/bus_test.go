@@ -349,3 +349,21 @@ func TestAPreambleSaysAndAsksBeforeAnyRunBeginsAndSummarisesNothing(t *testing.T
 		}
 	}
 }
+
+func TestAForcedStopRunsWhatTheRunAskedToReleaseFirstAndNothingItForgot(t *testing.T) {
+	bus := run.NewBus(newClock().read)
+	_, running, err := bus.Begin(context.Background(), "ocel deploy", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var released []string
+	running.BeforeForcedStop(func() { released = append(released, "lease") })
+	forget := running.BeforeForcedStop(func() { released = append(released, "forgotten") })
+	forget()
+
+	bus.Interrupt()
+
+	if !slices.Equal(released, []string{"lease"}) {
+		t.Fatalf("released %v, want only what the run still held", released)
+	}
+}

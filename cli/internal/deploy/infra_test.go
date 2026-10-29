@@ -459,3 +459,26 @@ func TestASucceededDeployLeavesNoLeaseBehind(t *testing.T) {
 		t.Error("the environment still holds a deploy lease after the deploy succeeded")
 	}
 }
+
+func TestADeployStoppedByForceAbandonsItsLeaseBeforeItStops(t *testing.T) {
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	fixture := setUpDeployProject(t)
+	var abandonedFirst int
+	fixture.Provider.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.Kind != provider.StackInfra {
+			return nil
+		}
+		dependencies.Events.Interrupt()
+		abandonedFirst = len(clitest.RequestsTo[*contractv1.AbandonDeployRequest](t, fixture.Requests, contractv1connect.ProviderServiceAbandonDeployProcedure))
+		return errors.New("the deploy was stopped")
+	})
+
+	var stdout, stderr bytes.Buffer
+	clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
+	_ = runDeploy(context.Background(), dependencies, fixture.Root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+
+	if abandonedFirst != 1 {
+		t.Fatalf("a forced stop abandoned %d leases before the deploy stopped, want the lease it held, so the next deploy need not wait out its TTL", abandonedFirst)
+	}
+}
