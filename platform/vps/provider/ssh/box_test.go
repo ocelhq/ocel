@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
+	"github.com/ocelhq/ocel/platform/vps/provider/shell"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -215,5 +217,30 @@ func TestACommandOutsideAnySpanRunsAsWritten(t *testing.T) {
 	}
 	if ran := conn.asked[len(conn.asked)-1]; ran != "docker pull ghcr.io/shop/web" {
 		t.Errorf("the box ran %q, want the command as written", ran)
+	}
+}
+
+func TestTheDeployLoginRunsFromTheRootOfTheBoxNotTheLoginsHome(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	if err := os.Chmod(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	command := fromRoot + "sh -c " + shell.Quote("pwd")
+	cmd := exec.Command("/bin/sh", "-c", command)
+	cmd.Dir = home
+	said, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("%s: %v", command, err)
+	}
+	if got := strings.TrimSpace(string(said)); got != "/" {
+		t.Errorf("the deploy login's command ran in %q, want / so a home it cannot enter is never its working directory", got)
+	}
+	argv := fromRoot + shell.Words([]string{"sh", "-c", "pwd"})
+	cmd = exec.Command("/bin/sh", "-c", argv)
+	cmd.Dir = home
+	if said, err := cmd.Output(); err != nil || strings.TrimSpace(string(said)) != "/" {
+		t.Errorf("an argv run as the deploy login ran in %q, %v, want /", said, err)
 	}
 }
