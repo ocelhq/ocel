@@ -1,0 +1,705 @@
+{
+  "prior": {
+    "resources": [
+      {
+        "id": "aws_ecs_cluster.main",
+        "name": "main",
+        "properties": {
+          "arn": "arn:aws:ecs:eu-west-2:123456789012:cluster/cost-fixture",
+          "configuration": [],
+          "id": "arn:aws:ecs:eu-west-2:123456789012:cluster/cost-fixture",
+          "name": "cost-fixture",
+          "region": "eu-west-2",
+          "service_connect_defaults": [],
+          "setting": {
+            "name": "containerInsights",
+            "value": "disabled"
+          },
+          "tags_all": {}
+        },
+        "region": "eu-west-2",
+        "scope": "root",
+        "type": "aws_ecs_cluster",
+        "vendor": "aws"
+      },
+      {
+        "id": "aws_ecs_service.app",
+        "name": "app",
+        "properties": {
+          "alarms": [],
+          "arn": "arn:aws:ecs:eu-west-2:123456789012:service/cost-fixture/app",
+          "availability_zone_rebalancing": "ENABLED",
+          "capacity_provider_strategy": [],
+          "cluster": "arn:aws:ecs:eu-west-2:123456789012:cluster/cost-fixture",
+          "deployment_circuit_breaker": [],
+          "deployment_configuration": [],
+          "deployment_controller": [],
+          "deployment_maximum_percent": 200,
+          "deployment_minimum_healthy_percent": 100,
+          "desired_count": 2,
+          "enable_ecs_managed_tags": false,
+          "enable_execute_command": false,
+          "iam_role": "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+          "id": "arn:aws:ecs:eu-west-2:123456789012:service/cost-fixture/app",
+          "launch_type": "FARGATE",
+          "load_balancer": [],
+          "name": "app",
+          "network_configuration": {
+            "assign_public_ip": true,
+            "subnets": [
+              "subnet-0a1b2c3d4e5f60718"
+            ]
+          },
+          "ordered_placement_strategy": [],
+          "placement_constraints": [],
+          "platform_version": "LATEST",
+          "region": "eu-west-2",
+          "scheduling_strategy": "REPLICA",
+          "service_connect_configuration": [],
+          "service_registries": [],
+          "tags_all": {},
+          "task_definition": "arn:aws:ecs:eu-west-2:123456789012:task-definition/app:1",
+          "triggers": {},
+          "volume_configuration": [],
+          "vpc_lattice_configurations": [],
+          "wait_for_steady_state": false
+        },
+        "references": {
+          "cluster": "aws_ecs_cluster.main",
+          "task_definition": "aws_ecs_task_definition.app"
+        },
+        "region": "eu-west-2",
+        "scope": "root",
+        "type": "aws_ecs_service",
+        "vendor": "aws"
+      },
+      {
+        "id": "aws_ecs_task_definition.app",
+        "name": "app",
+        "properties": {
+          "arn": "arn:aws:ecs:eu-west-2:123456789012:task-definition/app:1",
+          "arn_without_revision": "arn:aws:ecs:eu-west-2:123456789012:task-definition/app",
+          "container_definitions": "[{\"essential\":true,\"image\":\"public.ecr.aws/nginx/nginx:stable\",\"name\":\"app\",\"portMappings\":[{\"containerPort\":80}]}]",
+          "cpu": "512",
+          "enable_fault_injection": false,
+          "ephemeral_storage": [],
+          "family": "app",
+          "id": "app",
+          "memory": "2048",
+          "network_mode": "awsvpc",
+          "placement_constraints": [],
+          "proxy_configuration": [],
+          "region": "eu-west-2",
+          "requires_compatibilities": [
+            "FARGATE"
+          ],
+          "revision": 1,
+          "runtime_platform": {
+            "cpu_architecture": "ARM64",
+            "operating_system_family": "LINUX"
+          },
+          "skip_destroy": false,
+          "tags_all": {},
+          "track_latest": false,
+          "volume": []
+        },
+        "region": "eu-west-2",
+        "scope": "root",
+        "type": "aws_ecs_task_definition",
+        "vendor": "aws"
+      },
+      {
+        "id": "aws_iam_role.fn",
+        "name": "fn",
+        "properties": {
+          "arn": "arn:aws:iam::123456789012:role/fn-role",
+          "assume_role_policy": "{\"Statement\":[{\"Action\":\"sts:AssumeRole\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"}}],\"Version\":\"2012-10-17\"}",
+          "create_date": "2026-10-28T19:50:00Z",
+          "force_detach_policies": false,
+          "id": "fn-role",
+          "inline_policy": [],
+          "max_session_duration": 3600,
+          "name": "fn-role",
+          "path": "/",
+          "tags_all": {},
+          "unique_id": "fake-role-id"
+        },
+        "region": "eu-west-2",
+        "scope": "root",
+        "type": "aws_iam_role",
+        "vendor": "aws"
+      },
+      {
+        "id": "aws_lambda_function.handler",
+        "name": "handler",
+        "properties": {
+          "architectures": [
+            "arm64"
+          ],
+          "arn": "arn:aws:lambda:eu-west-2:123456789012:function:handler",
+          "dead_letter_config": [],
+          "environment": {
+            "variables": {
+              "STAGE": "dev"
+            }
+          },
+          "ephemeral_storage": [],
+          "file_system_config": [],
+          "filename": "handler.zip",
+          "function_name": "handler",
+          "handler": "index.handler",
+          "id": "handler",
+          "image_config": [],
+          "invoke_arn": "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:123456789012:function:handler/invocations",
+          "last_modified": "2026-10-28T19:50:05.000+0000",
+          "logging_config": [],
+          "memory_size": 512,
+          "package_type": "Zip",
+          "publish": false,
+          "qualified_arn": "arn:aws:lambda:eu-west-2:123456789012:function:handler:$LATEST",
+          "region": "eu-west-2",
+          "reserved_concurrent_executions": -1,
+          "role": "arn:aws:iam::123456789012:role/fn-role",
+          "runtime": "nodejs20.x",
+          "skip_destroy": false,
+          "snap_start": [],
+          "source_code_hash": "GSnowjV3Fdr873nubpjOfLGK6NycMpSthHueNBRBeig=",
+          "source_code_size": 192,
+          "tags": {
+            "team": "payments"
+          },
+          "tags_all": {
+            "team": "payments"
+          },
+          "timeout": 30,
+          "tracing_config": [],
+          "version": "$LATEST",
+          "vpc_config": []
+        },
+        "references": {
+          "role": "aws_iam_role.fn"
+        },
+        "region": "eu-west-2",
+        "scope": "root",
+        "tags": {
+          "team": "payments"
+        },
+        "type": "aws_lambda_function",
+        "unknown": [
+          "environment.variables.API_KEY"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "aws_s3_bucket.assets[0]",
+        "name": "assets[0]",
+        "properties": {
+          "arn": "arn:aws:s3:::cost-fixture-assets",
+          "bucket": "cost-fixture-assets",
+          "bucket_domain_name": "cost-fixture-assets.s3.amazonaws.com",
+          "bucket_region": "us-east-1",
+          "cors_rule": [],
+          "force_destroy": false,
+          "grant": [],
+          "hosted_zone_id": "Z3AQBSTGFYJSTF",
+          "id": "cost-fixture-assets",
+          "lifecycle_rule": [],
+          "logging": [],
+          "object_lock_configuration": [],
+          "region": "us-east-1",
+          "replication_configuration": [],
+          "server_side_encryption_configuration": [],
+          "tags": {
+            "team": "web"
+          },
+          "tags_all": {
+            "team": "web"
+          },
+          "versioning": [],
+          "website": []
+        },
+        "region": "us-east-1",
+        "scope": "root",
+        "tags": {
+          "team": "web"
+        },
+        "type": "aws_s3_bucket",
+        "vendor": "aws"
+      },
+      {
+        "id": "google_cloud_run_v2_service.web",
+        "name": "web",
+        "properties": {
+          "binary_authorization": [],
+          "build_config": [],
+          "deletion_protection": false,
+          "effective_labels": {
+            "goog-terraform-provisioned": "true"
+          },
+          "generation": "1",
+          "id": "projects/cost-fixture/locations/europe-west1/services/web",
+          "ingress": "INGRESS_TRAFFIC_ALL",
+          "launch_stage": "GA",
+          "location": "europe-west1",
+          "multi_region_settings": [],
+          "name": "web",
+          "project": "cost-fixture",
+          "scaling": [],
+          "template": {
+            "containers": {
+              "env": [],
+              "image": "us-docker.pkg.dev/cloudrun/container/hello",
+              "liveness_probe": [],
+              "ports": [],
+              "resources": {
+                "limits": {
+                  "cpu": "1",
+                  "memory": "512Mi"
+                }
+              },
+              "startup_probe": [],
+              "volume_mounts": []
+            },
+            "node_selector": [],
+            "scaling": {
+              "max_instance_count": 10,
+              "min_instance_count": 0
+            },
+            "volumes": [],
+            "vpc_access": []
+          },
+          "terraform_labels": {
+            "goog-terraform-provisioned": "true"
+          },
+          "traffic": [],
+          "uri": "https://web-uc.a.run.app"
+        },
+        "region": "europe-west1",
+        "scope": "root",
+        "type": "google_cloud_run_v2_service",
+        "vendor": "gcp"
+      },
+      {
+        "id": "module.db.aws_rds_cluster.main",
+        "name": "main",
+        "properties": {
+          "arn": "arn:aws:rds:eu-west-1:123456789012:cluster:cost-fixture-db",
+          "cluster_identifier": "cost-fixture-db",
+          "copy_tags_to_snapshot": false,
+          "database_name": "app",
+          "delete_automated_backups": true,
+          "enable_global_write_forwarding": false,
+          "enable_http_endpoint": false,
+          "enable_local_write_forwarding": false,
+          "endpoint": "cost-fixture-db.cluster-cabcdefghijk.eu-west-1.rds.amazonaws.com",
+          "engine": "aurora-postgresql",
+          "engine_mode": "provisioned",
+          "engine_version": "16.4",
+          "id": "cost-fixture-db",
+          "master_username": "app",
+          "port": 5432,
+          "region": "eu-west-1",
+          "restore_to_point_in_time": [],
+          "s3_import": [],
+          "scaling_configuration": [],
+          "serverlessv2_scaling_configuration": {
+            "max_capacity": 4,
+            "min_capacity": 0.5
+          },
+          "skip_final_snapshot": true,
+          "storage_encrypted": true,
+          "storage_type": "aurora",
+          "tags_all": {}
+        },
+        "region": "eu-west-1",
+        "scope": "module.db",
+        "type": "aws_rds_cluster",
+        "unknown": [
+          "master_password"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "module.db.aws_rds_cluster_instance.main[0]",
+        "name": "main[0]",
+        "properties": {
+          "arn": "arn:aws:rds:eu-west-1:123456789012:db:cost-fixture-db-0",
+          "auto_minor_version_upgrade": true,
+          "availability_zone": "eu-west-1a",
+          "cluster_identifier": "cost-fixture-db",
+          "copy_tags_to_snapshot": false,
+          "engine": "aurora-postgresql",
+          "engine_version": "16.4",
+          "force_destroy": false,
+          "id": "cost-fixture-db-0",
+          "identifier": "cost-fixture-db-0",
+          "instance_class": "db.serverless",
+          "monitoring_interval": 0,
+          "promotion_tier": 0,
+          "region": "eu-west-1",
+          "tags_all": {}
+        },
+        "references": {
+          "cluster_identifier": "module.db.aws_rds_cluster.main"
+        },
+        "region": "eu-west-1",
+        "scope": "module.db",
+        "type": "aws_rds_cluster_instance",
+        "vendor": "aws"
+      }
+    ],
+    "scopes": [
+      {
+        "id": "root",
+        "kind": "module",
+        "name": "root"
+      },
+      {
+        "id": "module.db",
+        "kind": "module",
+        "name": "module.db",
+        "parent": "root"
+      }
+    ],
+    "source": "terraform"
+  },
+  "set": {
+    "resources": [
+      {
+        "id": "aws_ecs_cluster.main",
+        "name": "main",
+        "properties": {
+          "arn": "arn:aws:ecs:eu-west-2:123456789012:cluster/cost-fixture",
+          "configuration": [],
+          "id": "arn:aws:ecs:eu-west-2:123456789012:cluster/cost-fixture",
+          "name": "cost-fixture",
+          "region": "eu-west-2",
+          "service_connect_defaults": [],
+          "setting": {
+            "name": "containerInsights",
+            "value": "disabled"
+          },
+          "tags_all": {}
+        },
+        "region": "eu-west-2",
+        "scope": "root",
+        "type": "aws_ecs_cluster",
+        "vendor": "aws"
+      },
+      {
+        "id": "aws_ecs_service.app",
+        "name": "app",
+        "properties": {
+          "alarms": [],
+          "arn": "arn:aws:ecs:eu-west-2:123456789012:service/cost-fixture/app",
+          "availability_zone_rebalancing": "ENABLED",
+          "capacity_provider_strategy": [],
+          "cluster": "arn:aws:ecs:eu-west-2:123456789012:cluster/cost-fixture",
+          "deployment_circuit_breaker": [],
+          "deployment_configuration": [],
+          "deployment_controller": [],
+          "deployment_maximum_percent": 200,
+          "deployment_minimum_healthy_percent": 100,
+          "desired_count": 2,
+          "enable_ecs_managed_tags": false,
+          "enable_execute_command": false,
+          "iam_role": "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+          "id": "arn:aws:ecs:eu-west-2:123456789012:service/cost-fixture/app",
+          "launch_type": "FARGATE",
+          "load_balancer": [],
+          "name": "app",
+          "network_configuration": {
+            "assign_public_ip": true,
+            "security_groups": [],
+            "subnets": [
+              "subnet-0a1b2c3d4e5f60718"
+            ]
+          },
+          "ordered_placement_strategy": [],
+          "placement_constraints": [],
+          "platform_version": "LATEST",
+          "region": "eu-west-2",
+          "scheduling_strategy": "REPLICA",
+          "service_connect_configuration": [],
+          "service_registries": [],
+          "tags_all": {},
+          "triggers": {},
+          "volume_configuration": [],
+          "vpc_lattice_configurations": [],
+          "wait_for_steady_state": false
+        },
+        "references": {
+          "cluster": "aws_ecs_cluster.main",
+          "task_definition": "aws_ecs_task_definition.app"
+        },
+        "region": "eu-west-2",
+        "scope": "root",
+        "type": "aws_ecs_service",
+        "unknown": [
+          "task_definition"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "aws_ecs_task_definition.app",
+        "name": "app",
+        "properties": {
+          "container_definitions": "[{\"essential\":true,\"image\":\"public.ecr.aws/nginx/nginx:stable\",\"name\":\"app\",\"portMappings\":[{\"containerPort\":80}]}]",
+          "cpu": "1024",
+          "ephemeral_storage": [],
+          "family": "app",
+          "memory": "2048",
+          "network_mode": "awsvpc",
+          "placement_constraints": [],
+          "proxy_configuration": [],
+          "region": "eu-west-2",
+          "requires_compatibilities": [
+            "FARGATE"
+          ],
+          "runtime_platform": {
+            "cpu_architecture": "ARM64",
+            "operating_system_family": "LINUX"
+          },
+          "skip_destroy": false,
+          "track_latest": false,
+          "volume": []
+        },
+        "region": "eu-west-2",
+        "scope": "root",
+        "type": "aws_ecs_task_definition",
+        "vendor": "aws"
+      },
+      {
+        "id": "aws_iam_role.fn",
+        "name": "fn",
+        "properties": {
+          "arn": "arn:aws:iam::123456789012:role/fn-role",
+          "assume_role_policy": "{\"Statement\":[{\"Action\":\"sts:AssumeRole\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"}}],\"Version\":\"2012-10-17\"}",
+          "create_date": "2026-10-28T19:50:00Z",
+          "force_detach_policies": false,
+          "id": "fn-role",
+          "inline_policy": [],
+          "max_session_duration": 3600,
+          "name": "fn-role",
+          "path": "/",
+          "tags_all": {},
+          "unique_id": "fake-role-id"
+        },
+        "region": "eu-west-2",
+        "scope": "root",
+        "type": "aws_iam_role",
+        "vendor": "aws"
+      },
+      {
+        "id": "aws_lambda_function.handler",
+        "name": "handler",
+        "properties": {
+          "architectures": [
+            "arm64"
+          ],
+          "arn": "arn:aws:lambda:eu-west-2:123456789012:function:handler",
+          "dead_letter_config": [],
+          "environment": {
+            "variables": {
+              "STAGE": "dev"
+            }
+          },
+          "ephemeral_storage": [],
+          "file_system_config": [],
+          "filename": "handler.zip",
+          "function_name": "handler",
+          "handler": "index.handler",
+          "id": "handler",
+          "image_config": [],
+          "invoke_arn": "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:123456789012:function:handler/invocations",
+          "last_modified": "2026-10-28T19:50:05.000+0000",
+          "logging_config": [],
+          "memory_size": 1024,
+          "package_type": "Zip",
+          "publish": false,
+          "qualified_arn": "arn:aws:lambda:eu-west-2:123456789012:function:handler:$LATEST",
+          "region": "eu-west-2",
+          "reserved_concurrent_executions": -1,
+          "role": "arn:aws:iam::123456789012:role/fn-role",
+          "runtime": "nodejs20.x",
+          "skip_destroy": false,
+          "snap_start": [],
+          "source_code_hash": "GSnowjV3Fdr873nubpjOfLGK6NycMpSthHueNBRBeig=",
+          "source_code_size": 192,
+          "tags": {
+            "team": "payments"
+          },
+          "tags_all": {
+            "team": "payments"
+          },
+          "timeout": 30,
+          "tracing_config": [],
+          "version": "$LATEST",
+          "vpc_config": []
+        },
+        "references": {
+          "role": "aws_iam_role.fn"
+        },
+        "region": "eu-west-2",
+        "scope": "root",
+        "tags": {
+          "team": "payments"
+        },
+        "type": "aws_lambda_function",
+        "unknown": [
+          "environment.variables.API_KEY"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "google_cloud_run_v2_service.web",
+        "name": "web",
+        "properties": {
+          "binary_authorization": [],
+          "build_config": [],
+          "deletion_protection": false,
+          "effective_labels": {
+            "goog-terraform-provisioned": "true"
+          },
+          "generation": "1",
+          "id": "projects/cost-fixture/locations/europe-west1/services/web",
+          "ingress": "INGRESS_TRAFFIC_ALL",
+          "launch_stage": "GA",
+          "location": "europe-west1",
+          "multi_region_settings": [],
+          "name": "web",
+          "project": "cost-fixture",
+          "scaling": [],
+          "template": {
+            "annotations": {},
+            "containers": {
+              "args": [],
+              "base_image_uri": "",
+              "build_info": [],
+              "command": [],
+              "depends_on": [],
+              "env": [],
+              "image": "us-docker.pkg.dev/cloudrun/container/hello",
+              "liveness_probe": [],
+              "name": "",
+              "ports": [],
+              "resources": {
+                "cpu_idle": false,
+                "limits": {
+                  "cpu": "1",
+                  "memory": "512Mi"
+                },
+                "startup_cpu_boost": false
+              },
+              "startup_probe": [],
+              "volume_mounts": [],
+              "working_dir": ""
+            },
+            "encryption_key": "",
+            "execution_environment": "",
+            "gpu_zonal_redundancy_disabled": false,
+            "health_check_disabled": false,
+            "labels": {},
+            "max_instance_request_concurrency": 0,
+            "node_selector": [],
+            "revision": "",
+            "scaling": {
+              "max_instance_count": 10,
+              "min_instance_count": 0
+            },
+            "service_account": "",
+            "session_affinity": false,
+            "timeout": "",
+            "volumes": [],
+            "vpc_access": []
+          },
+          "terraform_labels": {
+            "goog-terraform-provisioned": "true"
+          },
+          "traffic": [],
+          "uri": "https://web-uc.a.run.app"
+        },
+        "region": "europe-west1",
+        "scope": "root",
+        "type": "google_cloud_run_v2_service",
+        "vendor": "gcp"
+      },
+      {
+        "id": "module.db.aws_rds_cluster.main",
+        "name": "main",
+        "properties": {
+          "cluster_identifier": "cost-fixture-db",
+          "copy_tags_to_snapshot": false,
+          "database_name": "app",
+          "delete_automated_backups": true,
+          "enable_global_write_forwarding": false,
+          "enable_http_endpoint": false,
+          "enable_local_write_forwarding": false,
+          "engine": "aurora-postgresql",
+          "engine_mode": "provisioned",
+          "engine_version": "16.4",
+          "master_username": "app",
+          "region": "eu-west-1",
+          "restore_to_point_in_time": [],
+          "s3_import": [],
+          "scaling_configuration": [],
+          "serverlessv2_scaling_configuration": {
+            "max_capacity": 4,
+            "min_capacity": 0.5
+          },
+          "skip_final_snapshot": true,
+          "storage_encrypted": true
+        },
+        "region": "eu-west-1",
+        "scope": "module.db",
+        "type": "aws_rds_cluster",
+        "unknown": [
+          "master_password"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "module.db.aws_rds_cluster_instance.main[0]",
+        "name": "main[0]",
+        "properties": {
+          "auto_minor_version_upgrade": true,
+          "copy_tags_to_snapshot": false,
+          "engine": "aurora-postgresql",
+          "engine_version": "16.4",
+          "force_destroy": false,
+          "identifier": "cost-fixture-db-0",
+          "instance_class": "db.serverless",
+          "monitoring_interval": 0,
+          "promotion_tier": 0,
+          "region": "eu-west-1"
+        },
+        "references": {
+          "cluster_identifier": "module.db.aws_rds_cluster.main",
+          "engine": "module.db.aws_rds_cluster.main",
+          "engine_version": "module.db.aws_rds_cluster.main"
+        },
+        "region": "eu-west-1",
+        "scope": "module.db",
+        "type": "aws_rds_cluster_instance",
+        "unknown": [
+          "cluster_identifier"
+        ],
+        "vendor": "aws"
+      }
+    ],
+    "scopes": [
+      {
+        "id": "root",
+        "kind": "module",
+        "name": "root"
+      },
+      {
+        "id": "module.db",
+        "kind": "module",
+        "name": "module.db",
+        "parent": "root"
+      }
+    ],
+    "source": "terraform"
+  }
+}

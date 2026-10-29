@@ -26,7 +26,7 @@
   {
     "name": "pkg, s3, pgmq, realtime and edge",
     "scope": "pkg",
-    "dirs": "pkg pkg/provider/pulumi platform/s3 platform/pgmq platform/realtime platform/edge/cloudflare/deploy",
+    "dirs": "pkg pkg/provider/pulumi platform/s3 platform/pgmq platform/realtime platform/edge/cloudflare/deploy scripts/pricingbridge",
     "generate": "pkg/provider/transform platform/edge/cloudflare/deploy"
   }
 ]
