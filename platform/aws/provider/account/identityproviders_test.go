@@ -282,7 +282,7 @@ func TestATrustThatMovesReleasesWhatTheTierTrustedBefore(t *testing.T) {
 		{
 			name:    "to another audience",
 			req:     moved(func(trust *provider.WebIdentityTrust) { trust.Audience = "https://moved.example.com" }),
-			planned: provider.Change{Kind: identityProviderKind, Name: fixtureIssuerHost, Action: provider.ActionUpdate, Reason: "drops audience " + fixtureAudience},
+			planned: provider.Change{Kind: identityProviderKind, Name: fixtureIssuerHost, Action: provider.ActionUpdate, Reason: "adds audience https://moved.example.com, drops audience " + fixtureAudience},
 			left: func(providers *fakeIdentityProviders) string {
 				made, _ := providers.has(fixtureIssuerHost)
 				if made == nil || !reflect.DeepEqual(made.clientIDs, []string{"https://moved.example.com"}) {
@@ -312,6 +312,53 @@ func TestATrustThatMovesReleasesWhatTheTierTrustedBefore(t *testing.T) {
 			}
 			if problem := tc.left(providers); problem != "" {
 				t.Error(problem)
+			}
+		})
+	}
+}
+
+func TestAPlanShowsAnIdentityProviderOnceWhenItsAudienceMoves(t *testing.T) {
+	const moved = "https://moved.example.com"
+	for _, tc := range []struct {
+		name    string
+		admit   bool
+		planned provider.Change
+	}{
+		{
+			name:    "to an audience the provider does not admit",
+			planned: provider.Change{Kind: identityProviderKind, Name: fixtureIssuerHost, Action: provider.ActionUpdate, Reason: "adds audience " + moved + ", drops audience " + fixtureAudience},
+		},
+		{
+			name:    "to an audience the provider already admits",
+			admit:   true,
+			planned: provider.Change{Kind: identityProviderKind, Name: fixtureIssuerHost, Action: provider.ActionUpdate, Reason: "drops audience " + fixtureAudience},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+			apis := apisOf(stacks, ssmc, iamc, preloadedStore())
+			providers := apis.IdentityProviders.(*fakeIdentityProviders)
+			if err := Run(context.Background(), apis, defaultNamespace, environment.TierProduction, everything(), nil); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if tc.admit {
+				if _, err := providers.AddClientIDToOpenIDConnectProvider(context.Background(), &awsiam.AddClientIDToOpenIDConnectProviderInput{
+					OpenIDConnectProviderArn: aws.String(fakeIdentityProviderARNPrefix + fixtureIssuerHost),
+					ClientID:                 aws.String(moved),
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			req := everything()
+			req.Trust = fixtureTrust()
+			req.Trust.Audience = moved
+
+			planned, err := plannedTrustedIssuer(context.Background(), ParamAPIs{Stacks: stacks, IdentityProviders: providers}, defaultNamespace, environment.TierProduction, req)
+			if err != nil {
+				t.Fatalf("plannedTrustedIssuer: %v", err)
+			}
+			if !reflect.DeepEqual(planned, []provider.Change{tc.planned}) {
+				t.Errorf("planned %+v, want the one provider shown once as %+v", planned, tc.planned)
 			}
 		})
 	}
