@@ -12,7 +12,8 @@ func RefuseUnconsentedChanges(shown, fresh Plan) error {
 	for _, group := range shown.Groups {
 		rows[group.Name] = group.Action
 		for _, change := range group.Changes {
-			rows[rowKey(group, change)] = change.Action
+			key := rowKey(group, change)
+			rows[key] = consented(rows[key], change.Action)
 		}
 	}
 
@@ -31,6 +32,26 @@ func RefuseUnconsentedChanges(shown, fresh Plan) error {
 
 func rowKey(group ChangeGroup, change Change) string {
 	return group.Name + "/" + change.Kind + "/" + change.Name
+}
+
+func consented(held, shown ChangeAction) ChangeAction {
+	if weight(shown) > weight(held) {
+		return shown
+	}
+	return held
+}
+
+func weight(action ChangeAction) int {
+	switch {
+	case action == "":
+		return 0
+	case destroys(action):
+		return 3
+	case action.Writes():
+		return 2
+	default:
+		return 1
+	}
 }
 
 type unconsentedDrift struct {
