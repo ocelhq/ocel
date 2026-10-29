@@ -51,6 +51,11 @@ const (
 
 const MaxRequestTimeout = 3600 * time.Second
 
+const (
+	startupProbeWindow = 240 * time.Second
+	startupProbePeriod = 10 * time.Second
+)
+
 type Serving struct {
 	Service     string
 	Tier        environment.Tier
@@ -159,7 +164,9 @@ func ServiceOf(s Serving) (*run.GoogleCloudRunV2Service, error) {
 	}
 	if s.Compute == provider.ComputeContainer {
 		container.StartupProbe = &run.GoogleCloudRunV2Probe{
-			HttpGet: &run.GoogleCloudRunV2HTTPGetAction{Path: s.Health, Port: containerimage.Port},
+			HttpGet:          &run.GoogleCloudRunV2HTTPGetAction{Path: s.Health, Port: containerimage.Port},
+			PeriodSeconds:    int64(startupProbePeriod / time.Second),
+			FailureThreshold: int64(startupProbeWindow / startupProbePeriod),
 		}
 		if s.ProbeToken != "" {
 			container.StartupProbe.HttpGet.HttpHeaders = []*run.GoogleCloudRunV2HTTPHeader{{Name: originguard.ProbeTokenHeader, Value: s.ProbeToken}}
