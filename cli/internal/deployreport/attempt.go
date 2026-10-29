@@ -2,6 +2,8 @@ package deployreport
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -83,6 +85,11 @@ func lastRunes(text string, limit int) string {
 		return text
 	}
 	return string(runes[len(runes)-limit:])
+}
+
+func TierEventID(traceID string, tier environmentv1.Tier) string {
+	sum := sha256.Sum256([]byte(traceID + "/" + tier.String()))
+	return hex.EncodeToString(sum[:16])
 }
 
 func NewEnvironmentEvent(ctx context.Context, kind consolev1.EnvironmentEventKind, env *environmentv1.Environment, traceID string, at time.Time, projectDir string, getenv func(string) string) *consolev1.EnvironmentEvent {
