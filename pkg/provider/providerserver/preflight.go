@@ -119,7 +119,7 @@ func (h *handlers) preflight(ctx context.Context, steps preflightSteps, p provid
 		return resp, nil
 	}
 	resp.InfraTier, resp.InfrastructurePresent = encodeTier(tier), true
-	if h.session.deploysWithWebIdentity() {
+	if h.session.deploysWithWebIdentity() && offersConsoleTrust(offered) {
 		if err := refuseStaleDeployIdentity(status.own, tier); err != nil {
 			return nil, provider.RefusalError(err)
 		}
@@ -454,6 +454,10 @@ func CredentialProblemProto(vendor provider.Vendor, err error) *contractv1.Crede
 	}
 	problem.Message = fmt.Sprintf("could not authenticate: %v", err)
 	return problem
+}
+
+func offersConsoleTrust(offered []provider.Part) bool {
+	return slices.ContainsFunc(offered, func(part provider.Part) bool { return part.Name == provider.ConsoleTrustPart })
 }
 
 func refuseStaleDeployIdentity(status bootstrapplan.Status, tier environment.Tier) error {
