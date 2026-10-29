@@ -21,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
@@ -139,9 +138,6 @@ func newMux(config Config) *http.ServeMux {
 	path, handler = variablestorev1connect.NewVariableStoreServiceHandler(services, interceptors)
 	mux.Handle(path, handler)
 
-	path, handler = costv1connect.NewCostServiceHandler(services, interceptors)
-	mux.Handle(path, handler)
-
 	return mux
 }
 
@@ -159,7 +155,6 @@ type handlers struct {
 var (
 	_ contractv1connect.ProviderServiceHandler           = (*handlers)(nil)
 	_ variablestorev1connect.VariableStoreServiceHandler = (*handlers)(nil)
-	_ costv1connect.CostServiceHandler                   = (*handlers)(nil)
 )
 
 type sessionBackend struct {

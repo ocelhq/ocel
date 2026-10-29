@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -18,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -70,7 +68,7 @@ func (p *Realtime) Component() component.Component {
 		Types:         []provider.BindingType{provider.BindingRealtime},
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
-		Shape:         shapeRealtime,
+		Inventory:     realtimeInventory,
 		Parts:         []component.Part{component.NewPart(bootstrap.Realtime)},
 		Accounts:      []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}},
 	}
@@ -330,42 +328,39 @@ func (r realtimeEnvironment) place(ctx context.Context, keys map[string]string, 
 	return r.serveGateway(ctx, keys, progress)
 }
 
-func shapeRealtime(shape component.Shape, declared []provider.Resource) error {
-	tree, names, req, region, environment := shape.Tree, shape.Names, shape.Request, shape.Region, shape.Environment
-	secret, _ := bootstrap.Resource{Kind: bootstrap.KindSecret}.Shape(region)
+func realtimeInventory(inventory component.Inventory, declared []provider.Resource) error {
+	tree, names, req, region, environment := inventory.Tree, inventory.Names, inventory.Request, inventory.Region, inventory.Environment
+	secret, _ := bootstrap.Resource{Kind: bootstrap.KindSecret}.Inventory(region)
 	for _, resource := range declared {
 		namespace := realtimeNamespaceOf(resource.Declared, resource.Name)
 		signing, err := names.RealtimeSigningSecret(req.Deploy.Slug, req.Deploy.Env, namespace)
 		if err != nil {
 			return err
 		}
-		tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, signing, region, secret.Properties)
+		tree.Add(environment, inventory.Vendor, gcloud.SecretManagerSecretType, signing, region, secret.Properties)
 	}
 	keys, err := names.RealtimeKeysSecret(req.Deploy.Tier, req.Deploy.Slug, req.Deploy.Env)
 	if err != nil {
 		return err
 	}
-	tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, keys, region, secret.Properties)
+	tree.Add(environment, inventory.Vendor, gcloud.SecretManagerSecretType, keys, region, secret.Properties)
 	gateway, err := names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env)
 	if err != nil {
 		return err
 	}
-	tree.Add(environment, shape.Vendor, cost.PubSubTopicType, gateway, region, map[string]any{})
-	tree.Add(environment, shape.Vendor, cost.PubSubSubscriptionType, gateway, region, map[string]any{})
-	tree.Add(environment, shape.Vendor, cost.CloudRunServiceType, gateway, region, map[string]any{
-		"location":      region,
-		"ingress":       run.IngressEverywhere,
-		"holds_sockets": true,
-		"template": map[string]any{
-			"scaling":                          map[string]any{"min_instance_count": 0, "max_instance_count": realtimeGatewayInstances},
-			"max_instance_request_concurrency": realtimeGatewayConcurrency,
-			"containers": []any{map[string]any{
-				"resources": map[string]any{
-					"cpu_idle": true,
-					"limits":   map[string]any{"cpu": realtimeGatewayCPU, "memory": strconv.Itoa(realtimeGatewayMemoryMiB) + "Mi"},
-				},
-			}},
-		},
-	})
+	tree.Add(environment, inventory.Vendor, gcloud.PubSubTopicType, gateway, region, map[string]any{})
+	tree.Add(environment, inventory.Vendor, gcloud.PubSubSubscriptionType, gateway, region, map[string]any{})
+	ref := provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: req.Deploy.Infra}
+	serving, err := realtimeGatewayServing(names, ref, gateway, "", "", "", "")
+	if err != nil {
+		return err
+	}
+	sent, err := run.ServiceOf(serving)
+	if err != nil {
+		return err
+	}
+	properties := run.PropertiesOf(sent)
+	properties["location"] = region
+	tree.Add(environment, inventory.Vendor, gcloud.CloudRunServiceType, gateway, region, properties)
 	return nil
 }

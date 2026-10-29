@@ -15,12 +15,12 @@ func New() component.Component {
 		Declare:    declare,
 		Collect:    topic.Collect,
 		Credential: credential,
-		Shape: func(cost component.CostTree, scope string, at component.Stack, declared []provider.Resource) error {
+		Inventory: func(tree component.InventoryTree, scope string, at component.Stack, declared []provider.Resource) error {
 			topics, err := topic.Of(topic.NamesAt(at), declared)
 			if err != nil {
 				return err
 			}
-			topic.Shape(cost, scope, topics)
+			topic.Inventory(tree, scope, topics)
 			return nil
 		},
 	}

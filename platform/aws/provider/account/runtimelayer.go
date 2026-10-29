@@ -363,10 +363,10 @@ func DeleteRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, store rec
 	return records.Forget(ctx, store, runtimeLayersKey(tier))
 }
 
-func ShapeRuntimeLayers() []pricing.Shaped {
-	shaped := make([]pricing.Shaped, 0, len(runtimeArches()))
+func RuntimeLayersInventory() []pricing.Item {
+	items := make([]pricing.Item, 0, len(runtimeArches()))
 	for _, architecture := range runtimeArches() {
-		shaped = append(shaped, pricing.Shaped{Name: "RuntimeLayer" + runtimeArchTokens[architecture], Type: shapedTypes[runtimeLayerType].token, Properties: map[string]any{}})
+		items = append(items, pricing.Item{Name: "RuntimeLayer" + runtimeArchTokens[architecture], Type: inventoryTypes[runtimeLayerType].token, Properties: map[string]any{}})
 	}
-	return shaped
+	return items
 }

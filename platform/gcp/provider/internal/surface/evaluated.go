@@ -135,10 +135,10 @@ func (s Surface[D, U]) SplitOutputs(patch map[string]any) (map[string]any, []str
 	return known, unknown
 }
 
-func ListPriced(unknown []string, priced map[string]string) []string {
+func UnknownProperties(unknown []string, properties map[string]string) []string {
 	var listed []string
 	for _, path := range unknown {
-		if property, found := priced[path]; found {
+		if property, found := properties[path]; found {
 			listed = append(listed, property)
 		}
 	}

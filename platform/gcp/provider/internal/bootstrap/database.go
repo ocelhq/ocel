@@ -12,7 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -38,7 +37,7 @@ const (
 
 var databaseKind = KindOps{
 	noun:          "Firestore database",
-	terraform:     cost.FirestoreDatabaseType,
+	terraform:     gcloud.FirestoreDatabaseType,
 	emulatorKeeps: reasonEmulated,
 	survey: func(ctx context.Context, b Engine, _ Survey, target Resource) (Presence, error) {
 		return b.databasePresence(ctx, target.Name)

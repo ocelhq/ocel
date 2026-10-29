@@ -231,7 +231,7 @@ func TestAStoreRunsOnTheSmallestNodeWhoseKeyspaceHoldsItsMemory(t *testing.T) {
 	}
 }
 
-func TestTheStoreShapeMatchesTheInstanceProvisionSends(t *testing.T) {
+func TestTheStoreInventoryMatchesTheInstanceProvisionSends(t *testing.T) {
 	t.Parallel()
 
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
@@ -241,15 +241,15 @@ func TestTheStoreShapeMatchesTheInstanceProvisionSends(t *testing.T) {
 				t.Fatal(err)
 			}
 			sent := store.instance("acme-prod", "network", nil)
-			shaped := store.shapeProperties("us-central1", sent)
-			if strings.ReplaceAll(strings.ToUpper(shaped["node_type"].(string)), "-", "_") != sent.NodeType {
-				t.Errorf("shaped node %v, provision sends %s", shaped["node_type"], sent.NodeType)
+			listed := store.inventoryProperties("us-central1", sent)
+			if listed["node_type"] != sent.NodeType {
+				t.Errorf("lists node %v, provision sends %s", listed["node_type"], sent.NodeType)
 			}
-			if shaped["replica_count"] != *sent.ReplicaCount || shaped["shard_count"] != sent.ShardCount {
-				t.Errorf("shaped %v replicas and %v shards, provision sends %d and %d", shaped["replica_count"], shaped["shard_count"], *sent.ReplicaCount, sent.ShardCount)
+			if listed["replica_count"] != *sent.ReplicaCount || listed["shard_count"] != sent.ShardCount {
+				t.Errorf("lists %v replicas and %v shards, provision sends %d and %d", listed["replica_count"], listed["shard_count"], *sent.ReplicaCount, sent.ShardCount)
 			}
-			if shaped["persistence_config"].(map[string]any)["mode"] != sent.PersistenceConfig.Mode {
-				t.Errorf("shaped persistence %v, provision sends %s", shaped["persistence_config"], sent.PersistenceConfig.Mode)
+			if listed["persistence_config"].(map[string]any)["mode"] != sent.PersistenceConfig.Mode {
+				t.Errorf("lists persistence %v, provision sends %s", listed["persistence_config"], sent.PersistenceConfig.Mode)
 			}
 		}
 	}

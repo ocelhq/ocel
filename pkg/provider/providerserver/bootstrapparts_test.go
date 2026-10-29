@@ -3,6 +3,7 @@ package providerserver_test
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -82,38 +83,63 @@ func TestABootstrapRecordsWhatEachPartItCreatedHoldsAndTheDigestOfItsContent(t *
 	}
 }
 
-func TestAPartsIdleCostIsTheFixedMonthlyCostOfWhatItHoldsAndUnknownWithoutAShape(t *testing.T) {
+func TestADescribedBootstrapListsTheInventoryOfEachPartThatHasOneUnderAScopeOfItsOwn(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	vendor.FakeBootstrap().AddPart(environment.TierProduction, provider.BootstrapPart{
 		Name:   "containers",
 		UsedBy: []string{"api"},
-		Shape: &provider.PartShape{Vendor: string(fake.Vendor), Resources: []pricing.Shaped{
+		Inventory: &provider.PartInventory{Vendor: string(fake.Vendor), Region: "nowhere", Resources: []pricing.Item{
 			{Name: "containers", Type: fake.TypeContainer, Properties: map[string]any{}},
 		}},
 	})
 	vendor.FakeBootstrap().AddPart(environment.TierProduction, provider.BootstrapPart{Name: "bastion"})
 
-	parts := describedParts(t, client)
-	for _, name := range []string{provider.BasePart, "containers", "bastion"} {
-		if parts[name] == nil {
-			t.Fatalf("DescribeBootstrap() parts = %v, want %s among them", parts, name)
+	described, err := client.DescribeBootstrap(context.Background(), &contractv1.DescribeBootstrapRequest{
+		Tier:      environmentv1.Tier_TIER_PRODUCTION,
+		WithParts: true,
+	})
+	if err != nil {
+		t.Fatalf("DescribeBootstrap() error = %v", err)
+	}
+	inventory := described.GetInventory()
+	if inventory.GetSource() != provider.InventorySource {
+		t.Errorf("inventory source = %q, want %q", inventory.GetSource(), provider.InventorySource)
+	}
+	scopes := map[string]string{}
+	for _, scope := range inventory.GetScopes() {
+		if scope.GetKind() != "part" || scope.GetParent() != "" {
+			t.Errorf("scope %v, want a root scope of kind part", scope)
+		}
+		scopes[scope.GetId()] = scope.GetName()
+	}
+	named := slices.Collect(maps.Values(scopes))
+	if !slices.Contains(named, provider.BasePart) || !slices.Contains(named, "containers") || slices.Contains(named, "bastion") {
+		t.Errorf("part scopes = %v, want the base and containers and nothing for bastion, which lists no inventory", scopes)
+	}
+	var listed []string
+	for _, resource := range inventory.GetResources() {
+		if scopes[resource.GetScope()] == "containers" {
+			listed = append(listed, resource.GetType()+" "+resource.GetVendor()+" "+resource.GetRegion())
 		}
 	}
+	if want := []string{fake.TypeContainer + " fake nowhere"}; !slices.Equal(listed, want) {
+		t.Errorf("containers lists %v, want %v", listed, want)
+	}
+}
 
-	if got := parts[provider.BasePart]; got.IdleMonthlyFixed == nil || got.GetIdleMonthlyFixed() != "0.00" {
-		t.Errorf("base idle = %v, want 0.00: storage is billed by use", got.IdleMonthlyFixed)
+func TestABootstrapDescribedWithoutItsPartsListsNoInventory(t *testing.T) {
+	t.Parallel()
+	client, _ := contractServed(t, "1.2.3")
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+
+	described, err := client.DescribeBootstrap(context.Background(), &contractv1.DescribeBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	if err != nil {
+		t.Fatalf("DescribeBootstrap() error = %v", err)
 	}
-	containers := parts["containers"]
-	if containers.GetIdleMonthlyFixed() != "7.30" || containers.GetCurrency() != "USD" {
-		t.Errorf("containers idle = %s %s, want 7.30 USD for a container running every hour", containers.GetIdleMonthlyFixed(), containers.GetCurrency())
-	}
-	if !slices.Equal(containers.GetUsedBy(), []string{"api"}) {
-		t.Errorf("containers used by %v, want the users its vendor reported", containers.GetUsedBy())
-	}
-	if parts["bastion"].IdleMonthlyFixed != nil {
-		t.Errorf("bastion idle = %s, want it unknown: nothing shapes it", parts["bastion"].GetIdleMonthlyFixed())
+	if described.Inventory != nil {
+		t.Errorf("inventory = %v, want none when the parts were not asked for", described.GetInventory())
 	}
 }
 

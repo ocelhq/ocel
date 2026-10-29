@@ -14,9 +14,9 @@ import (
 
 func RuntimeLayersPart(layers account.LayerTeardownAPI, store account.RecordStore, ns account.Namespace, region string, read func(context.Context, environment.Tier) (account.Reading, error)) tier.Part {
 	return tier.Part{
-		Name:    account.RuntimeLayersPart,
-		Summary: account.RuntimeLayersSummary,
-		Shape:   func(environment.Tier) []pricing.Shaped { return account.ShapeRuntimeLayers() },
+		Name:      account.RuntimeLayersPart,
+		Summary:   account.RuntimeLayersSummary,
+		Inventory: func(environment.Tier) []pricing.Item { return account.RuntimeLayersInventory() },
 		Teardown: &tier.Removal{
 			Plan: func(ctx context.Context, at environment.Tier) (*provider.ChangeGroup, error) {
 				reading, err := read(ctx, at)
@@ -47,7 +47,7 @@ func RuntimeLayersPart(layers account.LayerTeardownAPI, store account.RecordStor
 			if err != nil || !found {
 				return provider.BootstrapPart{}, false, err
 			}
-			part.Shape = &provider.PartShape{Vendor: string(groupVendor), Region: region, Resources: account.ShapeRuntimeLayers()}
+			part.Inventory = &provider.PartInventory{Vendor: string(groupVendor), Region: region, Resources: account.RuntimeLayersInventory()}
 			return part, true, nil
 		},
 	}

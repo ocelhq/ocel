@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
@@ -30,7 +31,7 @@ type Component struct {
 	Sweep        func(ctx context.Context, at Stack, kept []provider.Resource) error
 	Teardown     *Teardown
 	Transform    func(at Stack, declared provider.Resource) (Transformable, error)
-	Shape        func(cost CostTree, scope string, at Stack, declared []provider.Resource) error
+	Inventory    func(tree InventoryTree, scope string, at Stack, declared []provider.Resource) error
 }
 
 type Teardown struct {
@@ -76,9 +77,9 @@ type Transformable struct {
 	Check func(name string, patches map[string]map[string]any) error
 }
 
-type CostTree interface {
-	Add(scope, typ, name string, properties map[string]any, ref ocelpulumi.ResourceRef)
-	AddPlain(scope, typ, name string, properties map[string]any)
+type InventoryTree interface {
+	Add(scope, typ, name string, properties map[string]any, ref ocelpulumi.ResourceRef) *costv1.Resource
+	AddPlain(scope, typ, name string, properties map[string]any) *costv1.Resource
 }
 
 type Registry struct {

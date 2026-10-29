@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/valkey"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
@@ -40,21 +39,16 @@ const (
 type memorystoreNode struct {
 	nodeType      string
 	keyspaceBytes int64
-	capacityGB    float64
-}
-
-func (n memorystoreNode) terraformNodeType() string {
-	return strings.ToLower(strings.ReplaceAll(n.nodeType, "_", "-"))
 }
 
 var memorystoreNodes = []memorystoreNode{
-	{nodeType: "CUSTOM_PICO", keyspaceBytes: 1_080_000_000, capacityGB: 1.25},
-	{nodeType: "CUSTOM_MICRO", keyspaceBytes: 2_000_000_000, capacityGB: 2.5},
-	{nodeType: "CUSTOM_MINI", keyspaceBytes: 3_000_000_000, capacityGB: 3.75},
-	{nodeType: "STANDARD_SMALL", keyspaceBytes: 5_200_000_000, capacityGB: 6.5},
-	{nodeType: "HIGHMEM_MEDIUM", keyspaceBytes: 10_400_000_000, capacityGB: 13},
-	{nodeType: "STANDARD_LARGE", keyspaceBytes: 20_800_000_000, capacityGB: 26},
-	{nodeType: "HIGHMEM_XLARGE", keyspaceBytes: 46_400_000_000, capacityGB: 58},
+	{nodeType: "CUSTOM_PICO", keyspaceBytes: 1_080_000_000},
+	{nodeType: "CUSTOM_MICRO", keyspaceBytes: 2_000_000_000},
+	{nodeType: "CUSTOM_MINI", keyspaceBytes: 3_000_000_000},
+	{nodeType: "STANDARD_SMALL", keyspaceBytes: 5_200_000_000},
+	{nodeType: "HIGHMEM_MEDIUM", keyspaceBytes: 10_400_000_000},
+	{nodeType: "STANDARD_LARGE", keyspaceBytes: 20_800_000_000},
+	{nodeType: "HIGHMEM_XLARGE", keyspaceBytes: 46_400_000_000},
 }
 
 var engineVersions = map[string]string{"8": "VALKEY_8_0", "9": "VALKEY_9_1"}
@@ -128,12 +122,11 @@ func (s kvStore) instance(project, network string, labels map[string]string) *gc
 	}
 }
 
-func (s kvStore) shapeProperties(region string, instance *gcloud.MemorystoreInstance) map[string]any {
+func (s kvStore) inventoryProperties(region string, instance *gcloud.MemorystoreInstance) map[string]any {
 	return map[string]any{
 		"location":           region,
 		"mode":               clusterModeOff,
-		"node_type":          s.node.terraformNodeType(),
-		"node_capacity_gb":   s.node.capacityGB,
+		"node_type":          s.node.nodeType,
 		"shard_count":        1,
 		"replica_count":      replicasOf(instance),
 		"persistence_config": map[string]any{"mode": appendOnly, "aof_config": map[string]any{"append_fsync": fsyncEverySecond}},
@@ -552,32 +545,32 @@ func (p *KV) Component() component.Component {
 			_, err := readKVStore(resource)
 			return err
 		},
-		Shape:      shapeKV,
+		Inventory:  kvInventory,
 		Transforms: map[provider.BindingType]*component.Transform{provider.BindingKV: transformTarget()},
 	}
 }
 
-func shapeKV(shape component.Shape, declared []provider.Resource) error {
-	tier := shape.Request.Deploy.Tier
+func kvInventory(inventory component.Inventory, declared []provider.Resource) error {
+	tier := inventory.Request.Deploy.Tier
 	for _, resource := range declared {
 		store, err := readKVStoreOn(resource, tier)
 		if err != nil {
 			return err
 		}
-		instance, err := shape.Names.KVInstance(shape.Request.Deploy.Slug, shape.Request.Deploy.Env, resource.Name)
+		instance, err := inventory.Names.KVInstance(inventory.Request.Deploy.Slug, inventory.Request.Deploy.Env, resource.Name)
 		if err != nil {
 			return err
 		}
-		result := shape.Transforms.For(transformKind, resource.Name)
+		result := inventory.Transforms.For(transformKind, resource.Name)
 		known, unknown := storeSurface.SplitOutputs(result.Patches[transformSurface])
-		patched, err := storeSurface.Patch("kv "+resource.Name, *store.instance(shape.Names.Project(), shape.Names.NetworkPath(tier), nil), known, nil, surface.Recorded{})
+		patched, err := storeSurface.Patch("kv "+resource.Name, *store.instance(inventory.Names.Project(), inventory.Names.NetworkPath(tier), nil), known, nil, surface.Recorded{})
 		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.MemorystoreInstanceType, instance, shape.Region, store.shapeProperties(shape.Region, &patched.Desired),
-			surface.ListPriced(unknown, pricedPaths)...)
+		inventory.Tree.Add(inventory.Environment, inventory.Vendor, gcloud.MemorystoreInstanceType, instance, inventory.Region, store.inventoryProperties(inventory.Region, &patched.Desired),
+			surface.UnknownProperties(unknown, inventoryPaths)...)
 	}
 	return nil
 }
 
-var pricedPaths = map[string]string{"replicaCount": "replica_count"}
+var inventoryPaths = map[string]string{"replicaCount": "replica_count"}

@@ -46,7 +46,7 @@ const credentialHeading = "AWS credentials"
 
 const credentialHint = "configure AWS credentials (set AWS_PROFILE, run `aws sso login`, or export access keys)"
 
-const regionHint = "set the region in the provider options, in AWS_REGION, or as the profile's region under a [profile <name>] header"
+const RegionHint = "set the region in the provider options, in AWS_REGION, or as the profile's region under a [profile <name>] header"
 
 const expiredHint = "the AWS session has expired: run `aws sso login`, or refresh the temporary credentials"
 
@@ -186,7 +186,7 @@ func refuseCallerIdentity(err error) error {
 	case errors.As(err, &refused):
 		return refused
 	case strings.Contains(err.Error(), "Missing Region"):
-		return refusal.Refuse(refusal.CodeInvalid, "%s: %v", regionHint, err)
+		return refusal.Refuse(refusal.CodeInvalid, "%s: %v", RegionHint, err)
 	case errors.As(err, &invalidToken),
 		hasAPIError && (apiErr.ErrorCode() == "ExpiredToken" || apiErr.ErrorCode() == "ExpiredTokenException"):
 		return refusal.Refuse(refusal.CodeDenied, "%s: %v", expiredHint, err)

@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
@@ -268,42 +268,42 @@ func TestRemovingABucketForgetsWhatItsTransformsPatched(t *testing.T) {
 	}
 }
 
-func shapedBucket(t *testing.T, pass transform.Pass) *costv1.Resource {
+func listedBucket(t *testing.T, pass transform.Pass) *costv1.Resource {
 	t.Helper()
 	p := pushing(t, "")
 	p.transforms = pass
-	set, err := p.ShapeCost(context.Background(), provider.ShapeRequest{
+	set, err := p.Inventory(context.Background(), provider.InventoryRequest{
 		Deploy:    provider.DeploySpec{Slug: "shop", Tier: environment.TierProduction, Env: "prod"},
 		Resources: bucketStack().Resources,
 	})
 	if err != nil {
-		t.Fatalf("ShapeCost() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	for _, resource := range set.GetResources() {
 		if resource.GetType() == "google_storage_bucket" && strings.Contains(resource.GetName(), "uploads") {
 			return resource
 		}
 	}
-	t.Fatalf("ShapeCost() shaped %v, want the uploads bucket", set.GetResources())
+	t.Fatalf("Inventory() lists %v, want the uploads bucket", set.GetResources())
 	return nil
 }
 
-func TestABucketIsPricedAtTheStorageClassItsTransformSets(t *testing.T) {
-	shaped := shapedBucket(t, &patching{patches: transform.Patches{"bucket": {"storageClass": "ARCHIVE", "versioning": map[string]any{"enabled": true}}}})
+func TestABucketIsListedAtTheStorageClassItsTransformSets(t *testing.T) {
+	listed := listedBucket(t, &patching{patches: transform.Patches{"bucket": {"storageClass": "ARCHIVE", "versioning": map[string]any{"enabled": true}}}})
 
-	properties := shaped.GetProperties().AsMap()
+	properties := listed.GetProperties().AsMap()
 	if properties["storage_class"] != "ARCHIVE" || properties["versioning"].(map[string]any)["enabled"] != true {
-		t.Errorf("the bucket is priced as %v, want the ARCHIVE class with versioning the transform sets", properties)
+		t.Errorf("the bucket is listed as %v, want the ARCHIVE class with versioning the transform sets", properties)
 	}
 }
 
-func TestABucketWhoseStorageClassABindingFillsIsPricedAsUnknown(t *testing.T) {
-	shaped := shapedBucket(t, &patching{patches: transform.Patches{"bucket": {
+func TestABucketWhoseStorageClassABindingFillsIsListedAsUnknown(t *testing.T) {
+	listed := listedBucket(t, &patching{patches: transform.Patches{"bucket": {
 		"storageClass": map[string]any{"$ocelOutput": map[string]any{"type": "custom", "name": "tiers", "property": "class"}},
 	}}})
 
-	if !slices.Contains(shaped.GetUnknown(), "storage_class") {
-		t.Errorf("the bucket is priced with unknown %v, want its storage class unknown until the deploy reads the record", shaped.GetUnknown())
+	if !slices.Contains(listed.GetUnknown(), "storage_class") {
+		t.Errorf("the bucket is listed with unknown %v, want its storage class unknown until the deploy reads the record", listed.GetUnknown())
 	}
 }
 

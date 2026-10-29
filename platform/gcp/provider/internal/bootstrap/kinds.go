@@ -5,7 +5,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -74,8 +73,8 @@ func init() {
 		KindQueue:          queueKind,
 		KindTierTag:        tierTagKind,
 		KindLogView:        logViewKind,
-		KindService:        {noun: "Cloud Run service", terraform: cost.CloudRunServiceType},
-		KindSchedule:       {noun: "Cloud Scheduler job", terraform: cost.SchedulerJobType},
+		KindService:        {noun: "Cloud Run service", terraform: gcloud.CloudRunServiceType},
+		KindSchedule:       {noun: "Cloud Scheduler job", terraform: gcloud.SchedulerJobType},
 	}
 }
 
@@ -86,16 +85,16 @@ func (k KindOps) mendOrMake(ctx context.Context, b Engine, read Survey, target R
 	return k.Make(ctx, b, read, target)
 }
 
-func (i Resource) Shape(region string) (pricing.Shaped, bool) {
+func (i Resource) Inventory(region string) (pricing.Item, bool) {
 	k := i.KindOps()
 	if k.terraform == "" {
-		return pricing.Shaped{}, false
+		return pricing.Item{}, false
 	}
 	properties := map[string]any{}
 	if k.properties != nil {
 		properties = k.properties(region, i)
 	}
-	return pricing.Shaped{Name: i.Name, Type: k.terraform, Properties: properties}, true
+	return pricing.Item{Name: i.Name, Type: k.terraform, Properties: properties}, true
 }
 
 func kept(target Resource, reason string) Removal {

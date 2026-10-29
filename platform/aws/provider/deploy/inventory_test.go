@@ -1,0 +1,604 @@
+package deploy
+
+import (
+	"context"
+	"maps"
+	"os"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/pricing"
+	"github.com/ocelhq/ocel/pkg/pricing/pricingtest"
+	"github.com/ocelhq/ocel/pkg/pricing/ruleset"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/resources"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
+	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+)
+
+var pulumiTokens = map[string]string{
+	"aws:ec2/vpc:Vpc":                         "aws_vpc",
+	"aws:ec2/subnet:Subnet":                   "aws_subnet",
+	"aws:ec2/internetGateway:InternetGateway": "aws_internet_gateway",
+	"aws:ec2/vpcEndpoint:VpcEndpoint":         "aws_vpc_endpoint",
+	"aws:lambda/function:Function":            "aws_lambda_function",
+	"aws:lambda/functionUrl:FunctionUrl":      "aws_lambda_function_url",
+	"aws:cloudwatch/logGroup:LogGroup":        "aws_cloudwatch_log_group",
+	"aws:s3/bucketV2:BucketV2":                "aws_s3_bucket",
+	"aws:rds/cluster:Cluster":                 "aws_rds_cluster",
+	"aws:rds/clusterInstance:ClusterInstance": "aws_rds_cluster_instance",
+	"aws:ecs/cluster:Cluster":                 "aws_ecs_cluster",
+	"aws:ecs/taskDefinition:TaskDefinition":   "aws_ecs_task_definition",
+	"aws:ecs/service:Service":                 "aws_ecs_service",
+	"aws:lb/loadBalancer:LoadBalancer":        "aws_lb",
+	"aws:ec2/natGateway:NatGateway":           "aws_nat_gateway",
+	"aws:ec2/eip:Eip":                         "aws_eip",
+
+	"aws:elasticache/replicationGroup:ReplicationGroup": "aws_elasticache_replication_group",
+	"aws:elasticache/parameterGroup:ParameterGroup":     "aws_elasticache_parameter_group",
+	"aws:elasticache/subnetGroup:SubnetGroup":           "aws_elasticache_subnet_group",
+
+	"aws:cloudwatch/metricAlarm:MetricAlarm": "aws_cloudwatch_metric_alarm",
+
+	"aws:sqs/queue:Queue":                              "aws_sqs_queue",
+	"aws:sns/topic:Topic":                              "aws_sns_topic",
+	"aws:lambda/eventSourceMapping:EventSourceMapping": "aws_lambda_event_source_mapping",
+	"aws:scheduler/schedule:Schedule":                  "aws_scheduler_schedule",
+	"aws:appsync/api:Api":                              "aws_appsync_api",
+}
+
+func inventoryRequest(t *testing.T) provider.InventoryRequest {
+	t.Helper()
+	release := fixedRelease(t)
+	return provider.InventoryRequest{
+		Deploy: provider.DeploySpec{
+			Slug:  "shop",
+			Tier:  environment.TierProduction,
+			Env:   "prod",
+			Infra: naming.InfraStack("prod"),
+			Apps: []provider.AppEntry{
+				{App: "web", Stack: naming.AppStack("prod", "web", release), Manifest: &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: "next"}, Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}}}, Workers: []provider.WorkerSpec{{Name: "worker"}, {Name: "ledger"}}},
+				{App: "api", Stack: naming.AppStack("prod", "api", release), Manifest: &contractv1.ManifestApp{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}, Instances: provider.Instances{Min: 1, Max: 4}, Workers: []provider.WorkerSpec{{Name: "media", App: "api", Compute: provider.ComputeContainer}}},
+			},
+		},
+		Resources: []provider.Resource{
+			taskResource("transcode", provider.ConsumerSpec{Worker: "media"}),
+			topicResource("uploaded", provider.ConsumerSpec{Name: "thumbnails", Worker: "media"}, provider.ConsumerSpec{Name: "captions", Worker: "media"}),
+			{Name: "main", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}},
+			{Name: "uploads", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
+			{Name: "shared", Type: provider.BindingBucket, Binding: "elsewhere"},
+			{Name: "cache", Type: provider.BindingKV, KV: &provider.KVSpec{}},
+			{Name: "realtime--live", Declared: "live", Type: provider.BindingRealtime, Realtime: &provider.RealtimeSpec{}},
+			{Name: "realtime--chat", Declared: "chat", Type: provider.BindingRealtime, Realtime: &provider.RealtimeSpec{}},
+			taskResource("heartbeat", provider.ConsumerSpec{Worker: "worker"}, cronEveryMinute),
+			topicResource("orders", provider.ConsumerSpec{Name: "audit-log", Worker: "worker"}, provider.ConsumerSpec{Name: "ledger-entry", Worker: "ledger"}),
+		},
+		Functions: map[string][]provider.FunctionSpec{
+			"web": {{Name: "fn--web--entry"}, {Name: "fn--web--admin", Route: "/admin"}},
+		},
+		Usages: []provider.AppUsage{{App: "web", Resources: []provider.Resource{{Name: "main", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}}}}},
+	}
+}
+
+func items(t *testing.T, pass transform.Pass, req provider.InventoryRequest) *costv1.ResourceSet {
+	t.Helper()
+	tree := &pricing.Tree{}
+	project := tree.Scope("", "project", "shop")
+	scopes := InventoryScopes{
+		Shared:      tree.Scope(project, "shared", "production"),
+		Environment: tree.Scope(project, "environment", "prod"),
+	}
+	if err := Inventory(context.Background(), pass, testNamespace, "us-east-1", req, tree, scopes); err != nil {
+		t.Fatalf("Inventory() = %v", err)
+	}
+	set, err := tree.Set("ocel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return set
+}
+
+func countTypes(set *costv1.ResourceSet) map[string]int {
+	counts := map[string]int{}
+	for _, r := range set.GetResources() {
+		counts[r.GetType()]++
+	}
+	return counts
+}
+
+func listedNamed(t *testing.T, set *costv1.ResourceSet, typ, name string) map[string]any {
+	t.Helper()
+	for _, r := range set.GetResources() {
+		if r.GetType() == typ && r.GetName() == name {
+			return r.GetProperties().AsMap()
+		}
+	}
+	t.Fatalf("no %s named %s among %v", typ, name, set.GetResources())
+	return nil
+}
+
+type secretedCluster struct{ *inputRecorder }
+
+func (s secretedCluster) NewResource(args pulumi.MockResourceArgs) (string, resource.PropertyMap, error) {
+	id, state, err := s.inputRecorder.NewResource(args)
+	if secrets := masterUserSecret(args); secrets != nil {
+		state = state.Copy()
+		state["masterUserSecrets"] = secrets["masterUserSecrets"]
+	}
+	return id, state, err
+}
+
+func (s secretedCluster) Call(args pulumi.MockCallArgs) (resource.PropertyMap, error) {
+	return s.inputRecorder.Call(args)
+}
+
+func everyProgramRecorded(t *testing.T) *inputRecorder {
+	t.Helper()
+	rec := &inputRecorder{}
+	run := func(name string, program func(*pulumi.Context) error) {
+		if err := pulumi.RunErr(program, pulumi.WithMocks("shop", name, secretedCluster{rec})); err != nil {
+			t.Fatalf("run %s: %v", name, err)
+		}
+	}
+	cfg, appSpec := appStackSpec(t)
+	appWork, err := releasing(t, cfg).appWork(appSpec, nil, nil, variables.Bundle{}, stagedOf(appSpec))
+	if err != nil {
+		t.Fatal(err)
+	}
+	run("app", func(pctx *pulumi.Context) error { return appWork.run(pctx, nil) })
+
+	containerCfg, containerSpec := containerStackSpec(t)
+	containerWork, err := containerDefinitionOf(containerCfg, containerSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run("container", containerWork.Declare)
+	layout, err := network.NewLayout("10.20.0.0/16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run("network", network.NewProgram(testNamespace, environment.TierProduction, "us-east-1", layout, []string{"use1-az1", "use1-az2"}, component.Patches{}).Run)
+	run("function-network", functionnetwork.NewProgram(testNamespace, environment.TierProduction, network.Pending, component.Patches{}).Run)
+	run("container-infra", containers.NewProgram(testNamespace, environment.TierProduction, containerCfg.AppBoundaryARN, containerCfg.AppRolePath, containers.Fronts{Private: true}, network.Pending).Run)
+	topicsRelease := &release{cfg: Config{Namespace: testNamespace, Region: "us-east-1", StateTableARN: testStateTableARN}}
+	req := inventoryRequest(t)
+	run("topics", func(pctx *pulumi.Context) error {
+		return declareTopicsAndTasks(pctx, topicsRelease, "shop", "prod", req.Resources)
+	})
+	workerArgs := function.Args{Runtime: component.LambdaNodeRuntime, Arch: "arm64", MemorySizeMB: 1024}
+	hosted, err := worker.NewStack(provider.StackSpec{
+		Ref: provider.StackRef{Project: "shop", Name: naming.StackName{Env: "prod", App: "web"}},
+		App: &provider.AppSpec{App: "web", Workers: req.Deploy.Apps[0].Workers, Topics: req.Resources},
+	}, function.AppStack{
+		Functions: []function.AppFunction{{Logical: "web", HasWorkerEntry: true}},
+		Args:      func(function.AppFunction) function.Args { return workerArgs },
+	}, function.ExecutionRole{Namespace: testNamespace, Boundary: componenttest.BoundaryARN, Path: componenttest.AppRolePath}, nil,
+		worker.Target{Namespace: testNamespace, StateTable: topic.StateTable{Region: "us-east-1", ARN: testStateTableARN}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run("workers", hosted.Declare)
+	jobsCfg, jobsSpec := containerStackSpec(t)
+	jobsCfg.StateTable, jobsCfg.StateTableARN = "ocel-state", testStateTableARN
+	jobsSpec.App.Instances = provider.Instances{Min: 1, Max: 4}
+	jobsSpec.App.Workers = req.Deploy.Apps[1].Workers
+	jobsSpec.App.DeploymentWorkers = jobsSpec.App.Workers
+	jobsSpec.App.Topics = req.Resources
+	jobsWeb, err := containerDefinitionOf(jobsCfg, jobsSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	containerWorkers, err := worker.NewContainerStack(jobsSpec, jobsWeb, jobsCfg.workerTarget())
+	if err != nil {
+		t.Fatal(err)
+	}
+	run("container-workers", containerWorkers.Declare)
+	run(naming.InfraApp, func(pctx *pulumi.Context) error {
+		registry := awsresources.Registry(awsresources.Clients{
+			Artifacts:   component.Artifacts{Objects: &fakeArtifactStore{exists: map[string]bool{}}, Bucket: "ocel-artifacts"},
+			KVTokens:    kv.Tokens{Parameters: newFakeParameters(), Root: "/ocel/kv"},
+			SigningKeys: realtime.Keys{SigningKeys: newFakeSigningKeys(), Root: "/ocel/realtime"},
+		})
+		at := component.Stack{
+			Ref:       provider.StackRef{Tier: environment.TierProduction, Project: "shop"},
+			Namespace: testNamespace,
+			Project:   "shop", Env: "prod", StateTable: "ocel-state", StateTableARN: testStateTableARN,
+			AppBoundaryARN: containerCfg.AppBoundaryARN, AppRolePath: containerCfg.AppRolePath,
+			Network:    component.Network{VPCID: "vpc-1", SubnetIDs: []string{"subnet-a"}, Clients: "sg-vpc-clients"},
+			Transforms: (*transformPatches)(nil),
+			Resources:  req.Resources,
+		}
+		for _, declaring := range registry.Components() {
+			if slices.Contains(declaring.Types, provider.BindingTopic) || slices.Contains(declaring.Types, provider.BindingTask) {
+				continue
+			}
+			if err := declaring.Declare(pctx, at, declaring.Declared(req.Resources)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	return rec
+}
+
+func TestInventoryRegistersWhatTheProgramsRegister(t *testing.T) {
+	t.Parallel()
+
+	set := items(t, nil, inventoryRequest(t))
+
+	rec := everyProgramRecorded(t)
+	registered := map[string]int{}
+	for key := range rec.recorded {
+		token, _, _ := strings.Cut(key, "::")
+		if tf, billable := pulumiTokens[token]; billable {
+			registered[tf]++
+		}
+	}
+	got := countTypes(set)
+	delete(got, "aws_secretsmanager_secret")
+	delete(got, "aws_ecr_repository")
+	delete(got, "aws_ssm_parameter")
+	if !maps.Equal(got, registered) {
+		t.Errorf("inventory counts %v, the programs register %v", got, registered)
+	}
+
+	entry := recordedOf(t, rec, "aws:lambda/function:Function")
+	for key := range rec.recorded {
+		if strings.HasPrefix(key, "aws:lambda/function:Function::ocel-app-shop-prod-web-entry") {
+			entry = rec.recorded[key]
+		}
+	}
+	lambda := listedNamed(t, set, "aws_lambda_function", "fn--web--entry")
+	if lambda["memory_size"] != entry["memorySize"].NumberValue() || lambda["timeout"] != entry["timeout"].NumberValue() {
+		t.Errorf("listed lambda = %v, program registered memory %v timeout %v", lambda, entry["memorySize"], entry["timeout"])
+	}
+	if arch := lambda["architectures"].([]any); arch[0] != entry["architectures"].ArrayValue()[0].StringValue() {
+		t.Errorf("listed architectures = %v, program registered %v", arch, entry["architectures"])
+	}
+	task := recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")
+	definition := listedNamed(t, set, "aws_ecs_task_definition", "api")
+	if definition["cpu"] != task["cpu"].StringValue() || definition["memory"] != task["memory"].StringValue() {
+		t.Errorf("listed task = %v, program registered cpu %v memory %v", definition, task["cpu"], task["memory"])
+	}
+	cluster := recordedOf(t, rec, "aws:rds/cluster:Cluster")
+	scaling := listedNamed(t, set, "aws_rds_cluster", "main")["serverlessv2_scaling_configuration"].(map[string]any)
+	registeredScaling := cluster["serverlessv2ScalingConfiguration"].ObjectValue()
+	if scaling["min_capacity"] != registeredScaling["minCapacity"].NumberValue() || scaling["max_capacity"] != registeredScaling["maxCapacity"].NumberValue() {
+		t.Errorf("listed scaling = %v, program registered %v", scaling, registeredScaling)
+	}
+	alarm := recordedOf(t, rec, "aws:cloudwatch/metricAlarm:MetricAlarm")["metricQueries"].ArrayValue()
+	if listed := listedNamed(t, set, "aws_cloudwatch_metric_alarm", resources.WorkerName("media")+"/0")["metric_query"].([]any); len(listed) != len(alarm) {
+		t.Errorf("listed %d metric queries, the program registered %d", len(listed), len(alarm))
+	}
+	group := recordedOf(t, rec, "aws:elasticache/replicationGroup:ReplicationGroup")
+	store := listedNamed(t, set, "aws_elasticache_replication_group", "cache")
+	if store["node_type"] != group["nodeType"].StringValue() || store["num_cache_clusters"] != group["numCacheClusters"].NumberValue() {
+		t.Errorf("listed store = %v, program registered node %v times %v", store, group["nodeType"], group["numCacheClusters"])
+	}
+	if token := listedNamed(t, set, "aws_ssm_parameter", "cache"); token["type"] != "SecureString" {
+		t.Errorf("listed token = %v, want the SecureString the store's AUTH token is kept in", token)
+	}
+	var authorizer resource.PropertyMap
+	for key, inputs := range rec.recorded {
+		if strings.HasPrefix(key, "aws:lambda/function:Function::") && strings.HasSuffix(key, "-authorizer") {
+			authorizer = inputs
+		}
+	}
+	listedAuthorizer := listedNamed(t, set, "aws_lambda_function", "realtime-authorizer")
+	if listedAuthorizer["memory_size"] != authorizer["memorySize"].NumberValue() || listedAuthorizer["timeout"] != authorizer["timeout"].NumberValue() || listedAuthorizer["architectures"].([]any)[0] != authorizer["architectures"].ArrayValue()[0].StringValue() {
+		t.Errorf("listed authorizer = %v, program registered %v", listedAuthorizer, authorizer)
+	}
+	for _, name := range []string{"live", "chat"} {
+		listedNamed(t, set, "aws_secretsmanager_secret", name)
+	}
+}
+
+func TestEveryRoleTheProgramsMintSitsUnderTheTiersAppRolePath(t *testing.T) {
+	t.Parallel()
+
+	rec := everyProgramRecorded(t)
+	roles := rec.registered("aws:iam/role:Role")
+	if len(roles) == 0 {
+		t.Fatal("the programs registered no role")
+	}
+	for _, name := range roles {
+		path := rec.recorded["aws:iam/role:Role::"+name]["path"]
+		if !path.IsString() || path.StringValue() != componenttest.AppRolePath {
+			t.Errorf("role %s has path %v, want %q: a credential passes an app role only under its own tier's path", name, path, componenttest.AppRolePath)
+		}
+	}
+}
+
+func TestInventoryScopesAppsUnderTheEnvironmentAndTheContainerInfraAsShared(t *testing.T) {
+	t.Parallel()
+
+	set := items(t, nil, inventoryRequest(t))
+
+	scopeOf := map[string]string{}
+	for _, r := range set.GetResources() {
+		scopeOf[r.GetType()+":"+r.GetName()] = r.GetScope()
+	}
+	want := map[string]string{
+		"aws_lambda_function:fn--web--entry": "project:shop/environment:prod/app:web",
+		"aws_ecs_service:api":                "project:shop/environment:prod/app:api",
+		"aws_lb:ocel-containers":             "project:shop/shared:production",
+		"aws_rds_cluster:main":               "project:shop/environment:prod",
+		"aws_s3_bucket:uploads":              "project:shop/environment:prod",
+	}
+	for key, scope := range want {
+		if scopeOf[key] != scope {
+			t.Errorf("%s in scope %q, want %q", key, scopeOf[key], scope)
+		}
+	}
+	if _, bound := scopeOf["aws_s3_bucket:shared"]; bound {
+		t.Error("a bound resource is someone else's bill, and was listed anyway")
+	}
+	if n := len(set.GetScopes()); n != 5 {
+		t.Errorf("scopes = %d, want project, shared, environment and two apps", n)
+	}
+	if set.GetResources()[0].GetRegion() != "us-east-1" {
+		t.Errorf("region = %q", set.GetResources()[0].GetRegion())
+	}
+}
+
+func listedLoadBalancersInternal(set *costv1.ResourceSet) []bool {
+	var internal []bool
+	for _, r := range set.GetResources() {
+		if r.GetType() == component.TerraformLoadBalancer {
+			internal = append(internal, r.GetProperties().AsMap()["internal"].(bool))
+		}
+	}
+	return internal
+}
+
+func TestAContainerAppForwardedFromCloudflareIsListedBehindOneInternetFacingLoadBalancerAndNoInternalOne(t *testing.T) {
+	t.Parallel()
+
+	req := inventoryRequest(t)
+	req.Edge = cloudflare.Kind
+	set := items(t, nil, req)
+
+	if got := listedLoadBalancersInternal(set); !slices.Equal(got, []bool{false}) {
+		t.Errorf("load balancers internal = %v, want the one internet-facing load balancer Cloudflare forwards to", got)
+	}
+	if liveness := listedNamed(t, set, "aws_lambda_function", "ocel-containers-liveness"); liveness["runtime"] != component.LambdaNodeRuntime {
+		t.Errorf("listed liveness answer = %v, want the function the public front answers its liveness probe with", liveness)
+	}
+}
+
+func TestAContainerAppBehindCloudFrontIsListedBehindOneInternalLoadBalancer(t *testing.T) {
+	t.Parallel()
+
+	req := inventoryRequest(t)
+	req.Edge = cloudfront.Kind
+	set := items(t, nil, req)
+
+	if got := listedLoadBalancersInternal(set); !slices.Equal(got, []bool{true}) {
+		t.Errorf("load balancers internal = %v, want the one internal load balancer CloudFront reaches through its VPC origin", got)
+	}
+}
+
+func TestContainerAppsOfOneDeployAreListedOneSharedInfrastructure(t *testing.T) {
+	t.Parallel()
+
+	req := inventoryRequest(t)
+	req.Edge = cloudflare.Kind
+	second := req.Deploy.Apps[1]
+	second.App, second.Workers = "admin", nil
+	req.Deploy.Apps = append(req.Deploy.Apps, second)
+	set := items(t, nil, req)
+
+	if counts := countTypes(set); counts["aws_lb"] != 1 || counts["aws_ecs_cluster"] != 1 {
+		t.Errorf("counts = %v, want one load balancer and one cluster however many container apps share them", counts)
+	}
+}
+
+func TestAContainerAppIsBilledForTheTasksItsFloorKeepsRunning(t *testing.T) {
+	t.Parallel()
+
+	req := inventoryRequest(t)
+	req.Deploy.Apps[1].Instances = provider.Instances{Min: 3, Max: 8}
+	set := items(t, nil, req)
+
+	if count := listedNamed(t, set, "aws_ecs_service", "api")["desired_count"]; count != float64(3) {
+		t.Errorf("the service is listed at %v tasks, want the 3 its floor keeps running", count)
+	}
+}
+
+func TestAnAppWithNoBuildListsOneFunction(t *testing.T) {
+	t.Parallel()
+
+	req := inventoryRequest(t)
+	req.Functions, req.Deploy.Apps[0].Workers = nil, nil
+	set := items(t, nil, req)
+
+	if got := countTypes(set)["aws_lambda_function"]; got != 3 {
+		t.Errorf("lambdas = %d, want one for web, the upload completer and the realtime authorizer", got)
+	}
+	if memory := listedNamed(t, set, "aws_lambda_function", "web")["memory_size"]; memory != float64(1769) {
+		t.Errorf("a next app's stand-in function has %v MB, want %d", memory, 1769)
+	}
+}
+
+const sizingModule = `
+	import { defineTransform } from "@ocel/transforms"
+	export default defineTransform(({ bindings }) => ({
+		aws: {
+			function: { lambda: { memorySize: 2048, vpcConfig: { subnetIds: bindings.custom.network.subnetIds, securityGroupIds: bindings.custom.network.securityGroupIds } } },
+			postgres: { cluster: { serverlessv2ScalingConfiguration: { minCapacity: 0.5, maxCapacity: 8 } } },
+			kv: { replicationGroup: { numCacheClusters: 1, automaticFailoverEnabled: false, multiAzEnabled: false } },
+		},
+	}))
+`
+
+func TestTransformsResizeTheInventoryAndBindingOutputsStayUnknown(t *testing.T) {
+	t.Parallel()
+
+	root := transformtest.Root(t, map[string]string{"sizing.transform.ts": sizingModule})
+	pass := NodePass(root, []string{"./sizing.transform.ts"})
+	set := items(t, pass, inventoryRequest(t))
+
+	lambda := listedNamed(t, set, "aws_lambda_function", "fn--web--entry")
+	if lambda["memory_size"] != float64(2048) {
+		t.Errorf("memory_size = %v, want the transform's 2048", lambda["memory_size"])
+	}
+	scaling := listedNamed(t, set, "aws_rds_cluster", "main")["serverlessv2_scaling_configuration"].(map[string]any)
+	if scaling["min_capacity"] != 0.5 || scaling["max_capacity"] != float64(8) {
+		t.Errorf("scaling = %v, want the transform's 0.5 to 8", scaling)
+	}
+	if nodes := listedNamed(t, set, "aws_elasticache_replication_group", "cache")["num_cache_clusters"]; nodes != float64(1) {
+		t.Errorf("num_cache_clusters = %v, want the transform's single node", nodes)
+	}
+	for _, r := range set.GetResources() {
+		if r.GetType() == "aws_lambda_function" && r.GetName() == "fn--web--entry" {
+			if !slices.Contains(r.GetUnknown(), "vpc_config") {
+				t.Errorf("unknown = %v, want vpc_config, which a binding fills at deploy", r.GetUnknown())
+			}
+		}
+	}
+}
+
+const ceilingModule = `
+	import { defineTransform } from "@ocel/transforms"
+	export default defineTransform(() => ({
+		aws: { postgres: { cluster: { serverlessv2ScalingConfiguration: { maxCapacity: 8 } } } },
+	}))
+`
+
+func TestAPatchToPartOfANestedBlockKeepsTheRestOfIt(t *testing.T) {
+	t.Parallel()
+
+	root := transformtest.Root(t, map[string]string{"ceiling.transform.ts": ceilingModule})
+	set := items(t, NodePass(root, []string{"./ceiling.transform.ts"}), inventoryRequest(t))
+	plain := items(t, nil, inventoryRequest(t))
+
+	scaling := listedNamed(t, set, "aws_rds_cluster", "main")["serverlessv2_scaling_configuration"].(map[string]any)
+	floor := listedNamed(t, plain, "aws_rds_cluster", "main")["serverlessv2_scaling_configuration"].(map[string]any)["min_capacity"]
+	if scaling["max_capacity"] != float64(8) || scaling["min_capacity"] != floor {
+		t.Fatalf("scaling = %v, want the transform's ceiling of 8 over the listed floor of %v", scaling, floor)
+	}
+	raw, err := os.ReadFile("../../../../pkg/pricing/aws/testdata/catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := pricingtest.NewCard(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	est, err := pricing.Estimate(context.Background(), card, ruleset.Table(), set, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range est.GetResources() {
+		for _, c := range r.GetComponents() {
+			if c.GetName() == "Aurora Serverless v2 capacity" && pricing.Unpriced(c) {
+				t.Errorf("%s capacity = %v, want it priced between the kept floor and the patched ceiling", r.GetResource(), c)
+			}
+		}
+	}
+}
+
+func TestAContainerWorkerIsListedAtNoTasksWithOneAlarmForEachNineQueuesItWatches(t *testing.T) {
+	t.Parallel()
+
+	req := inventoryRequest(t)
+	set := items(t, nil, req)
+
+	service := listedNamed(t, set, "aws_ecs_service", resources.WorkerName("media"))
+	if service["desired_count"] != float64(0) {
+		t.Errorf("the worker's service is listed at %v tasks, want none: it is billed for what it runs, and idle it runs nothing", service["desired_count"])
+	}
+	alarm := listedNamed(t, set, "aws_cloudwatch_metric_alarm", resources.WorkerName("media")+"/0")
+	var metrics, expressions int
+	for _, query := range alarm["metric_query"].([]any) {
+		if _, metric := query.(map[string]any)["metric"]; metric {
+			metrics++
+		} else if query.(map[string]any)["expression"] != nil {
+			expressions++
+		}
+	}
+	if metrics != 3 || expressions != 1 {
+		t.Errorf("the worker's alarm queries %d metrics and %d expressions, want the 3 queues of its transcode task and uploaded topic summed by one", metrics, expressions)
+	}
+	scopeOf := map[string]string{}
+	for _, r := range set.GetResources() {
+		scopeOf[r.GetType()+":"+r.GetName()] = r.GetScope()
+	}
+	if scope := scopeOf["aws_ecs_service:"+resources.WorkerName("media")]; scope != "project:shop/environment:prod/app:api" {
+		t.Errorf("the worker is billed in scope %q, want the app that hosts it", scope)
+	}
+}
+
+func TestAnEphemeralPreviewListsTheContainerWorkersItDeclares(t *testing.T) {
+	t.Parallel()
+
+	req := inventoryRequest(t)
+	req.Deploy.Tier = environment.TierPreview
+	req.Deploy.Env = "pr-7"
+	req.Deploy.Infra = naming.InfraStack("pr-7")
+	set := items(t, nil, req)
+
+	service := listedNamed(t, set, "aws_ecs_service", resources.WorkerName("media"))
+	if service["desired_count"] != float64(0) {
+		t.Errorf("an ephemeral preview lists its worker's service at %v tasks, want none, as a persistent environment does", service["desired_count"])
+	}
+	listedNamed(t, set, "aws_cloudwatch_metric_alarm", resources.WorkerName("media")+"/0")
+}
+
+func TestAContainerWorkerAppIsListedWithItsWorkersAtItsFloorAndNoWebService(t *testing.T) {
+	t.Parallel()
+
+	req := inventoryRequest(t)
+	for i, app := range req.Deploy.Apps {
+		if app.App == "api" {
+			req.Deploy.Apps[i].Instances = provider.Instances{Min: 2, Max: 4}
+			req.Deploy.Apps[i].Workers = []provider.WorkerSpec{{Name: "api", App: "api", Compute: provider.ComputeContainer}}
+		}
+	}
+	req.Resources = append(req.Resources, taskResource("encode", provider.ConsumerSpec{Worker: "api"}))
+	set := items(t, nil, req)
+
+	for _, r := range set.GetResources() {
+		if (r.GetType() == "aws_ecs_service" || r.GetType() == "aws_ecs_task_definition") && r.GetName() == "api" {
+			t.Errorf("listed %s %s, want no web service for an app only its worker runs on", r.GetType(), r.GetName())
+		}
+	}
+	if service := listedNamed(t, set, "aws_ecs_service", resources.WorkerName("api")); service["desired_count"] != float64(2) {
+		t.Errorf("the worker's service is listed at %v tasks, want the app's floor of 2", service["desired_count"])
+	}
+}
+
+func TestACronTaskOnAContainerWorkerIsListedWithItsSchedule(t *testing.T) {
+	t.Parallel()
+
+	req := inventoryRequest(t)
+	req.Resources = append(req.Resources, taskResource("nightly", provider.ConsumerSpec{Worker: "media"}, cronEveryMinute))
+	set := items(t, nil, req)
+
+	if schedule := listedNamed(t, set, "aws_scheduler_schedule", "nightly"); schedule["schedule_expression"] == nil {
+		t.Errorf("the nightly schedule is listed with no expression: %v", schedule)
+	}
+}

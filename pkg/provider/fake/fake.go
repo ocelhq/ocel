@@ -101,7 +101,7 @@ func NewProvider(options Options) *Provider {
 	p.hooks = provider.Hooks{
 		ProgramEdge:        p.ProgramEdge,
 		OpenRegistryImages: p.OpenRegistryImages,
-		Cost:               &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
+		Inventory:          p.Inventory,
 		Retirement:         &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
 
 		ListProjectResources: p.ListProjectResources,
