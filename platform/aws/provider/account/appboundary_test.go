@@ -139,6 +139,22 @@ func TestTheAppBoundaryStillAdmitsWhatADeployGrantsARole(t *testing.T) {
 	}
 }
 
+func TestTheAppBoundaryLetsAnAppReadAWSListPrices(t *testing.T) {
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		t.Run(string(tier), func(t *testing.T) {
+			for _, st := range boundaryStatements(t, tier, "") {
+				if slices.Contains(templateStrings(st.Action), "pricing:GetProducts") {
+					if st.Resource != "*" {
+						t.Errorf("pricing:GetProducts is admitted on %q, want *: the Price List API names no resource", st.Resource)
+					}
+					return
+				}
+			}
+			t.Error("the boundary does not admit pricing:GetProducts, so no policy attached to an app role can read AWS list prices")
+		})
+	}
+}
+
 func TestTheAppBoundaryAdmitsTheChannelsABastionTaskOpensToSSM(t *testing.T) {
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		t.Run(string(tier), func(t *testing.T) {
