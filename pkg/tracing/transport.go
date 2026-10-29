@@ -74,7 +74,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	sent := req.Clone(httptrace.WithClientTrace(ctx, connectionEvents(span)))
 	omitted := content.IsOmitted(req.Context())
 	var requestBody *bodyPrefix
-	if !omitted && req.Body != nil && req.Body != http.NoBody && isTextual(req.Header.Get("Content-Type")) {
+	if !omitted && req.Body != nil && req.Body != http.NoBody && isText(req.Header) {
 		requestBody = &bodyPrefix{}
 		sent.Body = &recordedBody{ReadCloser: req.Body, prefix: requestBody}
 	}
@@ -105,7 +105,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return resp, nil
 	}
 	var responseBody *bodyPrefix
-	if !omitted && isTextual(resp.Header.Get("Content-Type")) {
+	if !omitted && isText(resp.Header) {
 		responseBody = &bodyPrefix{}
 	}
 	resp.Body = &spannedBody{
@@ -170,6 +170,11 @@ func outcome(err error, attrs ...attribute.KeyValue) trace.SpanStartEventOption 
 	return trace.WithAttributes(attrs...)
 }
 
+func isText(header http.Header) bool {
+	encoding := header.Get("Content-Encoding")
+	return (encoding == "" || strings.EqualFold(encoding, "identity")) && isTextual(header.Get("Content-Type"))
+}
+
 func isTextual(contentType string) bool {
 	contentType = strings.ToLower(contentType)
 	for _, textual := range []string{"json", "xml", "text/", "x-www-form-urlencoded", "yaml", "graphql", "javascript"} {
@@ -205,7 +210,7 @@ func (p *bodyPrefix) String() string {
 func (p *bodyPrefix) attributes(key string) []attribute.KeyValue {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return []attribute.KeyValue{attribute.String(key, p.buf.String()), attribute.Bool(key+".truncated", p.truncated)}
+	return []attribute.KeyValue{attribute.String(key, strings.ToValidUTF8(p.buf.String(), "\uFFFD")), attribute.Bool(key+".truncated", p.truncated)}
 }
 
 type recordedBody struct {

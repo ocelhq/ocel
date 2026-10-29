@@ -2,6 +2,8 @@ package tracing_test
 
 import (
 	"bufio"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
@@ -14,6 +16,7 @@ import (
 	"testing"
 	"testing/iotest"
 	"time"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -685,5 +688,61 @@ func TestClosingAClientsIdleConnectionsReachesTheTransportItTracesThrough(t *tes
 
 	if base.closes != 1 || defaultBase.closes != 1 {
 		t.Errorf("base closed %d times and default %d, want each once", base.closes, defaultBase.closes)
+	}
+}
+
+func TestACompressedFailedResponseIsNotRecordedAsText(t *testing.T) {
+	ctx, recorded := tracingtest.Record(t)
+	var compressed bytes.Buffer
+	zipper := gzip.NewWriter(&compressed)
+	_, _ = io.WriteString(zipper, `{"code":"permission_denied","message":"no"}`)
+	_ = zipper.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write(compressed.Bytes())
+	}))
+	defer server.Close()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL, strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	resp, err := (&http.Client{Transport: tracing.NewTransport(nil)}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	if !bytes.Equal(body, compressed.Bytes()) {
+		t.Error("caller did not read the compressed body unchanged")
+	}
+	attrs := tracingtest.Attributes(recorded.Only(t))
+	if got, ok := attrs["http.response.body"]; ok {
+		t.Errorf("recorded the compressed body as text: %q", got.AsString())
+	}
+	if got := attrs["http.request.body"].AsString(); got != "{}" {
+		t.Errorf("http.request.body = %q, want {}", got)
+	}
+}
+
+func TestAFailedBodyCutInsideACharacterIsRecordedAsValidText(t *testing.T) {
+	ctx, recorded := tracingtest.Record(t)
+	server := httptest.NewServer(failWith(http.StatusInternalServerError, "text/plain", strings.Repeat("a", tracing.RecordedBodyBytes-1)+"é"))
+	defer server.Close()
+
+	resp, err := get(ctx, &http.Client{Transport: tracing.NewTransport(nil)}, server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+
+	if got := tracingtest.Attributes(recorded.Only(t))["http.response.body"].AsString(); !utf8.ValidString(got) {
+		t.Errorf("http.response.body ends %q, which is not valid UTF-8", got[len(got)-4:])
 	}
 }
