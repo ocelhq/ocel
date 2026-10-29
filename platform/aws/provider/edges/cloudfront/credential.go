@@ -28,5 +28,14 @@ func Credential(s iam.Scope) []iam.Statement {
 			Actions:   []string{"cloudfront:ListDistributions"},
 			Resources: []string{iam.AnyResource},
 		},
+		{
+			Actions: []string{
+				"cloudfront-keyvaluestore:DescribeKeyValueStore",
+				"cloudfront-keyvaluestore:GetKey",
+				"cloudfront-keyvaluestore:ListKeys",
+				"cloudfront-keyvaluestore:UpdateKeys",
+			},
+			Resources: []string{iam.EdgeRoutesStoreARN},
+		},
 	}
 }

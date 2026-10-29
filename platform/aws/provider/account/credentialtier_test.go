@@ -30,6 +30,12 @@ var actionsOnWhatBothTiersShare = []string{
 	"iam:GetOpenIDConnectProvider",
 	"iam:RemoveClientIDFromOpenIDConnectProvider",
 	"iam:TagOpenIDConnectProvider",
+	"route53:ChangeResourceRecordSets",
+	"route53:ListResourceRecordSets",
+}
+
+var hostnamesTheUserNames = []string{
+	iam.DomainNameARN,
 }
 
 var resourcesAWSOwns = []string{
@@ -115,7 +121,8 @@ func witnessesOf(t *testing.T, tier environment.Tier) []witness {
 
 func isOfNoTier(w witness) bool {
 	switch {
-	case w.resource == iam.AnyResource && readOnly(w.action):
+	case w.resource == iam.AnyResource && readOnly(w.action),
+		slices.Contains(hostnamesTheUserNames, w.resource) && readOnly(w.action):
 		return true
 	case slices.Contains(actionsAWSGivesNoScopingKey, w.action),
 		slices.Contains(actionsOnWhatBothTiersShare, w.action):
