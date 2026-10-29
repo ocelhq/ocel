@@ -6,14 +6,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
+	"slices"
 	"time"
+
+	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/jobcontext"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
-const DefaultTimeout = 10 * time.Second
+const (
+	DefaultTimeout   = 10 * time.Second
+	reportAttempts   = 4
+	firstReportPause = 250 * time.Millisecond
+)
+
+var retriedCodes = []connect.Code{connect.CodeUnavailable, connect.CodeDeadlineExceeded, connect.CodeResourceExhausted, connect.CodeAborted}
 
 var (
 	errNoTarget    = errors.New("the provider named no target account it deployed to")
@@ -56,7 +66,8 @@ func (c Console) StartDeployment(ctx context.Context, projectDir string, start *
 	if err != nil || session == nil {
 		return
 	}
-	_ = console.New(session.apiURL).StartDeployment(ctx, session.accessToken, session.projectID, start)
+	client := console.New(session.apiURL)
+	_ = retrying(ctx, func() error { return client.StartDeployment(ctx, session.accessToken, session.projectID, start) })
 }
 
 func (c Console) ReportEnvironmentEvent(ctx context.Context, projectDir string, event *consolev1.EnvironmentEvent, stderr io.Writer) {
@@ -85,10 +96,27 @@ func (c Console) send(ctx context.Context, projectDir, subject string, stderr io
 		return
 	}
 	if err == nil && session != nil {
-		err = call(ctx, console.New(session.apiURL), session.accessToken, session.projectID)
+		client := console.New(session.apiURL)
+		err = retrying(ctx, func() error { return call(ctx, client, session.accessToken, session.projectID) })
 	}
 	if err != nil {
 		fmt.Fprintf(stderr, "Couldn't report %s to the console: %v\n", subject, err)
+	}
+}
+
+func retrying(ctx context.Context, call func() error) error {
+	pause := firstReportPause
+	for attempt := 1; ; attempt++ {
+		err := call()
+		if err == nil || attempt == reportAttempts || !slices.Contains(retriedCodes, connect.CodeOf(err)) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(pause/2 + rand.N(pause/2)):
+		}
+		pause *= 2
 	}
 }
 
