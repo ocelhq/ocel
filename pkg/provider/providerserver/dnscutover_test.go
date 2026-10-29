@@ -559,3 +559,46 @@ func TestARecordTheHostnameResolvesElsewhereStillWaitsOnTheUser(t *testing.T) {
 		t.Errorf("manual = %v, reported = %v, want only %v", written.Manual, reported, elsewhere)
 	}
 }
+
+type addressedNames struct {
+	addresses map[string][]string
+	aliases   map[string]string
+}
+
+func (a addressedNames) Host(_ context.Context, host string) ([]string, error) {
+	return a.addresses[host], nil
+}
+
+func (a addressedNames) CNAME(_ context.Context, host string) (string, error) {
+	if alias, ok := a.aliases[host]; ok {
+		return alias, nil
+	}
+	return host + ".", nil
+}
+
+func TestAnAddressRecordToTheOriginsAddressServesAHostnameAskedToAliasIt(t *testing.T) {
+	t.Parallel()
+
+	alias := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "box.example.net"}
+	for name, tc := range map[string]struct {
+		addresses map[string][]string
+		served    bool
+	}{
+		"the origin's address": {map[string][]string{"shop.app.com": {"203.0.113.10"}, "box.example.net": {"203.0.113.10"}}, true},
+		"some other address":   {map[string][]string{"shop.app.com": {"198.51.100.1"}, "box.example.net": {"203.0.113.10"}}, false},
+		"no address at all":    {map[string][]string{"box.example.net": {"203.0.113.10"}}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cutover := dnsCutover{
+				lookup: addressedNames{addresses: tc.addresses},
+				manual: manualRecordPolicy{fail: true, report: func(string, []edge.Record, ...string) {}},
+			}
+			_, err := cutover.write(context.Background(), []edge.Record{alias}, "add these", func(string) {})
+			if served := err == nil; served != tc.served {
+				t.Errorf("write() = %v, want served %v", err, tc.served)
+			}
+		})
+	}
+}
