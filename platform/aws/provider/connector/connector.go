@@ -15,7 +15,10 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	logstypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -44,6 +47,8 @@ const (
 	timeout = 30
 
 	codeBucketID        = "CodeBucket"
+	functionID          = "ConnectorFunction"
+	logGroupPrefix      = "/aws/lambda/"
 	reservedConcurrency = 10
 	unreservedMinimum   = 100
 	codePayload         = "connector"
@@ -101,7 +106,12 @@ type APIs struct {
 	Objects payloads.ObjectStore
 	SSM     KeyStore
 	Lambda  AccountSettingsAPI
+	Logs    LogGroupsAPI
 	Region  string
+}
+
+type LogGroupsAPI interface {
+	DeleteLogGroup(ctx context.Context, in *cloudwatchlogs.DeleteLogGroupInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DeleteLogGroupOutput, error)
 }
 
 type AccountSettingsAPI interface {
@@ -298,14 +308,54 @@ func Remove(ctx context.Context, apis APIs, ns account.Namespace, progress progr
 		}
 		progress.Say(fmt.Sprintf("Emptied bucket %s, where the connector's code was staged", bucket))
 	}
+	function, err := readFunctionName(ctx, apis.CFN, ns)
+	if err != nil {
+		return err
+	}
 	if err := cfn.Delete(ctx, apis.CFN, StackName(ns)); err != nil {
 		return err
 	}
 	progress.Say("Deleted stack " + StackName(ns))
+	if err := deleteLogGroup(ctx, apis.Logs, function, progress); err != nil {
+		return err
+	}
 	if err := takeKey(ctx, apis.SSM, ns); err != nil {
 		return err
 	}
 	progress.Say(fmt.Sprintf("Deleted parameter %s, the connector's key", KeyParameter(ns)))
+	return nil
+}
+
+func readFunctionName(ctx context.Context, api cfn.API, ns account.Namespace) (string, error) {
+	pages := cloudformation.NewListStackResourcesPaginator(api, &cloudformation.ListStackResourcesInput{StackName: aws.String(StackName(ns))})
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
+		if err != nil {
+			return "", fmt.Errorf("read the function of stack %s: %w", StackName(ns), err)
+		}
+		for _, resource := range page.StackResourceSummaries {
+			if aws.ToString(resource.LogicalResourceId) == functionID {
+				return aws.ToString(resource.PhysicalResourceId), nil
+			}
+		}
+	}
+	return "", nil
+}
+
+func deleteLogGroup(ctx context.Context, api LogGroupsAPI, function string, progress progress.Log) error {
+	if function == "" {
+		return nil
+	}
+	group := logGroupPrefix + function
+	_, err := api.DeleteLogGroup(ctx, &cloudwatchlogs.DeleteLogGroupInput{LogGroupName: aws.String(group)})
+	var missing *logstypes.ResourceNotFoundException
+	if errors.As(err, &missing) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("delete log group %s: %w", group, err)
+	}
+	progress.Say("Deleted log group " + group)
 	return nil
 }
 
@@ -417,7 +467,7 @@ func templateFor(ns account.Namespace, at payloads.Placement, bundle Bundle, key
 	if err != nil {
 		return "", err
 	}
-	functionARN := cfn.GetAtt("ConnectorFunction", "Arn")
+	functionARN := cfn.GetAtt(functionID, "Arn")
 	managed := []any{iam.LambdaBasicExecutionPolicyARN}
 	resources := []cfn.Resource{codeBucketResource()}
 	for i, policy := range bundle.Policies {
@@ -452,7 +502,7 @@ func templateFor(ns account.Namespace, at payloads.Placement, bundle Bundle, key
 			},
 		},
 		{
-			ID:   "ConnectorFunction",
+			ID:   functionID,
 			Type: "AWS::Lambda::Function",
 			Metadata: cfn.Metadata{
 				Description: "The connector itself. The console dials it over its function url and authenticates with a short-lived token the connector verifies before any call runs.",
