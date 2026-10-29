@@ -298,3 +298,34 @@ func TestTheChildIsHandedTheLiveDeclarationTheProjectionAndTheProxy(t *testing.T
 		}
 	})
 }
+
+func TestACompiledAppStartsOnlyOnceItsLiveValuesAreInPlace(t *testing.T) {
+	t.Parallel()
+
+	l := &stubValues{released: make(chan struct{})}
+	prefetch := l.Prefetch(context.Background())
+	started := make(chan struct{})
+	brought := make(chan error, 1)
+	go func() {
+		_, err := bringUpExecutable(func() (*execChild, error) {
+			close(started)
+			return &execChild{}, nil
+		}, l, prefetch)
+		brought <- err
+	}()
+
+	select {
+	case <-started:
+		t.Fatal("the app started before its live values were fetched, and a compiled app's SDK reads them once, at start")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(l.released)
+	if err := <-brought; err != nil {
+		t.Fatalf("bringUpExecutable: %v", err)
+	}
+	select {
+	case <-started:
+	default:
+		t.Error("the app never started once its live values were in place")
+	}
+}
