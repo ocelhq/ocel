@@ -341,7 +341,9 @@ func TestProjectsDestroyFromALinkedTreeRecordsADestroyedEventPerTier(t *testing.
 	}
 
 	var tiers []environmentv1.Tier
+	ids := map[string]bool{}
 	for _, event := range console.Events() {
+		ids[event.GetEvent().GetId()] = true
 		if event.GetEvent().GetKind() != consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED {
 			t.Errorf("event = %v, want a destroyed event", event)
 		}
@@ -349,6 +351,9 @@ func TestProjectsDestroyFromALinkedTreeRecordsADestroyedEventPerTier(t *testing.
 	}
 	if !slices.Equal(tiers, bothTiers) {
 		t.Errorf("destroyed events in %v, want one in production and one in preview", tiers)
+	}
+	if len(ids) != 2 {
+		t.Errorf("destroyed events carry ids %v, want one id per tier, so the console records both", ids)
 	}
 }
 

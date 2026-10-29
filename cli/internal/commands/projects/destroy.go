@@ -238,7 +238,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, resolve
 		if _, err := providerprocess.Stream(ctx, removal.provider, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {
 			return destroyed, err
 		}
-		destroyed = append(destroyed, deployreport.NewEnvironmentEvent(ctx, consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED, &environmentv1.Environment{Tier: removal.tier}, running.TraceID(), time.Now(), cfg.Dir, os.Getenv))
+		destroyed = append(destroyed, deployreport.NewEnvironmentEvent(ctx, consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED, &environmentv1.Environment{Tier: removal.tier}, deployreport.TierEventID(running.TraceID(), removal.tier), time.Now(), cfg.Dir, os.Getenv))
 	}
 	running.Succeed(fmt.Sprintf("Destroyed project %s", slug))
 	return destroyed, nil
