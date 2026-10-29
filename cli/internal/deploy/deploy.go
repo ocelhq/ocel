@@ -103,6 +103,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		cfg := facts.project
 		infra := newInfraProvisioning(provider, env, facts)
 		defer func() { err = errors.Join(err, infra.release(ctx, run, cfg.Slug)) }()
+		defer run.BeforeForcedStop(func() { infra.abandonBeforeForcedStop(ctx, cfg.Slug) })()
 
 		d := newDeployRun(dependencies, target, cfg, provider, env, facts, infra, policy, opts, dependencies.IsBrowserReachable(stdin))
 		phase := run.Phase(progressv1.Phase_PHASE_BUILD)
