@@ -29,10 +29,11 @@ import (
 const Vendor provider.Vendor = "aws"
 
 type Provider struct {
-	Options   Options
-	Config    aws.Config
-	Namespace account.Namespace
-	WrittenBy provider.WrittenBy
+	Options     Options
+	Config      aws.Config
+	Namespace   account.Namespace
+	WrittenBy   provider.WrittenBy
+	WebIdentity *provider.WebIdentity
 
 	deployed  memo[environment.Tier, account.Reading]
 	params    memo[tierEdge, account.TierParams]
@@ -61,15 +62,16 @@ func New(ctx context.Context, settings provider.Settings) (*Provider, error) {
 	if err := account.Namespace(ns).RefuseReservedPrefix(); err != nil {
 		return nil, err
 	}
-	if err := useWebIdentity(settings.WebIdentity); err != nil {
-		return nil, err
-	}
 	cfg, err := sdkconfig.Control(ctx, decoded.Region)
 	if err != nil {
 		return nil, err
 	}
+	if settings.WebIdentity != nil {
+		cfg.Credentials = webIdentityCredentials(cfg, settings.WebIdentity)
+	}
 	p := NewProvider(decoded, addRegionCheck(cfg, decoded.Region), account.Namespace(ns))
 	p.WrittenBy = settings.WrittenBy
+	p.WebIdentity = settings.WebIdentity
 	return p, nil
 }
 

@@ -196,7 +196,7 @@ func (r *Stacks) open(ctx context.Context, scope Scope) (*release, error) {
 			URL:        cfg.BackendURL,
 			Passphrase: cfg.Passphrase,
 			Project:    cfg.PulumiProject,
-			Env:        map[string]string{"AWS_REGION": cfg.Region},
+			Env:        engineEnv(cfg),
 		},
 		Program:   component.ProgramIn(cfg.Region),
 		Configure: component.DefaultProvidersDisabled,
@@ -784,3 +784,9 @@ func (r *Stacks) Outputs(ctx context.Context, ref provider.StackRef, progress pr
 }
 
 var _ provider.Stacks = (*Stacks)(nil)
+
+func engineEnv(cfg Config) map[string]string {
+	env := map[string]string{"AWS_REGION": cfg.Region}
+	maps.Copy(env, cfg.CredentialEnv)
+	return env
+}

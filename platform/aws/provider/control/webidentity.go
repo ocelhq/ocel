@@ -1,7 +1,9 @@
 package control
 
 import (
-	"os"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/provider"
 )
@@ -22,18 +24,19 @@ var credentialEnvVars = []string{
 	"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
 }
 
-func useWebIdentity(identity *provider.WebIdentity) error {
-	if identity == nil {
+func webIdentityCredentials(cfg aws.Config, identity *provider.WebIdentity) aws.CredentialsProvider {
+	assumed := stscreds.NewWebIdentityRoleProvider(sts.NewFromConfig(cfg), identity.Principal, stscreds.IdentityTokenFile(identity.TokenFile),
+		func(o *stscreds.WebIdentityRoleOptions) { o.RoleSessionName = identity.SessionName })
+	return aws.NewCredentialsCache(assumed)
+}
+
+func (p *Provider) WebIdentityEnv() map[string]string {
+	if p.WebIdentity == nil {
 		return nil
 	}
-	if err := os.Setenv(roleARNVariable, identity.Principal); err != nil {
-		return err
+	env := map[string]string{roleARNVariable: p.WebIdentity.Principal, tokenFileVariable: p.WebIdentity.TokenFile}
+	if p.WebIdentity.SessionName != "" {
+		env[sessionNameVariable] = p.WebIdentity.SessionName
 	}
-	if err := os.Setenv(tokenFileVariable, identity.TokenFile); err != nil {
-		return err
-	}
-	if identity.SessionName == "" {
-		return os.Unsetenv(sessionNameVariable)
-	}
-	return os.Setenv(sessionNameVariable, identity.SessionName)
+	return env
 }
