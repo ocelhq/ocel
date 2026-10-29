@@ -310,3 +310,25 @@ func TestAGapRefusingMissingPartsReportsBootstrapPartsMissing(t *testing.T) {
 		}
 	}
 }
+
+func TestACredentialThatReachedNoAccountIsRefusedWithWhyItReachedNone(t *testing.T) {
+	t.Parallel()
+
+	resp := &contractv1.PreflightResponse{
+		Identity:           &contractv1.Identity{Provider: "vps"},
+		CredentialProblems: []*contractv1.CredentialProblem{{Provider: "vps", Message: "could not authenticate", Hint: "box.example.com issued no ssh certificate: this box trusts the console for no preview deploys"}},
+	}
+	err := refuseOtherAccount(resp, "box.example.com")
+	if err == nil || !strings.Contains(err.Error(), "issued no ssh certificate") || strings.Contains(err.Error(), "reached account") {
+		t.Errorf("err = %v, want the exchange's own failure, not an account mismatch", err)
+	}
+}
+
+func TestACredentialThatReachedAnotherAccountIsRefusedNamingBoth(t *testing.T) {
+	t.Parallel()
+
+	err := refuseOtherAccount(&contractv1.PreflightResponse{Identity: &contractv1.Identity{Account: "123456789012"}}, "210987654321")
+	if err == nil || !strings.Contains(err.Error(), "123456789012") || !strings.Contains(err.Error(), "210987654321") {
+		t.Errorf("err = %v, want both accounts named", err)
+	}
+}

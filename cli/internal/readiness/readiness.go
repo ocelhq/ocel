@@ -50,7 +50,7 @@ func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provid
 	}
 	if err == nil {
 		span.Identity(identityEvent(cfg, req.Tier, read.Response.GetIdentity()))
-		err = refuseOtherAccount(read.Response.GetIdentity(), req.Account)
+		err = refuseOtherAccount(read.Response, req.Account)
 	}
 	if err == nil {
 		err = RefuseUnready(read.Response, provider, cfg, req)
@@ -64,7 +64,11 @@ func Check(ctx context.Context, span *run.Span, provider *providerprocess.Provid
 	return read, nil
 }
 
-func refuseOtherAccount(identity *contractv1.Identity, account string) error {
+func refuseOtherAccount(resp *contractv1.PreflightResponse, account string) error {
+	if err := refuseCredentialProblems(resp.GetCredentialProblems()); err != nil {
+		return err
+	}
+	identity := resp.GetIdentity()
 	if account == "" || identity.GetAccount() == account {
 		return nil
 	}
