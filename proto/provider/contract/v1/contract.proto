@@ -8,13 +8,13 @@ import "app/resources/v1/variables.proto";
 import "app/topic/v1/topic.proto";
 import "buf/validate/validate.proto";
 import "common/bindings/v1/bindings.proto";
+import "common/cost/v1/cost.proto";
 import "common/environment/v1/environment.proto";
 import "common/plan/v1/plan.proto";
 import "common/progress/v1/progress.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
-import "provider/cost/v1/cost.proto";
 
 service ProviderService {
     rpc Configure(ConfigureRequest) returns (ConfigureResponse);
@@ -85,7 +85,7 @@ service ProviderService {
 
     rpc RemoveConnector(RemoveConnectorRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc Shape(ShapeRequest) returns (provider.cost.v1.ResourceSet);
+    rpc Inventory(InventoryRequest) returns (common.cost.v1.ResourceSet);
 
     rpc Confirm(ConfirmRequest) returns (ConfirmResponse);
 
@@ -133,7 +133,7 @@ message ConfigureResponse {
 }
 
 message ProviderFacts {
-  bool prices_deploys = 1;
+  bool takes_inventory = 1;
 
   repeated string computes = 2;
 
@@ -483,7 +483,7 @@ message AbandonDeployRequest {
 
 message AbandonDeployResponse {}
 
-message ShapeRequest {
+message InventoryRequest {
   Manifest manifest = 1 [(buf.validate.field).required = true];
 
   common.environment.v1.Environment environment = 2;
@@ -552,6 +552,8 @@ message DescribeBootstrapResponse {
   BootstrapStatus bootstrap = 1;
 
   repeated BootstrapPart parts = 2;
+
+  common.cost.v1.ResourceSet inventory = 3;
 }
 
 enum BootstrapPartState {
@@ -582,10 +584,6 @@ message BootstrapPart {
   repeated PhysicalResource resources = 7;
 
   repeated string used_by = 8;
-
-  optional string idle_monthly_fixed = 9;
-
-  string currency = 10;
 
   bool retires_with_last_user = 11;
 

@@ -1,17 +1,13 @@
 syntax = "proto3";
-package provider.cost.v1;
+package common.cost.v1;
 
-option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1;costv1";
+option go_package = "github.com/ocelhq/ocel/pkg/proto/common/cost/v1;costv1";
 
 import "buf/validate/validate.proto";
 import "google/protobuf/struct.proto";
 
-service CostService {
-    rpc Price(PriceRequest) returns (Estimate);
-}
-
 message ResourceSet {
-  string source = 1 [(buf.validate.field).string.min_len = 1];
+  string source = 1 [(buf.validate.field).string = {in: ["ocel", "pulumi", "sst", "terraform"]}];
 
   repeated Scope scopes = 2;
 
@@ -46,12 +42,8 @@ message Resource {
   repeated string unknown = 8;
 
   map<string, string> tags = 9;
-}
 
-message PriceRequest {
-  ResourceSet resources = 1 [(buf.validate.field).required = true];
-
-  Usage usage = 2;
+  map<string, string> references = 10;
 }
 
 enum Profile {
@@ -70,21 +62,32 @@ message Usage {
 message Estimate {
   string currency = 1;
 
-  string rates_version = 2;
+  Profile profile = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
 
-  Profile profile = 3;
+  repeated ResourceEstimate resources = 3;
 
-  repeated ResourceEstimate resources = 4;
+  repeated ScopeTotal scopes = 4;
 
-  repeated ScopeTotal scopes = 5;
+  Coverage coverage = 5;
 
-  Coverage coverage = 6;
+  repeated string notes = 6;
 
-  repeated string notes = 7;
+  string monthly_fixed = 7;
 
-  string monthly_fixed = 8;
+  string monthly_usage = 8;
 
-  string monthly_usage = 9;
+  repeated CatalogVersion catalogs = 9;
+}
+
+message CatalogVersion {
+  string vendor = 1;
+
+  string service = 2;
+
+  string version = 3;
 }
 
 message ResourceEstimate {
@@ -98,7 +101,10 @@ message ResourceEstimate {
 
   string resource = 1;
 
-  Status status = 2;
+  Status status = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
 
   repeated CostComponent components = 3;
 
@@ -108,6 +114,15 @@ message ResourceEstimate {
 }
 
 message CostComponent {
+  enum PriceStatus {
+    PRICE_STATUS_UNSPECIFIED = 0;
+    PRICE_STATUS_PRICED = 1;
+    PRICE_STATUS_UNKNOWN_INPUT = 2;
+    PRICE_STATUS_MISSING = 3;
+    PRICE_STATUS_AMBIGUOUS = 4;
+    PRICE_STATUS_UNAVAILABLE = 5;
+  }
+
   string name = 1;
 
   string unit = 2;
@@ -122,11 +137,18 @@ message CostComponent {
 
   string assumption = 7;
 
-  bool price_not_found = 8;
+  repeated string depends_on_unknown = 8;
 
-  string rate_ref = 9;
+  PriceStatus price_status = 9 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
 
-  repeated string depends_on_unknown = 10;
+  string price_detail = 10;
+
+  string sku = 11;
+
+  string price_source = 12;
 }
 
 message ScopeTotal {
@@ -149,4 +171,36 @@ message Coverage {
   map<string, uint32> unsupported_types = 5;
 
   repeated string supported_types = 6;
+}
+
+message EstimateDiff {
+  Estimate current = 1;
+
+  Estimate proposed = 2;
+
+  repeated ResourceChange resources = 3;
+
+  string monthly_fixed_delta = 4;
+
+  string monthly_usage_delta = 5;
+}
+
+message ResourceChange {
+  enum Change {
+    CHANGE_UNSPECIFIED = 0;
+    CHANGE_ADDED = 1;
+    CHANGE_REMOVED = 2;
+    CHANGE_MODIFIED = 3;
+  }
+
+  string resource = 1;
+
+  Change change = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string monthly_fixed_delta = 3;
+
+  string monthly_usage_delta = 4;
 }

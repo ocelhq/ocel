@@ -3,10 +3,10 @@ package cli.result.v1;
 
 option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/result/v1;resultv1";
 
+import "common/cost/v1/cost.proto";
 import "common/environment/v1/environment.proto";
 import "console/v1/console.proto";
 import "google/protobuf/struct.proto";
-import "provider/cost/v1/cost.proto";
 
 message BindingSetResult {
   string name = 1;
@@ -139,11 +139,21 @@ message Certificate {
 }
 
 message CostScanResult {
-  provider.cost.v1.ResourceSet resources = 1;
+  common.cost.v1.ResourceSet resources = 1;
 
-  provider.cost.v1.Estimate estimate = 2;
+  common.cost.v1.Estimate estimate = 2;
 
   repeated string assumptions = 3;
+}
+
+message CostDiffResult {
+  common.cost.v1.ResourceSet current = 1;
+
+  common.cost.v1.ResourceSet proposed = 2;
+
+  common.cost.v1.EstimateDiff diff = 3;
+
+  repeated string assumptions = 4;
 }
 
 message PromotionListResult {
