@@ -230,7 +230,7 @@ func AttachedPolicyIsAServiceRole() map[string]any {
 
 func AttachedPolicyIsAServiceRoleOrInCallerAccount() map[string]any {
 	return map[string]any{
-		"ArnLike": map[string]any{"iam:PolicyARN": append(slices.Clone(serviceRolePolicyARNs), CallerAccountPolicyARNs)},
+		"StringLike": map[string]any{"iam:PolicyARN": append(slices.Clone(serviceRolePolicyARNs), CallerAccountPolicyARNs)},
 	}
 }
 
