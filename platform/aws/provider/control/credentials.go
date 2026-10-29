@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/credential"
+	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -117,6 +118,7 @@ func deployStatements(s iam.Scope) []iam.Statement {
 		notfoundapi.Credential(s),
 		cloudfront.Credential(s),
 		apigateway.Credential(s),
+		dns.Credential(s),
 		alb.Credential(s),
 		credential.Postgres(s),
 		credential.Bucket(s),
