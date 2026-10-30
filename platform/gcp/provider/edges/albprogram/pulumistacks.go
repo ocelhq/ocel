@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"maps"
 
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"google.golang.org/api/googleapi"
@@ -24,8 +25,9 @@ import (
 const cloudStorageScheme = "gs"
 
 type PulumiStacks struct {
-	OpenClients func(context.Context) (*gcloud.Clients, error)
-	SkipChecks  bool
+	OpenClients   func(context.Context) (*gcloud.Clients, error)
+	SkipChecks    bool
+	CredentialEnv map[string]string
 }
 
 func (s PulumiStacks) UpLoadBalancer(ctx context.Context, spec albresources.LoadBalancerSpec, progress progress.Log) (map[string]string, error) {
@@ -123,10 +125,7 @@ func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, stack 
 			URL:        naming.StateBackendURL(cloudStorageScheme, stateBucket, project),
 			Passphrase: passphrase,
 			Project:    project,
-			Env: map[string]string{
-				"GOOGLE_PROJECT": clients.Project(),
-				"GOOGLE_REGION":  clients.Region,
-			},
+			Env:        s.engineEnv(clients),
 		},
 		Program: func(ctx *sdk.Context, program Program) error {
 			if err := program.Patches.Install(ctx); err != nil {
@@ -139,6 +138,12 @@ func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, stack 
 		config.Refresh = s.refreshesTheFront
 	}
 	return config, provider.StackRef{Project: project, Tier: stack.Tier, Name: naming.InfraStack(stack.Name())}
+}
+
+func (s PulumiStacks) engineEnv(clients *gcloud.Clients) map[string]string {
+	env := map[string]string{"GOOGLE_PROJECT": clients.Project(), "GOOGLE_REGION": clients.Region}
+	maps.Copy(env, s.CredentialEnv)
+	return env
 }
 
 func (s PulumiStacks) refreshesTheFront(_ provider.StackRef, op pulumi.Operation) bool {

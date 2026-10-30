@@ -19,11 +19,12 @@ type Projects interface {
 }
 
 type resourceManager struct {
-	endpoint string
+	endpoint    string
+	credentials ports.Credentials
 }
 
 func (r resourceManager) Reaches(ctx context.Context, project string) error {
-	service, err := ports.NewRESTService(ctx, cloudresourcemanager.NewService, r.endpoint, "")
+	service, err := ports.NewRESTService(ctx, r.credentials, cloudresourcemanager.NewService, r.endpoint, "")
 	if err != nil {
 		return gcloud.Unauthenticated()
 	}

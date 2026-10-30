@@ -19,7 +19,7 @@ import (
 
 func schedules(t *testing.T) *cloudscheduler.Service {
 	t.Helper()
-	service, err := ports.NewRESTService(context.Background(), cloudscheduler.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(context.Background(), ports.Credentials{}, cloudscheduler.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the Cloud Scheduler API: %v", err)
 	}
@@ -28,7 +28,7 @@ func schedules(t *testing.T) *cloudscheduler.Service {
 
 func cloudRun(t *testing.T) *runv2.Service {
 	t.Helper()
-	service, err := ports.NewRESTService(context.Background(), runv2.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(context.Background(), ports.Credentials{}, runv2.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the Cloud Run API: %v", err)
 	}

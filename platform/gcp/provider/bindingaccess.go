@@ -71,7 +71,7 @@ func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingPr
 		if err != nil {
 			return provider.BindingProxy{}, err
 		}
-		store, err := bucket.Open(ctx, c.Endpoint, c.QuotaProject())
+		store, err := bucket.Open(ctx, c.Credentials, c.Endpoint, c.QuotaProject())
 		if err != nil {
 			return provider.BindingProxy{}, err
 		}

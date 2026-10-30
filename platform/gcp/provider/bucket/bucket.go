@@ -37,8 +37,8 @@ type Store struct {
 	SignBlob func(ctx context.Context, account string, payload []byte) ([]byte, error)
 }
 
-func Open(ctx context.Context, endpoint, quotaProject string) (Store, error) {
-	client, err := ports.NewHTTPClient(ctx, endpoint, quotaProject)
+func Open(ctx context.Context, credentials ports.Credentials, endpoint, quotaProject string) (Store, error) {
+	client, err := ports.NewHTTPClient(ctx, credentials, endpoint, quotaProject)
 	if err != nil {
 		return Store{}, fmt.Errorf("find the Google credentials Cloud Storage is reached with: %w", err)
 	}

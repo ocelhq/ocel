@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-
-	"golang.org/x/oauth2/google"
 )
 
 const (
@@ -14,18 +12,18 @@ const (
 	federatedCredential = "external_account_authorized_user"
 )
 
-func findQuotaProject(project string) string {
+func findQuotaProject(project string, credentials Credentials) string {
 	if named := os.Getenv(QuotaProjectEnvVar); named != "" {
 		return named
 	}
-	if isBilledElsewhere() {
+	if isBilledElsewhere(credentials) {
 		return project
 	}
 	return ""
 }
 
-func isBilledElsewhere() bool {
-	found, err := google.FindDefaultCredentials(context.Background(), CloudPlatformScope)
+func isBilledElsewhere(credentials Credentials) bool {
+	found, err := credentials.Find(context.Background())
 	if err != nil || len(found.JSON) == 0 {
 		return false
 	}
@@ -44,7 +42,7 @@ func (c *Clients) QuotaProject() string {
 		if c.Emulated() {
 			return "", nil
 		}
-		return findQuotaProject(c.Project), nil
+		return findQuotaProject(c.Project, c.Credentials), nil
 	})
 	return project
 }

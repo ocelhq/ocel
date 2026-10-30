@@ -26,16 +26,19 @@ import (
 )
 
 type Provider struct {
-	Options     Options
-	Tokens      gcloud.TokenSource
-	Emulator    string
-	TagEmulator string
-	Namespace   provider.Namespace
-	SkipChecks  bool
-	Records     records.Store
-	Clients     *gcloud.Clients
+	Options           Options
+	Tokens            gcloud.TokenSource
+	GoogleCredentials ports.Credentials
+	Emulator          string
+	TagEmulator       string
+	Namespace         provider.Namespace
+	SkipChecks        bool
+	Records           records.Store
+	Clients           *gcloud.Clients
 
 	Engine Engine
+
+	externalAccountFile string
 
 	mu                sync.Mutex
 	clientsChecked    bool
@@ -44,15 +47,22 @@ type Provider struct {
 	liveness.Net
 }
 
-func New(_ context.Context, settings provider.Settings) (*Provider, error) {
+func New(ctx context.Context, settings provider.Settings) (*Provider, error) {
 	decoded, err := provider.Decode[Options](gcloud.Vendor, settings.Options)
 	if err != nil {
 		return nil, err
 	}
-	if err := useWebIdentity(settings.WebIdentity); err != nil {
+	p, err := NewProvider(decoded)
+	if err != nil {
 		return nil, err
 	}
-	return NewProvider(decoded)
+	if settings.WebIdentity == nil {
+		return p, nil
+	}
+	if err := p.useWebIdentity(ctx, settings.WebIdentity); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 func NewProvider(options Options) (*Provider, error) {
@@ -75,7 +85,7 @@ func NewProvider(options Options) (*Provider, error) {
 	options.Project = namedProject(options.Project)
 	return &Provider{
 		Options:     options,
-		Tokens:      gcloud.ApplicationDefault{},
+		Tokens:      ports.Credentials{},
 		Emulator:    emulator,
 		TagEmulator: tagEmulator,
 		Namespace:   namespace,
@@ -121,7 +131,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		EnsureImageRegistry:  refuseEnsureImageRegistry,
 		OpenDirectImages:     refuseOpenDirectImages,
 		CheckBucket:          refuseCheckBucket,
-		EnvSource:            &provider.EnvSourceHooks{ProveIdentity: ports.ProveIdentity, EnsureSync: refuseEnsureEnvSourceSync},
+		EnvSource:            &provider.EnvSourceHooks{ProveIdentity: p.GoogleCredentials.ProveIdentity, EnsureSync: refuseEnsureEnvSourceSync},
 		BindingAccess:        &provider.BindingAccessHooks{ForwardPorts: refuseForwardPorts, ServeProxy: refuseServeBindingProxy},
 		Cost:                 &provider.CostHooks{Inventory: refuseInventory, Estimate: EstimateCost},
 		Retirement:           &provider.RetirementHooks{Plan: refusePlanRetirement, Retire: refuseRetire},
@@ -153,7 +163,7 @@ func (p *Provider) Credentials() provider.Credentials {
 		Region:    p.Options.Region,
 		Tokens:    p.Tokens,
 		Endpoint:  p.Emulator,
-		Projects:  resourceManager{endpoint: p.Emulator},
+		Projects:  resourceManager{endpoint: p.Emulator, credentials: p.GoogleCredentials},
 		Namespace: p.Namespace,
 	}
 }

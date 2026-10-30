@@ -89,7 +89,7 @@ func newSync(getenv func(string) string) (*envsource.Sync, error) {
 		},
 		Tier: tier,
 		Login: envsource.Login{
-			ProveIdentity: ports.ProveIdentity,
+			ProveIdentity: ports.Credentials{}.ProveIdentity,
 			Client:        &http.Client{Timeout: requestTimeout},
 		},
 	}, nil

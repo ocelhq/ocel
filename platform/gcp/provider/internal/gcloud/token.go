@@ -6,16 +6,12 @@ import (
 	"net/http"
 	"time"
 
-	"golang.org/x/oauth2/google"
-
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const CloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
-
-const UserinfoEmailScope = "https://www.googleapis.com/auth/userinfo.email"
 
 const TokenInfoURL = "https://oauth2.googleapis.com/tokeninfo"
 
@@ -27,20 +23,6 @@ var tokenInfoClient = &http.Client{Transport: ports.NewGoogleTransport(nil), Tim
 
 type TokenSource interface {
 	Token(ctx context.Context) (string, error)
-}
-
-type ApplicationDefault struct{}
-
-func (ApplicationDefault) Token(ctx context.Context) (string, error) {
-	found, err := google.FindDefaultCredentials(ctx, CloudPlatformScope, UserinfoEmailScope)
-	if err != nil {
-		return "", err
-	}
-	token, err := found.TokenSource.Token()
-	if err != nil {
-		return "", err
-	}
-	return token.AccessToken, nil
 }
 
 const EmulatorPrincipal = "emulator"
