@@ -1,4 +1,5 @@
 import {
+  authenticateHeaderCheck,
   batchCheck,
   bindingCheck,
   clientAddressCheck,
@@ -10,6 +11,7 @@ import {
   lanesCheck,
   malformedQueryCheck,
   missingImmutableChunkCheck,
+  missingNextAssetCheck,
   nextCacheChecks,
   nextDataCacheChecks,
   nextOriginDataCacheChecks,
@@ -240,6 +242,19 @@ export const gaps: Gap[] = [
         fixtures: [deploy.node, deploy.python, deploy.go, deploy.rust, sdk.node],
         variants: [apiGateway],
         fails: [check(emptyBodyCheck)],
+      },
+    ],
+  },
+  {
+    id: "cloudfront-runs-no-function-on-an-error",
+    reason:
+      "CloudFront runs no viewer-response function on a status of 400 or more, so the edge cannot rename the x-amzn-remapped-www-authenticate a function URL sends on a 401 back to WWW-Authenticate, nor answer a missing static asset with plain text instead of S3's XML 404; a custom error response would replace the app's own error pages across the distribution",
+    where: [
+      {
+        on: ["aws"],
+        fixtures: [deploy.next],
+        variants: [defaults],
+        fails: [check([authenticateHeaderCheck, missingNextAssetCheck])],
       },
     ],
   },
