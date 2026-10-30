@@ -3,7 +3,7 @@ title: cloud.version_unserved
 description: Ocel Cloud does not serve this release of the CLI.
 ---
 
-The project deploys to Ocel Cloud, and Ocel Cloud answered that it does not serve the release of the CLI that called it. Every call names the CLI's version, and Ocel Cloud serves the releases it runs a builder and a provider for. A deploy, a preview or a build is refused before any source is uploaded.
+The project deploys to Ocel Cloud, and the command opens a session on the provider Ocel Cloud serves, which serves one release of the CLI. The console publishes that release, and the CLI compares it before it opens the session; Ocel Cloud refuses a session of any other release the same way.
 
 The message names the releases Ocel Cloud serves. When the CLI is older than all of them, it says which release to upgrade to. When the CLI is newer, Ocel Cloud has not caught up with it yet.
 

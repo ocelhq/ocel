@@ -1,0 +1,12 @@
+---
+title: job.version_unserved
+description: The runner refused this release of the CLI.
+---
+
+The command runs as a job on a runner, and the runner refused a call because it does not serve the release of the CLI that made it. Before it uploads anything, the CLI only warns when the console publishes another release for the runner, because the job reads the project with the runner's own ocel.
+
+The message names the releases the runner serves.
+
+## Fix
+
+Run the command with a release the message names, or run it again once the runner serves this release.

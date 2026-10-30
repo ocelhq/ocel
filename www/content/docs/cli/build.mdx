@@ -27,8 +27,8 @@ that environment.
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--env` | `string` |  | Build with the values of a deployed environment: production, or preview for the current branch's preview |
-| `--no-wait` | `bool` | `false` | On Ocel Cloud, start the job, print its link and return without waiting for it to end |
+| `--env` | `string` |  | Build with the values of a deployed environment: production, or preview for the current branch's preview. A project that names no provider builds on that tier's runner with its values, production's when none is named |
+| `--no-wait` | `bool` | `false` | On a runner, start the job, print its link and return without waiting for it to end |
 
 Every command also takes the [global flags](/docs/cli#global-flags).
 

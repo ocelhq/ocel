@@ -1,0 +1,10 @@
+---
+title: job.context_invalid
+description: The CLI runs inside a job whose context it cannot read.
+---
+
+`OCEL_JOB_CONTEXT` is set, so the CLI runs inside a job a runner started, and the job's context is missing or not valid. The runner writes that context for every job, so the fault is the runner's, not your project's. The message says which part is at fault.
+
+## Fix
+
+Start the job again with the same command. If it fails the same way, report it with the job's URL. Outside a job, unset `OCEL_JOB_CONTEXT`.

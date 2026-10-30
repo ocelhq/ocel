@@ -1,0 +1,10 @@
+---
+title: job.token_refused
+description: The runner refused the token the console issued for this command.
+---
+
+The command runs as a job on a runner, so the CLI had the console issue a short-lived token for that runner, and the runner answered that the token speaks for no one it trusts. When the runner cannot check a token, the command fails as unavailable instead, and a job keeps being watched.
+
+## Fix
+
+Run `ocel login`, then run the command again.

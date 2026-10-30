@@ -430,6 +430,82 @@ container starts it over from what the build prerendered. Its build reads its pu
 Railpack's build step is handed them, and a Dockerfile reads them as build arguments; see
 [Environment variables](/docs/frameworks/nextjs#environment-variables).
 
+## Deploys from the console
+
+Bootstrapping a tier while logged in to the [console](/docs/console), in a project linked to it,
+registers the box as a console target for that tier. The box must be named by its hostname:
+the console refuses an IP address, because the box's endpoint serves a publicly trusted
+certificate for that name. With a [connector](/docs/cli/connector) on the box, the console's
+jobs can then deploy to it without a key of their own.
+
+The connector also answers the console's control calls on the box itself, as `ocel-deploy`:
+a rollback, a hostname's status, the promotions a project has made. A call that would build,
+bootstrap or send images goes to a runner instead, and so does any call for a project behind
+Cloudflare, or whose `ssh` names the box by an `ssh_config` alias rather than its address.
+
+The bootstrap's `console-trust` part writes:
+
+| What | For |
+| --- | --- |
+| `/etc/ocel/ssh/user-ca` | A certificate authority minted on the box. Its key never leaves it, and only root reads it. |
+| `/etc/sudoers.d/ocel-ssh-sign` | The connector signs through `/usr/local/lib/ocel/live ssh-sign`, which signs only for `ocel-deploy`, for at most 10 minutes. |
+| `/etc/ssh/sshd_config.d/ocel.conf`, `/etc/ocel/ssh/principals` | sshd trusts that authority for `ocel-deploy` alone. |
+| `/etc/ocel/ssh/authority.json` | The login its certificates name: `ocel-deploy`. |
+| `/etc/ocel/<tier>/console-trust.json` | The console, organization and target whose credentials the connector accepts for the tier. |
+
+The console records `https://<box>/.ocel/connector` as the tier's identity provider. A job
+asks the console for a credential, through the same check as on AWS and Google Cloud: the
+tier's bound runner must have credentials. It hands that credential to the connector, which
+signs a certificate for a key the job just made. The certificate names `ocel-deploy`, lasts at
+most 10 minutes and never past the credential, and carries the credential's session, project
+and tier as its key id, so sshd's log names the deploy. The connector also returns the box's
+host keys, and the job trusts only those.
+
+One `ocel-deploy` login serves both tiers, so a credential for one tier reaches the other. A
+box that serves production therefore takes console credentials for production only:
+bootstrapping preview there while logged in is refused, and so is bootstrapping production onto
+a box whose preview already takes them, until `ocel bootstrap preview --remove console-trust`
+runs. Deploy previews from the console or git to a box of their own. A preview you deploy from
+your own machine still works on the shared box, since it logs in with your own ssh.
+
+`ocel bootstrap <tier> --remove console-trust` stops the console issuing credentials for the
+tier and deletes its trust. The authority and the sshd lines go when no tier trusts the
+console.
+
+## Running jobs on the box
+
+A box can be the runner the console sends a project's jobs to. Add its connector as one:
+
+```bash
+ocel connector add --runner
+```
+
+The connector install then adds:
+
+| What | For |
+| --- | --- |
+| `ocel-job:<version>` | The image each job runs in, built on the box from the `ocel` release running the install and checked against its `checksums.txt`. `--image` names one to pull instead; a development build of ocel must. |
+| `/usr/local/lib/ocel/runner-docker`, `/etc/sudoers.d/ocel-runner` | The connector starts job containers as root through this helper, which puts each under `ocel-jobs.slice`. |
+| `/etc/systemd/system/ocel-jobs.slice` | The CPU and memory cap every job on the box shares. |
+| `ocel-jobs-docker`, `/var/lib/ocel/jobs-docker` | The Docker daemon jobs build images and run containers in: a privileged container under `ocel-jobs.slice`, with its images and build cache in the volume of the same name. |
+| `/var/lib/ocel/runner` | Jobs, uploaded sources and their blobs. |
+| `/etc/ocel/runner.json` | The connector serves the runner at `https://<box>/.ocel/connector`. |
+
+Every job runs in `ocel-jobs.slice`, a systemd slice whose cap the jobs share: all but one of
+the box's CPUs and three quarters of its memory, however many jobs run at once. The images jobs
+build and the containers they start run in `ocel-jobs-docker`, inside the same slice, so the cap
+holds them too. `--cpus` and `--memory` change that cap. Docker must use the systemd cgroup
+driver, the default on current distributions, so the slice holds the jobs. Each job mounts the
+`ocel-runner-cache` volume for package caches. Then bind the runner to a project's tier in the
+console. `ocel connector add` without `--runner` takes the runner off the box, and
+`ocel connector rm` takes it off with the connector. Either first stops the jobs running on the
+box, killing any still running after a minute.
+
+A job runs as root and drives `ocel-jobs-docker`, a privileged Docker daemon. A build on the box
+is trusted like the box's admins, and so is anyone who can deploy to it, since the deploy login
+and the connector are one login. Keep apps off a runner: give builds their own box, and let its
+jobs deploy to your app boxes with the certificates their connectors sign.
+
 ## Upgrades
 
 After upgrading ocel, a deploy that needs a newer box agent tells you to run `ocel bootstrap
@@ -451,6 +527,17 @@ the box is in a swarm.
 | `docker … is older than 28.0`, `… is the snap package`, `… runs rootless` | Install Docker 28.0 or later from Docker's own packages as the system daemon, then bootstrap. |
 | Bootstrap names what holds port 80 or 443 | Stop it, or deploy [behind it](#behind-your-own-proxy). |
 | `ports 80 and 443 on … are unreachable from this machine` | Allow inbound TCP 80 and 443 in your cloud firewall, or the box's own. |
+| `the ssh host is the address …; the connector needs a hostname` | Point a hostname at the box and name it under `ssh`. |
+| `` `sshd -t` on … refuses its config with /etc/ssh/sshd_config.d/ocel.conf in it …`` | The drop-in was taken out again, so logins still work. Fix what sshd names, then bootstrap. |
+| `… trusts console target … and … would trust target …` | Bootstrap both tiers from the same organization, or remove `console-trust` from the other tier first. |
+| `this box serves production, and one ocel-deploy login serves both tiers …` | Deploy previews from the console to a box of their own, or deploy previews here from your machine. |
+| `preview on this box takes the console's credentials …` | Run `ocel bootstrap preview --remove console-trust`, or give production its own box. |
+| `this box's connector serves organization …` | Add the connector and bootstrap from the same organization. |
+| `this project deploys to … and the console's credential is for …` | Name the box under `ssh` by the hostname the console registered. |
+| `Docker on … uses the cgroupfs cgroup driver …` | Switch Docker to the systemd cgroup driver, then add the connector again. |
+| `sshd on … does not apply /etc/ssh/sshd_config.d/ocel.conf …` | Add `Include /etc/ssh/sshd_config.d/*.conf` at the top of `/etc/ssh/sshd_config`, then bootstrap. |
+| `this box trusts the console for no <tier> deploys` | Run `ocel bootstrap <tier>` logged in to the console. |
+| `this ocel (…) is no release …` | Name a job image with `ocel connector add --runner --image`, or add the connector with a released ocel. |
 | `… has … free on …; this deploy needs …` | Free space on Docker's data root. |
 | `app … asks for instances.min …` | A box runs one container per app: set both to 1 or leave them off. |
 | `… orders a publicly trusted certificate for each preview hostname …` | See [Previews](#previews). |

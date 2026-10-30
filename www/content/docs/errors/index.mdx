@@ -50,24 +50,32 @@ A failure with no code reports `internal`. It has no page, because it means Ocel
 | [`console.not_logged_in`](/docs/errors/console.not_logged_in) | You are not logged in to the console. |
 | [`console.not_linked`](/docs/errors/console.not_linked) | This directory is not linked to a console project. |
 | [`cloud.unsupported`](/docs/errors/cloud.unsupported) | The command does not run on Ocel Cloud yet. |
-| [`cloud.job_failed`](/docs/errors/cloud.job_failed) | The job running the command on Ocel Cloud failed. |
-| [`cloud.job_canceled`](/docs/errors/cloud.job_canceled) | The job running the command on Ocel Cloud was canceled. |
-| [`cloud.source_invalid`](/docs/errors/cloud.source_invalid) | Ocel Cloud would not accept the source the CLI read for the job. |
-| [`cloud.job_context_invalid`](/docs/errors/cloud.job_context_invalid) | The CLI runs inside an Ocel Cloud job whose context it cannot read. |
 | [`cloud.version_unserved`](/docs/errors/cloud.version_unserved) | Ocel Cloud does not serve this release of the CLI. |
 | [`cloud.token_refused`](/docs/errors/cloud.token_refused) | Ocel Cloud refused the token the console issued for this command. |
 
-## Ocel Cloud jobs
-
-A job that fails on Ocel Cloud ends the command with [`cloud.job_failed`](/docs/errors/cloud.job_failed), and its message names the job's own code: one of the CLI's codes above, from the run inside the job, or one of these, from Ocel Cloud itself.
+## Jobs
 
 | Code | Meaning |
 | --- | --- |
-| [`cloud.timeout`](/docs/errors/cloud.timeout) | The job ran on Ocel Cloud longer than a job may, and was stopped. |
-| [`cloud.interrupted`](/docs/errors/cloud.interrupted) | Ocel Cloud stopped while the job ran. |
-| [`cloud.builder`](/docs/errors/cloud.builder) | Ocel Cloud could not run the job. |
-| [`cloud.source`](/docs/errors/cloud.source) | Ocel Cloud could not unpack the source the CLI uploaded. |
-| [`cloud.run`](/docs/errors/cloud.run) | The ocel run inside the job failed without naming an error code. |
+| [`job.unsupported`](/docs/errors/job.unsupported) | The job cannot run the command as it was asked. |
+| [`job.failed`](/docs/errors/job.failed) | The job running the command on a runner failed. |
+| [`job.canceled`](/docs/errors/job.canceled) | The job running the command on a runner was canceled. |
+| [`job.source_invalid`](/docs/errors/job.source_invalid) | The runner would not accept the source the CLI read for the job. |
+| [`job.context_invalid`](/docs/errors/job.context_invalid) | The CLI runs inside a job whose context it cannot read. |
+| [`job.version_unserved`](/docs/errors/job.version_unserved) | The runner refused this release of the CLI. |
+| [`job.token_refused`](/docs/errors/job.token_refused) | The runner refused the token the console issued for this command. |
+
+## A job's own codes
+
+A job that fails ends the command with [`job.failed`](/docs/errors/job.failed), and its message names the job's own code: one of the CLI's codes above, from the run inside the job, or one of these, from the runner or from Ocel Cloud.
+
+| Code | Meaning |
+| --- | --- |
+| [`job.source`](/docs/errors/job.source) | The runner could not unpack the job's source. |
+| [`job.run`](/docs/errors/job.run) | The ocel run inside the job failed without naming an error code. |
+| [`job.agent`](/docs/errors/job.agent) | The runner's job agent failed the job. |
+| [`job.timeout`](/docs/errors/job.timeout) | The job ran longer than its token allows, and was stopped. |
+| [`job.interrupted`](/docs/errors/job.interrupted) | The runner lost the job before it ended. |
 | [`cloud.preview_limit`](/docs/errors/cloud.preview_limit) | The project runs as many preview environments as the organization's plan allows. |
 
 ## Runs
