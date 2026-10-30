@@ -1,19 +1,17 @@
 "use client";
 
-import posthog from "posthog-js";
 import { useState } from "react";
 import { Cursor, Terminal } from "@/components/landing/terminal";
 import { GithubLogo } from "@/components/landing/tool-logos";
 import { Button } from "@/components/ui/button";
+import { capture } from "@/lib/analytics";
 
 export function Hero() {
   const [step, setStep] = useState(0);
 
   function start() {
     if (step) return;
-    if (process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN && process.env.NEXT_PUBLIC_POSTHOG_HOST) {
-      posthog.capture("deploy_demo_started");
-    }
+    capture("deploy_demo_started");
     setStep(1);
     setTimeout(() => setStep(2), 700);
     setTimeout(() => setStep(3), 1600);

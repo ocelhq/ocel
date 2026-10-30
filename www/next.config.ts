@@ -1,5 +1,6 @@
 import { createMDX } from "fumadocs-mdx/next";
 import type { NextConfig } from "next";
+import { posthogRewrites } from "./lib/posthog";
 
 const alternate = (url: string) => `<${url}>; rel="alternate"; type="text/markdown"`;
 
@@ -25,8 +26,12 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
-    return [{ source: "/docs/:slug*.md", destination: "/llms.mdx/docs/:slug*/content.md" }];
+    return [
+      ...posthogRewrites(process.env.NEXT_PUBLIC_POSTHOG_HOST),
+      { source: "/docs/:slug*.md", destination: "/llms.mdx/docs/:slug*/content.md" },
+    ];
   },
+  skipTrailingSlashRedirect: true,
 };
 
 const withMDX = createMDX();
