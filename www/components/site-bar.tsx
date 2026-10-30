@@ -54,13 +54,15 @@ export function SiteBar() {
             <span className="sr-only md:not-sr-only">GitHub</span>
           </a>
           <a
-            href="/docs/quick-start"
+            href="https://app.ocelhq.com"
             className={cn(
               cell,
-              "gap-2 border-x-[1.5px] border-foreground px-3 text-[14px] font-medium whitespace-nowrap text-foreground transition-colors hover:bg-foreground hover:text-background sm:px-4",
+              "gap-2 border-x-[1.5px] border-foreground bg-foreground px-3 text-[14px] font-medium whitespace-nowrap text-background transition-opacity hover:opacity-85 sm:px-4",
             )}
           >
-            Get started
+            <span>
+              <span className="hidden sm:inline">Deploy on </span>Ocel Cloud
+            </span>
             <svg
               viewBox="0 0 12 12"
               aria-hidden="true"

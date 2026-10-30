@@ -31,11 +31,35 @@ const archivo = localFont({
   variable: "--font-display",
 });
 
+const title = "Ocel - Deploy apps anywhere";
+const description =
+  "One CLI ships your app to AWS, Google Cloud, a VPS or Ocel Cloud. Your code declares the resources it needs, and Ocel builds them too.";
+
 export const metadata: Metadata = {
-  title: "Ocel — Deploy apps to your own cloud",
-  description:
-    'The deploy experience you love, running in the account you already pay for. Zero-config deploys, real dev infra, and an SDK that turns postgres("main") into a database.',
+  metadataBase: new URL("https://ocel.dev"),
+  title,
+  description,
+  openGraph: { type: "website", siteName: "Ocel", url: "/", title, description },
+  twitter: { card: "summary_large_image", title, description },
 };
+
+// The docs keep the reader's theme in localStorage under "theme" (fumadocs' next-themes,
+// defaulting to the system's), so the landing reads the same key before it paints and
+// follows the system while nothing is chosen.
+const themeScript = `(() => {
+  const root = document.documentElement;
+  const media = matchMedia("(prefers-color-scheme: dark)");
+  const apply = () => {
+    let chosen = null;
+    try { chosen = localStorage.getItem("theme"); } catch {}
+    const dark = chosen === "dark" || ((!chosen || chosen === "system") && media.matches);
+    root.classList.toggle("dark", dark);
+    root.dataset.theme = dark ? "dark" : "light";
+    root.style.colorScheme = dark ? "dark" : "light";
+  };
+  apply();
+  media.addEventListener("change", apply);
+})();`;
 
 export default function RootLayout({
   children,
@@ -46,6 +70,7 @@ export default function RootLayout({
     <html
       lang="en"
       data-register="landing"
+      suppressHydrationWarning
       className={cn(
         "h-full",
         "antialiased",
@@ -55,6 +80,9 @@ export default function RootLayout({
         archivo.variable,
       )}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

@@ -33,9 +33,10 @@ The console is the UI over Ocel, never called a cloud; it may offer Ocel Cloud.
 
 `www` is ocel.dev, the open-source engine's home. It exists so a developer can
 understand what Ocel is and why they should care, get an app running in their own
-account, and find the reference they need without having to search for it. ocel.dev
-markets nothing managed; the managed side (Ocel Cloud, the hosted console) has its own
-site at ocelhq.com, recorded in `cloud/www/PRODUCT.md` of the private cloud repo.
+account, and find the reference they need without having to search for it. It is also
+the one landing page: ocelhq.com, Ocel Cloud's own site (`cloud/www/PRODUCT.md` in the
+private cloud repo), is parked and redirects here until after launch. Ocel Cloud appears
+on ocel.dev as one target among the others, never as a section of its own.
 
 ## Positioning
 
@@ -77,7 +78,8 @@ site at ocelhq.com, recorded in `cloud/www/PRODUCT.md` of the private cloud repo
 - CLI commands: whatever `content/docs/cli/` documents (deploy, dev, preview,
   promotions, rollback, env, domain, logs, skill, and more). Read the folder; never
   hand-copy the list into a page.
-- SDKs: TypeScript (`packages/ocel`), Go (`sdk/`), Rust (`crates/ocel-sdk`).
+- SDKs: TypeScript (`packages/ocel`), Go (`sdk/`), Python (`python/ocel`), Rust
+  (`crates/ocel-sdk`).
 - SDK resources: postgres, bucket, kv, realtime, task, topic, and workers that consume
   them (`proto/` resource types).
 - Providers: AWS (`platform/aws`), GCP (`platform/gcp`), VPS over SSH (`platform/vps`),
@@ -92,11 +94,14 @@ site at ocelhq.com, recorded in `cloud/www/PRODUCT.md` of the private cloud repo
 - Console (github.com/ocelhq/console, Apache-2.0, self-hostable): sign-in, device
   approval, organizations and members, project linking, deployment history, variables.
 
-**Planned, not shipped.** The site may show these only when clearly labelled as planned
-or coming soon. Never present them as available:
+Covered without a dedicated adapter, and fine to show as supported: Django and any other
+WSGI or ASGI app (a Python app whose entrypoint is `wsgi.py`, `asgi.py` or similar,
+`cli/internal/language/detector.go`), and DigitalOcean, Hetzner or any other Linux box
+through the VPS provider.
 
-- Python SDK (`python/` holds only an empty workspace).
-- DigitalOcean provider; Django.
+**Planned, not shipped.** The site may show these only when clearly labelled as planned
+or coming soon. Never present them as available. Check the code before adding to this
+list, or before trusting it.
 
 **Status:** pre-release alpha. Nothing is released, so nothing has consumers. The
 codebase makes clean breaks; the site must not imply stability guarantees it does not
@@ -132,18 +137,16 @@ Binding, confirmed by the owner:
 ## Evidence on Hand
 
 - Real, runnable code samples: the quick start, `ocel.json` variants, and the
-  Node/Go SDK samples in `content/docs/index.mdx`. The Python tab there is illustrative
-  and not backed by a shipped SDK.
+  TypeScript, Go, Python and Rust SDK samples in `content/docs/index.mdx`.
 - Framework and provider logos in `components/logos.tsx` (check each against
   Capabilities before showing it as shipped).
 - Working example apps under `examples/` at the repo root and `../examples/` in the
   ocelhq workspace.
 - Some docs pages under `content/docs/` are still placeholders ("Dummy content.", e.g.
   `frameworks/nestjs.mdx`).
-- The landing page at `app/(landing)/page.tsx` (with `components/landing/`) is an old,
-  superseded design. `middleware.ts` redirects `/` to `/docs` because of it; a new
-  landing page replaces both the page and the redirect. The old page is evidence, not
-  a reference.
+- Recordings of the real CLI, console and an agent at work, listed with their shot
+  descriptions in `components/landing/clips.ts`. They are the landing page's figures; a
+  clip not yet recorded draws its shot description in its place.
 - **Absent, do not fabricate:** customers, testimonials, case studies, press,
   benchmarks, pricing, uptime or cost claims, and any user count.
 - **Absent, do not fabricate:** customers, testimonials, case studies, press,
@@ -166,8 +169,10 @@ Binding, confirmed by the owner:
    path sits one step away, complete and working without anyone's permission. Beyond
    that, Ocel Cloud appears only where a reader of the engine meets it anyway (the list
    of targets, `ocel deploy` with no provider, its error codes), described as plainly
-   as AWS. No banners, upsells, or pricing on the open-source side, and no link to
-   ocelhq.com in the site bar: each site's bar serves its own product.
+   as AWS. No banners, upsells, or pricing on the open-source side. On the landing it
+   is a name in the hero's list of targets, one of the three windows in "Change the
+   target", a project in the console clip, and the last cell of the closing title block.
+   Sign-up is open to a capped number of organizations, then by invite.
 6. **Agents are first-class, and the site shows it.** The skill, `--json` everywhere,
    stable error codes with docs URLs, a self-describing binary, `llms.txt` and `.md`
    pages are product, not footnotes (`content/docs/agents.mdx`).
@@ -176,5 +181,9 @@ Binding, confirmed by the owner:
 
 ## Accessibility & Inclusion
 
-No product-specific standard was established. Code samples and terminal output are
-primary content and must remain real text, never images.
+No product-specific standard was established. In docs, code samples and terminal output
+are primary content and must remain real text, never images. The landing is the one
+exception, by the owner's decision: its figures are recordings of the real thing. What a
+reader copies or reads closely stays text there too (the install command, the config
+diff, resource and command names). Every clip carries a label describing what happens in
+it and a Pause control, and clips hold on their poster under reduced motion.

@@ -175,21 +175,6 @@ components:
     textColor: "{colors.ink}"
     rounded: "{rounded.none}"
     padding: "10px 12px"
-  status-badge:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.electric}"
-    rounded: "{rounded.none}"
-    padding: "2px 6px"
-  target-tab-active:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.paper}"
-    rounded: "{rounded.none}"
-    padding: "10px 12px"
-  target-tab:
-    backgroundColor: "{colors.paper}"
-    textColor: "{colors.body}"
-    rounded: "{rounded.none}"
-    padding: "10px 12px"
 ---
 
 # Design System: Ocel
@@ -211,8 +196,7 @@ command. Code and terminal output are the figures on the sheet, so they get the 
 careful framing on the page.
 
 One theme, two registers. The landing page is the printed sheet in full: grid paper
-showing through the hero, registration crosses in each sheet's corners, a mono caption
-under every figure, and heavy 1.5px Ink rules under the header and between sheets. The docs and the console
+showing through the hero, and heavy 1.5px Ink rules under the header and between sheets. The docs and the console
 dashboard are the same drawing with the scaffolding lifted off: plain paper, hairlines
 only, and the accent limited to link underlines and the mark, so nothing competes with
 the reader's work. The materials never change between them. Only how much of the
@@ -240,14 +224,14 @@ A monochrome drawing with one saturated line and one confirmation green.
 - **Fog** (`{colors.fog}`, dark `{colors.fog-dark}`): the only tinted surface. Tiles, inline code, chips, and the sidebar in dark mode.
 - **Paper** (`{colors.paper}`, dark `{colors.paper-dark}`): the page. Dark paper is a cool near-black with a faint blue cast.
 - **Hairline** (`{colors.hairline}`, dark `{colors.hairline-dark}`): every divider, border, and table rule. Twelve percent ink in light; a solid dark grey in dark mode.
-- **Grid** (`{colors.grid}`) and **Faint** (`{colors.faint}`): landing register only. The grid paper lines and the quiet registration crosses.
+- **Grid** (`{colors.grid}`) and **Faint** (`{colors.faint}`): landing register only. The grid paper lines.
 - **Terminal** (`{colors.terminal}`) with **Terminal Rule** (`{colors.terminal-rule}`), **Terminal Foreground** (`{colors.terminal-foreground}`) and **Terminal Ink** (`{colors.terminal-ink}`): terminal panes are always dark regardless of theme. They read as a second material, a screen set into the paper. Terminal Foreground carries muted output, file titles and captions inside a screen; Terminal Ink carries commands and emphasis.
 
 ### Tertiary
 - **Go** (`{colors.go}`, dark `{colors.go-dark}`): the check mark in terminal output and success states. It appears only where something actually succeeded.
 
 ### Named Rules
-**The One Annotation Rule.** Electric owns less than ten percent of any view. It underlines, outlines, marks, and points. It never fills a card or a button on any surface. The landing register's one Electric fill is the terminal's block cursor, at most one per sheet; every other landing Electric is a line: a link underline, the hero phrase's underline, the target select's border, the status badge's outline, the first rule of a definition list.
+**The One Annotation Rule.** Electric owns less than ten percent of any view. It underlines, outlines, marks, and points. It never fills a card or a button on any surface. The landing register has no Electric fill; every landing Electric is a line or a mark: a link underline, the hero phrase's underline, the first rule of a definition list, the cut-ring mark beside Ocel Cloud in the hero's list of targets.
 
 **The Dark Screen Rule.** Terminal and code panes keep their dark palette in light mode. They are screens set into the drawing, not part of the paper.
 
@@ -268,7 +252,6 @@ A monochrome drawing with one saturated line and one confirmation green.
 - **Sheet Heading** (600, `clamp(1.875rem, 3.6vw, 2.75rem)`, 1.06, -0.03em): each landing sheet's heading, across 7 of 12 columns with its lede beside it in the other 5. Landing register only.
 - **Title** (600, 1.0625rem, 1.4): sub-headings, tile titles, and sidebar navigation, which is set in the display face at 0.875rem.
 - **Lede** (400, 1.125rem, 1.55): the one sentence under a display title, in Body color. Nowhere else. On the landing the hero lede is 17px at 1.55 capped at 40ch, and a sheet lede is 16px at 1.6 capped at 46ch.
-- **Statement** (600, `clamp(2.375rem, 4.4vw, 3.5rem)`, 1.05, -0.035em, about 18ch): the landing's closing call above the second title block. Landing register only.
 - **Index** (600, 2.5rem, 1.1, -0.035em): the docs index and comparison page titles.
 - **Small** (400, 0.9375rem, 1.6): docs table cells and the compare panes. Landing running text inside cells, tables and lists sits at 14px to 14.5px.
 - **Body** (400, 1rem, 1.6): prose in Body color. Max width follows the docs column, about 65 to 75 characters. On the docs index the prose is capped at 35rem while figures, tiles, and tabs keep the full 56rem column.
@@ -287,18 +270,18 @@ The docs use the Fumadocs three-column shell: sidebar, article, and a clerk-styl
 
 Rhythm is on an 8px base. Tiles sit in a responsive grid of at least 16rem columns with 16px gaps. Compared code panes sit side by side from the medium breakpoint and stack below it. Docs section headings take 2.5rem above; the landing register in docs takes 5rem.
 
-In docs the hero splits text and figure: the overview diagram, first on mobile and right of the text on large screens. The landing stacks instead: headline and lede share one row (8 and 4 columns), the full-width terminal screen sits beneath them, then its caption, then the title block. Inside the hero screen, code takes 5 columns and the session 7; below the medium breakpoint the session comes first and the second code file is hidden. Sheets pair a figure with text or a second figure at 7 and 5 (or 5 and 7) columns from the large breakpoint, stacking below it.
+In docs the hero splits text and figure: the overview diagram, first on mobile and right of the text on large screens. The landing stacks instead, one column, nothing beside the headline: the headline across the full width, its lede beneath (54ch), the two calls to action side by side (the filled Ocel Cloud button and the copy command, equal height), and nothing beneath them. The three layer sheets (CLI, SDK, console) open the same way: a 3.75rem headline (16ch), a 52ch lede, then their figures: the CLI's diagram panel and config and output frames at 5 and 7; the SDK's resource tiles in two columns; the console's clip at full width. The Ocel Cloud sheet splits 6 and 6, text and terminal, and closes the page above the footer. Below the large breakpoint everything stacks.
 
-The landing is a run of sheets. Each sheet opens on a 1.5px Ink rule across the full width, carries a mono "+" registration cross in each corner (13px, Faint, from the medium breakpoint), and alternates Paper and Fog. Only the hero shows grid paper.
+The landing is a run of sheets. Each sheet opens on a 1.5px Ink rule across the full width and alternates Paper and Fog. Only the hero shows grid paper.
 
 Dividers are structural. A hairline under the hero, under table rows, and between compared panes structures the layout; margin alone never does.
 
 ### Named Rules
-**The Two Registers Rule.** The landing page may show the drafting apparatus: 48px grid paper faded by a radial mask behind the hero, mono "+" registration crosses in each sheet's corners, a visible mono caption under each figure, and 1.5px Ink rules under the header, between sheets, and above the footer. Docs and the console dashboard show none of it. They keep paper, hairlines, and type so nothing competes with the work at hand.
+**The Two Registers Rule.** The landing page may show the drafting apparatus: 48px grid paper faded by a radial mask behind the hero, and 1.5px Ink rules under the header, between sheets, and above the footer. Docs and the console dashboard show none of it. They keep paper, hairlines, and type so nothing competes with the work at hand.
 
 ## Elevation & Depth
 
-No blurred shadows. The docs stylesheet strips every shadow the docs framework ships, including on code blocks and keyboard keys, and the read register sets the float shadow to none. The landing register frames its terminal screens and the config diff with a 1.5px Ink border and the float shadow (`shadow-float`): a 6px zero-blur offset in Hard Shadow. The title block and the targets table take the 1.5px Ink border without the offset. Depth in docs comes from three things only: a hairline rule, a tonal step from Paper to Fog, and the dark terminal material set into the page. The landing header uses a translucent paper with backdrop blur so content passes beneath it, and that is the only blur in the system.
+No blurred shadows. The docs stylesheet strips every shadow the docs framework ships, including on code blocks and keyboard keys, and the read register sets the float shadow to none. The landing register frames its terminal screens and the config diff with a 1.5px Ink border and the float shadow (`shadow-float`): a 6px zero-blur offset in Hard Shadow. Depth in docs comes from three things only: a hairline rule, a tonal step from Paper to Fog, and the dark terminal material set into the page. The landing header uses a translucent paper with backdrop blur so content passes beneath it, and that is the only blur in the system.
 
 ### Named Rules
 **The No Blur Rule.** Nothing casts a soft shadow. A surface that needs to separate from the page gets a hairline or steps to Fog; a landing figure takes the float offset. Hover never lifts; it darkens a border or tints a fill.
@@ -307,7 +290,7 @@ No blurred shadows. The docs stylesheet strips every shadow the docs framework s
 
 Square. A global rule sets every radius to zero and marks it important, so even library components arrive with hard corners. The only curve in the system is the cut-ring mark, a circle with a wedge removed, and that is why it reads as a signature.
 
-Borders are hairlines by default. The landing register escalates to a 1.5px Ink border for figures, the title block, the targets table, the email field, the copy command, the sign-in button, and the sheet rules; hairlines stay inside them, between cells and rows. Callouts take a 2px left edge in their status color. Prose links draw a 1.5px Electric underline as a bottom border rather than a text decoration, so it sits a touch below the baseline like a ruled annotation.
+Borders are hairlines by default. The landing register escalates to a 1.5px Ink border for figures, the resource tiles, the target switcher, the copy command, the buttons, and the sheet rules; hairlines stay inside them, between cells and rows. Callouts take a 2px left edge in their status color. Prose links draw a 1.5px Electric underline as a bottom border rather than a text decoration, so it sits a touch below the baseline like a ruled annotation.
 
 Diagram connectors are dashed 1.5px Steel curves at 60% opacity, cubic and vertical, with no arrowheads.
 
@@ -322,7 +305,7 @@ Printed and exact. Flat ink, square, no shadow, no motion beyond a color change.
 
 ### Chips
 - **Style:** Paper fill, hairline border, mono Label type in Steel, 4px by 6px padding.
-- **Status badge (landing):** a 1px Electric outline, Electric text, mono 10.5px medium uppercase at 0.14em, 2px by 6px, beside a target name. Marks Ocel Cloud's early access; it is an outline, never a fill.
+- **Status badge:** a 1px Electric outline, Electric text, mono 10.5px medium uppercase at 0.14em, 2px by 6px, beside a name. An outline, never a fill. The landing does not use it at present.
 
 ### Tiles
 Cards are tiles, not cards. They never float.
@@ -340,35 +323,40 @@ Cards are tiles, not cards. They never float.
 - **Error:** destructive red border and 20% ring on the console.
 
 ### Copy Command
-A command as a button. A 1.5px Ink frame on Paper, mono 13px, 10px by 12px, a Body "$ " prompt that does not select, and a Label "COPY" on the right that reads "COPIED" for 1.6s. Hover tints to Fog.
+A command as a button. A 1.5px Ink frame on Paper, mono 13px, 10px by 12px, a Body "$ " prompt that does not select, and a copy icon on the right (Phosphor, 16px, Body hovering to Ink) that turns into a Go check for 1.6s. Its accessible name is "Copy <command>", then "Copied". Hover tints to Fog.
 
 ### Navigation
 - **Docs sidebar:** display face at 0.875rem, separators in Label type, tabs colored per root (Deploy in Electric, CLI in Amber, SDK in Violet) through the tab icon only. Collapse control centered.
-- **Site bar** (`components/site-bar.tsx`): the engine's own bar; ocelhq.com draws its own from the same theme and mark. A ruled strip, sticky, 56px tall, translucent Paper at 85% with backdrop blur, a 1.5px Ink rule beneath, on the 1180px container. Every item is a full-height cell, so labels share one centre line. Left: the Electric cut-ring mark, the lowercase Archivo wordmark, and the revision tag. Right: Docs (from sm) and GitHub (the GitHub glyph, with its name from md, hidden below 380px) in Space Grotesk 14px medium Body hovering to Ink; then "Get started", the end cell, to the quick start: closed by 1.5px Ink rules on both sides, 14px medium Ink with a drawn arrow from sm, filling with Ink and turning Paper on hover. Focus draws the 2px Electric outline inset 3px inside the cell. No Sign in and no link to ocelhq.com: Ocel Cloud is met in the quick start and the targets.
+- **Site bar** (`components/site-bar.tsx`): the engine's own bar; ocelhq.com draws its own from the same theme and mark. A ruled strip, sticky, 56px tall, translucent Paper at 85% with backdrop blur, a 1.5px Ink rule beneath, on the 1180px container. Every item is a full-height cell, so labels share one centre line. Left: the Electric cut-ring mark, the lowercase Archivo wordmark, and the revision tag. Right: Docs (from sm) and GitHub (the GitHub glyph, with its name from md, hidden below 380px) in Space Grotesk 14px medium Body hovering to Ink; then "Deploy on Ocel Cloud" ("Ocel Cloud" below sm), the end cell, to app.ocelhq.com: an Ink fill with Paper text, closed by 1.5px Ink rules on both sides, easing to 85% opacity on hover. Focus draws the 2px Electric outline inset 3px inside the cell.
 - **Revision tag:** the release stage beside the wordmark, drawn like a drawing's revision box. A 1px Ink border, Ink mono 11px medium at 0.14em, uppercase, 5px sides. "ALPHA" in the site bar and the docs lockup (`components/docs/logo.tsx`). No fill.
 - **Landing footer:** 1.5px Ink rule above, the wordmark at 15px, then 13px Body links hovering to Ink, Ocel Cloud pushed right.
 
-### Terminal (Screen and Session)
+### Terminal
 The signature component. A dark screen set into the page in either theme.
 - **Frame:** a figure on Terminal fill. In docs a Terminal Rule border; on the landing a 1.5px Ink border and the 6px float offset. A title bar at least 44px tall: three 10px traffic-light dots (red `#ff5f57`, amber `#febc2e`, green `#28c840`), the title in mono 11px Terminal Foreground as the figure's caption, and an optional control pushed right. A Terminal Rule line closes the bar, and Terminal Rule lines divide panes inside the screen.
 - **Body:** mono at 12.5px (13px from sm), 1.85 line height, wrapping. Transcript tones: command and emphasis in Terminal Ink, muted output in Terminal Foreground, success marks in Go (dark), warnings in Warn (dark), URLs in Terminal Ink with a 1.5px Electric (dark) underline at a 4px offset.
-- **Session (landing):** lines print in sequence once the screen is a third in view (55ms per line, 260ms before a prompt), and print whole under reduced motion. Each line holds its height so nothing reflows. When the transcript ends, a prompt and an Electric block cursor blink in steps at 1.1s; the cursor is the landing register's Electric stamp and stops blinking under reduced motion.
 - **Code panes:** Shiki output on the screen's own fill, 13px at 1.85, each under a mono 11px filename bar.
 
-### Target Selector
-One target state drives the landing. Choosing a target in any selector re-runs every target-aware session and is remembered across visits.
-- **Select:** sits in a terminal title bar, right-aligned. A "TARGET" Label (from sm), then a native select with a 1px Electric border on Terminal fill, mono 12px Terminal Ink, and a 1.5px chevron drawn in SVG.
-- **Needs line:** a footer row inside the hero screen under a Terminal Rule, mono 12px. A "NEEDS" Label, what the target needs in Terminal Ink, and why in Terminal Foreground; for Ocel Cloud it ends in a "Request one" link that focuses the early-access field.
-- **Config diff:** a radio group of target tabs above an `ocel.json` screen. Tabs are mono 12px, 10px by 12px, framed in 1.5px Ink with hairlines between, two per row below sm and one row from it; the checked tab is Ink fill with Paper text, the rest Paper with Body text hovering to Ink. The pane beneath has a filename caption with a Label status on the right, and marks the added provider line with a Go "+" over a 10% Go tint.
+### Frame (landing)
+`components/landing/frame.tsx`. The window every landing figure sits in: the Terminal frame above for a terminal, or a browser window, whose title bar steps to Fog with a hairline beneath, the same three dots, and the URL in mono 11px Body. Both take the 1.5px Ink border and the float offset; a frame stacked under another drops the offset so only the front one lifts. An optional control sits right in the title bar.
 
-### Title Block
-The landing's ruled call to action, drawn like a drawing's title block. A 1.5px Ink frame on Paper with three cells on 5, 4 and 3 columns, split by hairlines and stacked below md. Each cell (20px, 24px from md) opens on a Label, then a 14px Body sentence, then its control: the early-access email field, the copy command, the source link with an Electric underline and its licence Label. It closes the hero and the page.
+### Clip
+`components/landing/clip.tsx`, fed by `components/landing/clips.ts`. A recording that behaves like a GIF: a muted, looping, inline WebM or H.264 video in a Frame, at 16:10. It loads nothing until reached, plays while a third of it is in view and pauses out of it. The title bar carries a Pause/Play control in Label type. Under reduced motion it holds on its poster until the visitor presses Play. A still is the same frame around an image. A clip not yet recorded draws its shot description in place: a "TO BE RECORDED" Label over the shot in mono 12.5px, centred on the frame's own fill, at the clip's ratio, so the page keeps its final layout before the files exist.
 
-### Figure Caption
-Under every landing figure, 16px below it: mono 11px uppercase at 0.14em and 1.6 line height in Body, led by a 24px 1.5px Ink leader rule. It numbers the figure and says what is abridged or illustrative.
+### Ocel Cloud Button
+The landing's primary action, wherever Ocel Cloud is offered: Ink fill, Paper text, 1.5px Ink border, 15px semibold, 12px by 20px, a drawn arrow that nudges 2px right on hover, the fill easing to 85% opacity. It sits beside the copy command at equal height in the hero.
 
-### Targets Table
-A 1.5px Ink frame on Paper. From md, a table with Label headers and hairline rows: target name in semibold Ink with its status badge, where it runs in Body, what you bring in mono 13px Ink. Below md the same rows become a definition list, one block per target. A closing row of Body text carries an Electric-underlined link.
+### Deploy Diagram
+`components/landing/deploy-diagram.tsx`: the docs' overview diagram drawn for the landing, in a Fog panel framed in 1.5px Ink. Framework logos across the top, the `ocel deploy` terminal in the middle with a 1.5px Ink frame, and the targets along the bottom with a mono 11px label under each (AWS, Google Cloud, Any VPS, Ocel Cloud as the Electric cut-ring mark), joined by the dashed Steel curves. Static.
+
+### Resource Tiles
+`components/landing/primitives-grid.tsx`: one tile per SDK resource, two columns from the large breakpoint. A tile is a 1.5px Ink frame: a Paper header with the resource's icon (Phosphor, light, 26px, in Body colour, unframed), its name in mono 15px, one Body line saying what it is and a "Docs" link; then two Terminal panes, each under its file name: the declaration in the discovery folder (`infra/` by default; the `Infra` struct in Rust), and the app code that imports and calls it, 12.5px. Declaration and use are never shown in one file, because discovery runs the declarations before anything is provisioned. One radio strip above the grid switches every tile between TypeScript, Go, Python and Rust (Ink fill when checked) and is remembered across visits.
+
+### Config Diff
+A Terminal frame titled with the config's filename and a "1 LINE CHANGED" Label on the right. Removed lines are struck through over a 10% red tint with a red "-"; added lines are Terminal Ink over a 10% Go tint with a Go "+". Beneath the frame, a 1.5px Ink rule and a line reading `app/` and a Go "0 LINES CHANGED" Label.
+
+### No Annotation on the Landing
+The landing carries no figure captions, layer markers, registration crosses or tracked mono labels. Headings, plain sentences and the work itself (code, terminals, recordings, the diagram) do the explaining; a heading or control is set in the display or body face, sentence case. Docs keep their table headers and Labels.
 
 ### Compare
 Two code panes side by side inside one hairline frame, the second pane's title bar hidden so both read as one figure with a diff. Used to show a one-line change in config.
@@ -387,14 +375,13 @@ An inline SVG figure: framework logos across the top, a terminal in the middle, 
 - **Do** underline prose links with a 1.5px Electric bottom border and Ink text.
 - **Do** keep terminal and code panes dark in both themes, framed by a hairline in docs and by 1.5px Ink on the landing.
 - **Do** separate with hairlines and tonal steps to Fog. Hover darkens a border or tints a fill.
-- **Do** confine grid paper, registration crosses, figure captions, and 1.5px rules to the landing register.
-- **Do** caption every landing figure beneath it, and say when its output is abridged.
+- **Do** confine grid paper and 1.5px rules to the landing register.
 - **Do** use the cut-ring mark and lowercase Archivo wordmark exactly as built. It is the one curve in the system.
 
 ### Don't:
-- **Don't** let Electric fill a button, card, or background on any surface. Under ten percent, as annotation only, plus the landing terminal's block cursor.
+- **Don't** let Electric fill a button, card, or background on any surface. Under ten percent, as annotation only.
 - **Don't** add blurred shadows, glows, blurs, or gradients. The site bar's backdrop blur and the hero's radial grid mask are the two exceptions, both landing only.
 - **Don't** bring the landing's drafting apparatus into docs or the dashboard. Those surfaces stay quiet so the work is the only thing that stands out.
 - **Don't** invent a second accent. Amber and Violet colour category icons only; they never appear in content.
-- **Don't** render code or terminal output as images or screenshots.
+- **Don't** render code or terminal output as images or screenshots in docs. On the landing, recordings of the real thing are the figures, but what a reader copies (commands, config) stays text.
 - **Don't** set headings, buttons, or labels in a fourth typeface. Grotesk, Plex Sans, Plex Mono, and Archivo for the wordmark are the whole set.
