@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { waitlistEvent } from "./waitlist";
+import { resendContact, waitlistEvent } from "./waitlist";
 
 describe("waitlistEvent", () => {
   it("records an email as a PostHog person on the waitlist", () => {
@@ -25,5 +25,15 @@ describe("waitlistEvent", () => {
     expect(
       waitlistEvent({ email: "bot@example.com", source: "landing", company: "Acme" }, "phc_x"),
     ).toBeNull();
+  });
+});
+
+describe("resendContact", () => {
+  it("subscribes the email to the waitlist segment", () => {
+    expect(resendContact("ada@example.com", "seg_1")).toEqual({
+      email: "ada@example.com",
+      unsubscribed: false,
+      segments: [{ id: "seg_1" }],
+    });
   });
 });

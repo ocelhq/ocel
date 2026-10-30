@@ -20,3 +20,7 @@ export function waitlistEvent(
     },
   };
 }
+
+export function resendContact(email: string, segmentId: string) {
+  return { email, unsubscribed: false, segments: [{ id: segmentId }] };
+}
