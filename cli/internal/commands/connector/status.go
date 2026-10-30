@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/scope"
+
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
@@ -33,7 +35,7 @@ func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 		if err != nil {
 			return err
 		}
-		registered = slices.DeleteFunc(registered, func(row *consolev1.Connector) bool { return row.GetTarget() != fingerprint })
+		registered = slices.DeleteFunc(registered, func(row *consolev1.Endpoint) bool { return row.GetTarget() != fingerprint })
 		if len(registered) == 0 && !asJSON {
 			fmt.Fprintf(stdout, "The console has no connector registered for %s. Run `ocel connector add` to put one there.\n", terminal.PaletteFor(stdout).Bold(fingerprint))
 			return nil
@@ -44,7 +46,7 @@ func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 		return nil
 	}
 
-	slices.SortFunc(registered, func(a, b *consolev1.Connector) int {
+	slices.SortFunc(registered, func(a, b *consolev1.Endpoint) int {
 		return strings.Compare(a.GetTarget(), b.GetTarget())
 	})
 	if asJSON {
@@ -59,7 +61,7 @@ func runStatus(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 	return nil
 }
 
-func connectorStatusResult(registered []*consolev1.Connector) *resultv1.ConnectorStatusResult {
+func connectorStatusResult(registered []*consolev1.Endpoint) *resultv1.ConnectorStatusResult {
 	result := &resultv1.ConnectorStatusResult{Connectors: make([]*resultv1.ConnectorStatus, 0, len(registered))}
 	for _, row := range registered {
 		result.Connectors = append(result.Connectors, &resultv1.ConnectorStatus{
@@ -69,7 +71,7 @@ func connectorStatusResult(registered []*consolev1.Connector) *resultv1.Connecto
 			Reach:        reachName(row.GetReach()),
 			Url:          row.GetUrl(),
 			Version:      row.GetVersion(),
-			Capabilities: sortedCapabilities(row.GetCapabilities()),
+			Capabilities: sortedCapabilities(scope.ClaimsOf(row.GetAllowedScopes())),
 			Liveness:     connectorLiveness(console.LivenessOf(row)),
 			ConnectedAt:  terminal.FormatRFC3339(timeOf(row.GetConnectedAt())),
 			LastSeenAt:   terminal.FormatRFC3339(timeOf(row.GetLastSeenAt())),
@@ -92,7 +94,7 @@ func connectorLiveness(live console.Liveness) resultv1.ConnectorLiveness {
 	}
 }
 
-func connectorDenial(denied *consolev1.ConnectorDenial) *resultv1.ConnectorDenial {
+func connectorDenial(denied *consolev1.EndpointDenial) *resultv1.ConnectorDenial {
 	if denied == nil {
 		return nil
 	}
