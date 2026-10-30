@@ -1,3 +1,4 @@
+import { env } from "@/infra/env";
 import { resendContact, waitlistEvent } from "@/lib/waitlist";
 
 // The console's sign-in page posts here too.
@@ -17,9 +18,13 @@ function cors(request: Request): Record<string, string> {
 // PostHog is the record of who joined; Resend is who we can email. An email already on the
 // list is answered with an error by Resend and is still on the list, so the visitor isn't told.
 async function subscribe(email: string) {
-  const key = process.env.RESEND_API_KEY;
-  const segment = process.env.RESEND_SEGMENT_ID;
-  if (!key || !segment) return;
+  const resend = env.resend;
+  if (!resend) {
+    console.warn("waitlist: Resend is not configured, so the sign-up is in PostHog only");
+    return;
+  }
+  const key = resend.RESEND_API_KEY;
+  const segment = resend.RESEND_SEGMENT_ID;
   const res = await fetch("https://api.resend.com/contacts", {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
