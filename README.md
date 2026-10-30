@@ -8,25 +8,39 @@
 <h1 align="center">ocel</h1>
 
 <p align="center">
-  Deploy apps to your own cloud or servers with one command.
+  Deploy apps anywhere.
   <br>
   <a href="https://ocel.dev/docs">Docs</a> ·
   <a href="https://ocel.dev/docs/quick-start">Quick start</a> ·
-  <a href="https://ocel.dev/docs/frameworks/nextjs">Next.js</a> ·
   <a href="https://github.com/ocelhq/ocel/issues/new/choose">Report a bug</a>
 </p>
 
 > [!WARNING]
 > Ocel is in early alpha, so expect bugs. If you hit one, [open an issue](https://github.com/ocelhq/ocel/issues/new/choose).
 
-> [!TIP]
-> If Ocel is useful to you, ⭐ **star the repo**: it's the easiest way to follow releases and helps others find it.
+Ocel is a CLI for deploying apps to your AWS, GCP or VPS without writing infra code. 
+
+You install the CLI, tell it where to deploy to, and run `ocel deploy`.
 
 ## Install
 
 ```bash
-curl -fsSL https://ocel.dev/install.sh | sh   # or: brew install --cask ocelhq/tap/ocel
-                                               # or: npm install -g @ocel/cli
+curl -fsSL https://ocel.dev/install.sh | sh
+# or: brew install --cask ocelhq/tap/ocel
+# or: npm install -g @ocel/cli
+```
+
+An `ocel.config.{ts,json,yaml}` is how you configure it:
+
+```ts
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "acme",
+  provider: awsProvider(),
+  domains: { production: "my-app.example.com" }
+});
 ```
 
 Then, in your app:
@@ -35,26 +49,9 @@ Then, in your app:
 ocel deploy
 ```
 
-The first deploy asks where the app should go, writes the config, and sets up what your account
-is missing, asking before each step. See the [quick start](https://ocel.dev/docs/quick-start).
-
-## Zero infrastructure code
-
-You write one small config naming where to deploy, and no infrastructure code. Your app doesn't
-know or care where it runs, so moving it is one line:
-
-```diff
-  import { defineConfig } from "ocel/config";
-- import awsProvider from "ocel/providers/aws";
-+ import vpsProvider from "ocel/providers/vps";
-
-  export default defineConfig({
-    slug: "acme",
--   provider: awsProvider(),
-+   provider: vpsProvider({ ssh: "my-vps" }),
-    apps: [{ name: "web", path: "." }],
-  });
-```
+With IaC tooling, you write infra code for how to deploy your app (components for lambda, ecs tasks, api-gateway, etc).
+Ocel instead pushes an application-first model. The providers hold the logic for deploying to your platform, and the CLI is the engine that drives them. 
+The platform you deploy to is just an implementation detail, a setting.
 
 Compute is a setting too. On providers that support both, the same app runs as functions or as
 one container:
@@ -64,20 +61,13 @@ one container:
 +   apps: [{ name: "web", path: ".", compute: "container" }],
 ```
 
-Ocel deploys [Next.js](https://ocel.dev/docs/frameworks/nextjs),
-[SvelteKit](https://ocel.dev/docs/frameworks/sveltekit), Node servers such as
-[Express](https://ocel.dev/docs/frameworks/express) and [Hono](https://ocel.dev/docs/frameworks/hono),
-and Go, Python and Rust apps, to [AWS, Google Cloud or a VPS](https://ocel.dev/docs/providers),
-optionally behind [Cloudflare](https://ocel.dev/docs/providers/cloudflare). Infrastructure lands
-in your own account, under your billing and access.
+### Ocel SDK
 
-## Application defined infrastructure
-
-A database or a bucket is a function call in your app. Declare it once and import it where you
-use it; the call is what provisions it.
+When using the CLI to deploy, your app can also declare the resources it needs within itself,
+no separate infra code to maintain. We like to call this **Application defined infrastructure**
 
 ```ts
-// resources/index.ts
+// infra/index.ts
 import { postgres } from "ocel/postgres";
 
 export const db = postgres("main");
@@ -87,6 +77,7 @@ export const db = postgres("main");
 // src/server.ts
 import { db } from "../resources";
 
+// Use directly in your app
 const { rows } = await db.query("select * from documents");
 ```
 
@@ -95,14 +86,34 @@ The SDK ships for TypeScript, Go, Python and Rust, with
 [KV](https://ocel.dev/docs/sdk/kv), [realtime](https://ocel.dev/docs/sdk/realtime),
 [topics](https://ocel.dev/docs/sdk/topic) and [tasks](https://ocel.dev/docs/sdk/task).
 
-## The stack comes up with dev
+During development, the CLI provides a local stack to use:
 
 ```bash
+# connects your app to resources running locally
 ocel dev -- next dev
 ```
 
-`ocel dev` starts the resources your code declares on your machine and runs your app with their
-connections set. Docker is needed only when the app declares a resource.
+### Ocel Console
+
+Ocel is a CLI-first product, but it also comes with an optional console.
+The console is a regular app, itself built with Ocel SDK, and deployed with the Ocel CLI. 
+
+When self-hosting with tools like Coolify/Dokploy, the UI is the control plane,
+you install it on your box and perform actions from it. With Ocel, the UI is 
+just the first app you deploy into your VPS using Ocel CLI itself! 
+It’s just an app that can manage and deploy other apps! 
+
+The console repo is also open source [here](https://github.com/ocelhq/console).
+
+### Ocel Cloud
+
+Ocel offers a managed cloud, intended for small-software, apps that are only intended for few users, not scaling to millions.
+You can also use ocel cloud for development and hosting previews while keeping production on your own infra. What you get with cloud:
+
+- Managed hosting
+- Unique URLs for your app on `.ocel.app`
+- Zero-config deployments. `ocel login` and `ocel deploy` instantly.
+- Zero-setup required. On AWS/GCP, ocel needs to bootstrap for the first time running.
 
 ## Learn more
 
