@@ -33,7 +33,7 @@ import (
 func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	registry := p.DNS()
 
 	conformance.RunDNS(t, p.Facts(), registry)
@@ -58,7 +58,7 @@ func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 func TestAProjectThatNamesNoEdgeIsAnsweredByTheSwitchboardOnTheBox(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	registry := p.Edges()
 
 	conformance.RunEdges(t, p.Facts(), registry)
@@ -91,7 +91,7 @@ func TestAProjectThatNamesNoEdgeIsAnsweredByTheSwitchboardOnTheBox(t *testing.T)
 func TestCloudflareFrontsTheBoxAsAProxyThatRunsNoCodeAndForwardsToTheSwitchboard(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	front, err := p.Edges().Open("cloudflare", nil)
 	if err != nil {
 		t.Fatalf("Open(cloudflare) = %v, want the Cloudflare proxy", err)
@@ -110,7 +110,7 @@ func TestCloudflareFrontsTheBoxAsAProxyThatRunsNoCodeAndForwardsToTheSwitchboard
 func TestTheRouterRegistryOpensTheRouterEveryEdgePairsWith(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	conformance.RunRouters(t, p.Facts(), p.Edges(), p.Routers())
 }
 
@@ -118,7 +118,7 @@ func TestVPSProvider(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
 	conformance.RunWithoutAccount(t, conformance.Suite{
-		Server:  providerserver.Config{Version: "test", New: vps.New},
+		Server:  providerserver.Config{Version: "test", New: vps.New(vps.TestAssets)},
 		Options: provider.Options{"ssh": map[string]any{"host": "203.0.113.10"}},
 		Binary:  buildProvider(t),
 		Certificates: &conformance.CertificateChecks{
@@ -132,7 +132,7 @@ func TestVPSProvider(t *testing.T) {
 func TestTheProviderNamesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 
 	if p.Facts().Vendor != vps.Vendor {
 		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, vps.Vendor)
@@ -157,7 +157,7 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 	t.Parallel()
 
 	ctx := context.Background()
-	release := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).Stacks()
+	release := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).Stacks()
 	spec := provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
@@ -196,28 +196,28 @@ func buildProvider(t *testing.T) string {
 func TestTheTopicsTasksAndWorkersABoxRunsAreOnesTheBuildCanPlace(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	conformance.RunWorkers(t, p.Facts())
 }
 
 func TestAContainerBuiltFromAFunctionPassesTheConformanceSuite(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).PullingImagesWith(fake.PullStandInImage)
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).PullingImagesWith(fake.PullStandInImage)
 	conformance.RunFunctionContainers(t, p.Facts(), p.Runtime())
 }
 
 func TestKVStoresPassTheConformanceSuite(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	conformance.RunKVStores(t, p.Facts())
 }
 
 func TestRealtimePassesTheConformanceSuite(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	conformance.RunRealtime(t, p.Facts())
 }
 

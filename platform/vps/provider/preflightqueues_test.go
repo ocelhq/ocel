@@ -24,7 +24,7 @@ func agentSurveyed(t *testing.T, content []byte) answer {
 
 func currentAgent(t *testing.T) []byte {
 	t.Helper()
-	for _, item := range host.StorageItems(environment.TierProduction, nil, ssh.AMD64) {
+	for _, item := range host.StorageItems(vps.TestAssets, environment.TierProduction, nil, ssh.AMD64) {
 		if item.Name == host.LiveBinary {
 			return item.Content
 		}

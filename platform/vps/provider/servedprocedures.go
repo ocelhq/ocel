@@ -1,0 +1,43 @@
+package vps
+
+import (
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
+)
+
+func ControlServedProcedures() []string {
+	return []string{
+		contractv1connect.ProviderServiceConfigureProcedure,
+		contractv1connect.ProviderServiceRenewDeployLeaseProcedure,
+		contractv1connect.ProviderServiceAbandonDeployProcedure,
+		contractv1connect.ProviderServiceGetCredentialPermissionsProcedure,
+		contractv1connect.ProviderServiceRemoveEnvironmentProcedure,
+		contractv1connect.ProviderServiceRemoveProjectProcedure,
+		contractv1connect.ProviderServicePlanRemoveProjectProcedure,
+		contractv1connect.ProviderServiceListEnvironmentsProcedure,
+		contractv1connect.ProviderServiceGetEnvironmentProcedure,
+		contractv1connect.ProviderServiceEnsurePreviewAliasProcedure,
+		contractv1connect.ProviderServiceForgetPreviewAliasProcedure,
+		contractv1connect.ProviderServiceGetProtectionProcedure,
+		contractv1connect.ProviderServiceRevealProtectionPasswordProcedure,
+		contractv1connect.ProviderServiceChangeProtectionProcedure,
+		contractv1connect.ProviderServicePublishProtectionProcedure,
+		contractv1connect.ProviderServiceListPromotionsProcedure,
+		contractv1connect.ProviderServiceRollbackProcedure,
+		contractv1connect.ProviderServiceRemoveStalePromotionsProcedure,
+		contractv1connect.ProviderServiceUsePreviewWildcardProcedure,
+		contractv1connect.ProviderServiceGetPreviewWildcardProcedure,
+		contractv1connect.ProviderServicePlanRemovePreviewWildcardProcedure,
+		contractv1connect.ProviderServiceRemovePreviewWildcardProcedure,
+		contractv1connect.ProviderServiceAddHostnameProcedure,
+		contractv1connect.ProviderServiceRemoveHostnameProcedure,
+		contractv1connect.ProviderServiceGetHostnameStatusProcedure,
+		contractv1connect.ProviderServiceInventoryProcedure,
+		contractv1connect.ProviderServiceConfirmProcedure,
+		contractv1connect.ProviderServiceReadLogsProcedure,
+		contractv1connect.ProviderServiceListProjectsProcedure,
+		contractv1connect.ProviderServiceGetProjectProcedure,
+		contractv1connect.ProviderServiceDescribeProjectProcedure,
+		costv1connect.CostServicePriceProcedure,
+	}
+}

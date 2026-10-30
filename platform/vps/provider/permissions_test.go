@@ -15,7 +15,7 @@ import (
 
 func rendered(t *testing.T, purpose edge.CredentialPurpose) edge.CredentialDocument {
 	t.Helper()
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}})
 	document, err := p.Credentials().Permissions(purpose, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(%q) = %v", purpose, err)
@@ -63,7 +63,7 @@ func TestTheBootstrapDocumentIncludesTheSudoersFragmentTheLoginNeeds(t *testing.
 func TestTheBootstrapDocumentNamesTheLoginItCannotResolve(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Alias: "prod-box"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Alias: "prod-box"}})
 	document, err := p.Credentials().Permissions(edge.PurposeBootstrap, environment.TierProduction)
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +93,7 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 
 	document := rendered(t, edge.PurposeDeploy).Document
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		for _, item := range host.Items(tier, nil, ssh.AMD64, front.Proxy{}) {
+		for _, item := range host.Items(vps.TestAssets, tier, nil, ssh.AMD64, front.Proxy{}) {
 			if item.Owner != "ocel-deploy" || item.Kind == "linux:user" {
 				continue
 			}
@@ -106,7 +106,7 @@ func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 
 func describedGroups(t *testing.T, tier environment.Tier) string {
 	t.Helper()
-	for _, item := range host.Items(tier, nil, ssh.AMD64, front.Proxy{}) {
+	for _, item := range host.Items(vps.TestAssets, tier, nil, ssh.AMD64, front.Proxy{}) {
 		if item.Kind != "linux:user" {
 			continue
 		}
@@ -150,7 +150,7 @@ func TestTheDeployDocumentIncludesEverySudoersLineBootstrapWrites(t *testing.T) 
 
 	document := rendered(t, edge.PurposeDeploy).Document
 	sealing := false
-	for _, item := range host.Items(environment.TierProduction, nil, ssh.AMD64, front.Proxy{}) {
+	for _, item := range host.Items(vps.TestAssets, environment.TierProduction, nil, ssh.AMD64, front.Proxy{}) {
 		if !strings.HasPrefix(item.Name, "/etc/sudoers.d/") {
 			continue
 		}
@@ -173,7 +173,7 @@ func TestTheDeployDocumentNamesTheCaddyReloadLineOnlyBehindACaddyService(t *test
 		{Caddy: &front.Caddy{Directory: "/etc/caddy/ocel.d", Container: "caddy", Network: "web"}}: false,
 		{Caddy: &front.Caddy{Preset: "coolify"}}:                                                  false,
 	} {
-		p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}, Proxy: proxy})
+		p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}, Proxy: proxy})
 		document, err := p.Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
 		if err != nil {
 			t.Fatalf("Permissions(deploy) = %v", err)
@@ -208,7 +208,7 @@ func TestTheDeployDocumentSaysTheKeyIsNeverRotated(t *testing.T) {
 func TestCredentialsThatAreNeitherPurposeAreRefused(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	if _, err := p.Credentials().Permissions("admin", environment.TierProduction); err == nil {
 		t.Error("Permissions() rendered a document for a purpose this provider has no credentials for")
 	}
@@ -217,7 +217,7 @@ func TestCredentialsThatAreNeitherPurposeAreRefused(t *testing.T) {
 func TestTheDeployDocumentNamesBootstrapDestroyAsWhatRemovesTheLoginItsLinesAndTheKey(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}, Proxy: &front.Proxy{Caddy: &front.Caddy{Directory: "/etc/caddy/ocel.d"}}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}, Proxy: &front.Proxy{Caddy: &front.Caddy{Directory: "/etc/caddy/ocel.d"}}})
 	document, err := p.Credentials().Permissions(edge.PurposeDeploy, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)

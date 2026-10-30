@@ -21,7 +21,7 @@ func TestEachTierRunsItsOwnEnvSourceSyncThatWritesThatTiersRecordsAlone(t *testi
 	t.Parallel()
 
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+		items := Items(testAssets, tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
 		unit := itemAt(t, items, machine.KindUnit, "ocel-envsourcesync@"+string(tier)+".service")
 		if unit.Owner != machine.RootOwner {
 			t.Errorf("%s is enabled as %s, and the sync reads the tier key, which is root's alone", unit.Name, unit.Owner)
@@ -33,7 +33,7 @@ func TestEachTierRunsItsOwnEnvSourceSyncThatWritesThatTiersRecordsAlone(t *testi
 		}
 	}
 
-	template := string(itemAt(t, Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), machine.KindFile, envSourceSyncTemplateFile).Content)
+	template := string(itemAt(t, Items(testAssets, environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), machine.KindFile, envSourceSyncTemplateFile).Content)
 	for _, want := range []string{
 		"ExecStart=" + LiveBinary + " " + boxapi.EnvSourceSyncCommand + " --tier %i",
 		"ProtectSystem=strict",
@@ -65,7 +65,7 @@ func TestTheEnvSourceSyncRestartsWhenTheAgentBinaryOrItsUnitChangesAndIsWrittenA
 	t.Parallel()
 
 	tier := environment.TierProduction
-	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	items := Items(testAssets, tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
 	at := func(kind, name string) int {
 		return slices.IndexFunc(items, func(item machine.Item) bool { return item.Kind == kind && item.Name == name })
 	}
@@ -83,7 +83,7 @@ func TestTheEnvSourceSyncRestartsWhenTheAgentBinaryOrItsUnitChangesAndIsWrittenA
 		}
 	}
 	template := itemAt(t, items, machine.KindFile, envSourceSyncTemplateFile)
-	if !bytes.Equal(items[unit].Content, machine.UnitWatchFacts(template.Content, liveAgent(ssh.AMD64))) {
+	if !bytes.Equal(items[unit].Content, machine.UnitWatchFacts(template.Content, liveAgent(testAssets, ssh.AMD64))) {
 		t.Error("the unit's facts do not follow the unit file and the agent binary, so a changed sync would not restart it")
 	}
 	if template.Owner != machine.RootOwner || template.Mode != 0o644 {
@@ -123,8 +123,8 @@ func TestDestroyingATierStopsItsEnvSourceSyncBeforeItsRecordsAndTheLastTakesTheT
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	current := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(production, keys, ssh.AMD64, front.Proxy{}))}
-	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(preview, keys, ssh.AMD64, front.Proxy{}))}
+	current := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(testAssets, production, keys, ssh.AMD64, front.Proxy{}))}
+	beside := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(testAssets, preview, keys, ssh.AMD64, front.Proxy{}))}
 
 	shared := removing(current, beside, appsPresent{})
 	own := removalOf(shared, EnvSourceSyncService(production))
@@ -140,7 +140,7 @@ func TestDestroyingATierStopsItsEnvSourceSyncBeforeItsRecordsAndTheLastTakesTheT
 		}
 	}
 
-	last := removing(current, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
+	last := removing(current, Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	for _, gone := range []string{EnvSourceSyncService(production), LiveBinary, envSourceSyncTemplateFile} {
 		if removalOf(last, gone).Action != provider.ActionDelete {
 			t.Errorf("destroying the last tier plans %s as %q", gone, removalOf(last, gone).Action)

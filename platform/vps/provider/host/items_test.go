@@ -22,7 +22,7 @@ const aKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample bootstrap@laptop"
 func TestWhatATierKeepsIsRootsAndItsStateIsTheDeployPrincipalsAlone(t *testing.T) {
 	t.Parallel()
 
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	items := Items(testAssets, environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
 	owners := map[string]string{}
 	for _, item := range items {
 		owners[item.Name] = item.Owner
@@ -53,7 +53,7 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 	if tableDir == boxapi.StateRoot || tableDir == proxyRoot {
 		t.Fatalf("the routing table sits directly in %s, and a container that reads it through a bind of its directory would read everything else there too", tableDir)
 	}
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	items := Items(testAssets, environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
 	made := slices.IndexFunc(items, func(item machine.Item) bool { return item.Kind == machine.KindDir && item.Name == tableDir })
 	table := slices.IndexFunc(items, func(item machine.Item) bool { return strings.Contains(item.Command(), boxapi.RoutingTablePath) })
 	if made < 0 || table < 0 || made > table {
@@ -69,7 +69,7 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 func TestThePrincipalIsWrittenBeforeAnythingItOwns(t *testing.T) {
 	t.Parallel()
 
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	items := Items(testAssets, environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
 	account := slices.IndexFunc(items, func(item machine.Item) bool { return item.Kind == machine.KindUser })
 	if account < 0 {
 		t.Fatal("nothing in the item set creates the deploy principal")
@@ -86,7 +86,7 @@ func TestTheDeployKeysAreTheOnesTheItemContains(t *testing.T) {
 
 	keys := []byte(aKey + "\n")
 	var written machine.Item
-	for _, item := range Items(environment.TierProduction, keys, ssh.AMD64, front.Proxy{}) {
+	for _, item := range Items(testAssets, environment.TierProduction, keys, ssh.AMD64, front.Proxy{}) {
 		if item.Name == authorizedKeys {
 			written = item
 		}
@@ -137,12 +137,12 @@ func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatExistsIsKept(t *testing.T
 
 	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	fresh := planFor(planned(Reading{Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: map[string]string{}}), principal().ID())
+	fresh := planFor(planned(Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: map[string]string{}}), principal().ID())
 	if fresh.Action != provider.ActionCreate {
 		t.Errorf("a host with no %s plans %q, want it created", deployUser, fresh.Action)
 	}
 
-	installed := Reading{Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: machine.DigestsOf(Items(tier, keys, ssh.AMD64, front.Proxy{}))}
+	installed := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: tier, Keys: keys, Observed: machine.DigestsOf(Items(testAssets, tier, keys, ssh.AMD64, front.Proxy{}))}
 	if kept := planFor(planned(installed), principal().ID()); kept.Action != provider.ActionKeep {
 		t.Errorf("a host whose principal is unchanged from what ocel writes plans %q, want it kept", kept.Action)
 	}
@@ -157,8 +157,8 @@ func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	installed := Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
-	moved := Reading{Arch: ssh.AMD64, Tier: tier, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: machine.DigestsOf(installed)}
+	installed := Items(testAssets, tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	moved := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: tier, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: machine.DigestsOf(installed)}
 	for _, change := range planned(moved) {
 		want := provider.ActionKeep
 		switch change.Name {
@@ -178,9 +178,9 @@ func TestThePrincipalGoesWithTheLastTierAndStaysWhileASiblingRemains(t *testing.
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	installed := machine.DigestsOf(Items(production, keys, ssh.AMD64, front.Proxy{}))
+	installed := machine.DigestsOf(Items(testAssets, production, keys, ssh.AMD64, front.Proxy{}))
 
-	alone := removing(Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
+	alone := removing(Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	taken := slices.IndexFunc(alone, func(r machine.Removal) bool { return r.Kind == machine.KindUser && r.Path == deployUser })
 	if taken < 0 {
 		t.Fatal("destroying the last tier leaves the deploy principal behind, and a login nothing uses is a login nobody revokes")
@@ -189,8 +189,8 @@ func TestThePrincipalGoesWithTheLastTierAndStaysWhileASiblingRemains(t *testing.
 		t.Error("the principal is removed before its home, and userdel over a home ocel still keeps state in is a home nothing owns")
 	}
 
-	beside := machine.DigestsOf(Items(preview, keys, ssh.AMD64, front.Proxy{}))
-	shared := removing(Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: beside}, appsPresent{})
+	beside := machine.DigestsOf(Items(testAssets, preview, keys, ssh.AMD64, front.Proxy{}))
+	shared := removing(Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: beside}, appsPresent{})
 	for _, r := range shared {
 		if r.Kind == machine.KindUser {
 			t.Error("destroying one tier takes the deploy principal an installed sibling still deploys as")
@@ -203,11 +203,11 @@ func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	installed := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(production, keys, ssh.AMD64, front.Proxy{}))}
+	installed := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(testAssets, production, keys, ssh.AMD64, front.Proxy{}))}
 
 	for name, sibling := range map[string]Reading{
 		"the last tier on the host": {Tier: preview, Observed: map[string]string{}},
-		"a tier beside its sibling": {Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(preview, keys, ssh.AMD64, front.Proxy{}))},
+		"a tier beside its sibling": {Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(testAssets, preview, keys, ssh.AMD64, front.Proxy{}))},
 	} {
 		taken := removing(installed, sibling, appsPresent{})
 		stamp := index(taken, boxapi.TierDir(production))
@@ -232,8 +232,8 @@ func TestDestroyOfAHalfWrittenHostNamesWhatExistsAndNothingBeside(t *testing.T) 
 		half[item.ID()] = item.Digest()
 	}
 	taken := removing(
-		Reading{Arch: ssh.AMD64, Tier: production, Observed: half},
-		Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{},
+		Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: production, Observed: half},
+		Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{},
 	)
 	for _, r := range taken {
 		if _, present := half[r.Kind+" "+r.Path]; !present {

@@ -175,7 +175,7 @@ func frontProxy(t *testing.T, named string) *front.Proxy {
 
 func (vm liveBox) deployingBehind(t *testing.T, proxy *front.Proxy) *vps.Provider {
 	t.Helper()
-	p := vps.NewProvider(vps.Options{
+	p := vps.NewProvider(vps.TestAssets, vps.Options{
 		SSH:   vps.Target{Host: vm.addr, User: deployLogin, IdentityFile: vm.key, Config: vm.config},
 		Proxy: proxy,
 	})

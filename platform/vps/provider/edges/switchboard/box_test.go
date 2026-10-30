@@ -371,7 +371,8 @@ func removePointer(ctx context.Context, stack boxStack, pointer string, progress
 	if err := stack.RemovePointer(ctx, router.PointerRemoval{Pointer: pointer}, progress); err != nil {
 		return router.PruneResult{}, err
 	}
-	return stack.Ledger().RemovePointer(ctx, pointer)
+	removed, _, err := stack.Ledger().RemovePointer(ctx, pointer)
+	return removed, err
 }
 
 func (m *fakeBox) ApplyOrigins(_ context.Context, project string, tier environment.Tier) error {
@@ -1534,7 +1535,7 @@ func TestRemovingAPointerTakesTheRouteOfAnAppTheLedgerNoLongerRemembers(t *testi
 	if err := promoted(t, stack, "p3", "web", "b3"); err != nil {
 		t.Fatalf("Promote(p3): %v", err)
 	}
-	if _, err := stack.Ledger().Prune(context.Background(), 1, ""); err != nil {
+	if _, _, err := stack.Ledger().Prune(context.Background(), 1, ""); err != nil {
 		t.Fatalf("Prune: %v", err)
 	}
 

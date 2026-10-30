@@ -77,18 +77,21 @@ type ConnectorState struct {
 }
 
 func (c *Connector) Describe(ctx context.Context) (ConnectorState, error) {
-	rendered, err := c.host.Run(ctx, ssh.Root, "ask this host what connector it has installed", connectorSurvey(), nil)
+	rendered, err := c.host.Run(ctx, ssh.RootWhenAble, "ask this host what connector it has installed", connectorSurvey(), nil)
 	if err != nil {
 		return ConnectorState{}, err
 	}
 	return readConnectorState(rendered)
 }
 
-func connectorSurvey() string {
-	printing := shell.Quote(ConnectorBinary) + " --config " + shell.Quote(ConnectorConfig) + " --print-public-key"
-	return "if [ -x " + shell.Quote(ConnectorBinary) + " ] && [ -f " + shell.Quote(ConnectorConfig) + " ]; then\n" +
-		"printf 'version=%s\\n' \"$(" + shell.Quote(ConnectorBinary) + " --version 2>/dev/null || true)\"\n" +
-		"printf 'key=%s\\n' \"$(su -s /bin/sh -c " + shell.Quote(printing) + " " + shell.Quote(deployUser) + " 2>/dev/null || true)\"\n" +
+func connectorSurvey() string { return surveyConnectorAt(ConnectorBinary, ConnectorConfig) }
+
+func surveyConnectorAt(binary, config string) string {
+	printing := shell.Quote(binary) + " --config " + shell.Quote(config) + " --print-public-key"
+	return "if [ -x " + shell.Quote(binary) + " ] && [ -f " + shell.Quote(config) + " ]; then\n" +
+		"printf 'version=%s\\n' \"$(" + shell.Quote(binary) + " --version 2>/dev/null || true)\"\n" +
+		"if [ \"$(id -u)\" = 0 ]; then key=$(su -s /bin/sh -c " + shell.Quote(printing) + " " + shell.Quote(deployUser) + " 2>/dev/null || true); else key=$(" + printing + " 2>/dev/null || true); fi\n" +
+		"printf 'key=%s\\n' \"$key\"\n" +
 		"fi"
 }
 
@@ -142,15 +145,9 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 	if err != nil {
 		return ConnectorState{}, err
 	}
-	for _, item := range items {
-		if observed[item.ID()] == item.Digest() {
-			progress.Debug(machine.Capitalized(item.Phrase()) + " is " + machine.ReasonCurrent)
-			continue
-		}
-		if err := c.host.Install(ctx, item); err != nil {
-			return ConnectorState{}, err
-		}
-		progress.Say("Installed " + item.Phrase())
+	table, err := c.host.routing.Read(ctx)
+	if err != nil {
+		return ConnectorState{}, err
 	}
 	if err := c.Route(ctx, hostname); err != nil {
 		return ConnectorState{}, err
@@ -158,6 +155,14 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 	progress.Say("Routed https://" + hostname + boxapi.ConnectorPath + " to the connector")
 	if route := c.host.RouteBy(hostname); route != "" {
 		progress.Say(route)
+	}
+	if err := c.host.InstallChanged(ctx, items, CurrentIn(observed), progress); err != nil {
+		return ConnectorState{}, err
+	}
+	if table.Connector != hostname {
+		if _, err := c.host.Run(ctx, ssh.Root, "restart the connector so it serves "+hostname, "systemctl try-restart "+shell.Quote(ConnectorUnit), nil); err != nil {
+			return ConnectorState{}, err
+		}
 	}
 	return c.Describe(ctx)
 }

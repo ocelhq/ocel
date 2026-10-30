@@ -32,7 +32,7 @@ func (vm liveBox) deploying(t *testing.T, shaped ...shaping) *vps.Provider {
 	for _, shape := range shaped {
 		shape(&options)
 	}
-	p := vps.NewProvider(options)
+	p := vps.NewProvider(vps.TestAssets, options)
 	t.Cleanup(func() { closing(t, p) })
 	return p
 }

@@ -3,6 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "generate": {
+      "outputs": ["assets/dist/**"],
       "inputs": [
         "generate.sh",
         "package.json",
@@ -22,6 +23,7 @@
         "$TURBO_ROOT$/platform/realtime/**/*.go",
         "$TURBO_ROOT$/platform/realtime/go.mod",
         "$TURBO_ROOT$/platform/realtime/go.sum",
+        "$TURBO_ROOT$/cli/jobimage/Dockerfile",
         "!$TURBO_ROOT$/**/*_test.go"
       ]
     },

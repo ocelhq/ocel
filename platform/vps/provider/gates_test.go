@@ -120,7 +120,7 @@ func TestAProviderThatCannotOpenTheRecordedGatesRefusesRatherThanServeUngated(t 
 
 func TestABoxEdgeAndTheCloudflareProxyInFrontOfItBothGate(t *testing.T) {
 	t.Setenv(provider.NamespaceEnvVar, "staging")
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}})
 
 	for _, kind := range []edge.Kind{edge.None, cloudflare.Kind} {
 		front, err := p.Edges().Open(kind, nil)

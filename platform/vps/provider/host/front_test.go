@@ -35,7 +35,7 @@ func coolifysTraefik() front.Proxy {
 func TestABoxFrontedByHandInstallsNothingOfOcelsOwnProxy(t *testing.T) {
 	t.Parallel()
 
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, routedByHand())
+	items := Items(testAssets, environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, routedByHand())
 	for _, item := range items {
 		switch {
 		case item.Kind == machine.KindContainer && item.Name == caddy.Container,
@@ -53,8 +53,8 @@ func TestABoxFrontedByHandInstallsNothingOfOcelsOwnProxy(t *testing.T) {
 
 func switchboardOf(t *testing.T, fronting front.Proxy) docker.Service {
 	t.Helper()
-	itemAt(t, ProxyItems(ssh.AMD64, fronting), machine.KindContainer, boxapi.Switchboard)
-	return switchboardBox(switchboardBinary(ssh.AMD64), fronting)
+	itemAt(t, ProxyItems(testAssets, ssh.AMD64, fronting), machine.KindContainer, boxapi.Switchboard)
+	return switchboardBox(switchboardBinary(testAssets, ssh.AMD64), fronting)
 }
 
 func TestTheSwitchboardPublishesOnLoopbackOnlyForAProxyRoutedByHand(t *testing.T) {
@@ -187,7 +187,7 @@ func TestTheConnectorOnABoxYourProxyFrontsSaysWhatToRouteToIt(t *testing.T) {
 func TestAProxyRoutedByHandOnItsOwnNetworkIsToldTheSwitchboardsNameOnIt(t *testing.T) {
 	t.Parallel()
 
-	got := New(nil, "shop", Keys{}, nil, routedOnANetwork()).RouteBy("shop.example.com")
+	got := New(nil, testAssets, "shop", Keys{}, nil, routedOnANetwork()).RouteBy("shop.example.com")
 	want := "Route shop.example.com → http://ocel-switchboard:8080 on the coolify network, or http://127.0.0.1:8480 from the host (keep Host, set X-Forwarded-Proto)"
 	if got != want {
 		t.Errorf("RouteBy() = %q, want %q: a proxy in a container on coolify cannot reach the host's loopback", got, want)
@@ -483,7 +483,7 @@ func TestWhatABoxInstallsFollowsWhetherItsProxyOwnsThePorts(t *testing.T) {
 
 	for name, front := range map[string]front.Proxy{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand(), "a Traefik on the host": traefikOnTheHost()} {
 		owns := front.Front().Open(frontBox{}).Guarantees().OwnsPorts
-		installsProxy := slices.ContainsFunc(ProxyItems(ssh.AMD64, front), func(item machine.Item) bool {
+		installsProxy := slices.ContainsFunc(ProxyItems(testAssets, ssh.AMD64, front), func(item machine.Item) bool {
 			return item.Kind == machine.KindContainer && item.Name == caddy.Container
 		})
 		if installsProxy != owns {

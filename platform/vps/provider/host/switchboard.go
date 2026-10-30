@@ -17,7 +17,9 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/tunnel"
 )
 
-func switchboardBinary(arch string) []byte { return embedded(boxapi.Switchboard, arch) }
+func switchboardBinary(assets Assets, arch string) []byte {
+	return assets.binary(boxapi.Switchboard, arch)
+}
 
 func switchboardBox(binary []byte, fronting front.Proxy) docker.Service {
 	return docker.Service{

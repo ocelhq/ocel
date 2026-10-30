@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
+	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -40,7 +41,7 @@ func transferRuntime(t *testing.T, daemon images.DockerHost, client *http.Client
 	if err != nil {
 		t.Fatalf("inspect the image the daemon at %s imported %s as: %v", daemon.Address, transferBase(), err)
 	}
-	runtime, err := host.ContainerRuntime(inspection.Architecture)
+	runtime, err := host.ContainerRuntime(vps.TestAssets, inspection.Architecture)
 	if err != nil {
 		t.Fatal(err)
 	}

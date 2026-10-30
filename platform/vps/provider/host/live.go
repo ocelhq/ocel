@@ -68,7 +68,9 @@ func liveServiceUnit() []byte {
 	}, "\n"))
 }
 
-func liveAgent(architecture string) []byte { return embedded(liveBinaryName, architecture) }
+func liveAgent(assets Assets, architecture string) []byte {
+	return assets.binary(liveBinaryName, architecture)
+}
 
 func ContainerArch(app, declared, runs string) (string, error) {
 	if declared == "" {
@@ -82,16 +84,16 @@ func ContainerArch(app, declared, runs string) (string, error) {
 	return runs, nil
 }
 
-func ContainerRuntime(architecture string) ([]byte, error) {
+func ContainerRuntime(assets Assets, architecture string) ([]byte, error) {
 	named, err := ssh.Architecture(architecture)
 	if err != nil {
 		return nil, err
 	}
-	return embedded(runtimeName, named), nil
+	return assets.read("dist/" + runtimeName + "-" + named)
 }
 
 func (h *Host) IsAgentCurrent(ctx context.Context) (bool, error) {
-	return h.isCurrent(ctx, "survey the box agent", func(arch string) machine.Item { return newAgentItem(liveAgent(arch)) })
+	return h.isCurrent(ctx, "survey the box agent", func(arch string) machine.Item { return newAgentItem(liveAgent(h.assets, arch)) })
 }
 
 func (h *Host) isCurrent(ctx context.Context, what string, newItem func(arch string) machine.Item) (bool, error) {
@@ -116,8 +118,8 @@ func newAgentItem(agent []byte) machine.Item {
 		Note: "serves apps their secret values and runs their topics and tasks"}
 }
 
-func LiveItems(architecture string) []machine.Item {
-	socket, service, agent := liveSocketUnit(), liveServiceUnit(), liveAgent(architecture)
+func LiveItems(assets Assets, architecture string) []machine.Item {
+	socket, service, agent := liveSocketUnit(), liveServiceUnit(), liveAgent(assets, architecture)
 	return []machine.Item{
 		{Kind: machine.KindFile, Name: liveSocketFile, Mode: 0o644, Owner: machine.RootOwner, Content: socket},
 		{Kind: machine.KindFile, Name: liveUnitFile, Mode: 0o644, Owner: machine.RootOwner, Content: service},

@@ -20,9 +20,12 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/resources/postgres"
 	"github.com/ocelhq/ocel/platform/vps/provider/resources/realtime"
 	"github.com/ocelhq/ocel/platform/vps/provider/resources/topic"
+	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
 
-var ProviderOver = newProvider
+func ProviderOver(options Options, dial ssh.Dial) *Provider {
+	return newProvider(TestAssets, options, dial)
+}
 
 var (
 	SystemLookup = systemLookup
@@ -93,15 +96,15 @@ func (p *Provider) RemoveTopic(ctx context.Context, ref provider.StackRef, bindi
 }
 
 func (p *Provider) PlanRealtime(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
-	return realtime.New(p.components()).Plan(ctx, in, recorded)
+	return realtime.New(p.components(), p.assets.RealtimeBinarySum).Plan(ctx, in, recorded)
 }
 
 func (p *Provider) ProvisionRealtime(ctx context.Context, in resources.ProvisionRequest, log progress.Log) (provider.Binding, error) {
-	return realtime.New(p.components()).Provision(ctx, in, log)
+	return realtime.New(p.components(), p.assets.RealtimeBinarySum).Provision(ctx, in, log)
 }
 
 func (p *Provider) RemoveRealtime(ctx context.Context, ref provider.StackRef, binding provider.Binding, log progress.Log) error {
-	return realtime.New(p.components()).Remove(ctx, ref, binding, log)
+	return realtime.New(p.components(), p.assets.RealtimeBinarySum).Remove(ctx, ref, binding, log)
 }
 
 func (p *Provider) PlanBucket(ctx context.Context, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
@@ -174,7 +177,7 @@ var NewRecordedGate = newRecordedGate
 
 func NewReadingSSHConfig(config string) func(context.Context, provider.Settings) (provider.Provider, error) {
 	return func(ctx context.Context, settings provider.Settings) (provider.Provider, error) {
-		served, err := New(ctx, settings)
+		served, err := New(TestAssets)(ctx, settings)
 		if err != nil {
 			return nil, err
 		}
@@ -186,4 +189,17 @@ func NewReadingSSHConfig(config string) func(context.Context, provider.Settings)
 func (p *Provider) PullingImagesWith(pull images.ImagePull) *Provider {
 	p.pullImage = pull
 	return p
+}
+
+func ControlOver(options provider.Options, onBox ssh.Conn, store records.Store) (provider.Provider, error) {
+	built, err := NewControl(context.Background(), provider.Settings{Options: options, Slug: "shop"}, onBox)
+	if err != nil {
+		return nil, err
+	}
+	built.(control).Recording(store)
+	return built, nil
+}
+
+func BoxAddress(ctx context.Context, served provider.Provider) (string, error) {
+	return served.(control).ssh.Address(ctx)
 }

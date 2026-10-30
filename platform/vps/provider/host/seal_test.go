@@ -47,7 +47,7 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 	t.Parallel()
 
 	tier := environment.TierProduction
-	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	items := Items(testAssets, tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
 
 	key := written(items, machine.KindSealKey, SealKeyPath(tier))
 	if key.Name == "" {
@@ -73,7 +73,7 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 func TestTheDeployLoginIsWhitelistedOnTheSealHelperThePinHelperAndTheCheckedDockerAndOnNothingBeside(t *testing.T) {
 	t.Parallel()
 
-	items := Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	items := Items(testAssets, environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
 
 	var lines []machine.Item
 	for _, item := range items {
@@ -202,10 +202,10 @@ func TestAReplacedKeyIsDriftThoughEveryPathIsStillAsItWasWritten(t *testing.T) {
 
 	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	observed := machine.DigestsOf(Items(tier, keys, ssh.AMD64, front.Proxy{}))
+	observed := machine.DigestsOf(Items(testAssets, tier, keys, ssh.AMD64, front.Proxy{}))
 	minted := machine.Seal{Fingerprint: "9f86d081884c7d659a", Algorithm: machine.SealAlgorithm, CreatedAt: "2026-08-26T09:00:00Z"}
 
-	read := Reading{
+	read := Reading{Assets: testAssets,
 		Arch: ssh.AMD64,
 		Tier: tier, Keys: keys, Present: true, Observed: observed, Seal: minted,
 		Stamp: machine.Stamp{State: machine.StateComplete, Digests: observed, Seal: minted},
@@ -260,7 +260,7 @@ func TestARefusalOverAReplacedKeyNamesTheBootstrapDestroyOfItsTier(t *testing.T)
 
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		minted := machine.Seal{Fingerprint: "9f86d081884c7d659a", Algorithm: machine.SealAlgorithm}
-		read := Reading{Tier: tier, Present: true, Stamp: machine.Stamp{State: machine.StateComplete, Seal: minted}}
+		read := Reading{Assets: testAssets, Tier: tier, Present: true, Stamp: machine.Stamp{State: machine.StateComplete, Seal: minted}}
 		err := read.adopting()
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) {
@@ -277,9 +277,9 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingRemains(t 
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	installed := machine.DigestsOf(Items(production, keys, ssh.AMD64, front.Proxy{}))
+	installed := machine.DigestsOf(Items(testAssets, production, keys, ssh.AMD64, front.Proxy{}))
 
-	alone := removing(Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
+	alone := removing(Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	key := removalOf(alone, SealKeyPath(production))
 	if key.Path == "" {
 		t.Fatalf("destroy leaves %s behind, and a key nothing takes is every sealed value still openable", SealKeyPath(production))
@@ -296,8 +296,8 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingRemains(t 
 		}
 	}
 
-	beside := machine.DigestsOf(Items(preview, keys, ssh.AMD64, front.Proxy{}))
-	shared := removing(Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: beside}, appsPresent{})
+	beside := machine.DigestsOf(Items(testAssets, preview, keys, ssh.AMD64, front.Proxy{}))
+	shared := removing(Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: installed}, Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: beside}, appsPresent{})
 	if removalOf(shared, LiveBinary).Path != "" {
 		t.Errorf("destroying one tier takes %s, which an installed sibling still seals through", LiveBinary)
 	}

@@ -197,7 +197,7 @@ func TestEveryBindTheCheckedDockerAllowsSitsUnderDirectoriesTheDeployLoginCannot
 	t.Parallel()
 
 	owned := map[string]bool{}
-	for _, item := range Items("production", nil, ssh.AMD64, coolifysTraefik()) {
+	for _, item := range Items(testAssets, "production", nil, ssh.AMD64, coolifysTraefik()) {
 		if item.Kind == machine.KindDir && item.Owner == deployUser {
 			owned[item.Name] = true
 		}
@@ -209,7 +209,7 @@ func TestEveryBindTheCheckedDockerAllowsSitsUnderDirectoriesTheDeployLoginCannot
 			}
 		}
 	}
-	if !slices.ContainsFunc(Items("production", nil, ssh.AMD64, front.Proxy{}), func(item machine.Item) bool {
+	if !slices.ContainsFunc(Items(testAssets, "production", nil, ssh.AMD64, front.Proxy{}), func(item machine.Item) bool {
 		return item.Kind == machine.KindDir && item.Name == boxapi.StateRoot && item.Owner == machine.RootOwner
 	}) {
 		t.Errorf("%s is not root's, and every bind beneath it is one the deploy login can swap", boxapi.StateRoot)

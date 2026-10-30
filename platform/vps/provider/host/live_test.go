@@ -21,7 +21,7 @@ import (
 func TestTheAgentListensOnASocketSystemdBindsBeforeTheEngineAndKeepsAcrossARestart(t *testing.T) {
 	t.Parallel()
 
-	socket := string(itemAt(t, LiveItems(ssh.AMD64), machine.KindFile, liveSocketFile).Content)
+	socket := string(itemAt(t, LiveItems(testAssets, ssh.AMD64), machine.KindFile, liveSocketFile).Content)
 	for _, want := range []string{
 		"ListenStream=" + boxapi.SocketPath,
 		"Before=" + dockerUnit,
@@ -32,7 +32,7 @@ func TestTheAgentListensOnASocketSystemdBindsBeforeTheEngineAndKeepsAcrossAResta
 			t.Errorf("the socket unit reads:\n%s\nand never says %q", socket, want)
 		}
 	}
-	service := string(itemAt(t, LiveItems(ssh.AMD64), machine.KindFile, liveUnitFile).Content)
+	service := string(itemAt(t, LiveItems(testAssets, ssh.AMD64), machine.KindFile, liveUnitFile).Content)
 	for _, want := range []string{
 		"ExecStart=" + LiveBinary,
 		"Requires=" + LiveSocketUnit,
@@ -55,7 +55,7 @@ func TestTheAgentListensOnASocketSystemdBindsBeforeTheEngineAndKeepsAcrossAResta
 func TestTheUnitsAreWrittenAfterWhatTheyWatchAndTheServiceAfterItsSocket(t *testing.T) {
 	t.Parallel()
 
-	items := Items(environment.TierProduction, nil, ssh.AMD64, front.Proxy{})
+	items := Items(testAssets, environment.TierProduction, nil, ssh.AMD64, front.Proxy{})
 	at := func(kind, name string) int {
 		return slices.IndexFunc(items, func(item machine.Item) bool { return item.Kind == kind && item.Name == name })
 	}
@@ -70,10 +70,10 @@ func TestTheUnitsAreWrittenAfterWhatTheyWatchAndTheServiceAfterItsSocket(t *test
 			}
 		}
 	}
-	if items[service].Content == nil || !bytes.Equal(items[service].Content, machine.UnitWatchFacts(liveServiceUnit(), liveAgent(ssh.AMD64))) {
+	if items[service].Content == nil || !bytes.Equal(items[service].Content, machine.UnitWatchFacts(liveServiceUnit(), liveAgent(testAssets, ssh.AMD64))) {
 		t.Error("the service's facts do not follow the unit file and the agent, so a changed agent would not restart it")
 	}
-	for _, item := range LiveItems(ssh.AMD64) {
+	for _, item := range LiveItems(testAssets, ssh.AMD64) {
 		if item.Owner != machine.RootOwner {
 			t.Errorf("%s is written to %s, and the agent is root's alone", item.ID(), item.Owner)
 		}
@@ -87,11 +87,11 @@ func TestTheAgentAndTheRuntimeAreStaticBinariesForEachArchitectureTheBoxRuns(t *
 	t.Parallel()
 
 	for arch, machine := range map[string]elf.Machine{ssh.AMD64: elf.EM_X86_64, ssh.ARM64: elf.EM_AARCH64} {
-		runtime, err := ContainerRuntime(arch)
+		runtime, err := ContainerRuntime(testAssets, arch)
 		if err != nil {
-			t.Fatalf("ContainerRuntime(%s) = %v", arch, err)
+			t.Fatalf("ContainerRuntime(testAssets, %s) = %v", arch, err)
 		}
-		for what, body := range map[string][]byte{"agent": liveAgent(arch), "runtime": runtime} {
+		for what, body := range map[string][]byte{"agent": liveAgent(testAssets, arch), "runtime": runtime} {
 			binary, err := elf.NewFile(bytes.NewReader(body))
 			if err != nil {
 				t.Fatalf("the %s for %s is no ELF binary: %v", what, arch, err)
@@ -104,13 +104,13 @@ func TestTheAgentAndTheRuntimeAreStaticBinariesForEachArchitectureTheBoxRuns(t *
 			}
 		}
 	}
-	if _, err := ContainerRuntime("riscv64"); err == nil {
-		t.Error("ContainerRuntime(riscv64) handed something back, and ocel builds the runtime for amd64 and arm64 alone")
+	if _, err := ContainerRuntime(testAssets, "riscv64"); err == nil {
+		t.Error("ContainerRuntime(testAssets, riscv64) handed something back, and ocel builds the runtime for amd64 and arm64 alone")
 	}
-	reported, _ := ContainerRuntime("x86_64")
-	named, _ := ContainerRuntime(ssh.AMD64)
+	reported, _ := ContainerRuntime(testAssets, "x86_64")
+	named, _ := ContainerRuntime(testAssets, ssh.AMD64)
 	if !bytes.Equal(reported, named) {
-		t.Error("ContainerRuntime(x86_64) is not the amd64 build, and an image reports its architecture either way")
+		t.Error("ContainerRuntime(testAssets, x86_64) is not the amd64 build, and an image reports its architecture either way")
 	}
 }
 
@@ -119,13 +119,13 @@ func TestTheLastDestroyTakesTheAgentAndItsUnitsAndASiblingTierKeepsThem(t *testi
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	current := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(production, keys, ssh.AMD64, front.Proxy{}))}
-	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(preview, keys, ssh.AMD64, front.Proxy{}))}
+	current := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(testAssets, production, keys, ssh.AMD64, front.Proxy{}))}
+	beside := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(testAssets, preview, keys, ssh.AMD64, front.Proxy{}))}
 	for _, name := range []string{LiveService, LiveSocketUnit, LiveBinary, liveUnitFile, liveSocketFile} {
 		if kept := removalOf(removing(current, beside, appsPresent{}), name); kept.Action == provider.ActionDelete {
 			t.Errorf("destroying one tier takes %s, and the sibling tier's containers still read their values through it", name)
 		}
-		if gone := removalOf(removing(current, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{}), name); gone.Action != provider.ActionDelete {
+		if gone := removalOf(removing(current, Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{}), name); gone.Action != provider.ActionDelete {
 			t.Errorf("destroying the last tier plans %s as %q", name, gone.Action)
 		}
 	}
