@@ -34,15 +34,15 @@ func DescribeParts(ctx context.Context, b Engine, described provider.BootstrapDe
 func SurveyedParts(b Engine, read Survey, stacks []provider.BootstrapStack) []provider.BootstrapPart {
 	baseStack := read.Project + "/" + string(read.Tier)
 	base := provider.BootstrapPart{
-		Name:    provider.BasePart,
-		Summary: baseSummary,
-		Digest:  read.Stamp.Digest,
-		Shape:   &provider.PartShape{Vendor: string(gcloud.Vendor), Region: read.Region},
+		Name:      provider.BasePart,
+		Summary:   baseSummary,
+		Digest:    read.Stamp.Digest,
+		Inventory: &provider.PartInventory{Vendor: string(gcloud.Vendor), Region: read.Region},
 	}
 	for _, item := range Resources(read.Names, read.Tier, read.Emulated) {
 		base.Resources = append(base.Resources, provider.PhysicalResource{Kind: string(item.Kind), ID: item.Name})
-		if shaped, priced := item.Shape(read.Region); priced {
-			base.Shape.Resources = append(base.Shape.Resources, shaped)
+		if listed, known := item.Inventory(read.Region); known {
+			base.Inventory.Resources = append(base.Inventory.Resources, listed)
 		}
 	}
 	parts := []provider.BootstrapPart{base}

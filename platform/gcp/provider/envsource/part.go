@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -112,10 +111,10 @@ func ensureSyncAccount(ctx context.Context, b bootstrap.Engine, tier environment
 	return b.MakeAccount(ctx, bootstrap.Survey{Tier: tier, Names: b.Clients.Names}, account)
 }
 
-func Shape(name, region string) []pricing.Shaped {
-	return []pricing.Shaped{
-		{Name: name, Type: cost.CloudRunServiceType, Properties: ServiceProperties(region)},
-		{Name: name, Type: cost.SchedulerJobType, Properties: map[string]any{"region": region, "schedule": syncSchedule}},
+func Inventory(name, region string) []pricing.Item {
+	return []pricing.Item{
+		{Name: name, Type: gcloud.CloudRunServiceType, Properties: ServiceProperties(region)},
+		{Name: name, Type: gcloud.SchedulerJobType, Properties: map[string]any{"region": region, "schedule": syncSchedule}},
 	}
 }
 
@@ -135,7 +134,7 @@ func describeEnvSourceSyncPart(ctx context.Context, b bootstrap.Engine, tier env
 		Digest:    recorded.Digest,
 		Resources: syncResources(b, tier),
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: string(gcloud.Vendor), Region: b.Clients.Region, Resources: Shape(b.Clients.EnvSourceSync(tier), b.Clients.Region)},
+		Inventory: &provider.PartInventory{Vendor: string(gcloud.Vendor), Region: b.Clients.Region, Resources: Inventory(b.Clients.EnvSourceSync(tier), b.Clients.Region)},
 	}, true, nil
 }
 
@@ -207,10 +206,8 @@ func takeSyncService(ctx context.Context, b bootstrap.Engine, name string, progr
 
 func ServiceProperties(region string) map[string]any {
 	return map[string]any{
-		"location":                   region,
-		"ingress":                    run.IngressInternal,
-		"requests_per_hour":          syncRequestsPerHour,
-		"billed_seconds_per_request": syncBilledSecondsEach,
+		"location": region,
+		"ingress":  run.IngressInternal,
 		"template": map[string]any{
 			"scaling": map[string]any{"min_instance_count": 0, "max_instance_count": syncInstances},
 			"containers": []any{map[string]any{

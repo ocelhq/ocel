@@ -1,0 +1,5156 @@
+{
+  "format": 1,
+  "vendor": "aws",
+  "version": "2026-10-28",
+  "currency": "USD",
+  "products": [
+    {
+      "service": "AWSAppSync",
+      "sku": "2A2DYQVGM9T495WG",
+      "region": "eu-west-1",
+      "productFamily": "RealTime",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "usagetype": "EventAPI-Operation",
+        "operation": "",
+        "eventapioperation": "Operation"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Operation",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppSync/20260911124525/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSAppSync",
+      "sku": "CUUURGCTDCFK829R",
+      "region": "eu-west-1",
+      "productFamily": "RealTime",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "usagetype": "EventAPI-ConnectionDuration",
+        "operation": "",
+        "eventapioperation": "Connection duration"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Minute",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00000008"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppSync/20260911124525/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSAppSync",
+      "sku": "GTUT38BCY4DEWJY3",
+      "region": "eu-west-2",
+      "productFamily": "RealTime",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "usagetype": "EventAPI-ConnectionDuration",
+        "operation": "",
+        "eventapioperation": "Connection duration"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Minute",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00000008"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppSync/20260911124525/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSAppSync",
+      "sku": "T2HVESGY38GXFTZ5",
+      "region": "eu-west-2",
+      "productFamily": "RealTime",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "usagetype": "EventAPI-Operation",
+        "operation": "",
+        "eventapioperation": "Operation"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Operation",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppSync/20260911124525/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSAppSync",
+      "sku": "73YBXMJS92PHR2Y6",
+      "region": "us-east-1",
+      "productFamily": "RealTime",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "usagetype": "EventAPI-ConnectionDuration",
+        "operation": "",
+        "eventapioperation": "Connection duration"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Minute",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00000008"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppSync/20260911124525/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSAppSync",
+      "sku": "CEM6653GX3MWYEUN",
+      "region": "us-east-1",
+      "productFamily": "RealTime",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "usagetype": "EventAPI-Operation",
+        "operation": "",
+        "eventapioperation": "Operation"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Operation",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSAppSync/20260911124525/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSDataTransfer",
+      "sku": "FSEU4E6BRE95JTX8",
+      "region": "eu-west-1",
+      "productFamily": "Data Transfer",
+      "attributes": {
+        "transferType": "AWS Outbound",
+        "fromLocation": "EU (Ireland)",
+        "fromLocationType": "AWS Region",
+        "toLocation": "External",
+        "toLocationType": "Other",
+        "usagetype": "DataTransfer-Out-Bytes",
+        "operation": "",
+        "fromRegionCode": "eu-west-1",
+        "toRegionCode": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.09"
+        },
+        {
+          "start": "10240",
+          "price": "0.085"
+        },
+        {
+          "start": "51200",
+          "price": "0.07"
+        },
+        {
+          "start": "153600",
+          "price": "0.05"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSDataTransfer",
+      "sku": "QZ73H5RGR5JYYB4D",
+      "region": "eu-west-2",
+      "productFamily": "Data Transfer",
+      "attributes": {
+        "transferType": "AWS Outbound",
+        "fromLocation": "EU (London)",
+        "fromLocationType": "AWS Region",
+        "toLocation": "External",
+        "toLocationType": "Other",
+        "usagetype": "DataTransfer-Out-Bytes",
+        "operation": "",
+        "fromRegionCode": "eu-west-2",
+        "toRegionCode": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.09"
+        },
+        {
+          "start": "10240",
+          "price": "0.085"
+        },
+        {
+          "start": "51200",
+          "price": "0.07"
+        },
+        {
+          "start": "153600",
+          "price": "0.05"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSDataTransfer",
+      "sku": "HQEH3ZWJVT46JHRG",
+      "region": "us-east-1",
+      "productFamily": "Data Transfer",
+      "attributes": {
+        "transferType": "AWS Outbound",
+        "fromLocation": "US East (N. Virginia)",
+        "fromLocationType": "AWS Region",
+        "toLocation": "External",
+        "toLocationType": "Other",
+        "usagetype": "DataTransfer-Out-Bytes",
+        "operation": "",
+        "fromRegionCode": "us-east-1",
+        "toRegionCode": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.09"
+        },
+        {
+          "start": "10240",
+          "price": "0.085"
+        },
+        {
+          "start": "51200",
+          "price": "0.07"
+        },
+        {
+          "start": "153600",
+          "price": "0.05"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260916132208/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "54CR7C3UHSDQ3C4E",
+      "region": "eu-west-1",
+      "productFamily": "Load Balancer-Gateway",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "Used Gateway Load Balancer capacity units-hr",
+        "usagetype": "LCUUsage",
+        "operation": "LoadBalancing:Gateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "LCU-Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.004"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "GNQR4Q4U4SJZGZA5",
+      "region": "eu-west-1",
+      "productFamily": "Load Balancer-Gateway",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Gateway Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing:Gateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.014"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "HWQC4ZB5JT7D9CQC",
+      "region": "eu-west-1",
+      "productFamily": "Load Balancer-Network",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "Used Network Load Balancer capacity units-hr",
+        "usagetype": "LCUUsage",
+        "operation": "LoadBalancing:Network"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "LCU-Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.006"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "PMVAP4E245MPBY22",
+      "region": "eu-west-1",
+      "productFamily": "Load Balancer",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Classic Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.028"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "T29JAP5UEZ7HXAM7",
+      "region": "eu-west-1",
+      "productFamily": "Load Balancer-Application",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Application Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing:Application"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0252"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "YE8QE7GMG9794PDX",
+      "region": "eu-west-1",
+      "productFamily": "Load Balancer-Application",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "Used Application Load Balancer capacity units-hr",
+        "usagetype": "LCUUsage",
+        "operation": "LoadBalancing:Application"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "LCU-Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.008"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "ZEBJ6Q6SEUWPQG9R",
+      "region": "eu-west-1",
+      "productFamily": "Load Balancer-Network",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Network Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing:Network"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0252"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "6AP766DZF74JPTE2",
+      "region": "eu-west-2",
+      "productFamily": "Load Balancer-Application",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Application Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing:Application"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.02646"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "922QC3D66T3QU9QK",
+      "region": "eu-west-2",
+      "productFamily": "Load Balancer",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Classic Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0294"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "D4JRRS3AFPHRV7RF",
+      "region": "eu-west-2",
+      "productFamily": "Load Balancer-Application",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "Used Application Load Balancer capacity units-hr",
+        "usagetype": "LCUUsage",
+        "operation": "LoadBalancing:Application"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "LCU-Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0084"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "QSWHNGUEGEPBSPC6",
+      "region": "eu-west-2",
+      "productFamily": "Load Balancer-Network",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Network Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing:Network"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.02646"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "RKNMJZBV5F2X3TAU",
+      "region": "eu-west-2",
+      "productFamily": "Load Balancer-Gateway",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Gateway Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing:Gateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0147"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "T9SXURTB56US7RTF",
+      "region": "eu-west-2",
+      "productFamily": "Load Balancer-Network",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "Used Network Load Balancer capacity units-hr",
+        "usagetype": "LCUUsage",
+        "operation": "LoadBalancing:Network"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "LCU-Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.006"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "V6762STHYS4NNE5D",
+      "region": "eu-west-2",
+      "productFamily": "Load Balancer-Gateway",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "Used Gateway Load Balancer capacity units-hr",
+        "usagetype": "LCUUsage",
+        "operation": "LoadBalancing:Gateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "LCU-Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.004"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "37CUWUT8GSNQEPUV",
+      "region": "us-east-1",
+      "productFamily": "Load Balancer-Application",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Application Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing:Application"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0225"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "4XCKHVEY2F7FVHE3",
+      "region": "us-east-1",
+      "productFamily": "Load Balancer-Gateway",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Gateway Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing:Gateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0125"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "6XT9C7FFNQ3T39YK",
+      "region": "us-east-1",
+      "productFamily": "Load Balancer",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Classic Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.025"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "EBFBY6XVZMVA2MJP",
+      "region": "us-east-1",
+      "productFamily": "Load Balancer-Gateway",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "Used Gateway Load Balancer capacity units-hr",
+        "usagetype": "LCUUsage",
+        "operation": "LoadBalancing:Gateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "LCU-Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.004"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "P2XGEJ8N3KU52WA8",
+      "region": "us-east-1",
+      "productFamily": "Load Balancer-Application",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "Used Application Load Balancer capacity units-hr",
+        "usagetype": "LCUUsage",
+        "operation": "LoadBalancing:Application"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "LCU-Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.008"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "XZ2DR556MD28P9WJ",
+      "region": "us-east-1",
+      "productFamily": "Load Balancer-Network",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "Used Network Load Balancer capacity units-hr",
+        "usagetype": "LCUUsage",
+        "operation": "LoadBalancing:Network"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "LCU-Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.006"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSELB",
+      "sku": "YKBGGP5EBGDU9T5W",
+      "region": "us-east-1",
+      "productFamily": "Load Balancer-Network",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "ELB:Balancing",
+        "groupDescription": "LoadBalancer hourly usage by Network Load Balancer",
+        "usagetype": "LoadBalancerUsage",
+        "operation": "LoadBalancing:Network"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0225"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSEvents",
+      "sku": "E82DKZKPTKQ3W532",
+      "region": "eu-west-1",
+      "productFamily": "EventBridge",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "usagetype": "ScheduledInvocation",
+        "operation": "Invocation",
+        "invocation": "Scheduled Invocation",
+        "timeWindow": "N/A"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Invocations",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "14000000",
+          "price": "0.000001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSEvents/20260924163903/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSEvents",
+      "sku": "RVNKVY9GTWJ2M4WX",
+      "region": "eu-west-2",
+      "productFamily": "EventBridge",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "usagetype": "ScheduledInvocation",
+        "operation": "Invocation",
+        "invocation": "Scheduled Invocation",
+        "timeWindow": "N/A"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Invocations",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "14000000",
+          "price": "0.00000115"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSEvents/20260924163903/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSEvents",
+      "sku": "UYXR5PNB8BYSVPGV",
+      "region": "us-east-1",
+      "productFamily": "EventBridge",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "usagetype": "ScheduledInvocation",
+        "operation": "Invocation",
+        "invocation": "Scheduled Invocation",
+        "timeWindow": "N/A"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Invocations",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "14000000",
+          "price": "0.000001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSEvents/20260924163903/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "B5V2RNHAWGVJBZD3",
+      "region": "eu-west-1",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Requests",
+        "groupDescription": "Invocation call for a Lambda function",
+        "usagetype": "Request",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Request",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "DV2YFXRNHNJFTDP3",
+      "region": "eu-west-1",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Requests-ARM",
+        "groupDescription": "Invocation call for a Lambda function for ARM",
+        "usagetype": "Request-ARM",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "KXNSA7NBRHBHXXPS",
+      "region": "eu-west-1",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Duration-ARM",
+        "groupDescription": "Invocation duration weighted by memory assigned to function, measured in GB-s for ARM",
+        "usagetype": "Lambda-GB-Second-ARM",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Lambda-GB-Second",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000133334"
+        },
+        {
+          "start": "7500000000",
+          "price": "0.0000120001"
+        },
+        {
+          "start": "18750000000",
+          "price": "0.0000106667"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "SGGKTWDV7PGMPPSJ",
+      "region": "eu-west-1",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Duration",
+        "groupDescription": "Invocation duration weighted by memory assigned to function, measured in GB-s",
+        "usagetype": "Lambda-GB-Second",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Lambda-GB-Second",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000166667"
+        },
+        {
+          "start": "6000000000",
+          "price": "0.000015"
+        },
+        {
+          "start": "15000000000",
+          "price": "0.0000133334"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "D4TPQYY66DKTZWX9",
+      "region": "eu-west-2",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Requests-ARM",
+        "groupDescription": "Invocation call for a Lambda function for ARM",
+        "usagetype": "Request-ARM",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "NDYBVXT3KB548Z2A",
+      "region": "eu-west-2",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Requests",
+        "groupDescription": "Invocation call for a Lambda function",
+        "usagetype": "Request",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Request",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "RP9RSZYUC96SQ4G2",
+      "region": "eu-west-2",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Duration",
+        "groupDescription": "Invocation duration weighted by memory assigned to function, measured in GB-s",
+        "usagetype": "Lambda-GB-Second",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Lambda-GB-Second",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000166667"
+        },
+        {
+          "start": "6000000000",
+          "price": "0.000015"
+        },
+        {
+          "start": "15000000000",
+          "price": "0.0000133334"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "VGMFG9KJ58Z2FK83",
+      "region": "eu-west-2",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Duration-ARM",
+        "groupDescription": "Invocation duration weighted by memory assigned to function, measured in GB-s for ARM",
+        "usagetype": "Lambda-GB-Second-ARM",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Lambda-GB-Second",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000133334"
+        },
+        {
+          "start": "7500000000",
+          "price": "0.0000120001"
+        },
+        {
+          "start": "18750000000",
+          "price": "0.0000106667"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "72SBSFWPMDTH8S3J",
+      "region": "us-east-1",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Duration-ARM",
+        "groupDescription": "Invocation duration weighted by memory assigned to function, measured in GB-s for ARM",
+        "usagetype": "Lambda-GB-Second-ARM",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Lambda-GB-Second",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000133334"
+        },
+        {
+          "start": "7500000000",
+          "price": "0.0000120001"
+        },
+        {
+          "start": "18750000000",
+          "price": "0.0000106667"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "GU2ZS9HVP6QTQ7KE",
+      "region": "us-east-1",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Requests",
+        "groupDescription": "Invocation call for a Lambda function",
+        "usagetype": "Request",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "K7BX6567RJ67A2KE",
+      "region": "us-east-1",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Requests-ARM",
+        "groupDescription": "Invocation call for a Lambda function for ARM",
+        "usagetype": "Request-ARM",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSLambda",
+      "sku": "TG3M4CAGBA3NYQBH",
+      "region": "us-east-1",
+      "productFamily": "Serverless",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "AWS-Lambda-Duration",
+        "groupDescription": "Invocation duration weighted by memory assigned to function, measured in GB-s",
+        "usagetype": "Lambda-GB-Second",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Lambda-GB-Second",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000166667"
+        },
+        {
+          "start": "6000000000",
+          "price": "0.000015"
+        },
+        {
+          "start": "15000000000",
+          "price": "0.0000133334"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSQueueService",
+      "sku": "6H4FT9UZM5YGT53K",
+      "region": "eu-west-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "SQS-APIRequest-Tier1",
+        "groupDescription": "Amazon SQS Requests",
+        "usagetype": "Requests-FIFO-Tier1",
+        "operation": "",
+        "messageDeliveryFrequency": "Exactly Once",
+        "messageDeliveryOrder": "Guaranteed",
+        "queueType": "FIFO (first-in, first-out)"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000005"
+        },
+        {
+          "start": "100000000000",
+          "price": "0.0000004"
+        },
+        {
+          "start": "200000000000",
+          "price": "0.00000035"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSQueueService/20260911124607/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSQueueService",
+      "sku": "SSZJAF3K6XY544ES",
+      "region": "eu-west-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "SQS-APIRequest-Tier1",
+        "groupDescription": "Amazon SQS Requests",
+        "usagetype": "Requests-Tier1",
+        "operation": "",
+        "messageDeliveryFrequency": "At Least Once",
+        "messageDeliveryOrder": "Not Guaranteed",
+        "queueType": "Standard"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000004"
+        },
+        {
+          "start": "100000000000",
+          "price": "0.0000003"
+        },
+        {
+          "start": "200000000000",
+          "price": "0.00000024"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSQueueService/20260911124607/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSQueueService",
+      "sku": "7DSEXZJZCF4MMFKF",
+      "region": "eu-west-2",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "SQS-APIRequest-Tier1",
+        "groupDescription": "Amazon SQS Requests",
+        "usagetype": "Requests-Tier1",
+        "operation": "",
+        "messageDeliveryFrequency": "At Least Once",
+        "messageDeliveryOrder": "Not Guaranteed",
+        "queueType": "Standard"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000004"
+        },
+        {
+          "start": "100000000000",
+          "price": "0.00000035"
+        },
+        {
+          "start": "200000000000",
+          "price": "0.00000032"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSQueueService/20260911124607/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSQueueService",
+      "sku": "7JDCXCCHVYH99G79",
+      "region": "eu-west-2",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "SQS-APIRequest-Tier1",
+        "groupDescription": "Amazon SQS Requests",
+        "usagetype": "Requests-FIFO-Tier1",
+        "operation": "",
+        "messageDeliveryFrequency": "Exactly Once",
+        "messageDeliveryOrder": "Guaranteed",
+        "queueType": "FIFO (first-in, first-out)"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000005"
+        },
+        {
+          "start": "100000000000",
+          "price": "0.00000046"
+        },
+        {
+          "start": "200000000000",
+          "price": "0.00000042"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSQueueService/20260911124607/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSQueueService",
+      "sku": "624ZQ7K46KHFAD9Y",
+      "region": "us-east-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "SQS-APIRequest-Tier1",
+        "groupDescription": "Amazon SQS Requests",
+        "usagetype": "Requests-FIFO-RBP",
+        "operation": "",
+        "messageDeliveryFrequency": "Exactly Once",
+        "messageDeliveryOrder": "Guaranteed",
+        "queueType": "FIFO (first-in, first-out)"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000005"
+        },
+        {
+          "start": "100000000000",
+          "price": "0.0000004"
+        },
+        {
+          "start": "200000000000",
+          "price": "0.00000035"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSQueueService/20260911124607/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSQueueService",
+      "sku": "8RN6B8U4MERHRXP3",
+      "region": "us-east-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "SQS-APIRequest-Tier1",
+        "groupDescription": "Amazon SQS Requests",
+        "usagetype": "Requests-RBP",
+        "operation": "",
+        "messageDeliveryFrequency": "At Least Once",
+        "messageDeliveryOrder": "Not Guaranteed",
+        "queueType": "Standard"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000004"
+        },
+        {
+          "start": "100000000000",
+          "price": "0.0000003"
+        },
+        {
+          "start": "200000000000",
+          "price": "0.00000024"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSQueueService/20260911124607/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSSecretsManager",
+      "sku": "7XGGDB26HD68ED7A",
+      "region": "eu-west-1",
+      "productFamily": "Secret",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "AWSSecretsManager-Secret",
+        "usagetype": "AWSSecretsManager-Secrets",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Secrets",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.4"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSSecretsManager",
+      "sku": "EGBHGCHDFAQWM4B6",
+      "region": "eu-west-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "AWSSecretsManager-APIRequest",
+        "usagetype": "AWSSecretsManager-APIRequests",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "API Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSSecretsManager",
+      "sku": "PJHVPQZRWG9TYHS5",
+      "region": "eu-west-2",
+      "productFamily": "Secret",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "AWSSecretsManager-Secret",
+        "usagetype": "AWSSecretsManager-Secrets",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Secrets",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.4"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSSecretsManager",
+      "sku": "YUHRT3TNBAHA3BHA",
+      "region": "eu-west-2",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "AWSSecretsManager-APIRequest",
+        "usagetype": "AWSSecretsManagerAPIRequest",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "API Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSSecretsManager",
+      "sku": "4MDZ5VNEJPMUTG9B",
+      "region": "us-east-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "AWSSecretsManager-APIRequest",
+        "usagetype": "AWSSecretsManagerAPIRequest",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "API Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AWSSecretsManager",
+      "sku": "BJ3PQ9BYGU6P632F",
+      "region": "us-east-1",
+      "productFamily": "Secret",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "AWSSecretsManager-Secret",
+        "usagetype": "AWSSecretsManager-Secrets",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Secrets",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.4"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonApiGateway",
+      "sku": "97HEGEHSUXEP2W8Y",
+      "region": "eu-west-1",
+      "productFamily": "API Calls",
+      "attributes": {
+        "description": "API calls received",
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "usagetype": "ApiGatewayRequest",
+        "operation": "ApiGatewayRequest"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000035"
+        },
+        {
+          "start": "333000000",
+          "price": "0.00000319"
+        },
+        {
+          "start": "1000000000",
+          "price": "0.00000271"
+        },
+        {
+          "start": "20000000000",
+          "price": "0.00000172"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonApiGateway/20261013003044/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonApiGateway",
+      "sku": "Z5KFC4J7492YHH8P",
+      "region": "eu-west-2",
+      "productFamily": "API Calls",
+      "attributes": {
+        "description": "API calls received",
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "usagetype": "ApiGatewayRequest",
+        "operation": "ApiGatewayRequest"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000035"
+        },
+        {
+          "start": "333000000",
+          "price": "0.00000333"
+        },
+        {
+          "start": "1000000000",
+          "price": "0.00000283"
+        },
+        {
+          "start": "20000000000",
+          "price": "0.0000018"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonApiGateway/20261013003044/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonApiGateway",
+      "sku": "KKDZ3TFSXUSMCZ3A",
+      "region": "us-east-1",
+      "productFamily": "API Calls",
+      "attributes": {
+        "description": "API calls received",
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "usagetype": "ApiGatewayRequest",
+        "operation": "ApiGatewayRequest"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000035"
+        },
+        {
+          "start": "333000000",
+          "price": "0.0000028"
+        },
+        {
+          "start": "1000000000",
+          "price": "0.00000238"
+        },
+        {
+          "start": "20000000000",
+          "price": "0.00000151"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonApiGateway/20261013003044/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudFront",
+      "sku": "GV2WFGX37Q9PDSHF",
+      "region": "",
+      "productFamily": "Data Transfer",
+      "attributes": {
+        "transferType": "CloudFront Outbound",
+        "fromLocation": "United States",
+        "fromLocationType": "AWS Edge Location",
+        "toLocation": "External",
+        "toLocationType": "Other",
+        "usagetype": "US-DataTransfer-Out-Bytes",
+        "operation": "",
+        "fromRegionCode": "",
+        "toRegionCode": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.085"
+        },
+        {
+          "start": "10240",
+          "price": "0.08"
+        },
+        {
+          "start": "51200",
+          "price": "0.06"
+        },
+        {
+          "start": "153600",
+          "price": "0.04"
+        },
+        {
+          "start": "512000",
+          "price": "0.03"
+        },
+        {
+          "start": "1048576",
+          "price": "0.025"
+        },
+        {
+          "start": "5242880",
+          "price": "0.02"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/20261019150500/aws-other/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudFront",
+      "sku": "NPFD6SEH9MXS8M4J",
+      "region": "",
+      "productFamily": "Request",
+      "attributes": {
+        "location": "United States",
+        "locationType": "AWS Edge Location",
+        "usagetype": "US-Requests-Tier2-HTTPS",
+        "operation": "",
+        "requestDescription": "HTTPS GET and HEAD requests",
+        "requestType": "CloudFront-Request-Tier2"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/20261019150500/aws-other/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudFront",
+      "sku": "QAZUUEJG8GARJCET",
+      "region": "",
+      "productFamily": "Request",
+      "attributes": {
+        "location": "Any",
+        "locationType": "Other",
+        "group": "CloudFront-Functions",
+        "groupDescription": "CloudFront Function executions",
+        "usagetype": "Executions-CloudFrontFunctions",
+        "operation": "Execution"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "FunctionExecutions",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "2000000",
+          "price": "0.0000001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/20261019150500/aws-other/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudFront",
+      "sku": "UJQ4XVRAX798D7BU",
+      "region": "",
+      "productFamily": "Request",
+      "attributes": {
+        "location": "Any",
+        "locationType": "Other",
+        "group": "KVS-Reads",
+        "groupDescription": "CloudFront KeyValueStore Reads",
+        "usagetype": "KeyValueStore-EdgeReads",
+        "operation": "KVSReads"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "EdgeReads",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "2000000",
+          "price": "0.00000003"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/20261019150500/aws-other/index.json",
+      "verified": "2026-10-29"
+    },
+    {
+      "service": "AmazonCloudFront",
+      "sku": "VGGT5H7FE95Y29Y4",
+      "region": "",
+      "productFamily": "Request",
+      "attributes": {
+        "location": "Any",
+        "locationType": "Other",
+        "group": "KVS-API-Requests",
+        "groupDescription": "CloudFront KeyValueStore API Operations",
+        "usagetype": "KeyValueStore-APIOperations",
+        "operation": "KVSRequests"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "API Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/20261019150500/aws-other/index.json",
+      "verified": "2026-10-29"
+    },
+    {
+      "service": "AmazonCloudWatch",
+      "sku": "GDMKAEDCSYJAKBZQ",
+      "region": "eu-west-1",
+      "productFamily": "Alarm",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "Alarm",
+        "groupDescription": "CloudWatch Alarms",
+        "usagetype": "CW:AlarmMonitorUsage",
+        "operation": "",
+        "alarmType": "Standard"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Alarms",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudWatch",
+      "sku": "KJBTQPDHW2H92B8Y",
+      "region": "eu-west-1",
+      "productFamily": "Data Payload",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "Ingested Logs",
+        "groupDescription": "Existing system, application, and custom log files",
+        "usagetype": "DataProcessing-Bytes",
+        "operation": "PutLogEvents",
+        "logsDestination": "Amazon CloudWatch Logs",
+        "version": "Current"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.57"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudWatch",
+      "sku": "M93YPPU987S2T6U9",
+      "region": "eu-west-1",
+      "productFamily": "Storage Snapshot",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "storageMedia": "Amazon S3",
+        "group": "Amazon CloudWatch Standard Storage pricing current",
+        "groupDescription": "Amazon CloudWatch Logs Storage Current version",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": "",
+        "version": "Current"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.03"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudWatch",
+      "sku": "7YQ22RBNQBPK86VK",
+      "region": "eu-west-2",
+      "productFamily": "Storage Snapshot",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "storageMedia": "Amazon S3",
+        "group": "Amazon CloudWatch Standard Storage pricing current",
+        "groupDescription": "Amazon CloudWatch Logs Storage Current version",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": "",
+        "version": "Current"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0315"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudWatch",
+      "sku": "S9T455EP2J2BR9R9",
+      "region": "eu-west-2",
+      "productFamily": "Data Payload",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "Ingested Logs",
+        "groupDescription": "Existing system, application, and custom log files",
+        "usagetype": "DataProcessing-Bytes",
+        "operation": "PutLogEvents",
+        "logsDestination": "Amazon CloudWatch Logs",
+        "version": "Current"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.5985"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudWatch",
+      "sku": "VU6CBY3UVQ6KVEAN",
+      "region": "eu-west-2",
+      "productFamily": "Alarm",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "Alarm",
+        "groupDescription": "CloudWatch Alarms",
+        "usagetype": "CW:AlarmMonitorUsage",
+        "operation": "",
+        "alarmType": "Standard"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Alarms",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudWatch",
+      "sku": "6K9ADYQAHV5KX9KZ",
+      "region": "us-east-1",
+      "productFamily": "Storage Snapshot",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "storageMedia": "Amazon S3",
+        "group": "Amazon CloudWatch Standard Storage pricing current",
+        "groupDescription": "Amazon CloudWatch Logs Storage Current version",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": "",
+        "version": "Current"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.03"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudWatch",
+      "sku": "96K55R2PV3ZZZ3AM",
+      "region": "us-east-1",
+      "productFamily": "Data Payload",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "Ingested Logs",
+        "groupDescription": "Existing system, application, and custom log files",
+        "usagetype": "DataProcessing-Bytes",
+        "operation": "PutLogEvents",
+        "logsDestination": "Amazon CloudWatch Logs",
+        "version": "Legacy"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.5"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudWatch",
+      "sku": "EVETVUGEN3MUTMXM",
+      "region": "us-east-1",
+      "productFamily": "Alarm",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "Alarm",
+        "groupDescription": "CloudWatch Alarms",
+        "usagetype": "CW:AlarmMonitorUsage",
+        "operation": "",
+        "alarmType": "Standard"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Alarms",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudWatch",
+      "sku": "JRHJQ2UMPUB5K73A",
+      "region": "us-east-1",
+      "productFamily": "Storage Snapshot",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "storageMedia": "Amazon S3",
+        "group": "Amazon CloudWatch Standard Storage pricing legacy",
+        "groupDescription": "Amazon CloudWatch Logs Storage Legacy version",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": "",
+        "version": "Legacy"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.03"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonCloudWatch",
+      "sku": "S8QGXX5R2BKKMDSJ",
+      "region": "us-east-1",
+      "productFamily": "Data Payload",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "Ingested Logs",
+        "groupDescription": "Existing system, application, and custom log files",
+        "usagetype": "DataProcessing-Bytes",
+        "operation": "PutLogEvents",
+        "logsDestination": "Amazon CloudWatch Logs",
+        "version": "Current"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.5"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20261007115540/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonDynamoDB",
+      "sku": "3ERQSZWPAMX2JWHN",
+      "region": "eu-west-1",
+      "productFamily": "Amazon DynamoDB PayPerRequest Throughput",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "DDB-ReadUnits",
+        "groupDescription": "DynamoDB PayPerRequest Read Request Units",
+        "usagetype": "ReadRequestUnits",
+        "operation": "PayPerRequestThroughput"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "ReadRequestUnits",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000001415"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonDynamoDB",
+      "sku": "E6MS5SS3AMMHBJC6",
+      "region": "eu-west-1",
+      "productFamily": "Database Storage",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "volumeType": "Amazon DynamoDB - Indexed DataStore",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "25",
+          "price": "0.283"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonDynamoDB",
+      "sku": "F4EZE5SAMS3D49NJ",
+      "region": "eu-west-1",
+      "productFamily": "Amazon DynamoDB PayPerRequest Throughput",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "DDB-WriteUnits",
+        "groupDescription": "DynamoDB PayPerRequest Write Request Units",
+        "usagetype": "WriteRequestUnits",
+        "operation": "PayPerRequestThroughput"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "WriteRequestUnits",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000000705"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonDynamoDB",
+      "sku": "6PCERDN3NMDKW474",
+      "region": "eu-west-2",
+      "productFamily": "Amazon DynamoDB PayPerRequest Throughput",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "DDB-WriteUnits",
+        "groupDescription": "DynamoDB PayPerRequest Write Request Units",
+        "usagetype": "WriteRequestUnits",
+        "operation": "PayPerRequestThroughput"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "WriteRequestUnits",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000007423"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonDynamoDB",
+      "sku": "8BMKSHZNW5CVQKKZ",
+      "region": "eu-west-2",
+      "productFamily": "Database Storage",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "volumeType": "Amazon DynamoDB - Indexed DataStore",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "25",
+          "price": "0.29715"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonDynamoDB",
+      "sku": "C3KVQJC3P2UZ6DKW",
+      "region": "eu-west-2",
+      "productFamily": "Amazon DynamoDB PayPerRequest Throughput",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "DDB-ReadUnits",
+        "groupDescription": "DynamoDB PayPerRequest Read Request Units",
+        "usagetype": "ReadRequestUnits",
+        "operation": "PayPerRequestThroughput"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "ReadRequestUnits",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000001487"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonDynamoDB",
+      "sku": "4W4ZMC46EHE8XTTZ",
+      "region": "us-east-1",
+      "productFamily": "Amazon DynamoDB PayPerRequest Throughput",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "DDB-ReadUnits",
+        "groupDescription": "DynamoDB PayPerRequest Read Request Units",
+        "usagetype": "ReadRequestUnits",
+        "operation": "PayPerRequestThroughput"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "ReadRequestUnits",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000000125"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonDynamoDB",
+      "sku": "F3E2EDSYC6ZNW7XP",
+      "region": "us-east-1",
+      "productFamily": "Database Storage",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "volumeType": "Amazon DynamoDB - Indexed DataStore",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "25",
+          "price": "0.25"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonDynamoDB",
+      "sku": "FGXVD96DKJMUASY3",
+      "region": "us-east-1",
+      "productFamily": "Amazon DynamoDB PayPerRequest Throughput",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "DDB-WriteUnits",
+        "groupDescription": "DynamoDB PayPerRequest Write Request Units",
+        "usagetype": "WriteRequestUnits",
+        "operation": "PayPerRequestThroughput"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "WriteRequestUnits",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000000625"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonEC2",
+      "sku": "DTH8595YVPFXV226",
+      "region": "eu-west-1",
+      "productFamily": "NAT Gateway",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "NGW:NatGateway",
+        "groupDescription": "Charge for per GB data processed by NatGateways",
+        "usagetype": "NatGateway-Bytes",
+        "operation": "NatGateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.048"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261028180352/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonEC2",
+      "sku": "KFNSSCHWD43WZK2R",
+      "region": "eu-west-1",
+      "productFamily": "NAT Gateway",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "NGW:NatGateway",
+        "groupDescription": "Hourly charge for NAT Gateways",
+        "usagetype": "NatGateway-Hours",
+        "operation": "NatGateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.048"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261028180352/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonEC2",
+      "sku": "D8BXG95NJW6MV3B3",
+      "region": "eu-west-2",
+      "productFamily": "NAT Gateway",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "NGW:NatGateway",
+        "groupDescription": "Hourly charge for NAT Gateways",
+        "usagetype": "NatGateway-Hours",
+        "operation": "NatGateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.05"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261028180352/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonEC2",
+      "sku": "ZECE57EY4F96YNAQ",
+      "region": "eu-west-2",
+      "productFamily": "NAT Gateway",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "NGW:NatGateway",
+        "groupDescription": "Charge for per GB data processed by NatGateways",
+        "usagetype": "NatGateway-Bytes",
+        "operation": "NatGateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.05"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261028180352/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonEC2",
+      "sku": "59S5R83GFPUAGVR5",
+      "region": "us-east-1",
+      "productFamily": "NAT Gateway",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "NGW:NatGateway",
+        "groupDescription": "Charge for per GB data processed by NatGateways",
+        "usagetype": "NatGateway-Bytes",
+        "operation": "NatGateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.045"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261028180352/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonEC2",
+      "sku": "M2YSHUBETB3JX4M4",
+      "region": "us-east-1",
+      "productFamily": "NAT Gateway",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "NGW:NatGateway",
+        "groupDescription": "Hourly charge for NAT Gateways",
+        "usagetype": "NatGateway-Hours",
+        "operation": "NatGateway"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.045"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20261028180352/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECR",
+      "sku": "4NWTEXUZBWQH8MDW",
+      "region": "eu-west-1",
+      "productFamily": "EC2 Container Registry",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": "",
+        "storageType": "S3"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECR/20260911124425/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECR",
+      "sku": "UKHV3Q6MJGAMQ6WM",
+      "region": "eu-west-2",
+      "productFamily": "EC2 Container Registry",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": "",
+        "storageType": "S3"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECR/20260911124425/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECR",
+      "sku": "KJC988R4J65BDMTQ",
+      "region": "us-east-1",
+      "productFamily": "EC2 Container Registry",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": "",
+        "storageType": "S3"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECR/20260911124425/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "K4EXFQ5YFQCP98EN",
+      "region": "eu-west-1",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-vCPU-Hours:perCPU",
+        "operation": "",
+        "cputype": "perCPU"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.04048"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "KXC9CEUQGJQPNZPY",
+      "region": "eu-west-1",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-ARM-vCPU-Hours:perCPU",
+        "operation": "",
+        "cpuArchitecture": "ARM",
+        "cputype": "perCPU",
+        "resource": "per vCPU per hour"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.03238"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "MGJ5EB5GSHR8QZDF",
+      "region": "eu-west-1",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-ARM-GB-Hours",
+        "operation": "",
+        "cpuArchitecture": "ARM",
+        "memorytype": "perGB",
+        "resource": "per GB per hour"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00356"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "UP5ETC3QSW2QZGEY",
+      "region": "eu-west-1",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-GB-Hours",
+        "operation": "",
+        "memorytype": "perGB"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.004445"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "G265XVYY5YDS48U6",
+      "region": "eu-west-2",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-vCPU-Hours:perCPU",
+        "operation": "",
+        "cputype": "perCPU"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.04656"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "JPX9CCYJS97M953T",
+      "region": "eu-west-2",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-GB-Hours",
+        "operation": "",
+        "memorytype": "perGB"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00511"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "YEJBN6TMUWD8EV8P",
+      "region": "eu-west-2",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-ARM-vCPU-Hours:perCPU",
+        "operation": "",
+        "cpuArchitecture": "ARM",
+        "cputype": "perCPU",
+        "resource": "per vCPU per hour"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.03725"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "ZHQV69PSVX9PGWTQ",
+      "region": "eu-west-2",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-ARM-GB-Hours",
+        "operation": "",
+        "cpuArchitecture": "ARM",
+        "memorytype": "perGB",
+        "resource": "per GB per hour"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00409"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "8CESGAFWKAJ98PME",
+      "region": "us-east-1",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-vCPU-Hours:perCPU",
+        "operation": "",
+        "cputype": "perCPU"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.04048"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "PBZNQUSEXZUC34C9",
+      "region": "us-east-1",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-GB-Hours",
+        "operation": "",
+        "memorytype": "perGB"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.004445"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "UNH9KPQP7W7C66C9",
+      "region": "us-east-1",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-ARM-GB-Hours",
+        "operation": "",
+        "cpuArchitecture": "ARM",
+        "memorytype": "perGB",
+        "resource": "per GB per hour"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00356"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonECS",
+      "sku": "XSZATS4VYMDC9CYN",
+      "region": "us-east-1",
+      "productFamily": "Compute",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "tenancy": "Shared",
+        "usagetype": "Fargate-ARM-vCPU-Hours:perCPU",
+        "operation": "",
+        "cpuArchitecture": "ARM",
+        "cputype": "perCPU",
+        "resource": "per vCPU per hour"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.03238"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20261019224317/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "2WCR4EK9ZF8NYV5V",
+      "region": "eu-west-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.r7g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "memory": "13.07 GiB",
+        "networkPerformance": "Up to 12.5 Gigabit",
+        "cacheEngine": "Redis",
+        "usagetype": "NodeUsage:cache.r7g.large",
+        "operation": "CreateCacheCluster:0002",
+        "normalizationSizeFactor": "4"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.243"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261028192450/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "B5G8M6Y6652B7J2T",
+      "region": "eu-west-1",
+      "productFamily": "Storage Snapshot",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "cacheEngine": "Valkey",
+        "storageMedia": "Amazon S3",
+        "usagetype": "ElastiCache:BackupUsage:Valkey",
+        "operation": "CreateCacheSnapshot"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.085"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261028192450/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "CDHKGB6GATTYU7M5",
+      "region": "eu-west-1",
+      "productFamily": "Storage Snapshot",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "cacheEngine": "Redis",
+        "storageMedia": "Amazon S3",
+        "usagetype": "ElastiCache:BackupUsage",
+        "operation": "CreateCacheSnapshot"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.085"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261028192450/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "P9SVF4HW3JDU3RK3",
+      "region": "eu-west-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.r7g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "memory": "13.07 GiB",
+        "networkPerformance": "Up to 12.5 Gigabit",
+        "cacheEngine": "Valkey",
+        "usagetype": "NodeUsage:cache.r7g.large",
+        "operation": "CreateCacheCluster:Valkey",
+        "normalizationSizeFactor": "3.2"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1944"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261028192450/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "RG42GGZZW9EG64FY",
+      "region": "eu-west-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.t4g.micro",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Standard",
+        "vcpu": "2",
+        "memory": "0.5 GiB",
+        "networkPerformance": "Up to 5 Gigabit",
+        "cacheEngine": "Valkey",
+        "usagetype": "NodeUsage:cache.t4g.micro",
+        "operation": "CreateCacheCluster:Valkey",
+        "normalizationSizeFactor": "0.4"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0136"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261028192450/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "TS7E7FWR7YM4U3CD",
+      "region": "eu-west-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.t4g.micro",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Standard",
+        "vcpu": "2",
+        "memory": "0.5 GiB",
+        "networkPerformance": "Up to 5 Gigabit",
+        "cacheEngine": "Memcached",
+        "usagetype": "NodeUsage:cache.t4g.micro",
+        "operation": "CreateCacheCluster:0001",
+        "normalizationSizeFactor": "0.5"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.017"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261028192450/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "VG2J4PD3JCRNDE5J",
+      "region": "eu-west-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.t4g.micro",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Standard",
+        "vcpu": "2",
+        "memory": "0.5 GiB",
+        "networkPerformance": "Up to 5 Gigabit",
+        "cacheEngine": "Redis",
+        "usagetype": "NodeUsage:cache.t4g.micro",
+        "operation": "CreateCacheCluster:0002",
+        "normalizationSizeFactor": "0.5"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.017"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261028192450/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "YUCYXCFESEYK4Y2J",
+      "region": "eu-west-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.r7g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "memory": "13.07 GiB",
+        "networkPerformance": "Up to 12.5 Gigabit",
+        "cacheEngine": "Memcached",
+        "usagetype": "NodeUsage:cache.r7g.large",
+        "operation": "CreateCacheCluster:0001",
+        "normalizationSizeFactor": "4"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.243"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261028192450/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "5MV8QBEC44S5VW63",
+      "region": "eu-west-2",
+      "productFamily": "Storage Snapshot",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "cacheEngine": "Redis",
+        "storageMedia": "Amazon S3",
+        "usagetype": "ElastiCache:BackupUsage",
+        "operation": "CreateCacheSnapshot"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.085"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "5NWKSC5ENGXQ7FWF",
+      "region": "eu-west-2",
+      "productFamily": "Storage Snapshot",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "cacheEngine": "Valkey",
+        "storageMedia": "Amazon S3",
+        "usagetype": "ElastiCache:BackupUsage:Valkey",
+        "operation": "CreateCacheSnapshot"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.085"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "AB2C3TZTZR5WDA7N",
+      "region": "eu-west-2",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.t4g.micro",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Standard",
+        "vcpu": "2",
+        "memory": "0.5 GiB",
+        "networkPerformance": "Up to 5 Gigabit",
+        "cacheEngine": "Valkey",
+        "usagetype": "NodeUsage:cache.t4g.micro",
+        "operation": "CreateCacheCluster:Valkey",
+        "normalizationSizeFactor": "0.4"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0144"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "JBYFTYHFEWT53H5U",
+      "region": "eu-west-2",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.r7g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "memory": "13.07 GiB",
+        "networkPerformance": "Up to 12.5 Gigabit",
+        "cacheEngine": "Redis",
+        "usagetype": "NodeUsage:cache.r7g.large",
+        "operation": "CreateCacheCluster:0002",
+        "normalizationSizeFactor": "4"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.256"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "MYUDEE6J8SC8DAAR",
+      "region": "eu-west-2",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.r7g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "memory": "13.07 GiB",
+        "networkPerformance": "Up to 12.5 Gigabit",
+        "cacheEngine": "Valkey",
+        "usagetype": "NodeUsage:cache.r7g.large",
+        "operation": "CreateCacheCluster:Valkey",
+        "normalizationSizeFactor": "3.2"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.2048"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "VYC98G9RNMYWYM9D",
+      "region": "eu-west-2",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.t4g.micro",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Standard",
+        "vcpu": "2",
+        "memory": "0.5 GiB",
+        "networkPerformance": "Up to 5 Gigabit",
+        "cacheEngine": "Redis",
+        "usagetype": "NodeUsage:cache.t4g.micro",
+        "operation": "CreateCacheCluster:0002",
+        "normalizationSizeFactor": "0.5"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.018"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "WSXN9E4BPK6E6YVD",
+      "region": "eu-west-2",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.t4g.micro",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Standard",
+        "vcpu": "2",
+        "memory": "0.5 GiB",
+        "networkPerformance": "Up to 5 Gigabit",
+        "cacheEngine": "Memcached",
+        "usagetype": "NodeUsage:cache.t4g.micro",
+        "operation": "CreateCacheCluster:0001",
+        "normalizationSizeFactor": "0.5"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.018"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "ZZGBE8C3FB2VP5FG",
+      "region": "eu-west-2",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.r7g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "memory": "13.07 GiB",
+        "networkPerformance": "Up to 12.5 Gigabit",
+        "cacheEngine": "Memcached",
+        "usagetype": "NodeUsage:cache.r7g.large",
+        "operation": "CreateCacheCluster:0001",
+        "normalizationSizeFactor": "4"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.256"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "2XE22ZNH57J5EQV8",
+      "region": "us-east-1",
+      "productFamily": "Storage Snapshot",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "cacheEngine": "Valkey",
+        "storageMedia": "Amazon S3",
+        "usagetype": "ElastiCache:BackupUsage:Valkey",
+        "operation": "CreateCacheSnapshot"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.085"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "AG7XE6BYB6NSJGA3",
+      "region": "us-east-1",
+      "productFamily": "Storage Snapshot",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "cacheEngine": "Redis",
+        "storageMedia": "Amazon S3",
+        "usagetype": "ElastiCache:BackupUsage",
+        "operation": "CreateCacheSnapshot"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.085"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "BT7FF8NJHA6V7WVP",
+      "region": "us-east-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.t4g.micro",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Standard",
+        "vcpu": "2",
+        "memory": "0.5 GiB",
+        "networkPerformance": "Up to 5 Gigabit",
+        "cacheEngine": "Redis",
+        "usagetype": "NodeUsage:cache.t4g.micro",
+        "operation": "CreateCacheCluster:0002",
+        "normalizationSizeFactor": "0.5"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.016"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "HUDNNPCZC9YXTMEE",
+      "region": "us-east-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.r7g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "memory": "13.07 GiB",
+        "networkPerformance": "Up to 12.5 Gigabit",
+        "cacheEngine": "Memcached",
+        "usagetype": "NodeUsage:cache.r7g.large",
+        "operation": "CreateCacheCluster:0001",
+        "normalizationSizeFactor": "4"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.219"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "HWKSXZUY7UAK8DKC",
+      "region": "us-east-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.r7g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "memory": "13.07 GiB",
+        "networkPerformance": "Up to 12.5 Gigabit",
+        "cacheEngine": "Valkey",
+        "usagetype": "NodeUsage:cache.r7g.large",
+        "operation": "CreateCacheCluster:Valkey",
+        "normalizationSizeFactor": "3.2"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1752"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "JSGVEAU2ZJSWY42F",
+      "region": "us-east-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.t4g.micro",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Standard",
+        "vcpu": "2",
+        "memory": "0.5 GiB",
+        "networkPerformance": "Up to 5 Gigabit",
+        "cacheEngine": "Valkey",
+        "usagetype": "NodeUsage:cache.t4g.micro",
+        "operation": "CreateCacheCluster:Valkey",
+        "normalizationSizeFactor": "0.4"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0128"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "MWNGNHD8QDQRAGKN",
+      "region": "us-east-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.r7g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "memory": "13.07 GiB",
+        "networkPerformance": "Up to 12.5 Gigabit",
+        "cacheEngine": "Redis",
+        "usagetype": "NodeUsage:cache.r7g.large",
+        "operation": "CreateCacheCluster:0002",
+        "normalizationSizeFactor": "4"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.219"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonElastiCache",
+      "sku": "VT4S25MNXV3KEMPP",
+      "region": "us-east-1",
+      "productFamily": "Cache Instance",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "instanceType": "cache.t4g.micro",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Standard",
+        "vcpu": "2",
+        "memory": "0.5 GiB",
+        "networkPerformance": "Up to 5 Gigabit",
+        "cacheEngine": "Memcached",
+        "usagetype": "NodeUsage:cache.t4g.micro",
+        "operation": "CreateCacheCluster:0001",
+        "normalizationSizeFactor": "0.5"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.016"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonElastiCache/20261014221139/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "2QP44WDMF92K36SF",
+      "region": "eu-west-1",
+      "productFamily": "Database Storage",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "storageMedia": "SSD",
+        "volumeType": "General Purpose-Aurora",
+        "minVolumeSize": "10 GB",
+        "maxVolumeSize": "64 TB",
+        "engineCode": "0",
+        "databaseEngine": "Any",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "Aurora:StorageUsage",
+        "operation": "CreateDBInstance"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.11"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "2RZPP2H5MABWMD2F",
+      "region": "eu-west-1",
+      "productFamily": "ServerlessV2",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "engineCode": "16",
+        "databaseEngine": "Aurora MySQL",
+        "usagetype": "Aurora:ServerlessV2Usage",
+        "operation": "CreateDBInstance:0016"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "ACU-Hr",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.14"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "2VM9F7TRVNRGECW6",
+      "region": "eu-west-1",
+      "productFamily": "ServerlessV2",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "usagetype": "Aurora:ServerlessV2Usage",
+        "operation": "CreateDBInstance:0021"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "ACU-Hr",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.14"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "44AZSRUPDZYKH672",
+      "region": "eu-west-1",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "16",
+        "databaseEngine": "Aurora MySQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0016",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.286"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "8TDMEUDAK3V4KE59",
+      "region": "eu-west-1",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "14",
+        "databaseEngine": "PostgreSQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0014",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.252"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "EQQGP475ZHNCR63P",
+      "region": "eu-west-1",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0021",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.286"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "NHQEGNNU6EXZ7ZD7",
+      "region": "eu-west-1",
+      "productFamily": "System Operation",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "group": "Aurora I/O Operation",
+        "groupDescription": "Input/Output Operation",
+        "usagetype": "Aurora:StorageIOUsage",
+        "operation": "CreateDBInstance:0021"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "IOs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00000022"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "TSZG7B3W4GC58KRT",
+      "region": "eu-west-1",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "2",
+        "databaseEngine": "MySQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0002",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.237"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "XCTJ3WPE3TSBCKNV",
+      "region": "eu-west-1",
+      "productFamily": "System Operation",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "engineCode": "0",
+        "databaseEngine": "Any",
+        "group": "Aurora I/O Operation",
+        "groupDescription": "Input/Output Operation",
+        "usagetype": "Aurora:StorageIOUsage",
+        "operation": "CreateDBInstance"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "IOs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00000022"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "Z57JPT74TUYSYD9G",
+      "region": "eu-west-1",
+      "productFamily": "Database Storage",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "storageMedia": "SSD",
+        "volumeType": "General Purpose-Aurora",
+        "minVolumeSize": "10 GB",
+        "maxVolumeSize": "64 TB",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "Aurora:StorageUsage",
+        "operation": "CreateDBInstance:0021"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.11"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "ZE37AUMG77AZQNPJ",
+      "region": "eu-west-1",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "18",
+        "databaseEngine": "MariaDB",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0018",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.237"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "69Q6SNQWNR76VF3Z",
+      "region": "eu-west-2",
+      "productFamily": "Database Storage",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "storageMedia": "SSD",
+        "volumeType": "General Purpose-Aurora",
+        "minVolumeSize": "10 GB",
+        "maxVolumeSize": "64 TB",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "Aurora:StorageUsage",
+        "operation": "CreateDBInstance:0021"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "8K2BMX8QNA6BX4XU",
+      "region": "eu-west-2",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "2",
+        "databaseEngine": "MySQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0002",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.251"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "9ETXVJDSKPA678BQ",
+      "region": "eu-west-2",
+      "productFamily": "System Operation",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "engineCode": "0",
+        "databaseEngine": "Any",
+        "group": "Aurora I/O Operation",
+        "groupDescription": "Input/Output Operation",
+        "usagetype": "Aurora:StorageIOUsage",
+        "operation": "CreateDBInstance"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "IOs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "9MY3ATPVTTEQT2YC",
+      "region": "eu-west-2",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0021",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.304"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "G77YKTPWXSYEXGHR",
+      "region": "eu-west-2",
+      "productFamily": "Database Storage",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "storageMedia": "SSD",
+        "volumeType": "General Purpose-Aurora",
+        "minVolumeSize": "10 GB",
+        "maxVolumeSize": "64 TB",
+        "engineCode": "0",
+        "databaseEngine": "Any",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "Aurora:StorageUsage",
+        "operation": "CreateDBInstance"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "GQ5EK4QH9EGB4KXG",
+      "region": "eu-west-2",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "16",
+        "databaseEngine": "Aurora MySQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0016",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.304"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "K3R62TQ7JY9MDCHN",
+      "region": "eu-west-2",
+      "productFamily": "ServerlessV2",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "usagetype": "Aurora:ServerlessV2Usage",
+        "operation": "CreateDBInstance:0021"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "ACU-Hr",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.14"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "N9EGKT7WVZAHQQ3P",
+      "region": "eu-west-2",
+      "productFamily": "System Operation",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "group": "Aurora I/O Operation",
+        "groupDescription": "Input/Output Operation",
+        "usagetype": "Aurora:StorageIOUsage",
+        "operation": "CreateDBInstance:0021"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "IOs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "PFHKF2XYTEKGFNAH",
+      "region": "eu-west-2",
+      "productFamily": "ServerlessV2",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "engineCode": "16",
+        "databaseEngine": "Aurora MySQL",
+        "usagetype": "Aurora:ServerlessV2Usage",
+        "operation": "CreateDBInstance:0016"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "ACU-Hr",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.14"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "RNUWQVDSBEAW2AM5",
+      "region": "eu-west-2",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "18",
+        "databaseEngine": "MariaDB",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0018",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.251"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "ZE24YKEEYDU6R6TG",
+      "region": "eu-west-2",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "14",
+        "databaseEngine": "PostgreSQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0014",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.264"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "4U9P9G87PY8QVQH5",
+      "region": "us-east-1",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0021",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.26"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "5KE8TCG3FP4Y4ZVZ",
+      "region": "us-east-1",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "2",
+        "databaseEngine": "MySQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0002",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.215"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "7GYUVAA992PFJPCB",
+      "region": "us-east-1",
+      "productFamily": "Database Storage",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "storageMedia": "SSD",
+        "volumeType": "General Purpose-Aurora",
+        "minVolumeSize": "10 GB",
+        "maxVolumeSize": "64 TB",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "Aurora:StorageUsage",
+        "operation": "CreateDBInstance:0021"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "7JDSZP38DMKT9B86",
+      "region": "us-east-1",
+      "productFamily": "System Operation",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "group": "Aurora I/O Operation",
+        "groupDescription": "Input/Output Operation",
+        "usagetype": "Aurora:StorageIOUsage",
+        "operation": "CreateDBInstance:0021"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "IOs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "AVKW7ZJP8D72HNQC",
+      "region": "us-east-1",
+      "productFamily": "ServerlessV2",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "engineCode": "21",
+        "databaseEngine": "Aurora PostgreSQL",
+        "usagetype": "Aurora:ServerlessV2Usage",
+        "operation": "CreateDBInstance:0021"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "ACU-Hr",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.12"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "C4ERBAHB6DJ9BCDR",
+      "region": "us-east-1",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "14",
+        "databaseEngine": "PostgreSQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0014",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.225"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "SVB4AAU3H83DPGMK",
+      "region": "us-east-1",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "16",
+        "databaseEngine": "Aurora MySQL",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0016",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.26"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "TP8SQX8FAU6UNY5B",
+      "region": "us-east-1",
+      "productFamily": "ServerlessV2",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "engineCode": "16",
+        "databaseEngine": "Aurora MySQL",
+        "usagetype": "Aurora:ServerlessV2Usage",
+        "operation": "CreateDBInstance:0016"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "ACU-Hr",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.12"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "UAJJK7FM88ZAY38F",
+      "region": "us-east-1",
+      "productFamily": "Database Instance",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "instanceType": "db.r6g.large",
+        "currentGeneration": "Yes",
+        "instanceFamily": "Memory optimized",
+        "vcpu": "2",
+        "physicalProcessor": "AWS Graviton2",
+        "memory": "16 GiB",
+        "storage": "EBS Only",
+        "networkPerformance": "Up to 10 Gigabit",
+        "processorArchitecture": "64-bit",
+        "engineCode": "18",
+        "databaseEngine": "MariaDB",
+        "licenseModel": "No license required",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "InstanceUsage:db.r6g.large",
+        "operation": "CreateDBInstance:0018",
+        "instanceTypeFamily": "R6G",
+        "normalizationSizeFactor": "4",
+        "unbundledLicensing": "FALSE"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.215"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "VCW4CP6PUZ5JN68T",
+      "region": "us-east-1",
+      "productFamily": "Database Storage",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "storageMedia": "SSD",
+        "volumeType": "General Purpose-Aurora",
+        "minVolumeSize": "10 GB",
+        "maxVolumeSize": "64 TB",
+        "engineCode": "0",
+        "databaseEngine": "Any",
+        "deploymentOption": "Single-AZ",
+        "usagetype": "Aurora:StorageUsage",
+        "operation": "CreateDBInstance"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonRDS",
+      "sku": "Z9GWDW2S5DY72YDV",
+      "region": "us-east-1",
+      "productFamily": "System Operation",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "engineCode": "0",
+        "databaseEngine": "Any",
+        "group": "Aurora I/O Operation",
+        "groupDescription": "Input/Output Operation",
+        "usagetype": "Aurora:StorageIOUsage",
+        "operation": "CreateDBInstance"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "IOs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20261026214716/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonS3",
+      "sku": "4AJHPB29ZPVFADXP",
+      "region": "eu-west-1",
+      "productFamily": "Storage",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "availability": "99.99%",
+        "storageClass": "General Purpose",
+        "volumeType": "Standard",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": "",
+        "durability": "99.999999999%"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.023"
+        },
+        {
+          "start": "51200",
+          "price": "0.022"
+        },
+        {
+          "start": "512000",
+          "price": "0.021"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261015173540/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonS3",
+      "sku": "578M9UJHH6X5PZVC",
+      "region": "eu-west-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "S3-API-Tier1",
+        "groupDescription": "PUT/COPY/POST or LIST requests",
+        "usagetype": "Requests-Tier1",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261015173540/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonS3",
+      "sku": "ZCQD4CM637S7D8U5",
+      "region": "eu-west-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "S3-API-Tier2",
+        "groupDescription": "GET and all other requests",
+        "usagetype": "Requests-Tier2",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000004"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261015173540/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonS3",
+      "sku": "3D99223WSVTX96UP",
+      "region": "eu-west-2",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "S3-API-Tier2",
+        "groupDescription": "GET and all other requests",
+        "usagetype": "Requests-Tier2",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00000042"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261015173540/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonS3",
+      "sku": "CXT6934AJ2W6U8P9",
+      "region": "eu-west-2",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "S3-API-Tier1",
+        "groupDescription": "PUT/COPY/POST or LIST requests",
+        "usagetype": "Requests-Tier1",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000053"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261015173540/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonS3",
+      "sku": "DV3FSFEQ3QM4J6VP",
+      "region": "eu-west-2",
+      "productFamily": "Storage",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "availability": "99.99%",
+        "storageClass": "General Purpose",
+        "volumeType": "Standard",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": "",
+        "durability": "99.999999999%"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.024"
+        },
+        {
+          "start": "51200",
+          "price": "0.023"
+        },
+        {
+          "start": "512000",
+          "price": "0.022"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261015173540/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonS3",
+      "sku": "E9YHNFENF4XQBZR6",
+      "region": "us-east-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "S3-API-Tier1",
+        "groupDescription": "PUT/COPY/POST or LIST requests",
+        "usagetype": "Requests-Tier1",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261015173540/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonS3",
+      "sku": "WP9ANXZGBYYSGJEA",
+      "region": "us-east-1",
+      "productFamily": "Storage",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "availability": "99.99%",
+        "storageClass": "General Purpose",
+        "volumeType": "Standard",
+        "usagetype": "TimedStorage-ByteHrs",
+        "operation": "",
+        "durability": "99.999999999%"
+      },
+      "purchaseOption": "on_demand",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.023"
+        },
+        {
+          "start": "51200",
+          "price": "0.022"
+        },
+        {
+          "start": "512000",
+          "price": "0.021"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261015173540/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonS3",
+      "sku": "ZWQ6Q48CRJXX4FXE",
+      "region": "us-east-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "S3-API-Tier2",
+        "groupDescription": "GET and all other requests",
+        "usagetype": "Requests-Tier2",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000004"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20261015173540/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonSNS",
+      "sku": "7KWKPT5S7NNCNRVM",
+      "region": "eu-west-1",
+      "productFamily": "",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "SNS-FIFO-Requests",
+        "groupDescription": "Amazon SNS FIFO API Requests",
+        "usagetype": "F-Request-Tier1",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00000033"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSNS/20260915151944/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonSNS",
+      "sku": "ZVCRD326SNFYPYWV",
+      "region": "eu-west-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "SNS-Requests-Tier1",
+        "groupDescription": "Amazon SNS API Requests",
+        "usagetype": "Requests-Tier1",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "1000000",
+          "price": "0.0000005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSNS/20260915151944/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonSNS",
+      "sku": "GN55XEGFPQBNQ37X",
+      "region": "eu-west-2",
+      "productFamily": "",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "SNS-FIFO-Requests",
+        "groupDescription": "Amazon SNS FIFO API Requests",
+        "usagetype": "F-Request-Tier1",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00000036"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSNS/20260915151944/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonSNS",
+      "sku": "P727SHX3Q2TGG46A",
+      "region": "eu-west-2",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "SNS-Requests-Tier1",
+        "groupDescription": "Amazon SNS API Requests",
+        "usagetype": "Requests-Tier1",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "1000000",
+          "price": "0.0000005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSNS/20260915151944/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonSNS",
+      "sku": "GXS664ADCBPVT6BA",
+      "region": "us-east-1",
+      "productFamily": "",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "SNS-FIFO-Requests",
+        "groupDescription": "Amazon SNS FIFO API Requests",
+        "usagetype": "F-Request-Tier1",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000003"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSNS/20260915151944/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonSNS",
+      "sku": "QDX8G2WMY9NPXXPG",
+      "region": "us-east-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "SNS-Requests-Tier1",
+        "groupDescription": "Amazon SNS API Requests",
+        "usagetype": "Requests-Tier1",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "1000000",
+          "price": "0.0000005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonSNS/20260915151944/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonVPC",
+      "sku": "CNZ4XSXPRJXGA4ZF",
+      "region": "eu-west-1",
+      "productFamily": "",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "VPCPublicIPv4Address",
+        "groupDescription": "Hourly charge for In-use Public IPv4 Addresses",
+        "usagetype": "PublicIPv4:InUseAddress",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20261016224321/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonVPC",
+      "sku": "CB3E2ZKHCN8Y7SYP",
+      "region": "eu-west-2",
+      "productFamily": "",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "VPCPublicIPv4Address",
+        "groupDescription": "Hourly charge for In-use Public IPv4 Addresses",
+        "usagetype": "PublicIPv4:InUseAddress",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20261016224321/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "AmazonVPC",
+      "sku": "4GQUNXTFWVSGPUZK",
+      "region": "us-east-1",
+      "productFamily": "",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "VPCPublicIPv4Address",
+        "groupDescription": "Hourly charge for In-use Public IPv4 Addresses",
+        "usagetype": "PublicIPv4:InUseAddress",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20261016224321/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "awskms",
+      "sku": "EVSMZX4D7HGSBAQF",
+      "region": "eu-west-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "group": "awskms-APIRequest-All",
+        "groupDescription": "All AWS KMS API requests",
+        "usagetype": "KMS-Requests",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000003"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20261026201814/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "awskms",
+      "sku": "GD24Q3NRUQ5AFYNR",
+      "region": "eu-west-1",
+      "productFamily": "Encryption Key",
+      "attributes": {
+        "location": "EU (Ireland)",
+        "locationType": "AWS Region",
+        "usagetype": "KMS-Keys",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Keys",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20261026201814/eu-west-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "awskms",
+      "sku": "AEV6J33PEDP33ZNG",
+      "region": "eu-west-2",
+      "productFamily": "Encryption Key",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "usagetype": "KMS-Keys",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Keys",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20261026201814/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "awskms",
+      "sku": "Y2YQ2HC2B26TT67Y",
+      "region": "eu-west-2",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "EU (London)",
+        "locationType": "AWS Region",
+        "group": "awskms-APIRequest-All",
+        "groupDescription": "All AWS KMS API requests",
+        "usagetype": "KMS-Requests",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000003"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20261026201814/eu-west-2/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "awskms",
+      "sku": "MFEBZPX8NHM5FY7Z",
+      "region": "us-east-1",
+      "productFamily": "API Request",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "group": "awskms-APIRequest-All",
+        "groupDescription": "All AWS KMS API requests",
+        "usagetype": "KMS-Requests",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000003"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20261026201814/us-east-1/index.json",
+      "verified": "2026-10-28"
+    },
+    {
+      "service": "awskms",
+      "sku": "U553K98XGDXCYHWS",
+      "region": "us-east-1",
+      "productFamily": "Encryption Key",
+      "attributes": {
+        "location": "US East (N. Virginia)",
+        "locationType": "AWS Region",
+        "usagetype": "KMS-Keys",
+        "operation": ""
+      },
+      "purchaseOption": "on_demand",
+      "unit": "Keys",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20261026201814/us-east-1/index.json",
+      "verified": "2026-10-28"
+    }
+  ]
+}

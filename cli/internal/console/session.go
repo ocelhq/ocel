@@ -3,6 +3,7 @@ package console
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
@@ -28,4 +29,21 @@ func (c *Client) GetSession(ctx context.Context, accessToken string) (*Session, 
 
 func (c *Client) SignOut(ctx context.Context, accessToken string) error {
 	return c.send(ctx, http.MethodPost, "/api/auth/sign-out", accessToken, struct{}{}, nil)
+}
+
+func ResolveSession(load func() (Credentials, error), now time.Time) (baseURL, accessToken string) {
+	if load == nil {
+		return BaseURL(""), ""
+	}
+	creds, err := load()
+	if err != nil {
+		return BaseURL(""), ""
+	}
+	baseURL = BaseURL(creds.APIURL)
+	issuedHere := creds.Store == EnvironmentStore || NormalizeBaseURL(creds.APIURL) == baseURL
+	current := creds.ExpiresAt.IsZero() || now.Before(creds.ExpiresAt)
+	if !issuedHere || !current {
+		return baseURL, ""
+	}
+	return baseURL, creds.AccessToken
 }

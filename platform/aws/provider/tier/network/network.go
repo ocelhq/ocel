@@ -351,7 +351,7 @@ func ReadPart(ctx context.Context, store records.Store, region string, tier envi
 		Current:   recorded.State == stackrecords.PartReady,
 		Resources: recorded.Resources,
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: Shape(tier)},
+		Inventory: &provider.PartInventory{Vendor: awsports.Vendor, Region: region, Resources: Inventory(tier)},
 
 		RetiresWithLastUser: true,
 	}, true, nil
@@ -393,21 +393,21 @@ func plural(n int, one, many string) string {
 	return many
 }
 
-func Shape(tier environment.Tier) []pricing.Shaped {
+func Inventory(tier environment.Tier) []pricing.Item {
 	name := Slug + "-" + string(tier)
-	shaped := []pricing.Shaped{
+	items := []pricing.Item{
 		{Name: name, Type: component.TerraformVPC, Properties: map[string]any{}},
 		{Name: name, Type: component.TerraformInternetGateway, Properties: map[string]any{}},
 	}
 	for _, role := range []string{publicWord, privateWord, isolatedWord} {
 		for n := range Zones {
-			shaped = append(shaped, pricing.Shaped{Name: naming.Join(naming.WordSeparator, name, role, fmt.Sprint(n+1)), Type: component.TerraformSubnet, Properties: map[string]any{}})
+			items = append(items, pricing.Item{Name: naming.Join(naming.WordSeparator, name, role, fmt.Sprint(n+1)), Type: component.TerraformSubnet, Properties: map[string]any{}})
 		}
 	}
 	for _, service := range endpointServices {
-		shaped = append(shaped, pricing.Shaped{Name: naming.Join(naming.WordSeparator, name, service), Type: component.TerraformVPCEndpoint, Properties: map[string]any{"vpc_endpoint_type": endpointType}})
+		items = append(items, pricing.Item{Name: naming.Join(naming.WordSeparator, name, service), Type: component.TerraformVPCEndpoint, Properties: map[string]any{"vpc_endpoint_type": endpointType}})
 	}
-	return shaped
+	return items
 }
 
 func newChangeGroup(namespace string, tier environment.Tier) provider.ChangeGroup {

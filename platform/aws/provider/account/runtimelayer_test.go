@@ -420,7 +420,7 @@ func TestDeletingATiersRuntimeLayersDeletesOnlyTheOnesItRecorded(t *testing.T) {
 	}
 }
 
-func TestTheRuntimeLayersPartHoldsEveryVersionOfTheLayersItsTierRecordedAndIsPriced(t *testing.T) {
+func TestTheRuntimeLayersPartHoldsEveryVersionOfTheLayersItsTierRecordedAndListsThem(t *testing.T) {
 	layers, records := newFakeLayers(), newFakeRecords()
 	own, _ := seedTiersRuntimeLayers(t, layers, records)
 
@@ -448,9 +448,9 @@ func TestTheRuntimeLayersPartHoldsEveryVersionOfTheLayersItsTierRecordedAndIsPri
 	if part.Name != RuntimeLayersPart || !part.Current || !part.UsedByEveryProject {
 		t.Errorf("runtime-layers = %+v, want it current and used by every project", part)
 	}
-	shapes, err := ShapeParts(defaultNamespace, environment.TierProduction, nil)
-	if err != nil || len(shapes[RuntimeLayersPart]) == 0 {
-		t.Errorf("ShapeParts() = %v, %v, want the runtime layers shaped to be priced", shapes, err)
+	inventories, err := PartInventories(defaultNamespace, environment.TierProduction, nil)
+	if err != nil || len(inventories[RuntimeLayersPart]) == 0 {
+		t.Errorf("PartInventories() = %v, %v, want the runtime layers listed", inventories, err)
 	}
 }
 

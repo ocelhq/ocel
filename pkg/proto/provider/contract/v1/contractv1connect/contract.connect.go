@@ -8,10 +8,10 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
+	v13 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 	v12 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	v11 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	v13 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	http "net/http"
 	strings "strings"
 )
@@ -137,8 +137,9 @@ const (
 	// ProviderServiceRemoveConnectorProcedure is the fully-qualified name of the ProviderService's
 	// RemoveConnector RPC.
 	ProviderServiceRemoveConnectorProcedure = "/provider.contract.v1.ProviderService/RemoveConnector"
-	// ProviderServiceShapeProcedure is the fully-qualified name of the ProviderService's Shape RPC.
-	ProviderServiceShapeProcedure = "/provider.contract.v1.ProviderService/Shape"
+	// ProviderServiceInventoryProcedure is the fully-qualified name of the ProviderService's Inventory
+	// RPC.
+	ProviderServiceInventoryProcedure = "/provider.contract.v1.ProviderService/Inventory"
 	// ProviderServiceConfirmProcedure is the fully-qualified name of the ProviderService's Confirm RPC.
 	ProviderServiceConfirmProcedure = "/provider.contract.v1.ProviderService/Confirm"
 	// ProviderServiceReadLogsProcedure is the fully-qualified name of the ProviderService's ReadLogs
@@ -194,7 +195,7 @@ type ProviderServiceClient interface {
 	DescribeConnectorTarget(context.Context, *v1.DescribeConnectorTargetRequest) (*v1.DescribeConnectorTargetResponse, error)
 	InstallConnector(context.Context, *v1.InstallConnectorRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	RemoveConnector(context.Context, *v1.RemoveConnectorRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
+	Inventory(context.Context, *v1.InventoryRequest) (*v13.ResourceSet, error)
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 	ReadLogs(context.Context, *v1.ReadLogsRequest) (*connect.ServerStreamForClient[v1.ReadLogsResponse], error)
 	ForwardPorts(context.Context, *v1.ForwardPortsRequest) (*connect.ServerStreamForClient[v1.ForwardPortsEvent], error)
@@ -418,10 +419,10 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("RemoveConnector")),
 			connect.WithClientOptions(opts...),
 		),
-		shape: connect.NewClient[v1.ShapeRequest, v13.ResourceSet](
+		inventory: connect.NewClient[v1.InventoryRequest, v13.ResourceSet](
 			httpClient,
-			baseURL+ProviderServiceShapeProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("Shape")),
+			baseURL+ProviderServiceInventoryProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Inventory")),
 			connect.WithClientOptions(opts...),
 		),
 		confirm: connect.NewClient[v1.ConfirmRequest, v1.ConfirmResponse](
@@ -499,7 +500,7 @@ type providerServiceClient struct {
 	describeConnectorTarget   *connect.Client[v1.DescribeConnectorTargetRequest, v1.DescribeConnectorTargetResponse]
 	installConnector          *connect.Client[v1.InstallConnectorRequest, v11.OperationEvent]
 	removeConnector           *connect.Client[v1.RemoveConnectorRequest, v11.OperationEvent]
-	shape                     *connect.Client[v1.ShapeRequest, v13.ResourceSet]
+	inventory                 *connect.Client[v1.InventoryRequest, v13.ResourceSet]
 	confirm                   *connect.Client[v1.ConfirmRequest, v1.ConfirmResponse]
 	readLogs                  *connect.Client[v1.ReadLogsRequest, v1.ReadLogsResponse]
 	forwardPorts              *connect.Client[v1.ForwardPortsRequest, v1.ForwardPortsEvent]
@@ -750,9 +751,9 @@ func (c *providerServiceClient) RemoveConnector(ctx context.Context, req *v1.Rem
 	return c.removeConnector.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// Shape calls provider.contract.v1.ProviderService.Shape.
-func (c *providerServiceClient) Shape(ctx context.Context, req *v1.ShapeRequest) (*v13.ResourceSet, error) {
-	response, err := c.shape.CallUnary(ctx, connect.NewRequest(req))
+// Inventory calls provider.contract.v1.ProviderService.Inventory.
+func (c *providerServiceClient) Inventory(ctx context.Context, req *v1.InventoryRequest) (*v13.ResourceSet, error) {
+	response, err := c.inventory.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -841,7 +842,7 @@ type ProviderServiceHandler interface {
 	DescribeConnectorTarget(context.Context, *v1.DescribeConnectorTargetRequest) (*v1.DescribeConnectorTargetResponse, error)
 	InstallConnector(context.Context, *v1.InstallConnectorRequest, *connect.ServerStream[v11.OperationEvent]) error
 	RemoveConnector(context.Context, *v1.RemoveConnectorRequest, *connect.ServerStream[v11.OperationEvent]) error
-	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
+	Inventory(context.Context, *v1.InventoryRequest) (*v13.ResourceSet, error)
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 	ReadLogs(context.Context, *v1.ReadLogsRequest, *connect.ServerStream[v1.ReadLogsResponse]) error
 	ForwardPorts(context.Context, *v1.ForwardPortsRequest, *connect.ServerStream[v1.ForwardPortsEvent]) error
@@ -1061,10 +1062,10 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("RemoveConnector")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceShapeHandler := connect.NewUnaryHandlerSimple(
-		ProviderServiceShapeProcedure,
-		svc.Shape,
-		connect.WithSchema(providerServiceMethods.ByName("Shape")),
+	providerServiceInventoryHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceInventoryProcedure,
+		svc.Inventory,
+		connect.WithSchema(providerServiceMethods.ByName("Inventory")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServiceConfirmHandler := connect.NewUnaryHandlerSimple(
@@ -1173,8 +1174,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceInstallConnectorHandler.ServeHTTP(w, r)
 		case ProviderServiceRemoveConnectorProcedure:
 			providerServiceRemoveConnectorHandler.ServeHTTP(w, r)
-		case ProviderServiceShapeProcedure:
-			providerServiceShapeHandler.ServeHTTP(w, r)
+		case ProviderServiceInventoryProcedure:
+			providerServiceInventoryHandler.ServeHTTP(w, r)
 		case ProviderServiceConfirmProcedure:
 			providerServiceConfirmHandler.ServeHTTP(w, r)
 		case ProviderServiceReadLogsProcedure:
@@ -1332,8 +1333,8 @@ func (UnimplementedProviderServiceHandler) RemoveConnector(context.Context, *v1.
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RemoveConnector is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Shape is not implemented"))
+func (UnimplementedProviderServiceHandler) Inventory(context.Context, *v1.InventoryRequest) (*v13.ResourceSet, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Inventory is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error) {

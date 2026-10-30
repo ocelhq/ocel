@@ -85,7 +85,7 @@ func TestWhoamiHintsAtTheFixForTheCauseSTSNamed(t *testing.T) {
 			name:     "a missing region is a misconfiguration naming where the region is set",
 			err:      &smithy.OperationError{ServiceID: "STS", OperationName: "GetCallerIdentity", Err: errors.New("failed to resolve service endpoint, endpoint rule error, Invalid Configuration: Missing Region")},
 			code:     refusal.CodeInvalid,
-			hint:     regionHint,
+			hint:     RegionHint,
 			sdkWords: "Missing Region",
 		},
 		{

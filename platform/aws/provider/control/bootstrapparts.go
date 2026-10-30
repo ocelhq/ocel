@@ -20,11 +20,11 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 	if !read.Deployed.Present {
 		return nil, nil
 	}
-	var options []account.ShapeOption
+	var options []account.InventoryOption
 	if b.VariablesKey != "" {
 		options = append(options, account.WithVariablesKey(b.VariablesKey))
 	}
-	shapes, err := account.ShapeParts(b.Namespace, described.Tier, read.Deployed.Parts.Names(), options...)
+	inventories, err := account.PartInventories(b.Namespace, described.Tier, read.Deployed.Parts.Names(), options...)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func (b Bootstrap) DescribeParts(ctx context.Context, described provider.Bootstr
 			Current:   stack.Current(),
 			Digest:    stack.Digest,
 			Resources: b.stackResources(ctx, stack.Name),
-			Shape:     &provider.PartShape{Vendor: string(groupVendor), Region: b.Region, Resources: shapes[name]},
+			Inventory: &provider.PartInventory{Vendor: string(groupVendor), Region: b.Region, Resources: inventories[name]},
 		})
 	}
 	for _, stack := range described.Stacks {

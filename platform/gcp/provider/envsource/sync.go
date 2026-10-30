@@ -37,10 +37,8 @@ const (
 	syncOpeningRole = "roles/cloudkms.cryptoKeyDecrypter"
 	syncInvokerRole = "roles/run.invoker"
 
-	syncSchedule          = "* * * * *"
-	syncRequestsPerHour   = 60
-	syncBilledSecondsEach = 2
-	syncScheduleMethod    = "POST"
+	syncSchedule       = "* * * * *"
+	syncScheduleMethod = "POST"
 
 	reasonUnwritable      = "it may not write this project's records or seal under the tier key"
 	reasonServiceChanged  = "it drifted from the env source sync this build deploys"

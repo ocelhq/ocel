@@ -17,12 +17,12 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
-func TestEveryTierPartShapesWhatItHoldsAndPlansItsOwnTeardown(t *testing.T) {
+func TestEveryTierPartListsWhatItHoldsAndPlansItsOwnTeardown(t *testing.T) {
 	t.Parallel()
 
 	for _, part := range partsOver(fake.NewKeyValues()) {
-		if part.Shape == nil {
-			t.Errorf("part %s shapes nothing, so its plan and its status cannot say what it costs", part.Name)
+		if part.Inventory == nil {
+			t.Errorf("part %s lists no inventory, so its plan and its status cannot say what it costs", part.Name)
 		}
 		if part.Describe == nil {
 			t.Errorf("part %s describes nothing, so status cannot show it", part.Name)

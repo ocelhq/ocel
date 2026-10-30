@@ -1,0 +1,413 @@
+{
+  "version": 3,
+  "deployment": {
+    "manifest": {
+      "time": "2026-10-28T22:46:43.324454775+03:00",
+      "magic": "7dff0d166258e7f1d265e8e044021ea087795d58a0c6415ab6fe8b7c790e447f",
+      "version": "v3.260.0"
+    },
+    "secrets_providers": {
+      "type": "passphrase",
+      "state": {
+        "salt": "v1:A2NUsjDWe/A=:v1:uQUKREdDDWE3xeiW:cmc0M0AHOBc5pVU2TdOfFS9Lf8gwug=="
+      }
+    },
+    "resources": [
+      {
+        "urn": "urn:pulumi:production::shop::pulumi:pulumi:Stack::shop-production",
+        "custom": false,
+        "type": "pulumi:pulumi:Stack",
+        "created": "2026-10-28T19:46:38.354841235Z",
+        "modified": "2026-10-28T19:46:38.354841235Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "custom": false,
+        "type": "sst:aws:Function",
+        "parent": "urn:pulumi:production::shop::pulumi:pulumi:Stack::shop-production",
+        "created": "2026-10-28T19:46:38.358966534Z",
+        "modified": "2026-10-28T19:46:38.358966534Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::sst:aws:Bucket::Uploads",
+        "custom": false,
+        "type": "sst:aws:Bucket",
+        "parent": "urn:pulumi:production::shop::pulumi:pulumi:Stack::shop-production",
+        "created": "2026-10-28T19:46:38.359173774Z",
+        "modified": "2026-10-28T19:46:38.359173774Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "custom": false,
+        "type": "sst:aws:Vpc",
+        "parent": "urn:pulumi:production::shop::pulumi:pulumi:Stack::shop-production",
+        "created": "2026-10-28T19:46:38.359374887Z",
+        "modified": "2026-10-28T19:46:38.359374887Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::pulumi:providers:aws::default_7_36_0",
+        "custom": true,
+        "id": "3179e677-20f8-498b-a2ec-d070bc781713",
+        "type": "pulumi:providers:aws",
+        "inputs": {
+          "__internal": {},
+          "accessKey": {
+            "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+            "ciphertext": "v1:M1oiXU6dzekfYLwy:qtWnYhvyZFbsh6mKK7JjGclNi6z0K1M2Wewl86Q1mRGpFkNiNMY="
+          },
+          "region": "us-east-1",
+          "secretKey": {
+            "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+            "ciphertext": "v1:EquRQZO+j0jtQDd7:dJJufK2eb6Yz7Lj9nwGJoLUNpP7BLQ=="
+          },
+          "skipCredentialsValidation": "true",
+          "skipMetadataApiCheck": "true",
+          "skipRegionValidation": "true",
+          "skipRequestingAccountId": "true",
+          "version": "7.36.0"
+        },
+        "outputs": {
+          "accessKey": {
+            "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+            "ciphertext": "v1:Hz2EFbsjhlAnsnmg:mWgebsuqK4d+HjaGp7u6FPQmG8dcj7Kgqu6gSwqS7mg1FpAKhaE="
+          },
+          "region": "us-east-1",
+          "secretKey": {
+            "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+            "ciphertext": "v1:ryyyatldsFtESJHn:kCSGEekKseABYxrmkzBN2ODlcK5zdw=="
+          },
+          "skipCredentialsValidation": "true",
+          "skipMetadataApiCheck": "true",
+          "skipRegionValidation": "true",
+          "skipRequestingAccountId": "true",
+          "version": "7.36.0"
+        },
+        "created": "2026-10-28T19:46:39.57923723Z",
+        "modified": "2026-10-28T19:46:39.57923723Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::sst:aws:Bucket$aws:s3/bucketV2:BucketV2::UploadsBucket",
+        "custom": true,
+        "id": "uploadsbucket-ee6419d",
+        "type": "aws:s3/bucketV2:BucketV2",
+        "inputs": {
+          "__defaults": [
+            "bucket"
+          ],
+          "bucket": "uploadsbucket-ee6419d",
+          "forceDestroy": true
+        },
+        "outputs": {
+          "arn": "arn:aws:s3:::uploadsbucket-ee6419d",
+          "bucket": "uploadsbucket-ee6419d",
+          "bucketRegion": "us-east-1",
+          "forceDestroy": true,
+          "id": "uploadsbucket-ee6419d"
+        },
+        "parent": "urn:pulumi:production::shop::sst:aws:Bucket::Uploads",
+        "provider": "urn:pulumi:production::shop::pulumi:providers:aws::default_7_36_0::3179e677-20f8-498b-a2ec-d070bc781713",
+        "propertyDependencies": {
+          "forceDestroy": []
+        },
+        "created": "2026-10-28T19:43:07Z",
+        "modified": "2026-10-28T19:43:07Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/vpc:Vpc::VpcVpc",
+        "custom": true,
+        "id": "vpc-0fake0000000000001",
+        "type": "aws:ec2/vpc:Vpc",
+        "inputs": {
+          "__defaults": [
+            "enableDnsSupport"
+          ],
+          "cidrBlock": "10.0.0.0/16",
+          "enableDnsHostnames": true,
+          "enableDnsSupport": true,
+          "region": "us-east-1",
+          "tagsAll": {}
+        },
+        "outputs": {
+          "arn": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0fake0000000000001",
+          "cidrBlock": "10.0.0.0/16",
+          "enableDnsHostnames": true,
+          "enableDnsSupport": true,
+          "id": "vpc-0fake0000000000001",
+          "instanceTenancy": "default",
+          "region": "us-east-1",
+          "tagsAll": {}
+        },
+        "parent": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "provider": "urn:pulumi:production::shop::pulumi:providers:aws::default_7_36_0::3179e677-20f8-498b-a2ec-d070bc781713",
+        "propertyDependencies": {
+          "cidrBlock": [],
+          "enableDnsHostnames": []
+        },
+        "created": "2026-10-28T19:43:07Z",
+        "modified": "2026-10-28T19:43:07Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::sst:aws:Function$aws:cloudwatch/logGroup:LogGroup::ApiLogGroup",
+        "custom": true,
+        "id": "/aws/lambda/shop-production-ApiFunction",
+        "type": "aws:cloudwatch/logGroup:LogGroup",
+        "inputs": {
+          "__defaults": [],
+          "name": "/aws/lambda/shop-production-ApiFunction",
+          "region": "us-east-1",
+          "retentionInDays": 30,
+          "tagsAll": {}
+        },
+        "outputs": {
+          "arn": "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/shop-production-ApiFunction",
+          "id": "/aws/lambda/shop-production-ApiFunction",
+          "logGroupClass": "STANDARD",
+          "name": "/aws/lambda/shop-production-ApiFunction",
+          "region": "us-east-1",
+          "retentionInDays": 30,
+          "tagsAll": {}
+        },
+        "parent": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "provider": "urn:pulumi:production::shop::pulumi:providers:aws::default_7_36_0::3179e677-20f8-498b-a2ec-d070bc781713",
+        "propertyDependencies": {
+          "name": [],
+          "retentionInDays": []
+        },
+        "created": "2026-10-28T19:43:07Z",
+        "modified": "2026-10-28T19:43:07Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::sst:aws:Function$aws:iam/role:Role::ApiRole",
+        "custom": true,
+        "id": "ApiRole-1b57b65",
+        "type": "aws:iam/role:Role",
+        "inputs": {
+          "__defaults": [
+            "maxSessionDuration",
+            "name",
+            "path"
+          ],
+          "assumeRolePolicy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}",
+          "maxSessionDuration": 3600,
+          "name": "ApiRole-1b57b65",
+          "path": "/",
+          "tagsAll": {}
+        },
+        "outputs": {
+          "arn": "arn:aws:iam::123456789012:role/ApiRole-1b57b65",
+          "assumeRolePolicy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}",
+          "id": "ApiRole-1b57b65",
+          "maxSessionDuration": 3600,
+          "name": "ApiRole-1b57b65",
+          "path": "/",
+          "tagsAll": {}
+        },
+        "parent": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "provider": "urn:pulumi:production::shop::pulumi:providers:aws::default_7_36_0::3179e677-20f8-498b-a2ec-d070bc781713",
+        "propertyDependencies": {
+          "assumeRolePolicy": []
+        },
+        "created": "2026-10-28T19:43:07Z",
+        "modified": "2026-10-28T19:43:07Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/eip:Eip::VpcElasticIp1",
+        "custom": true,
+        "id": "eipalloc-0fake0000000000001",
+        "type": "aws:ec2/eip:Eip",
+        "inputs": {
+          "__defaults": [],
+          "domain": "vpc",
+          "region": "us-east-1",
+          "tagsAll": {}
+        },
+        "outputs": {
+          "allocationId": "eipalloc-0fake0000000000001",
+          "domain": "vpc",
+          "id": "eipalloc-0fake0000000000001",
+          "publicIp": "203.0.113.10",
+          "region": "us-east-1",
+          "tagsAll": {}
+        },
+        "parent": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "provider": "urn:pulumi:production::shop::pulumi:providers:aws::default_7_36_0::3179e677-20f8-498b-a2ec-d070bc781713",
+        "propertyDependencies": {
+          "domain": []
+        },
+        "created": "2026-10-28T19:43:07Z",
+        "modified": "2026-10-28T19:43:07Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/subnet:Subnet::VpcPublicSubnet1",
+        "custom": true,
+        "id": "subnet-0fake0000000000001",
+        "type": "aws:ec2/subnet:Subnet",
+        "inputs": {
+          "__defaults": [],
+          "availabilityZone": "us-east-1a",
+          "cidrBlock": "10.0.0.0/22",
+          "region": "us-east-1",
+          "tagsAll": {},
+          "vpcId": "vpc-0fake0000000000001"
+        },
+        "outputs": {
+          "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-0fake0000000000001",
+          "availabilityZone": "us-east-1a",
+          "cidrBlock": "10.0.0.0/22",
+          "id": "subnet-0fake0000000000001",
+          "region": "us-east-1",
+          "tagsAll": {},
+          "vpcId": "vpc-0fake0000000000001"
+        },
+        "parent": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "dependencies": [
+          "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/vpc:Vpc::VpcVpc"
+        ],
+        "provider": "urn:pulumi:production::shop::pulumi:providers:aws::default_7_36_0::3179e677-20f8-498b-a2ec-d070bc781713",
+        "propertyDependencies": {
+          "availabilityZone": [],
+          "cidrBlock": [],
+          "vpcId": [
+            "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/vpc:Vpc::VpcVpc"
+          ]
+        },
+        "created": "2026-10-28T19:43:07Z",
+        "modified": "2026-10-28T19:43:07Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::sst:aws:Function$aws:lambda/function:Function::ApiFunction",
+        "custom": true,
+        "id": "shop-production-ApiFunction",
+        "type": "aws:lambda/function:Function",
+        "inputs": {
+          "__defaults": [
+            "packageType",
+            "reservedConcurrentExecutions"
+          ],
+          "architectures": [
+            "arm64"
+          ],
+          "code": {
+            "4dabf18193072939515e22adb298388d": "0def7320c3a5731c473e5ecbe6d01bc7",
+            "hash": "450e8d7b1bbf5bfb4432bb64ca53d8e45884d4279ee403a35a2e5e200f0bba3d",
+            "path": "handler"
+          },
+          "environment": {
+            "__defaults": [],
+            "variables": {
+              "SST_RESOURCE_App": "{\"name\":\"shop\",\"stage\":\"production\"}",
+              "SST_RESOURCE_Secret": {
+                "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                "ciphertext": "v1:rmhePmCYuawZcKvc:4ny6IhNDOPkdfVsu54QO7J6OTVZuNg=="
+              }
+            }
+          },
+          "handler": "index.handler",
+          "memorySize": 1024,
+          "name": "shop-production-ApiFunction",
+          "packageType": "Zip",
+          "region": "us-east-1",
+          "reservedConcurrentExecutions": -1,
+          "role": "arn:aws:iam::123456789012:role/ApiRole-1b57b65",
+          "runtime": "nodejs22.x",
+          "tagsAll": {},
+          "timeout": 20
+        },
+        "outputs": {
+          "architectures": [
+            "arm64"
+          ],
+          "arn": "arn:aws:lambda:us-east-1:123456789012:function:shop-production-ApiFunction",
+          "code": {
+            "4dabf18193072939515e22adb298388d": "0def7320c3a5731c473e5ecbe6d01bc7",
+            "hash": "450e8d7b1bbf5bfb4432bb64ca53d8e45884d4279ee403a35a2e5e200f0bba3d",
+            "path": "handler"
+          },
+          "environment": {
+            "variables": {
+              "SST_RESOURCE_App": "{\"name\":\"shop\",\"stage\":\"production\"}",
+              "SST_RESOURCE_Secret": {
+                "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                "ciphertext": "v1:Ct1FERnpi7UM91fu:Pq60dXIm9LXxKxy0ZECbXM0z6DMdfA=="
+              }
+            }
+          },
+          "handler": "index.handler",
+          "id": "shop-production-ApiFunction",
+          "memorySize": 1024,
+          "name": "shop-production-ApiFunction",
+          "packageType": "Zip",
+          "region": "us-east-1",
+          "reservedConcurrentExecutions": -1,
+          "role": "arn:aws:iam::123456789012:role/ApiRole-1b57b65",
+          "runtime": "nodejs22.x",
+          "tagsAll": {},
+          "timeout": 20,
+          "version": "$LATEST"
+        },
+        "parent": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "dependencies": [
+          "urn:pulumi:production::shop::sst:aws:Function$aws:iam/role:Role::ApiRole"
+        ],
+        "provider": "urn:pulumi:production::shop::pulumi:providers:aws::default_7_36_0::3179e677-20f8-498b-a2ec-d070bc781713",
+        "propertyDependencies": {
+          "architectures": [],
+          "code": [],
+          "environment": [],
+          "handler": [],
+          "memorySize": [],
+          "name": [],
+          "role": [
+            "urn:pulumi:production::shop::sst:aws:Function$aws:iam/role:Role::ApiRole"
+          ],
+          "runtime": [],
+          "timeout": []
+        },
+        "created": "2026-10-28T19:43:07Z",
+        "modified": "2026-10-28T19:43:07Z"
+      },
+      {
+        "urn": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/natGateway:NatGateway::VpcNatGateway1",
+        "custom": true,
+        "id": "nat-0fake0000000000001",
+        "type": "aws:ec2/natGateway:NatGateway",
+        "inputs": {
+          "__defaults": [
+            "connectivityType"
+          ],
+          "allocationId": "eipalloc-0fake0000000000001",
+          "connectivityType": "public",
+          "region": "us-east-1",
+          "subnetId": "subnet-0fake0000000000001",
+          "tagsAll": {}
+        },
+        "outputs": {
+          "allocationId": "eipalloc-0fake0000000000001",
+          "connectivityType": "public",
+          "id": "nat-0fake0000000000001",
+          "publicIp": "203.0.113.10",
+          "region": "us-east-1",
+          "subnetId": "subnet-0fake0000000000001",
+          "tagsAll": {}
+        },
+        "parent": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "dependencies": [
+          "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/eip:Eip::VpcElasticIp1",
+          "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/subnet:Subnet::VpcPublicSubnet1"
+        ],
+        "provider": "urn:pulumi:production::shop::pulumi:providers:aws::default_7_36_0::3179e677-20f8-498b-a2ec-d070bc781713",
+        "propertyDependencies": {
+          "allocationId": [
+            "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/eip:Eip::VpcElasticIp1"
+          ],
+          "subnetId": [
+            "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/subnet:Subnet::VpcPublicSubnet1"
+          ]
+        },
+        "created": "2026-10-28T19:43:07Z",
+        "modified": "2026-10-28T19:43:07Z"
+      }
+    ],
+    "metadata": {}
+  }
+}

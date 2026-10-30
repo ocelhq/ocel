@@ -9,6 +9,7 @@ package consolev1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	v13 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 	v11 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	v12 "go.opentelemetry.io/proto/otlp/trace/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -1188,6 +1189,7 @@ type Deployment struct {
 	Ci             *CI                    `protobuf:"bytes,19,opt,name=ci,proto3" json:"ci,omitempty"`
 	Trigger        *Trigger               `protobuf:"bytes,20,opt,name=trigger,proto3" json:"trigger,omitempty"`
 	Spans          []*v12.Span            `protobuf:"bytes,21,rep,name=spans,proto3" json:"spans,omitempty"`
+	Estimate       *v13.Estimate          `protobuf:"bytes,22,opt,name=estimate,proto3" json:"estimate,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1365,6 +1367,13 @@ func (x *Deployment) GetTrigger() *Trigger {
 func (x *Deployment) GetSpans() []*v12.Span {
 	if x != nil {
 		return x.Spans
+	}
+	return nil
+}
+
+func (x *Deployment) GetEstimate() *v13.Estimate {
+	if x != nil {
+		return x.Estimate
 	}
 	return nil
 }
@@ -1634,7 +1643,7 @@ var File_console_v1_deployment_proto protoreflect.FileDescriptor
 const file_console_v1_deployment_proto_rawDesc = "" +
 	"\n" +
 	"\x1bconsole/v1/deployment.proto\x12\n" +
-	"console.v1\x1a app/resources/v1/variables.proto\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(opentelemetry/proto/trace/v1/trace.proto\"J\n" +
+	"console.v1\x1a app/resources/v1/variables.proto\x1a\x1bbuf/validate/validate.proto\x1a\x19common/cost/v1/cost.proto\x1a'common/environment/v1/environment.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a(opentelemetry/proto/trace/v1/trace.proto\"J\n" +
 	"\bProvider\x12\x1d\n" +
 	"\x04name\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18@R\x04name\x12\x1f\n" +
 	"\x06region\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x18@R\x06region\"%\n" +
@@ -1706,7 +1715,7 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"\bresource\x18\x02 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\bresource\x12&\n" +
 	"\x05files\x18\x03 \x03(\tB\x10\xbaH\r\x92\x01\n" +
-	"\x10\xc8\x01\"\x05r\x03\x18\x80\x04R\x05files\"\xa7\x18\n" +
+	"\x10\xc8\x01\"\x05r\x03\x18\x80\x04R\x05files\"\xe7\x19\n" +
 	"\n" +
 	"Deployment\x12\x9b\x01\n" +
 	"\x02id\x18\x01 \x01(\tB\x8a\x01\xbaH\x86\x01\xba\x01q\n" +
@@ -1736,7 +1745,8 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"\x06source\x18\x12 \x01(\v2\x12.console.v1.SourceR\x06source\x12\x1e\n" +
 	"\x02ci\x18\x13 \x01(\v2\x0e.console.v1.CIR\x02ci\x125\n" +
 	"\atrigger\x18\x14 \x01(\v2\x13.console.v1.TriggerB\x06\xbaH\x03\xc8\x01\x01R\atrigger\x12C\n" +
-	"\x05spans\x18\x15 \x03(\v2\".opentelemetry.proto.trace.v1.SpanB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\x05spans:\x92\x0e\xbaH\x8e\x0e\x1a\xbc\x01\n" +
+	"\x05spans\x18\x15 \x03(\v2\".opentelemetry.proto.trace.v1.SpanB\t\xbaH\x06\x92\x01\x03\x10\xf4\x03R\x05spans\x124\n" +
+	"\bestimate\x18\x16 \x01(\v2\x18.common.cost.v1.EstimateR\bestimate:\x9c\x0f\xbaH\x98\x0f\x1a\xbc\x01\n" +
 	"\x1fdeployment.promotion_on_success\x127a succeeded deployment names the promotion it made live\x1a`this.outcome != console.v1.DeploymentOutcome.DEPLOYMENT_OUTCOME_SUCCEEDED || has(this.promotion)\x1a\xc5\x01\n" +
 	"\"deployment.no_promotion_on_failure\x12?a failed deployment made nothing live, so it names no promotion\x1a^this.outcome != console.v1.DeploymentOutcome.DEPLOYMENT_OUTCOME_FAILED || !has(this.promotion)\x1a\x9d\x01\n" +
 	"\x1bdeployment.environment_tier\x12\x1ethe environment names its tier\x1a^!has(this.environment) || this.environment.tier != common.environment.v1.Tier.TIER_UNSPECIFIED\x1a\xd4\x01\n" +
@@ -1747,7 +1757,8 @@ const file_console_v1_deployment_proto_rawDesc = "" +
 	"!deployment.unique_variable_groups\x12#each variable group is defined once\x1a+this.variable_groups.map(g, g.key).unique()\x1a\xbb\x01\n" +
 	"\"deployment.variable_groups_defined\x12,a variable names a group the project defines\x1agthis.apps.all(a, a.variables.all(v, v.group == '' || this.variable_groups.exists(g, g.key == v.group)))\x1a\xc9\x01\n" +
 	" deployment.links_reference_known\x12:a link names an app and a resource this deployment reports\x1aithis.links.all(l, this.apps.exists(a, a.name == l.app) && this.resources.exists(r, r.name == l.resource))\x1a\xcc\x01\n" +
-	"!deployment.usages_reference_known\x12;a usage names an app and a resource this deployment reports\x1ajthis.usages.all(u, this.apps.exists(a, a.name == u.app) && this.resources.exists(r, r.name == u.resource))\"\xbb\b\n" +
+	"!deployment.usages_reference_known\x12;a usage names an app and a resource this deployment reports\x1ajthis.usages.all(u, this.apps.exists(a, a.name == u.app) && this.resources.exists(r, r.name == u.resource))\x1a\x87\x01\n" +
+	"\x1bdeployment.estimate_bounded\x12)an estimate prices at most 2000 resources\x1a=!has(this.estimate) || this.estimate.resources.size() <= 2000\"\xbb\b\n" +
 	"\x10EnvironmentEvent\x12\xa2\x01\n" +
 	"\x02id\x18\x01 \x01(\tB\x91\x01\xbaH\x8d\x01\xba\x01x\n" +
 	"\"environment_event.id_is_a_trace_id\x12&an all zero id is not a valid trace id\x1a*this != '00000000000000000000000000000000'r\x102\x0e^[0-9a-f]{32}$R\x02id\x12@\n" +
@@ -1849,6 +1860,7 @@ var file_console_v1_deployment_proto_goTypes = []any{
 	(*timestamppb.Timestamp)(nil),          // 27: google.protobuf.Timestamp
 	(*v1.GroupDefinition)(nil),             // 28: app.resources.v1.GroupDefinition
 	(*v12.Span)(nil),                       // 29: opentelemetry.proto.trace.v1.Span
+	(*v13.Estimate)(nil),                   // 30: common.cost.v1.Estimate
 }
 var file_console_v1_deployment_proto_depIdxs = []int32{
 	4,  // 0: console.v1.Trigger.kind:type_name -> console.v1.TriggerKind
@@ -1875,22 +1887,23 @@ var file_console_v1_deployment_proto_depIdxs = []int32{
 	11, // 21: console.v1.Deployment.ci:type_name -> console.v1.CI
 	9,  // 22: console.v1.Deployment.trigger:type_name -> console.v1.Trigger
 	29, // 23: console.v1.Deployment.spans:type_name -> opentelemetry.proto.trace.v1.Span
-	5,  // 24: console.v1.EnvironmentEvent.kind:type_name -> console.v1.EnvironmentEventKind
-	26, // 25: console.v1.EnvironmentEvent.environment:type_name -> common.environment.v1.Environment
-	27, // 26: console.v1.EnvironmentEvent.at:type_name -> google.protobuf.Timestamp
-	10, // 27: console.v1.EnvironmentEvent.source:type_name -> console.v1.Source
-	11, // 28: console.v1.EnvironmentEvent.ci:type_name -> console.v1.CI
-	19, // 29: console.v1.ReportRequest.deployment:type_name -> console.v1.Deployment
-	20, // 30: console.v1.RecordEnvironmentEventRequest.event:type_name -> console.v1.EnvironmentEvent
-	21, // 31: console.v1.DeploymentService.Report:input_type -> console.v1.ReportRequest
-	23, // 32: console.v1.DeploymentService.RecordEnvironmentEvent:input_type -> console.v1.RecordEnvironmentEventRequest
-	22, // 33: console.v1.DeploymentService.Report:output_type -> console.v1.ReportResponse
-	24, // 34: console.v1.DeploymentService.RecordEnvironmentEvent:output_type -> console.v1.RecordEnvironmentEventResponse
-	33, // [33:35] is the sub-list for method output_type
-	31, // [31:33] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	30, // 24: console.v1.Deployment.estimate:type_name -> common.cost.v1.Estimate
+	5,  // 25: console.v1.EnvironmentEvent.kind:type_name -> console.v1.EnvironmentEventKind
+	26, // 26: console.v1.EnvironmentEvent.environment:type_name -> common.environment.v1.Environment
+	27, // 27: console.v1.EnvironmentEvent.at:type_name -> google.protobuf.Timestamp
+	10, // 28: console.v1.EnvironmentEvent.source:type_name -> console.v1.Source
+	11, // 29: console.v1.EnvironmentEvent.ci:type_name -> console.v1.CI
+	19, // 30: console.v1.ReportRequest.deployment:type_name -> console.v1.Deployment
+	20, // 31: console.v1.RecordEnvironmentEventRequest.event:type_name -> console.v1.EnvironmentEvent
+	21, // 32: console.v1.DeploymentService.Report:input_type -> console.v1.ReportRequest
+	23, // 33: console.v1.DeploymentService.RecordEnvironmentEvent:input_type -> console.v1.RecordEnvironmentEventRequest
+	22, // 34: console.v1.DeploymentService.Report:output_type -> console.v1.ReportResponse
+	24, // 35: console.v1.DeploymentService.RecordEnvironmentEvent:output_type -> console.v1.RecordEnvironmentEventResponse
+	34, // [34:36] is the sub-list for method output_type
+	32, // [32:34] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_console_v1_deployment_proto_init() }

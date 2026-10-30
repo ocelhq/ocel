@@ -58,13 +58,13 @@ var Part = bootstrap.RemovablePart{Part: provider.Part{Name: PartName, Summary: 
 
 func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
 	var resources []provider.PhysicalResource
-	for _, shaped := range alb.ShapeLoadBalancer(string(b.Clients.Namespace()), tier) {
-		resources = append(resources, provider.PhysicalResource{Kind: shaped.Type, ID: shaped.Name})
+	for _, item := range alb.LoadBalancerInventory(string(b.Clients.Namespace()), tier) {
+		resources = append(resources, provider.PhysicalResource{Kind: item.Type, ID: item.Name})
 	}
 	resources = append(resources, provider.PhysicalResource{Kind: string(bootstrap.KindRepository), ID: b.Clients.Repository(tier) + PluginRepository})
-	var shape []pricing.Shaped
-	if shaped, err := alb.Shape(string(b.Clients.Namespace()), pricing.EdgeSite{Tier: tier, Region: b.Clients.Region}); err == nil {
-		shape = shaped.Shared
+	var inventory []pricing.Item
+	if listed, err := alb.Inventory(string(b.Clients.Namespace()), pricing.EdgeSite{Tier: tier, Region: b.Clients.Region}); err == nil {
+		inventory = listed.Shared
 	}
 	return bootstrap.Part{
 		Name:      PartName,
@@ -72,7 +72,7 @@ func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
 		APIs:      bootstrap.ALBAPIs,
 		Retires:   true,
 		Resources: resources,
-		Shape:     shape,
+		Inventory: inventory,
 		Make:      func(ctx context.Context) error { return makeLoadBalancer(ctx, b, tier) },
 		Claim:     func(ctx context.Context, project string) error { return Claim(ctx, b, tier, project) },
 		Users:     func(ctx context.Context) ([]string, error) { return ListUsers(ctx, b, tier) },

@@ -48,8 +48,8 @@ func TestTheContainerInfrastructureIsAPartAddedByTheFirstContainerDeployAndUsedB
 	if !slices.Equal(part.UsedBy, []string{"blog", spec.Ref.Project}) {
 		t.Errorf("containers used by %v, want both container projects", part.UsedBy)
 	}
-	if len(part.Resources) == 0 || part.Shape == nil || len(part.Shape.Resources) == 0 || !part.RetiresWithLastUser {
-		t.Errorf("containers = %+v, want its resources, the shape that prices them, and it retiring with its last user", part)
+	if len(part.Resources) == 0 || part.Inventory == nil || len(part.Inventory.Resources) == 0 || !part.RetiresWithLastUser {
+		t.Errorf("containers = %+v, want its resources, the inventory that lists them, and it retiring with its last user", part)
 	}
 	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, tier, containers.Part)
 	if err != nil || !present || recorded.State != stackrecords.PartReady || recorded.AddedBy != spec.Ref.Project {

@@ -161,13 +161,13 @@ func TestTheContainersPartListsAndPricesThePublicFrontAForwardedContainerAppRais
 		}
 	}
 	var internal []bool
-	for _, shaped := range part.Shape.Resources {
-		if shaped.Type == "aws_lb" {
-			internal = append(internal, shaped.Properties["internal"].(bool))
+	for _, item := range part.Inventory.Resources {
+		if item.Type == "aws_lb" {
+			internal = append(internal, item.Properties["internal"].(bool))
 		}
 	}
 	if !slices.Contains(internal, false) {
-		t.Errorf("shaped load balancers internal = %v, want the internet-facing one the edge forwards to", internal)
+		t.Errorf("listed load balancers internal = %v, want the internet-facing one the edge forwards to", internal)
 	}
 }
 

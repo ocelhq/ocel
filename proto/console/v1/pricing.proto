@@ -1,0 +1,96 @@
+syntax = "proto3";
+package console.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1";
+
+import "buf/validate/validate.proto";
+
+enum PurchaseOption {
+  PURCHASE_OPTION_UNSPECIFIED = 0;
+  PURCHASE_OPTION_ON_DEMAND = 1;
+}
+
+message PriceQuery {
+  string vendor = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 32
+    pattern: "^[a-z0-9][a-z0-9-]*$"
+  }];
+
+  string service = 2 [(buf.validate.field).string = {min_len: 1, max_len: 128}];
+
+  string region = 3 [(buf.validate.field).string.max_len = 64];
+
+  string product_family = 4 [(buf.validate.field).string.max_len = 128];
+
+  map<string, string> attributes = 5 [(buf.validate.field).map = {
+    max_pairs: 16
+    keys: {string: {min_len: 1, max_len: 64}}
+    values: {string: {max_len: 256}}
+  }];
+
+  PurchaseOption purchase_option = 6 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string unit = 7 [(buf.validate.field).string.max_len = 64];
+}
+
+message LookupRequest {
+  repeated PriceQuery queries = 1 [(buf.validate.field).repeated = {min_items: 1, max_items: 500}];
+}
+
+message LookupResponse {
+  string currency = 1;
+
+  repeated PriceAnswer answers = 2;
+}
+
+message PriceAnswer {
+  oneof outcome {
+    Price price = 1;
+    PriceMiss miss = 2;
+    PriceAmbiguity ambiguous = 3;
+  }
+}
+
+message Price {
+  string sku = 1;
+
+  string unit = 2;
+
+  repeated PriceTier tiers = 3;
+
+  string catalog_version = 4;
+
+  string source_url = 5;
+}
+
+message PriceTier {
+  string start = 1;
+
+  string price = 2;
+}
+
+message PriceMiss {
+  enum Reason {
+    REASON_UNSPECIFIED = 0;
+    REASON_CATALOG_NOT_SEEDED = 1;
+    REASON_NO_MATCH = 2;
+  }
+
+  Reason reason = 1;
+
+  string detail = 2;
+}
+
+message PriceAmbiguity {
+  repeated string candidate_skus = 1;
+
+  uint32 matches = 2;
+}
+
+service PricingService {
+  rpc Lookup(LookupRequest) returns (LookupResponse);
+}

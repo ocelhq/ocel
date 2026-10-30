@@ -168,6 +168,6 @@ func Remove(ctx context.Context, c API, recorded []provider.PhysicalResource) er
 	return nil
 }
 
-func Shape(namespace string, tier environment.Tier) []pricing.Shaped {
-	return []pricing.Shaped{{Name: NameFor(namespace, tier), Type: "aws_api_gateway_rest_api", Properties: map[string]any{}}}
+func Inventory(namespace string, tier environment.Tier) []pricing.Item {
+	return []pricing.Item{{Name: NameFor(namespace, tier), Type: "aws_api_gateway_rest_api", Properties: map[string]any{}}}
 }

@@ -1,0 +1,310 @@
+{
+  "set": {
+    "resources": [
+      {
+        "id": "urn:pulumi:dev::costfixture::aws:iam/role:Role::fn-role",
+        "name": "fn-role",
+        "properties": {
+          "arn": "arn:aws:iam::123456789012:role/fn-role-8f785a5",
+          "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}",
+          "id": "fn-role-8f785a5",
+          "max_session_duration": 3600,
+          "name": "fn-role-8f785a5",
+          "path": "/",
+          "tags_all": {},
+          "unique_id": "fake-role-id"
+        },
+        "region": "eu-west-2",
+        "scope": "stack:dev",
+        "type": "aws_iam_role",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:dev::costfixture::aws:ecs/cluster:Cluster::cluster",
+        "name": "cluster",
+        "properties": {
+          "arn": "arn:aws:ecs:eu-west-2:123456789012:cluster/cluster-229e8df",
+          "id": "arn:aws:ecs:eu-west-2:123456789012:cluster/cluster-229e8df",
+          "name": "cluster-229e8df",
+          "region": "eu-west-2",
+          "setting": {
+            "name": "containerInsights",
+            "value": "disabled"
+          },
+          "tags_all": {}
+        },
+        "region": "eu-west-2",
+        "scope": "stack:dev",
+        "type": "aws_ecs_cluster",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:dev::costfixture::aws:ecs/taskDefinition:TaskDefinition::app",
+        "name": "app",
+        "properties": {
+          "arn": "arn:aws:ecs:eu-west-2:123456789012:task-definition/app:1",
+          "arn_without_revision": "arn:aws:ecs:eu-west-2:123456789012:task-definition/app",
+          "container_definitions": "[{\"essential\":true,\"image\":\"public.ecr.aws/nginx/nginx:stable\",\"name\":\"app\",\"portMappings\":[{\"containerPort\":80}]}]",
+          "cpu": "512",
+          "enable_fault_injection": false,
+          "family": "app",
+          "id": "app",
+          "memory": "2048",
+          "network_mode": "awsvpc",
+          "region": "eu-west-2",
+          "requires_compatibilities": [
+            "FARGATE"
+          ],
+          "revision": 1,
+          "runtime_platform": {
+            "cpu_architecture": "ARM64",
+            "operating_system_family": "LINUX"
+          },
+          "skip_destroy": false,
+          "tags_all": {},
+          "track_latest": false
+        },
+        "region": "eu-west-2",
+        "scope": "stack:dev",
+        "type": "aws_ecs_task_definition",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db",
+        "name": "db",
+        "properties": {
+          "arn": "arn:aws:rds:eu-west-1:123456789012:cluster:tf-20261028194305741900000001",
+          "cluster_identifier": "tf-20261028194305741900000001",
+          "database_name": "app",
+          "delete_automated_backups": true,
+          "endpoint": "tf-20261028194305741900000001.cluster-cabcdefghijk.eu-west-1.rds.amazonaws.com",
+          "engine": "aurora-postgresql",
+          "engine_lifecycle_support": "open-source-rds-extended-support",
+          "engine_mode": "provisioned",
+          "engine_version": "16.4",
+          "id": "tf-20261028194305741900000001",
+          "master_username": "app",
+          "port": 5432,
+          "region": "eu-west-1",
+          "serverlessv2_scaling_configuration": {
+            "max_capacity": 4,
+            "min_capacity": 0.5
+          },
+          "skip_final_snapshot": true,
+          "storage_encrypted": true,
+          "storage_type": "aurora",
+          "tags_all": {}
+        },
+        "region": "eu-west-1",
+        "scope": "stack:dev",
+        "type": "aws_rds_cluster",
+        "unknown": [
+          "master_password"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:dev::costfixture::gcp:cloudrunv2/service:Service::web",
+        "name": "web",
+        "properties": {
+          "deletion_protection": false,
+          "effective_labels": {
+            "goog-pulumi-provisioned": "true"
+          },
+          "generation": "1",
+          "id": "projects/cost-fixture/locations/europe-west1/services/web-dba37d0",
+          "ingress": "INGRESS_TRAFFIC_ALL",
+          "launch_stage": "GA",
+          "location": "europe-west1",
+          "name": "web-dba37d0",
+          "project": "cost-fixture",
+          "template": {
+            "containers": {
+              "image": "us-docker.pkg.dev/cloudrun/container/hello",
+              "resources": {
+                "limits": {
+                  "cpu": "1",
+                  "memory": "512Mi"
+                }
+              }
+            },
+            "scaling": {
+              "max_instance_count": 10,
+              "min_instance_count": 0
+            }
+          },
+          "terraform_labels": {
+            "goog-pulumi-provisioned": "true"
+          },
+          "uri": "https://web-dba37d0-uc.a.run.app"
+        },
+        "region": "europe-west1",
+        "scope": "stack:dev",
+        "type": "google_cloud_run_v2_service",
+        "vendor": "gcp"
+      },
+      {
+        "id": "urn:pulumi:dev::costfixture::aws:s3/bucket:Bucket::assets",
+        "name": "assets",
+        "properties": {
+          "arn": "arn:aws:s3:::assets-320c4bb",
+          "bucket": "assets-320c4bb",
+          "bucket_domain_name": "assets-320c4bb.s3.amazonaws.com",
+          "bucket_region": "us-east-1",
+          "force_destroy": false,
+          "id": "assets-320c4bb",
+          "region": "us-east-1",
+          "tags": {
+            "team": "web"
+          },
+          "tags_all": {
+            "team": "web"
+          }
+        },
+        "region": "us-east-1",
+        "scope": "stack:dev",
+        "tags": {
+          "team": "web"
+        },
+        "type": "aws_s3_bucket",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:dev::costfixture::costfixture:index:Api$aws:lambda/function:Function::handler",
+        "name": "handler",
+        "properties": {
+          "architectures": [
+            "arm64"
+          ],
+          "arn": "arn:aws:lambda:eu-west-2:123456789012:function:handler-bf5b08c",
+          "environment": {
+            "variables": {
+              "STAGE": "dev"
+            }
+          },
+          "ephemeral_storage": {
+            "size": 512
+          },
+          "function_name": "handler-bf5b08c",
+          "handler": "index.handler",
+          "id": "handler-bf5b08c",
+          "invoke_arn": "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:123456789012:function:handler-bf5b08c/invocations",
+          "logging_config": {
+            "log_format": "Text",
+            "log_group": "/aws/lambda/handler-bf5b08c"
+          },
+          "memory_size": 512,
+          "package_type": "Zip",
+          "region": "eu-west-2",
+          "reserved_concurrent_executions": -1,
+          "role": "arn:aws:iam::123456789012:role/fn-role-8f785a5",
+          "runtime": "nodejs20.x",
+          "tags": {
+            "team": "payments"
+          },
+          "tags_all": {
+            "team": "payments"
+          },
+          "timeout": 30,
+          "tracing_config": {
+            "mode": "PassThrough"
+          },
+          "version": "$LATEST"
+        },
+        "references": {
+          "role": "urn:pulumi:dev::costfixture::aws:iam/role:Role::fn-role"
+        },
+        "region": "eu-west-2",
+        "scope": "urn:pulumi:dev::costfixture::costfixture:index:Api::api",
+        "tags": {
+          "team": "payments"
+        },
+        "type": "aws_lambda_function",
+        "unknown": [
+          "environment.variables.API_KEY"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:dev::costfixture::aws:ecs/service:Service::app",
+        "name": "app",
+        "properties": {
+          "arn": "arn:aws:ecs:eu-west-2:123456789012:service/cluster-229e8df/app-0d4919b",
+          "availability_zone_rebalancing": "ENABLED",
+          "cluster": "arn:aws:ecs:eu-west-2:123456789012:cluster/cluster-229e8df",
+          "deployment_maximum_percent": 200,
+          "deployment_minimum_healthy_percent": 100,
+          "desired_count": 2,
+          "enable_ecs_managed_tags": false,
+          "enable_execute_command": false,
+          "iam_role": "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+          "id": "arn:aws:ecs:eu-west-2:123456789012:service/cluster-229e8df/app-0d4919b",
+          "launch_type": "FARGATE",
+          "name": "app-0d4919b",
+          "network_configuration": {
+            "assign_public_ip": true,
+            "security_groups": [],
+            "subnets": [
+              "subnet-0a1b2c3d4e5f60718"
+            ]
+          },
+          "platform_version": "LATEST",
+          "region": "eu-west-2",
+          "scheduling_strategy": "REPLICA",
+          "tags_all": {},
+          "task_definition": "arn:aws:ecs:eu-west-2:123456789012:task-definition/app:1",
+          "triggers": {},
+          "wait_for_steady_state": false
+        },
+        "references": {
+          "cluster": "urn:pulumi:dev::costfixture::aws:ecs/cluster:Cluster::cluster",
+          "task_definition": "urn:pulumi:dev::costfixture::aws:ecs/taskDefinition:TaskDefinition::app"
+        },
+        "region": "eu-west-2",
+        "scope": "stack:dev",
+        "type": "aws_ecs_service",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:dev::costfixture::aws:rds/clusterInstance:ClusterInstance::db-1",
+        "name": "db-1",
+        "properties": {
+          "arn": "arn:aws:rds:eu-west-1:123456789012:db:tf-20261028194305741900000002",
+          "auto_minor_version_upgrade": true,
+          "availability_zone": "eu-west-1a",
+          "cluster_identifier": "tf-20261028194305741900000001",
+          "engine": "aurora-postgresql",
+          "engine_version": "16.4",
+          "id": "tf-20261028194305741900000002",
+          "identifier": "tf-20261028194305741900000002",
+          "instance_class": "db.serverless",
+          "performance_insights_enabled": false,
+          "region": "eu-west-1",
+          "tags_all": {}
+        },
+        "references": {
+          "cluster_identifier": "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db",
+          "engine_version": "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db"
+        },
+        "region": "eu-west-1",
+        "scope": "stack:dev",
+        "type": "aws_rds_cluster_instance",
+        "vendor": "aws"
+      }
+    ],
+    "scopes": [
+      {
+        "id": "stack:dev",
+        "kind": "stack",
+        "name": "dev"
+      },
+      {
+        "id": "urn:pulumi:dev::costfixture::costfixture:index:Api::api",
+        "kind": "component",
+        "name": "api",
+        "parent": "stack:dev"
+      }
+    ],
+    "source": "pulumi"
+  }
+}

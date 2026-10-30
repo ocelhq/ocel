@@ -13,7 +13,6 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 )
 
@@ -145,10 +144,6 @@ func forward[Req any](ctx context.Context, p *Provider, rpc string, req *Req, ca
 
 func (p *Provider) VariableStore() (variablestorev1connect.VariableStoreServiceClient, error) {
 	return p.transport.VariableStore()
-}
-
-func (p *Provider) Cost() (costv1connect.CostServiceClient, error) {
-	return p.transport.Cost()
 }
 
 type processLines struct {

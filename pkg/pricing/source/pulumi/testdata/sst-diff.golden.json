@@ -1,0 +1,266 @@
+{
+  "prior": {
+    "resources": [
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Bucket$aws:s3/bucketV2:BucketV2::UploadsBucket",
+        "name": "UploadsBucket",
+        "properties": {
+          "arn": "arn:aws:s3:::uploadsbucket-ee6419d",
+          "bucket": "uploadsbucket-ee6419d",
+          "bucket_region": "us-east-1",
+          "force_destroy": true,
+          "id": "uploadsbucket-ee6419d"
+        },
+        "scope": "urn:pulumi:production::shop::sst:aws:Bucket::Uploads",
+        "type": "aws_s3_bucket",
+        "unknown": [
+          "region"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Function$aws:iam/role:Role::ApiRole",
+        "name": "ApiRole",
+        "properties": {
+          "arn": "arn:aws:iam::123456789012:role/ApiRole-1b57b65",
+          "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}",
+          "id": "ApiRole-1b57b65",
+          "max_session_duration": 3600,
+          "name": "ApiRole-1b57b65",
+          "path": "/",
+          "tags_all": {}
+        },
+        "scope": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "type": "aws_iam_role",
+        "unknown": [
+          "region"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Function$aws:lambda/function:Function::ApiFunction",
+        "name": "ApiFunction",
+        "properties": {
+          "architectures": [
+            "arm64"
+          ],
+          "arn": "arn:aws:lambda:us-east-1:123456789012:function:shop-production-ApiFunction",
+          "environment": {
+            "variables": {
+              "SST_RESOURCE_App": "{\"name\":\"shop\",\"stage\":\"production\"}"
+            }
+          },
+          "function_name": "shop-production-ApiFunction",
+          "handler": "index.handler",
+          "id": "shop-production-ApiFunction",
+          "memory_size": 1024,
+          "package_type": "Zip",
+          "region": "us-east-1",
+          "reserved_concurrent_executions": -1,
+          "role": "arn:aws:iam::123456789012:role/ApiRole-1b57b65",
+          "runtime": "nodejs22.x",
+          "tags_all": {},
+          "timeout": 20,
+          "version": "$LATEST"
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "type": "aws_lambda_function",
+        "unknown": [
+          "environment.variables.SST_RESOURCE_Secret"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/natGateway:NatGateway::VpcNatGateway1",
+        "name": "VpcNatGateway1",
+        "properties": {
+          "allocation_id": "eipalloc-0[secret]0000000000001",
+          "connectivity_type": "public",
+          "id": "nat-0[secret]0000000000001",
+          "public_ip": "203.0.113.10",
+          "region": "us-east-1",
+          "subnet_id": "subnet-0[secret]0000000000001",
+          "tags_all": {}
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "type": "aws_nat_gateway",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/eip:Eip::VpcElasticIp1",
+        "name": "VpcElasticIp1",
+        "properties": {
+          "allocation_id": "eipalloc-0[secret]0000000000001",
+          "domain": "vpc",
+          "id": "eipalloc-0[secret]0000000000001",
+          "public_ip": "203.0.113.10",
+          "region": "us-east-1",
+          "tags_all": {}
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "type": "aws_eip",
+        "vendor": "aws"
+      }
+    ],
+    "scopes": [
+      {
+        "id": "stage:production",
+        "kind": "stage",
+        "name": "production"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Bucket::Uploads",
+        "kind": "component",
+        "name": "Uploads",
+        "parent": "stage:production"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "kind": "component",
+        "name": "Api",
+        "parent": "stage:production"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "kind": "component",
+        "name": "Vpc",
+        "parent": "stage:production"
+      }
+    ],
+    "source": "sst"
+  },
+  "set": {
+    "resources": [
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Queue$aws:sqs/queue:Queue::JobsQueue",
+        "name": "JobsQueue",
+        "properties": {
+          "content_based_deduplication": false,
+          "delay_seconds": 0,
+          "fifo_queue": false,
+          "max_message_size": 262144,
+          "message_retention_seconds": 345600,
+          "name": "JobsQueue-3adb6b1",
+          "receive_wait_time_seconds": 0,
+          "region": "us-east-1",
+          "tags_all": {},
+          "visibility_timeout_seconds": 30
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Queue::Jobs",
+        "type": "aws_sqs_queue",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Bucket$aws:s3/bucketV2:BucketV2::UploadsBucket",
+        "name": "UploadsBucket",
+        "properties": {
+          "arn": "arn:aws:s3:::uploadsbucket-ee6419d",
+          "bucket": "uploadsbucket-ee6419d",
+          "bucket_region": "us-east-1",
+          "cors_rule": [],
+          "force_destroy": true,
+          "grant": [],
+          "id": "uploadsbucket-ee6419d",
+          "lifecycle_rule": [],
+          "loggings": [],
+          "region": "us-east-1",
+          "replication_configurations": [],
+          "server_side_encryption_configurations": [],
+          "versionings": [],
+          "websites": []
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Bucket::Uploads",
+        "type": "aws_s3_bucket",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Function$aws:iam/role:Role::ApiRole",
+        "name": "ApiRole",
+        "properties": {
+          "arn": "arn:aws:iam::123456789012:role/ApiRole-1b57b65",
+          "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}",
+          "force_detach_policies": false,
+          "id": "ApiRole-1b57b65",
+          "inline_policy": [],
+          "max_session_duration": 3600,
+          "name": "ApiRole-1b57b65",
+          "path": "/",
+          "tags_all": {}
+        },
+        "scope": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "type": "aws_iam_role",
+        "unknown": [
+          "region"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Function$aws:lambda/function:Function::ApiFunction",
+        "name": "ApiFunction",
+        "properties": {
+          "architectures": [
+            "arm64"
+          ],
+          "arn": "arn:aws:lambda:us-east-1:123456789012:function:shop-production-ApiFunction",
+          "environment": {
+            "variables": {
+              "SST_RESOURCE_App": "{\"name\":\"shop\",\"stage\":\"production\"}"
+            }
+          },
+          "function_name": "shop-production-ApiFunction",
+          "handler": "index.handler",
+          "id": "shop-production-ApiFunction",
+          "memory_size": 2048,
+          "package_type": "Zip",
+          "publish": false,
+          "region": "us-east-1",
+          "reserved_concurrent_executions": -1,
+          "role": "arn:aws:iam::123456789012:role/ApiRole-1b57b65",
+          "runtime": "nodejs22.x",
+          "skip_destroy": false,
+          "tags_all": {},
+          "timeout": 20,
+          "version": "$LATEST"
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "type": "aws_lambda_function",
+        "unknown": [
+          "environment.variables.SST_RESOURCE_Secret"
+        ],
+        "vendor": "aws"
+      }
+    ],
+    "scopes": [
+      {
+        "id": "stage:production",
+        "kind": "stage",
+        "name": "production"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Queue::Jobs",
+        "kind": "component",
+        "name": "Jobs",
+        "parent": "stage:production"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Bucket::Uploads",
+        "kind": "component",
+        "name": "Uploads",
+        "parent": "stage:production"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "kind": "component",
+        "name": "Api",
+        "parent": "stage:production"
+      }
+    ],
+    "source": "sst"
+  }
+}

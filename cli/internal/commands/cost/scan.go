@@ -5,9 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"os"
-	"slices"
+	"path/filepath"
 	"strings"
 
 	"google.golang.org/protobuf/types/known/structpb"
@@ -23,43 +22,31 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/workdir"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/pricing"
+	"github.com/ocelhq/ocel/pkg/pricing/source"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
 
 const (
+	command = "ocel cost scan"
+
 	envProduction = "production"
 	envPreview    = "preview"
 
-	defaultProfile = costv1.Profile_PROFILE_MODERATE
-	profilePrefix  = "PROFILE_"
+	stdinPath = "-"
 
 	unbuiltAssumption = "nothing is built, so each serverless app is priced as one function; run `ocel build` first to price the functions the build produces"
 )
 
-func profiles() []costv1.Profile {
-	all := make([]costv1.Profile, 0, len(costv1.Profile_name)-1)
-	for _, value := range slices.Sorted(maps.Keys(costv1.Profile_name)) {
-		if profile := costv1.Profile(value); profile != costv1.Profile_PROFILE_UNSPECIFIED {
-			all = append(all, profile)
-		}
-	}
-	return all
-}
-
-func profileName(profile costv1.Profile) string {
-	return strings.ToLower(strings.TrimPrefix(profile.String(), profilePrefix))
-}
-
 func profileNames() []string {
-	names := make([]string, 0, len(profiles()))
-	for _, profile := range profiles() {
-		names = append(names, profileName(profile))
+	names := make([]string, 0, len(pricing.Profiles()))
+	for _, profile := range pricing.Profiles() {
+		names = append(names, pricing.ProfileName(profile))
 	}
 	return names
 }
@@ -68,11 +55,23 @@ type Options struct {
 	Env     string
 	Profile string
 	Usage   string
+	From    string
+	Against string
+	Diff    bool
+	Offline bool
 }
 
-func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Options, stdout io.Writer) error {
-	env, err := environmentOf(opts.Env)
-	if err != nil {
+type scanned struct {
+	label       string
+	proposed    *costv1.ResourceSet
+	current     *costv1.ResourceSet
+	assumptions []string
+}
+
+func (s scanned) compares() bool { return s.current != nil }
+
+func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Options, stdin io.Reader, stdout io.Writer) (err error) {
+	if err := refuseConflictingFlags(opts); err != nil {
 		return err
 	}
 	profile, err := profileOf(opts.Profile)
@@ -83,82 +82,154 @@ func Run(ctx context.Context, dependencies Dependencies, cwd string, opts Option
 	if err != nil {
 		return err
 	}
-	cfg, err := dependencies.LoadProject(ctx, cwd)
-	if err != nil {
-		return err
-	}
-
-	return dependencies.WithProvider(ctx, cfg, "ocel cost scan", commands.OpenOptions{}, func(ctx context.Context, p commands.ProviderRun) error {
-		p.Check.End(nil)
-		pricingCtx, pricing := p.Run.Phase(progressv1.Phase_PHASE_PLAN).Child(ctx, cfg.Slug, progress.Pricing.Title("what a deploy would provision"))
-		set, estimates, assumptions, err := price(pricingCtx, dependencies, p.Provider, cfg, env, overrides, pricing.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
-		pricing.End(err)
+	var current *costv1.ResourceSet
+	var documentAssumptions []string
+	if opts.Against != "" {
+		against, err := readDocument(opts.Against, stdin)
 		if err != nil {
 			return err
 		}
-		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
-			return terminal.WriteResultJSON(stdout, &resultv1.CostScanResult{Resources: set, Estimate: estimates[profile], Assumptions: assumptions})
+		current, documentAssumptions = against.Set, against.Assumptions
+	}
+
+	if opts.From == "" {
+		env, err := environmentOf(opts.Env)
+		if err != nil {
+			return err
 		}
-		return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
-	})
+		cfg, err := dependencies.LoadProject(ctx, cwd)
+		if err != nil {
+			return err
+		}
+		return dependencies.WithProvider(ctx, cfg, command, commands.OpenOptions{}, func(ctx context.Context, p commands.ProviderRun) error {
+			p.Check.End(nil)
+			if !p.Provider.Facts().GetTakesInventory() {
+				return fmt.Errorf("%s takes no inventory; pass --from a plan or state file", p.Provider.Name())
+			}
+			ctx, pricingSpan := p.Run.Phase(progressv1.Phase_PHASE_PLAN).Child(ctx, cfg.Slug, progress.Pricing.Title("what a deploy would provision"))
+			s := scanned{label: cfg.Slug, current: current}
+			var err error
+			s.proposed, s.assumptions, err = projectInventory(ctx, dependencies, p.Provider, cfg, env, pricingSpan.Output(progressv1.Level_LEVEL_INFO, progressv1.Stream_STREAM_UNSPECIFIED))
+			s.assumptions = append(s.assumptions, documentAssumptions...)
+			if err == nil {
+				err = report(ctx, dependencies, s, opts, profile, overrides, stdout)
+			}
+			pricingSpan.End(err)
+			return err
+		})
+	}
+
+	from, err := readDocument(opts.From, stdin)
+	if err != nil {
+		return err
+	}
+	s := scanned{label: documentLabel(opts.From), proposed: from.Set, current: current, assumptions: mergeNotes(from.Assumptions, documentAssumptions)}
+	if opts.Diff {
+		if from.Prior == nil {
+			return fmt.Errorf("%s carries no prior state to compare with; pass --against the current state", s.label)
+		}
+		s.current = from.Prior
+	}
+	ctx, running, err := dependencies.Events.Begin(ctx, command, "")
+	if err != nil {
+		return err
+	}
+	defer running.End(&err)
+	ctx, pricingSpan := running.Phase(progressv1.Phase_PHASE_PLAN).Child(ctx, s.label, progress.Pricing.Title(s.label))
+	err = report(ctx, dependencies, s, opts, profile, overrides, stdout)
+	pricingSpan.End(err)
+	return err
 }
 
-func price(ctx context.Context, dependencies Dependencies, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, overrides map[string]*structpb.Struct, out io.Writer) (*costv1.ResourceSet, map[costv1.Profile]*costv1.Estimate, []string, error) {
-	if !provider.Facts().GetPricesDeploys() {
-		return nil, nil, nil, fmt.Errorf("%s does not price a deploy, so there is nothing to scan", provider.Name())
+func refuseConflictingFlags(opts Options) error {
+	switch {
+	case opts.From != "" && opts.Env != "":
+		return errors.New("--env picks the project environment to price, so it cannot go with --from")
+	case opts.Diff && opts.Against != "":
+		return errors.New("--diff compares with the prior state in --from, so it cannot go with --against")
+	case opts.Diff && opts.From == "":
+		return errors.New("--diff compares with the prior state a plan carries; pass --from the plan")
+	case opts.From == stdinPath && opts.Against == stdinPath:
+		return errors.New("only one of --from and --against can read stdin")
 	}
+	return nil
+}
+
+func readDocument(path string, stdin io.Reader) (source.Document, error) {
+	var raw []byte
+	var err error
+	if path == stdinPath {
+		raw, err = io.ReadAll(stdin)
+	} else {
+		raw, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return source.Document{}, fmt.Errorf("read %s: %w", documentLabel(path), err)
+	}
+	document, err := source.Read(raw)
+	if err != nil {
+		return source.Document{}, fmt.Errorf("read %s: %w", documentLabel(path), err)
+	}
+	return document, nil
+}
+
+func documentLabel(path string) string {
+	if path == stdinPath {
+		return "stdin"
+	}
+	return filepath.Base(path)
+}
+
+func report(ctx context.Context, dependencies Dependencies, s scanned, opts Options, profile costv1.Profile, overrides map[string]*structpb.Struct, stdout io.Writer) error {
+	if s.compares() && s.current.GetSource() != s.proposed.GetSource() {
+		return fmt.Errorf("the current set comes from %s and the proposed one from %s, whose resource ids never match; compare two documents from the same tool", s.current.GetSource(), s.proposed.GetSource())
+	}
+	catalog, err := dependencies.OpenPriceCatalog(opts.Offline)
+	if err != nil {
+		return err
+	}
+	sets := []*costv1.ResourceSet{s.proposed}
+	if s.compares() {
+		sets = append(sets, s.current)
+	}
+	estimates, err := estimateSets(ctx, catalog, dependencies.Prices.Table, overrides, opts.Offline, sets...)
+	if err != nil {
+		return err
+	}
+	isJSON := dependencies.Presentation(stdout).Format == terminal.FormatJSON
+	if !s.compares() {
+		if isJSON {
+			return terminal.WriteResultJSON(stdout, &resultv1.CostScanResult{Resources: s.proposed, Estimate: estimates[0][profile], Assumptions: s.assumptions})
+		}
+		return render(stdout, s.label, s.proposed, estimates[0], profile, s.assumptions)
+	}
+	diffs := make(map[costv1.Profile]*costv1.EstimateDiff, len(pricing.Profiles()))
+	for _, each := range pricing.Profiles() {
+		diffs[each] = pricing.Diff(s.current, s.proposed, estimates[1][each], estimates[0][each])
+	}
+	if isJSON {
+		return terminal.WriteResultJSON(stdout, &resultv1.CostDiffResult{Current: s.current, Proposed: s.proposed, Diff: diffs[profile], Assumptions: s.assumptions})
+	}
+	return renderDiff(stdout, s.label, s.current, s.proposed, diffs, profile, s.assumptions)
+}
+
+func projectInventory(ctx context.Context, dependencies Dependencies, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, out io.Writer) (*costv1.ResourceSet, []string, error) {
 	resolved, err := readiness.ResolveComputes(provider, cfg)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	set, assumptions, err := shape(ctx, dependencies, provider, resolved, env, out)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	costs, err := provider.Cost()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	estimates := make(map[costv1.Profile]*costv1.Estimate, len(profiles()))
-	for _, profile := range profiles() {
-		estimate, err := costs.Price(ctx, &costv1.PriceRequest{
-			Resources: set,
-			Usage:     &costv1.Usage{Profile: profile, Resources: overrides},
-		})
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		estimates[profile] = estimate
-	}
-	return set, estimates, assumptions, nil
-}
-
-func shape(ctx context.Context, dependencies Dependencies, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, out io.Writer) (*costv1.ResourceSet, []string, error) {
-	release, err := workdir.LockBuildOutput(ctx, cfg.Dir, func() {
-		_, _ = fmt.Fprintln(out, "Waiting for another ocel run in "+cfg.Dir+" to finish with "+buildoutput.Dir)
+	release, err := workdir.LockBuildOutput(ctx, resolved.Dir, func() {
+		_, _ = fmt.Fprintln(out, "Waiting for another ocel run in "+resolved.Dir+" to finish with "+buildoutput.Dir)
 	})
 	if err != nil {
 		return nil, nil, err
 	}
 	defer release()
-	manifest, assumptions, err := scanManifest(ctx, dependencies, cfg, env, out)
+	assembled, assumptions, err := scanManifest(ctx, dependencies, resolved, env, out)
 	if err != nil {
 		return nil, nil, err
 	}
-	outputRoot, err := buildoutput.Root(cfg.Dir)
-	if err != nil {
-		return nil, nil, err
-	}
-	var set *costv1.ResourceSet
-	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		set, err = client.Shape(ctx, &contractv1.ShapeRequest{
-			Manifest:    manifest,
-			Environment: env,
-			Edge:        cfg.EdgeSelection(),
-			OutputRoot:  outputRoot,
-		})
-		return err
-	})
+	set, err := provider.Inventory(ctx, resolved, assembled, env)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -181,10 +252,10 @@ func environmentOf(name string) (*environmentv1.Environment, error) {
 
 func profileOf(name string) (costv1.Profile, error) {
 	if name == "" {
-		return defaultProfile, nil
+		return pricing.DefaultProfile, nil
 	}
-	for _, profile := range profiles() {
-		if profileName(profile) == name {
+	for _, profile := range pricing.Profiles() {
+		if pricing.ProfileName(profile) == name {
 			return profile, nil
 		}
 	}
@@ -234,7 +305,7 @@ func scanManifest(ctx context.Context, dependencies Dependencies, cfg *project.P
 	if err != nil {
 		return nil, nil, err
 	}
-	scanned, err := manifest.Assemble(manifest.Input{
+	assembled, err := manifest.Assemble(manifest.Input{
 		Project:   cfg,
 		Tier:      env.GetTier(),
 		Resources: resources,
@@ -243,7 +314,7 @@ func scanManifest(ctx context.Context, dependencies Dependencies, cfg *project.P
 	if err != nil {
 		return nil, nil, err
 	}
-	return scanned, assumptions, nil
+	return assembled, assumptions, nil
 }
 
 func scannedOutput(dependencies Dependencies, cfg *project.Project) (build.Output, []string, error) {

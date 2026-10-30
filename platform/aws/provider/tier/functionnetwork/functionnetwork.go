@@ -329,7 +329,7 @@ func ReadPart(ctx context.Context, store records.Store, region string, tier envi
 		Current:   recorded.State == stackrecords.PartReady,
 		Resources: recorded.Resources,
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: Shape(tier)},
+		Inventory: &provider.PartInventory{Vendor: awsports.Vendor, Region: region, Resources: Inventory(tier)},
 
 		RetiresWithLastUser: true,
 	}, true, nil
@@ -342,15 +342,15 @@ func RefuseInUse(tier environment.Tier, users []string) error {
 		strings.Join(users, ", "), tier)
 }
 
-func Shape(tier environment.Tier) []pricing.Shaped {
-	var shaped []pricing.Shaped
+func Inventory(tier environment.Tier) []pricing.Item {
+	var items []pricing.Item
 	for n := range natGateways(tier) {
 		name := Slug + "-" + strconv.Itoa(n+1)
-		shaped = append(shaped,
-			pricing.Shaped{Name: name, Type: component.TerraformNATGateway, Properties: map[string]any{}},
-			pricing.Shaped{Name: name, Type: component.TerraformElasticIP, Properties: map[string]any{}})
+		items = append(items,
+			pricing.Item{Name: name, Type: component.TerraformNATGateway, Properties: map[string]any{}},
+			pricing.Item{Name: name, Type: component.TerraformElasticIP, Properties: map[string]any{}})
 	}
-	return shaped
+	return items
 }
 
 func (s *Stacks) PlanRepatch(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {

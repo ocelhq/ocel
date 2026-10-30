@@ -1,0 +1,749 @@
+{
+  "format": 1,
+  "currency": "USD",
+  "vendors": [
+    {
+      "vendor": "aws",
+      "source": "aws-offers",
+      "services": [
+        {
+          "service": "AmazonApiGateway",
+          "productFamilies": [
+            "API Calls"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AWSAppSync",
+          "productFamilies": [
+            "RealTime"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AmazonCloudFront",
+          "productFamilies": [
+            "Data Transfer",
+            "Request"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AmazonCloudWatch",
+          "productFamilies": [
+            "Alarm",
+            "Data Payload",
+            "Storage Snapshot"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AWSDataTransfer",
+          "productFamilies": [
+            "Data Transfer"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AmazonDynamoDB",
+          "productFamilies": [
+            "Amazon DynamoDB PayPerRequest Throughput",
+            "Database Storage"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AmazonEC2",
+          "productFamilies": [
+            "NAT Gateway"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AmazonECR",
+          "productFamilies": [
+            "EC2 Container Registry"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AmazonECS",
+          "productFamilies": [
+            "Compute"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AWSELB",
+          "productFamilies": [
+            "Load Balancer-Application"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AmazonElastiCache",
+          "productFamilies": [
+            "Cache Instance",
+            "Storage Snapshot"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AWSEvents",
+          "productFamilies": [
+            "EventBridge"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "awskms",
+          "productFamilies": [
+            "API Request",
+            "Encryption Key"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AWSLambda",
+          "productFamilies": [
+            "Serverless"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AmazonRDS",
+          "productFamilies": [
+            "Database Instance",
+            "Database Storage",
+            "ServerlessV2",
+            "System Operation"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AmazonS3",
+          "productFamilies": [
+            "API Request",
+            "Storage"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AWSSecretsManager",
+          "productFamilies": [
+            "API Request",
+            "Secret"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AmazonSNS",
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AWSQueueService",
+          "productFamilies": [
+            "API Request"
+          ],
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "AmazonVPC",
+          "exclude": [
+            {
+              "attribute": "locationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "fromLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            },
+            {
+              "attribute": "toLocationType",
+              "in": [
+                "AWS Local Zone",
+                "AWS Wavelength Zone"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "vendor": "gcp",
+      "source": "gcp-catalog",
+      "services": [
+        {
+          "service": "149C-F9EC-3994",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "152E-C115-5142",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "1F14-4801-0E16",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "95FF-2EF5-5EA1",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "9662-B51E-5089",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "A1E8-BE35-7EBC",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "A2B5-E0F1-B0F3",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "E505-1604-58F8",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "EE2C-7FAC-5E08",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "EE2F-D110-890C",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "EE82-7A5E-871C",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        },
+        {
+          "service": "F3A6-D7B7-9BDA",
+          "where": [
+            {
+              "attribute": "usageType",
+              "in": [
+                "OnDemand"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "vendor": "cloudflare",
+      "source": "static",
+      "services": [
+        {
+          "service": "workers",
+          "file": "static/cloudflare.json"
+        },
+        {
+          "service": "durable-objects",
+          "file": "static/cloudflare.json"
+        }
+      ]
+    }
+  ]
+}

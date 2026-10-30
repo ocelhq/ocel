@@ -8,7 +8,6 @@ import (
 	"google.golang.org/api/logging/v2"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -25,7 +24,7 @@ func TierLogFilter(tier environment.Tier) string {
 
 var logViewKind = KindOps{
 	noun:          "log view",
-	terraform:     cost.LogViewType,
+	terraform:     gcloud.LogViewType,
 	emulatorSkips: true,
 	survey: func(ctx context.Context, b Engine, read Survey, _ Resource) (Presence, error) {
 		view, err := b.readLogView(ctx, read.Tier)

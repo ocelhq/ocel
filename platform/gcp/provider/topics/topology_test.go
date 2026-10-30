@@ -47,7 +47,7 @@ func pushesTo(base string) map[string]topics.Push {
 	}
 }
 
-type subscriptionShape struct {
+type subscriptionInventory struct {
 	Topic              string `json:"topic"`
 	AckDeadlineSeconds int    `json:"ackDeadlineSeconds"`
 	EnableOrdering     bool   `json:"enableMessageOrdering"`
@@ -70,7 +70,7 @@ type subscriptionShape struct {
 
 type capturedPubSub struct {
 	mu            sync.Mutex
-	subscriptions map[string]subscriptionShape
+	subscriptions map[string]subscriptionInventory
 	topics        []string
 }
 
@@ -81,9 +81,9 @@ func (c *capturedPubSub) serve(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
 	switch {
 	case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/subscriptions/"):
-		var shape subscriptionShape
-		_ = json.Unmarshal(body, &shape)
-		c.subscriptions[name] = shape
+		var inventory subscriptionInventory
+		_ = json.Unmarshal(body, &inventory)
+		c.subscriptions[name] = inventory
 	case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "/topics/"):
 		c.topics = append(c.topics, name)
 	}
@@ -92,7 +92,7 @@ func (c *capturedPubSub) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestAConsumersMessagesAreRetriedUntilItsRunSettlesAndNeverDeadLetteredByPubSub(t *testing.T) {
-	captured := &capturedPubSub{subscriptions: map[string]subscriptionShape{}}
+	captured := &capturedPubSub{subscriptions: map[string]subscriptionInventory{}}
 	server := httptest.NewServer(http.HandlerFunc(captured.serve))
 	t.Cleanup(server.Close)
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: server.URL}
@@ -109,15 +109,15 @@ func TestAConsumersMessagesAreRetriedUntilItsRunSettlesAndNeverDeadLetteredByPub
 	if want := []string{topicOf(t, names, "orders"), topicOf(t, names, "resize")}; !slices.Equal(made, want) {
 		t.Errorf("Ensure() made topics %q, want the declared topics alone: Pub/Sub drops what it forwards to a topic no one subscribes to", made)
 	}
-	for name, shape := range captured.subscriptions {
-		if shape.DeadLetterPolicy != nil {
-			t.Errorf("subscription %s dead-letters to %s, want its messages redelivered until the run's attempts settle it", name, shape.DeadLetterPolicy.DeadLetterTopic)
+	for name, inventory := range captured.subscriptions {
+		if inventory.DeadLetterPolicy != nil {
+			t.Errorf("subscription %s dead-letters to %s, want its messages redelivered until the run's attempts settle it", name, inventory.DeadLetterPolicy.DeadLetterTopic)
 		}
 	}
 }
 
 func TestEveryPushIsSignedAsTheInvokerForTheWorkerItReaches(t *testing.T) {
-	captured := &capturedPubSub{subscriptions: map[string]subscriptionShape{}}
+	captured := &capturedPubSub{subscriptions: map[string]subscriptionInventory{}}
 	server := httptest.NewServer(http.HandlerFunc(captured.serve))
 	t.Cleanup(server.Close)
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: server.URL}
@@ -128,12 +128,12 @@ func TestEveryPushIsSignedAsTheInvokerForTheWorkerItReaches(t *testing.T) {
 	}
 
 	for _, consumer := range []struct{ topic, consumer, worker string }{{"orders", "ship", "worker"}, {"orders", "bill", "billing"}, {"resize", "resize", "worker"}} {
-		shape, made := captured.subscriptions[subscriptionOf(t, names, consumer.topic, consumer.consumer)]
+		inventory, made := captured.subscriptions[subscriptionOf(t, names, consumer.topic, consumer.consumer)]
 		if !made {
 			t.Errorf("no subscription was made for %s/%s", consumer.topic, consumer.consumer)
 			continue
 		}
-		token := shape.PushConfig.OidcToken
+		token := inventory.PushConfig.OidcToken
 		if token == nil || token.ServiceAccountEmail != invoker || token.Audience != "https://worker.run.app/"+consumer.worker {
 			t.Errorf("%s/%s pushes with token %+v, want one minted for %s with the worker's url as audience: an internal Cloud Run service admits no unsigned push",
 				consumer.topic, consumer.consumer, token, invoker)

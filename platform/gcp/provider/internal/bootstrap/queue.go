@@ -7,8 +7,8 @@ import (
 	"cloud.google.com/go/cloudtasks/apiv2/cloudtaskspb"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -18,7 +18,7 @@ const ReasonQueuePurged = "its waiting messages are deleted, since Cloud Tasks r
 
 var queueKind = KindOps{
 	noun:      "Cloud Tasks queue",
-	terraform: cost.CloudTasksQueueType,
+	terraform: gcloud.CloudTasksQueueType,
 	properties: func(region string, _ Resource) map[string]any {
 		return map[string]any{"location": region}
 	},

@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-type Shaped struct {
+type Item struct {
 	Name       string
 	Type       string
 	Properties map[string]any
@@ -25,18 +25,13 @@ type EdgeApp struct {
 	Hostnames []string
 }
 
-type EdgeShape struct {
+type EdgeInventory struct {
 	Vendor      string
 	Region      string
 	BillsEgress bool
-	Shared      []Shaped
-	Environment []Shaped
-	Apps        map[string][]Shaped
-}
-
-type EdgeRates struct {
-	Card  func() (*Card, error)
-	Table Table
+	Shared      []Item
+	Environment []Item
+	Apps        map[string][]Item
 }
 
 type EdgeScopes struct {
@@ -44,24 +39,10 @@ type EdgeScopes struct {
 	Environment string
 }
 
-func (t *Tree) AddEdge(scopes EdgeScopes, shape EdgeShape) {
-	t.AddShaped(scopes.Shared, shape.Vendor, shape.Region, shape.Shared)
-	t.AddShaped(scopes.Environment, shape.Vendor, shape.Region, shape.Environment)
-	for _, app := range slices.Sorted(maps.Keys(shape.Apps)) {
-		t.AddShaped(t.Scope(scopes.Environment, ScopeApp, app), shape.Vendor, shape.Region, shape.Apps[app])
+func (t *Tree) AddEdge(scopes EdgeScopes, inventory EdgeInventory) {
+	t.AddItems(scopes.Shared, inventory.Vendor, inventory.Region, inventory.Shared)
+	t.AddItems(scopes.Environment, inventory.Vendor, inventory.Region, inventory.Environment)
+	for _, app := range slices.Sorted(maps.Keys(inventory.Apps)) {
+		t.AddItems(t.Scope(scopes.Environment, ScopeApp, app), inventory.Vendor, inventory.Region, inventory.Apps[app])
 	}
-}
-
-func Priced(card *Card, table Table, edges ...EdgeRates) (*Card, Table, error) {
-	cards := []*Card{}
-	tables := []Table{table}
-	for _, rates := range edges {
-		card, err := rates.Card()
-		if err != nil {
-			return nil, nil, err
-		}
-		cards = append(cards, card)
-		tables = append(tables, rates.Table)
-	}
-	return Merge(card, cards...), Tables(tables...), nil
 }

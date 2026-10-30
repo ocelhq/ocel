@@ -24,7 +24,7 @@ func NewPart(records tier.Records, c Clients, namespace string, specFor func(con
 		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
 			return describe(ctx, records, specFor, tier)
 		},
-		Shape: func(tier environment.Tier) []pricing.Shaped { return Shape(namespace, tier) },
+		Inventory: func(tier environment.Tier) []pricing.Item { return Inventory(namespace, tier) },
 		Removal: records.Removal(Part, func(ctx context.Context, tier environment.Tier, _ []provider.PhysicalResource) error {
 			return Remove(ctx, c, namespace, tier)
 		}),
@@ -107,6 +107,6 @@ func describe(ctx context.Context, records tier.Records, specFor func(context.Co
 		Digest:    recorded.Digest,
 		Resources: Resources(spec.Namespace, tier),
 		UsedBy:    users,
-		Shape:     records.Shape(Shape(spec.Namespace, tier)),
+		Inventory: records.Inventory(Inventory(spec.Namespace, tier)),
 	}, true, nil
 }

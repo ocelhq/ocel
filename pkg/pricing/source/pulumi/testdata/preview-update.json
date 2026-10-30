@@ -1,0 +1,1951 @@
+{
+    "config": {
+        "aws:accessKey": "fake-access-key",
+        "aws:region": "eu-west-2",
+        "aws:secretKey": "[secret]",
+        "aws:skipCredentialsValidation": "true",
+        "aws:skipMetadataApiCheck": "true",
+        "aws:skipRequestingAccountId": "true"
+    },
+    "steps": [
+        {
+            "op": "same",
+            "urn": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "custom": false,
+                "type": "pulumi:pulumi:Stack",
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z",
+                "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "custom": false,
+                "type": "pulumi:pulumi:Stack",
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z",
+                "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "detailedDiff": null
+        },
+        {
+            "op": "same",
+            "urn": "urn:pulumi:dev::costfixture::costfixture:index:Api::api",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::costfixture:index:Api::api",
+                "custom": false,
+                "type": "costfixture:index:Api",
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "created": "2026-10-28T20:53:12.14954089Z",
+                "modified": "2026-10-28T20:53:12.14954089Z",
+                "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::costfixture:index:Api::api",
+                "custom": false,
+                "type": "costfixture:index:Api",
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "created": "2026-10-28T20:53:12.14954089Z",
+                "modified": "2026-10-28T20:53:12.14954089Z",
+                "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "detailedDiff": null
+        },
+        {
+            "op": "same",
+            "urn": "urn:pulumi:dev::costfixture::pulumi:providers:aws::virginia",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::pulumi:providers:aws::virginia",
+                "custom": true,
+                "id": "339a5c19-79cc-437e-8b99-887578a3efb3",
+                "type": "pulumi:providers:aws",
+                "inputs": {
+                    "__internal": {},
+                    "accessKey": "[secret]",
+                    "region": "us-east-1",
+                    "secretKey": "[secret]",
+                    "skipCredentialsValidation": "true",
+                    "skipMetadataApiCheck": "true",
+                    "skipRegionValidation": "true",
+                    "skipRequestingAccountId": "true",
+                    "version": "7.36.0"
+                },
+                "outputs": {
+                    "accessKey": "[secret]",
+                    "region": "us-east-1",
+                    "secretKey": "[secret]",
+                    "skipCredentialsValidation": "true",
+                    "skipMetadataApiCheck": "true",
+                    "skipRegionValidation": "true",
+                    "skipRequestingAccountId": "true",
+                    "version": "7.36.0"
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "propertyDependencies": {
+                    "accessKey": [],
+                    "region": [],
+                    "secretKey": [],
+                    "skipCredentialsValidation": [],
+                    "skipMetadataApiCheck": [],
+                    "skipRegionValidation": [],
+                    "skipRequestingAccountId": []
+                },
+                "additionalSecretOutputs": [
+                    "accessKey",
+                    "secretKey",
+                    "token"
+                ],
+                "created": "2026-10-28T20:53:12.146812287Z",
+                "modified": "2026-10-28T20:53:12.146812287Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#38",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#38"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::pulumi:providers:aws::virginia",
+                "custom": true,
+                "type": "pulumi:providers:aws",
+                "inputs": {
+                    "__internal": {},
+                    "accessKey": "[secret]",
+                    "region": "us-east-1",
+                    "secretKey": "[secret]",
+                    "skipCredentialsValidation": "true",
+                    "skipMetadataApiCheck": "true",
+                    "skipRegionValidation": "true",
+                    "skipRequestingAccountId": "true",
+                    "version": "7.36.0"
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "propertyDependencies": {
+                    "accessKey": [],
+                    "region": [],
+                    "secretKey": [],
+                    "skipCredentialsValidation": [],
+                    "skipMetadataApiCheck": [],
+                    "skipRegionValidation": [],
+                    "skipRequestingAccountId": []
+                },
+                "additionalSecretOutputs": [
+                    "accessKey",
+                    "secretKey",
+                    "token"
+                ],
+                "created": "2026-10-28T20:53:12.146812287Z",
+                "modified": "2026-10-28T20:53:12.146812287Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#38",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#38"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "detailedDiff": null
+        },
+        {
+            "op": "same",
+            "urn": "urn:pulumi:dev::costfixture::pulumi:providers:gcp::belgium",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::pulumi:providers:gcp::belgium",
+                "custom": true,
+                "id": "4e9835a8-232a-4ce6-9fcd-404dc75036bc",
+                "type": "pulumi:providers:gcp",
+                "inputs": {
+                    "__internal": {},
+                    "accessToken": "[secret]",
+                    "project": "cost-fixture",
+                    "version": "9.36.1",
+                    "zone": "europe-west1-b"
+                },
+                "outputs": {
+                    "accessToken": "[secret]",
+                    "project": "cost-fixture",
+                    "version": "9.36.1",
+                    "zone": "europe-west1-b"
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "propertyDependencies": {
+                    "accessToken": [],
+                    "project": [],
+                    "zone": []
+                },
+                "additionalSecretOutputs": [
+                    "accessToken"
+                ],
+                "created": "2026-10-28T20:53:10.673996034Z",
+                "modified": "2026-10-28T20:53:10.673996034Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#30",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#30"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::pulumi:providers:gcp::belgium",
+                "custom": true,
+                "type": "pulumi:providers:gcp",
+                "inputs": {
+                    "__internal": {},
+                    "accessToken": "[secret]",
+                    "project": "cost-fixture",
+                    "version": "9.36.1",
+                    "zone": "europe-west1-b"
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "propertyDependencies": {
+                    "accessToken": [],
+                    "project": [],
+                    "zone": []
+                },
+                "additionalSecretOutputs": [
+                    "accessToken"
+                ],
+                "created": "2026-10-28T20:53:10.673996034Z",
+                "modified": "2026-10-28T20:53:10.673996034Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#30",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#30"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "detailedDiff": null
+        },
+        {
+            "op": "same",
+            "urn": "urn:pulumi:dev::costfixture::aws:ecs/cluster:Cluster::cluster",
+            "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:ecs/cluster:Cluster::cluster",
+                "custom": true,
+                "id": "arn:aws:ecs:eu-west-2:123456789012:cluster/cluster-229e8df",
+                "type": "aws:ecs/cluster:Cluster",
+                "inputs": {
+                    "__defaults": [
+                        "name"
+                    ],
+                    "name": "cluster-229e8df",
+                    "region": "eu-west-2",
+                    "tagsAll": {}
+                },
+                "outputs": {
+                    "arn": "arn:aws:ecs:eu-west-2:123456789012:cluster/cluster-229e8df",
+                    "id": "arn:aws:ecs:eu-west-2:123456789012:cluster/cluster-229e8df",
+                    "name": "cluster-229e8df",
+                    "region": "eu-west-2",
+                    "settings": [
+                        {
+                            "name": "containerInsights",
+                            "value": "disabled"
+                        }
+                    ],
+                    "tagsAll": {}
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z"
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:ecs/cluster:Cluster::cluster",
+                "custom": true,
+                "type": "aws:ecs/cluster:Cluster",
+                "inputs": {
+                    "__defaults": [
+                        "name"
+                    ],
+                    "name": "cluster-229e8df",
+                    "region": "eu-west-2",
+                    "tagsAll": {}
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#136",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#136"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "detailedDiff": null
+        },
+        {
+            "op": "update",
+            "urn": "urn:pulumi:dev::costfixture::aws:iam/role:Role::fn-role",
+            "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:iam/role:Role::fn-role",
+                "custom": true,
+                "id": "fn-role-8f785a5",
+                "type": "aws:iam/role:Role",
+                "inputs": {
+                    "__defaults": [
+                        "maxSessionDuration",
+                        "name",
+                        "path"
+                    ],
+                    "assumeRolePolicy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}",
+                    "maxSessionDuration": 3600,
+                    "name": "fn-role-8f785a5",
+                    "path": "/",
+                    "tagsAll": {}
+                },
+                "outputs": {
+                    "arn": "arn:aws:iam::123456789012:role/fn-role-8f785a5",
+                    "assumeRolePolicy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}",
+                    "id": "fn-role-8f785a5",
+                    "maxSessionDuration": 3600,
+                    "name": "fn-role-8f785a5",
+                    "path": "/",
+                    "tagsAll": {},
+                    "uniqueId": "fake-role-id"
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "assumeRolePolicy": []
+                },
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z"
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:iam/role:Role::fn-role",
+                "custom": true,
+                "type": "aws:iam/role:Role",
+                "inputs": {
+                    "__defaults": [
+                        "maxSessionDuration",
+                        "name",
+                        "path"
+                    ],
+                    "assumeRolePolicy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}",
+                    "maxSessionDuration": 3600,
+                    "name": "fn-role-8f785a5",
+                    "path": "/",
+                    "tagsAll": {}
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "assumeRolePolicy": []
+                },
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#86",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#86"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "diffReasons": [
+                "forceDetachPolicies",
+                "managedPolicyArns"
+            ],
+            "detailedDiff": {
+                "forceDetachPolicies": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "managedPolicyArns": {
+                    "kind": "add",
+                    "inputDiff": false
+                }
+            }
+        },
+        {
+            "op": "replace",
+            "urn": "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db",
+            "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db",
+                "custom": true,
+                "delete": true,
+                "id": "tf-20261028194305741900000001",
+                "type": "aws:rds/cluster:Cluster",
+                "inputs": {
+                    "__defaults": [
+                        "deleteAutomatedBackups"
+                    ],
+                    "databaseName": "app",
+                    "deleteAutomatedBackups": true,
+                    "engine": "aurora-postgresql",
+                    "engineMode": "provisioned",
+                    "engineVersion": "16.4",
+                    "masterPassword": "[secret]",
+                    "masterUsername": "app",
+                    "region": "eu-west-1",
+                    "serverlessv2ScalingConfiguration": {
+                        "__defaults": [],
+                        "maxCapacity": 4,
+                        "minCapacity": 0.5
+                    },
+                    "skipFinalSnapshot": true,
+                    "storageEncrypted": true,
+                    "tagsAll": {}
+                },
+                "outputs": {
+                    "arn": "arn:aws:rds:eu-west-1:123456789012:cluster:tf-20261028194305741900000001",
+                    "clusterIdentifier": "tf-20261028194305741900000001",
+                    "databaseName": "app",
+                    "deleteAutomatedBackups": true,
+                    "endpoint": "tf-20261028194305741900000001.cluster-cabcdefghijk.eu-west-1.rds.amazonaws.com",
+                    "engine": "aurora-postgresql",
+                    "engineLifecycleSupport": "open-source-rds-extended-support",
+                    "engineMode": "provisioned",
+                    "engineVersion": "16.4",
+                    "id": "tf-20261028194305741900000001",
+                    "masterPassword": "[secret]",
+                    "masterUsername": "app",
+                    "port": 5432,
+                    "region": "eu-west-1",
+                    "serverlessv2ScalingConfiguration": {
+                        "maxCapacity": 4,
+                        "minCapacity": 0.5
+                    },
+                    "skipFinalSnapshot": true,
+                    "storageEncrypted": true,
+                    "storageType": "aurora",
+                    "tagsAll": {}
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "databaseName": [],
+                    "engine": [],
+                    "engineMode": [],
+                    "engineVersion": [],
+                    "masterPassword": [],
+                    "masterUsername": [],
+                    "region": [],
+                    "serverlessv2ScalingConfiguration": [],
+                    "skipFinalSnapshot": [],
+                    "storageEncrypted": []
+                },
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z"
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db",
+                "custom": true,
+                "type": "aws:rds/cluster:Cluster",
+                "inputs": {
+                    "__defaults": [
+                        "deleteAutomatedBackups"
+                    ],
+                    "databaseName": "app",
+                    "deleteAutomatedBackups": true,
+                    "engine": "aurora-postgresql",
+                    "engineMode": "provisioned",
+                    "engineVersion": "16.4",
+                    "masterPassword": "[secret]",
+                    "masterUsername": "app",
+                    "region": "eu-west-1",
+                    "serverlessv2ScalingConfiguration": {
+                        "__defaults": [],
+                        "maxCapacity": 4,
+                        "minCapacity": 0.5
+                    },
+                    "skipFinalSnapshot": true,
+                    "storageEncrypted": true,
+                    "tagsAll": {}
+                },
+                "outputs": {
+                    "__meta": "{\"_new_extra_shim\":{},\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"create\":7200000000000,\"delete\":7200000000000,\"update\":7200000000000}}",
+                    "allocatedStorage": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "allowMajorVersionUpgrade": null,
+                    "applyImmediately": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "arn": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "availabilityZones": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "backtrackWindow": null,
+                    "backupRetentionPeriod": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "caCertificateIdentifier": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "caCertificateValidTill": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "clusterIdentifier": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "clusterIdentifierPrefix": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "clusterMembers": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "clusterResourceId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "clusterScalabilityType": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "copyTagsToSnapshot": false,
+                    "databaseInsightsMode": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "databaseName": "app",
+                    "dbClusterInstanceClass": null,
+                    "dbClusterParameterGroupName": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "dbInstanceParameterGroupName": null,
+                    "dbSubnetGroupName": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "dbSystemId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "deleteAutomatedBackups": true,
+                    "deletionProtection": null,
+                    "domain": null,
+                    "domainIamRoleName": null,
+                    "enableGlobalWriteForwarding": false,
+                    "enableHttpEndpoint": false,
+                    "enableLocalWriteForwarding": false,
+                    "enabledCloudwatchLogsExports": null,
+                    "endpoint": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "engine": "aurora-postgresql",
+                    "engineLifecycleSupport": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "engineMode": "provisioned",
+                    "engineVersion": "16.4",
+                    "engineVersionActual": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "finalSnapshotIdentifier": null,
+                    "globalClusterIdentifier": null,
+                    "hostedZoneId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "iamDatabaseAuthenticationEnabled": null,
+                    "iamRoles": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "id": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "iops": null,
+                    "kmsKeyId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "manageMasterUserPassword": null,
+                    "masterPassword": "[secret]",
+                    "masterPasswordWo": "[secret]",
+                    "masterPasswordWoVersion": null,
+                    "masterUserSecretKmsKeyId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "masterUserSecrets": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "masterUsername": "app",
+                    "monitoringInterval": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "monitoringRoleArn": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "networkType": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "performanceInsightsEnabled": null,
+                    "performanceInsightsKmsKeyId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "performanceInsightsRetentionPeriod": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "port": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "preferredBackupWindow": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "preferredMaintenanceWindow": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "readerEndpoint": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "region": "eu-west-1",
+                    "replicationSourceIdentifier": null,
+                    "restoreToPointInTime": null,
+                    "s3Import": null,
+                    "scalingConfiguration": null,
+                    "serverlessv2ScalingConfiguration": {
+                        "maxCapacity": 4,
+                        "minCapacity": 0.5,
+                        "secondsUntilAutoPause": "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
+                    },
+                    "skipFinalSnapshot": true,
+                    "snapshotIdentifier": null,
+                    "sourceRegion": null,
+                    "storageEncrypted": true,
+                    "storageType": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "tags": null,
+                    "tagsAll": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "upgradeRolloutOrder": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "vpcSecurityGroupIds": "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "databaseName": [],
+                    "engine": [],
+                    "engineMode": [],
+                    "engineVersion": [],
+                    "masterPassword": [],
+                    "masterUsername": [],
+                    "region": [],
+                    "serverlessv2ScalingConfiguration": [],
+                    "skipFinalSnapshot": [],
+                    "storageEncrypted": []
+                },
+                "additionalSecretOutputs": [
+                    "masterPassword",
+                    "masterPasswordWo"
+                ],
+                "created": "2026-10-28T20:54:12.245607352Z",
+                "modified": "2026-10-28T20:54:12.245607352Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#68",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#68"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "diffReasons": [
+                "availabilityZones",
+                "clusterMembers",
+                "copyTagsToSnapshot",
+                "enableGlobalWriteForwarding",
+                "enableHttpEndpoint",
+                "enableLocalWriteForwarding",
+                "iamRoles",
+                "masterUserSecrets",
+                "serverlessv2ScalingConfiguration",
+                "vpcSecurityGroupIds"
+            ],
+            "replaceReasons": [
+                "availabilityZones"
+            ],
+            "detailedDiff": {
+                "availabilityZones": {
+                    "kind": "add-replace",
+                    "inputDiff": false
+                },
+                "clusterMembers": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "copyTagsToSnapshot": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "enableGlobalWriteForwarding": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "enableHttpEndpoint": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "enableLocalWriteForwarding": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "iamRoles": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "masterUserSecrets": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "serverlessv2ScalingConfiguration.secondsUntilAutoPause": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "vpcSecurityGroupIds": {
+                    "kind": "add",
+                    "inputDiff": false
+                }
+            }
+        },
+        {
+            "op": "create",
+            "urn": "urn:pulumi:dev::costfixture::aws:sqs/queue:Queue::jobs",
+            "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::virginia::339a5c19-79cc-437e-8b99-887578a3efb3",
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:sqs/queue:Queue::jobs",
+                "custom": true,
+                "type": "aws:sqs/queue:Queue",
+                "inputs": {
+                    "__defaults": [
+                        "maxMessageSize",
+                        "messageRetentionSeconds",
+                        "name"
+                    ],
+                    "maxMessageSize": 262144,
+                    "messageRetentionSeconds": 345600,
+                    "name": "jobs-22e8b89",
+                    "region": "us-east-1",
+                    "tagsAll": {},
+                    "visibilityTimeoutSeconds": 60
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::virginia::339a5c19-79cc-437e-8b99-887578a3efb3",
+                "propertyDependencies": {
+                    "visibilityTimeoutSeconds": []
+                },
+                "sourcePosition": "project:///../../../costfixture/main.go#99",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#99"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "detailedDiff": null
+        },
+        {
+            "op": "replace",
+            "urn": "urn:pulumi:dev::costfixture::aws:ecs/taskDefinition:TaskDefinition::app",
+            "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:ecs/taskDefinition:TaskDefinition::app",
+                "custom": true,
+                "delete": true,
+                "id": "app",
+                "type": "aws:ecs/taskDefinition:TaskDefinition",
+                "inputs": {
+                    "__defaults": [],
+                    "containerDefinitions": "[{\"essential\":true,\"image\":\"public.ecr.aws/nginx/nginx:stable\",\"name\":\"app\",\"portMappings\":[{\"containerPort\":80}]}]",
+                    "cpu": "512",
+                    "family": "app",
+                    "memory": "2048",
+                    "networkMode": "awsvpc",
+                    "region": "eu-west-2",
+                    "requiresCompatibilities": [
+                        "FARGATE"
+                    ],
+                    "runtimePlatform": {
+                        "__defaults": [],
+                        "cpuArchitecture": "ARM64",
+                        "operatingSystemFamily": "LINUX"
+                    },
+                    "tagsAll": {}
+                },
+                "outputs": {
+                    "arn": "arn:aws:ecs:eu-west-2:123456789012:task-definition/app:1",
+                    "arnWithoutRevision": "arn:aws:ecs:eu-west-2:123456789012:task-definition/app",
+                    "containerDefinitions": "[{\"essential\":true,\"image\":\"public.ecr.aws/nginx/nginx:stable\",\"name\":\"app\",\"portMappings\":[{\"containerPort\":80}]}]",
+                    "cpu": "512",
+                    "enableFaultInjection": false,
+                    "family": "app",
+                    "id": "app",
+                    "memory": "2048",
+                    "networkMode": "awsvpc",
+                    "region": "eu-west-2",
+                    "requiresCompatibilities": [
+                        "FARGATE"
+                    ],
+                    "revision": 1,
+                    "runtimePlatform": {
+                        "cpuArchitecture": "ARM64",
+                        "operatingSystemFamily": "LINUX"
+                    },
+                    "skipDestroy": false,
+                    "tagsAll": {},
+                    "trackLatest": false
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "containerDefinitions": [],
+                    "cpu": [],
+                    "family": [],
+                    "memory": [],
+                    "networkMode": [],
+                    "requiresCompatibilities": [],
+                    "runtimePlatform": []
+                },
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z"
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:ecs/taskDefinition:TaskDefinition::app",
+                "custom": true,
+                "type": "aws:ecs/taskDefinition:TaskDefinition",
+                "inputs": {
+                    "__defaults": [],
+                    "containerDefinitions": "[{\"essential\":true,\"image\":\"public.ecr.aws/nginx/nginx:stable\",\"name\":\"app\",\"portMappings\":[{\"containerPort\":80}]}]",
+                    "cpu": "1024",
+                    "family": "app",
+                    "memory": "2048",
+                    "networkMode": "awsvpc",
+                    "region": "eu-west-2",
+                    "requiresCompatibilities": [
+                        "FARGATE"
+                    ],
+                    "runtimePlatform": {
+                        "__defaults": [],
+                        "cpuArchitecture": "ARM64",
+                        "operatingSystemFamily": "LINUX"
+                    },
+                    "tagsAll": {}
+                },
+                "outputs": {
+                    "arn": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "arnWithoutRevision": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "containerDefinitions": "[{\"essential\":true,\"image\":\"public.ecr.aws/nginx/nginx:stable\",\"name\":\"app\",\"portMappings\":[{\"containerPort\":80}]}]",
+                    "cpu": "1024",
+                    "enableFaultInjection": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "ephemeralStorage": null,
+                    "executionRoleArn": null,
+                    "family": "app",
+                    "id": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "ipcMode": null,
+                    "memory": "2048",
+                    "networkMode": "awsvpc",
+                    "pidMode": null,
+                    "placementConstraints": [],
+                    "proxyConfiguration": null,
+                    "region": "eu-west-2",
+                    "requiresCompatibilities": [
+                        "FARGATE"
+                    ],
+                    "revision": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "runtimePlatform": {
+                        "cpuArchitecture": "ARM64",
+                        "operatingSystemFamily": "LINUX"
+                    },
+                    "skipDestroy": false,
+                    "tags": null,
+                    "tagsAll": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "taskRoleArn": null,
+                    "trackLatest": false,
+                    "volumes": []
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "containerDefinitions": [],
+                    "cpu": [],
+                    "family": [],
+                    "memory": [],
+                    "networkMode": [],
+                    "requiresCompatibilities": [],
+                    "runtimePlatform": []
+                },
+                "created": "2026-10-28T20:54:12.249979075Z",
+                "modified": "2026-10-28T20:54:12.249979075Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#153",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#153"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "diffReasons": [
+                "cpu"
+            ],
+            "replaceReasons": [
+                "cpu"
+            ],
+            "detailedDiff": {
+                "cpu": {
+                    "kind": "update-replace",
+                    "inputDiff": false
+                }
+            }
+        },
+        {
+            "op": "update",
+            "urn": "urn:pulumi:dev::costfixture::gcp:cloudrunv2/service:Service::web",
+            "provider": "urn:pulumi:dev::costfixture::pulumi:providers:gcp::belgium::4e9835a8-232a-4ce6-9fcd-404dc75036bc",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::gcp:cloudrunv2/service:Service::web",
+                "custom": true,
+                "id": "projects/cost-fixture/locations/europe-west1/services/web-dba37d0",
+                "type": "gcp:cloudrunv2/service:Service",
+                "inputs": {
+                    "__defaults": [
+                        "name"
+                    ],
+                    "deletionProtection": false,
+                    "location": "europe-west1",
+                    "name": "web-dba37d0",
+                    "template": {
+                        "__defaults": [],
+                        "containers": [
+                            {
+                                "__defaults": [],
+                                "image": "us-docker.pkg.dev/cloudrun/container/hello",
+                                "resources": {
+                                    "__defaults": [],
+                                    "limits": {
+                                        "cpu": "1",
+                                        "memory": "512Mi"
+                                    }
+                                }
+                            }
+                        ],
+                        "scaling": {
+                            "__defaults": [],
+                            "maxInstanceCount": 10,
+                            "minInstanceCount": 0
+                        }
+                    }
+                },
+                "outputs": {
+                    "deletionProtection": false,
+                    "effectiveLabels": {
+                        "goog-pulumi-provisioned": "true"
+                    },
+                    "generation": "1",
+                    "id": "projects/cost-fixture/locations/europe-west1/services/web-dba37d0",
+                    "ingress": "INGRESS_TRAFFIC_ALL",
+                    "launchStage": "GA",
+                    "location": "europe-west1",
+                    "name": "web-dba37d0",
+                    "project": "cost-fixture",
+                    "pulumiLabels": {
+                        "goog-pulumi-provisioned": "true"
+                    },
+                    "template": {
+                        "containers": [
+                            {
+                                "image": "us-docker.pkg.dev/cloudrun/container/hello",
+                                "resources": {
+                                    "limits": {
+                                        "cpu": "1",
+                                        "memory": "512Mi"
+                                    }
+                                }
+                            }
+                        ],
+                        "scaling": {
+                            "maxInstanceCount": 10,
+                            "minInstanceCount": 0
+                        }
+                    },
+                    "uri": "https://web-dba37d0-uc.a.run.app"
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:gcp::belgium::4e9835a8-232a-4ce6-9fcd-404dc75036bc",
+                "propertyDependencies": {
+                    "deletionProtection": [],
+                    "location": [],
+                    "template": []
+                },
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z"
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::gcp:cloudrunv2/service:Service::web",
+                "custom": true,
+                "type": "gcp:cloudrunv2/service:Service",
+                "inputs": {
+                    "__defaults": [
+                        "name"
+                    ],
+                    "deletionProtection": false,
+                    "location": "europe-west1",
+                    "name": "web-dba37d0",
+                    "template": {
+                        "__defaults": [],
+                        "containers": [
+                            {
+                                "__defaults": [],
+                                "image": "us-docker.pkg.dev/cloudrun/container/hello",
+                                "resources": {
+                                    "__defaults": [],
+                                    "limits": {
+                                        "cpu": "1",
+                                        "memory": "512Mi"
+                                    }
+                                }
+                            }
+                        ],
+                        "scaling": {
+                            "__defaults": [],
+                            "maxInstanceCount": 10,
+                            "minInstanceCount": 0
+                        }
+                    }
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:gcp::belgium::4e9835a8-232a-4ce6-9fcd-404dc75036bc",
+                "propertyDependencies": {
+                    "deletionProtection": [],
+                    "location": [],
+                    "template": []
+                },
+                "additionalSecretOutputs": [
+                    "effectiveLabels",
+                    "pulumiLabels"
+                ],
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#50",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#50"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "diffReasons": [
+                "conditions",
+                "deletionPolicy",
+                "effectiveAnnotations",
+                "template",
+                "terminalConditions",
+                "trafficStatuses",
+                "urls"
+            ],
+            "detailedDiff": {
+                "conditions": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "deletionPolicy": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "effectiveAnnotations": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.annotations": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.containers[0].baseImageUri": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.containers[0].name": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.containers[0].resources.cpuIdle": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.containers[0].resources.startupCpuBoost": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.containers[0].sandboxLauncher": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.containers[0].workingDir": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.encryptionKey": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.executionEnvironment": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.gpuZonalRedundancyDisabled": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.healthCheckDisabled": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.labels": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.maxInstanceRequestConcurrency": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.revision": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.scaling.concurrencyUtilization": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.scaling.cpuUtilization": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.serviceAccount": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.sessionAffinity": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "template.timeout": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "terminalConditions": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "trafficStatuses": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "urls": {
+                    "kind": "add",
+                    "inputDiff": false
+                }
+            }
+        },
+        {
+            "op": "update",
+            "urn": "urn:pulumi:dev::costfixture::costfixture:index:Api$aws:lambda/function:Function::handler",
+            "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::costfixture:index:Api$aws:lambda/function:Function::handler",
+                "custom": true,
+                "id": "handler-bf5b08c",
+                "type": "aws:lambda/function:Function",
+                "inputs": {
+                    "__defaults": [
+                        "name",
+                        "packageType",
+                        "reservedConcurrentExecutions"
+                    ],
+                    "architectures": [
+                        "arm64"
+                    ],
+                    "code": {
+                        "4dabf18193072939515e22adb298388d": "0def7320c3a5731c473e5ecbe6d01bc7",
+                        "hash": "450e8d7b1bbf5bfb4432bb64ca53d8e45884d4279ee403a35a2e5e200f0bba3d",
+                        "path": "handler"
+                    },
+                    "environment": {
+                        "__defaults": [],
+                        "variables": {
+                            "API_KEY": "[secret]",
+                            "STAGE": "dev"
+                        }
+                    },
+                    "handler": "index.handler",
+                    "memorySize": 512,
+                    "name": "handler-bf5b08c",
+                    "packageType": "Zip",
+                    "region": "eu-west-2",
+                    "reservedConcurrentExecutions": -1,
+                    "role": "arn:aws:iam::123456789012:role/fn-role-8f785a5",
+                    "runtime": "nodejs20.x",
+                    "tags": {
+                        "team": "payments"
+                    },
+                    "tagsAll": {
+                        "team": "payments"
+                    },
+                    "timeout": 30
+                },
+                "outputs": {
+                    "architectures": [
+                        "arm64"
+                    ],
+                    "arn": "arn:aws:lambda:eu-west-2:123456789012:function:handler-bf5b08c",
+                    "code": {
+                        "4dabf18193072939515e22adb298388d": "0def7320c3a5731c473e5ecbe6d01bc7",
+                        "hash": "450e8d7b1bbf5bfb4432bb64ca53d8e45884d4279ee403a35a2e5e200f0bba3d",
+                        "path": "handler"
+                    },
+                    "environment": {
+                        "variables": {
+                            "API_KEY": "[secret]",
+                            "STAGE": "dev"
+                        }
+                    },
+                    "ephemeralStorage": {
+                        "size": 512
+                    },
+                    "handler": "index.handler",
+                    "id": "handler-bf5b08c",
+                    "invokeArn": "arn:aws:apigateway:eu-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:eu-west-2:123456789012:function:handler-bf5b08c/invocations",
+                    "loggingConfig": {
+                        "logFormat": "Text",
+                        "logGroup": "/aws/lambda/handler-bf5b08c"
+                    },
+                    "memorySize": 512,
+                    "name": "handler-bf5b08c",
+                    "packageType": "Zip",
+                    "region": "eu-west-2",
+                    "reservedConcurrentExecutions": -1,
+                    "role": "arn:aws:iam::123456789012:role/fn-role-8f785a5",
+                    "runtime": "nodejs20.x",
+                    "tags": {
+                        "team": "payments"
+                    },
+                    "tagsAll": {
+                        "team": "payments"
+                    },
+                    "timeout": 30,
+                    "tracingConfig": {
+                        "mode": "PassThrough"
+                    },
+                    "version": "$LATEST"
+                },
+                "parent": "urn:pulumi:dev::costfixture::costfixture:index:Api::api",
+                "dependencies": [
+                    "urn:pulumi:dev::costfixture::aws:iam/role:Role::fn-role"
+                ],
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "architectures": [],
+                    "code": [],
+                    "environment": [],
+                    "handler": [],
+                    "memorySize": [],
+                    "role": [
+                        "urn:pulumi:dev::costfixture::aws:iam/role:Role::fn-role"
+                    ],
+                    "runtime": [],
+                    "tags": [],
+                    "timeout": []
+                },
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z"
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::costfixture:index:Api$aws:lambda/function:Function::handler",
+                "custom": true,
+                "type": "aws:lambda/function:Function",
+                "inputs": {
+                    "__defaults": [
+                        "name",
+                        "packageType",
+                        "reservedConcurrentExecutions"
+                    ],
+                    "architectures": [
+                        "arm64"
+                    ],
+                    "code": {
+                        "4dabf18193072939515e22adb298388d": "0def7320c3a5731c473e5ecbe6d01bc7",
+                        "hash": "450e8d7b1bbf5bfb4432bb64ca53d8e45884d4279ee403a35a2e5e200f0bba3d",
+                        "path": "handler"
+                    },
+                    "environment": {
+                        "__defaults": [],
+                        "variables": {
+                            "API_KEY": "[secret]",
+                            "STAGE": "dev"
+                        }
+                    },
+                    "handler": "index.handler",
+                    "memorySize": 1024,
+                    "name": "handler-bf5b08c",
+                    "packageType": "Zip",
+                    "region": "eu-west-2",
+                    "reservedConcurrentExecutions": -1,
+                    "role": "arn:aws:iam::123456789012:role/fn-role-8f785a5",
+                    "runtime": "nodejs20.x",
+                    "tags": {
+                        "team": "payments"
+                    },
+                    "tagsAll": {
+                        "team": "payments"
+                    },
+                    "timeout": 30
+                },
+                "parent": "urn:pulumi:dev::costfixture::costfixture:index:Api::api",
+                "dependencies": [
+                    "urn:pulumi:dev::costfixture::aws:iam/role:Role::fn-role"
+                ],
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "architectures": [],
+                    "code": [],
+                    "environment": [],
+                    "handler": [],
+                    "memorySize": [],
+                    "role": [
+                        "urn:pulumi:dev::costfixture::aws:iam/role:Role::fn-role"
+                    ],
+                    "runtime": [],
+                    "tags": [],
+                    "timeout": []
+                },
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#109",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#109"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "diffReasons": [
+                "loggingConfig",
+                "memorySize",
+                "publish",
+                "skipDestroy"
+            ],
+            "detailedDiff": {
+                "loggingConfig.applicationLogLevel": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "loggingConfig.systemLogLevel": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "memorySize": {
+                    "kind": "update",
+                    "inputDiff": false
+                },
+                "publish": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "skipDestroy": {
+                    "kind": "add",
+                    "inputDiff": false
+                }
+            }
+        },
+        {
+            "op": "replace",
+            "urn": "urn:pulumi:dev::costfixture::aws:rds/clusterInstance:ClusterInstance::db-1",
+            "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:rds/clusterInstance:ClusterInstance::db-1",
+                "custom": true,
+                "delete": true,
+                "id": "tf-20261028194305741900000002",
+                "type": "aws:rds/clusterInstance:ClusterInstance",
+                "inputs": {
+                    "__defaults": [
+                        "autoMinorVersionUpgrade"
+                    ],
+                    "autoMinorVersionUpgrade": true,
+                    "clusterIdentifier": "tf-20261028194305741900000001",
+                    "engine": "aurora-postgresql",
+                    "engineVersion": "16.4",
+                    "instanceClass": "db.serverless",
+                    "region": "eu-west-1",
+                    "tagsAll": {}
+                },
+                "outputs": {
+                    "arn": "arn:aws:rds:eu-west-1:123456789012:db:tf-20261028194305741900000002",
+                    "autoMinorVersionUpgrade": true,
+                    "availabilityZone": "eu-west-1a",
+                    "clusterIdentifier": "tf-20261028194305741900000001",
+                    "engine": "aurora-postgresql",
+                    "engineVersion": "16.4",
+                    "id": "tf-20261028194305741900000002",
+                    "identifier": "tf-20261028194305741900000002",
+                    "instanceClass": "db.serverless",
+                    "performanceInsightsEnabled": false,
+                    "region": "eu-west-1",
+                    "tagsAll": {}
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "dependencies": [
+                    "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db"
+                ],
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "clusterIdentifier": [
+                        "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db"
+                    ],
+                    "engine": [],
+                    "engineVersion": [
+                        "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db"
+                    ],
+                    "instanceClass": [],
+                    "region": []
+                },
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z"
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:rds/clusterInstance:ClusterInstance::db-1",
+                "custom": true,
+                "type": "aws:rds/clusterInstance:ClusterInstance",
+                "inputs": {
+                    "__defaults": [
+                        "autoMinorVersionUpgrade"
+                    ],
+                    "autoMinorVersionUpgrade": true,
+                    "clusterIdentifier": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "engine": "aurora-postgresql",
+                    "engineVersion": "16.4",
+                    "instanceClass": "db.serverless",
+                    "region": "eu-west-1",
+                    "tagsAll": {}
+                },
+                "outputs": {
+                    "__meta": "{\"_new_extra_shim\":{},\"e2bfb730-ecaa-11e6-8f88-34363bc7c4c0\":{\"create\":5400000000000,\"delete\":5400000000000,\"update\":5400000000000}}",
+                    "applyImmediately": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "arn": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "autoMinorVersionUpgrade": true,
+                    "availabilityZone": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "caCertIdentifier": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "clusterIdentifier": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "copyTagsToSnapshot": false,
+                    "customIamInstanceProfile": null,
+                    "dbParameterGroupName": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "dbSubnetGroupName": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "dbiResourceId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "endpoint": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "engine": "aurora-postgresql",
+                    "engineVersion": "16.4",
+                    "engineVersionActual": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "forceDestroy": false,
+                    "id": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "identifier": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "identifierPrefix": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "instanceClass": "db.serverless",
+                    "kmsKeyId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "monitoringInterval": 0,
+                    "monitoringRoleArn": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "networkType": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "performanceInsightsEnabled": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "performanceInsightsKmsKeyId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "performanceInsightsRetentionPeriod": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "port": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "preferredBackupWindow": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "preferredMaintenanceWindow": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "promotionTier": 0,
+                    "publiclyAccessible": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "region": "eu-west-1",
+                    "storageEncrypted": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "tags": null,
+                    "tagsAll": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                    "writer": "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "dependencies": [
+                    "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db"
+                ],
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "clusterIdentifier": [
+                        "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db"
+                    ],
+                    "engine": [],
+                    "engineVersion": [
+                        "urn:pulumi:dev::costfixture::aws:rds/cluster:Cluster::db"
+                    ],
+                    "instanceClass": [],
+                    "region": []
+                },
+                "created": "2026-10-28T20:54:12.493221686Z",
+                "modified": "2026-10-28T20:54:12.493221686Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#127",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#127"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "diffReasons": [
+                "clusterIdentifier",
+                "copyTagsToSnapshot",
+                "forceDestroy",
+                "monitoringInterval",
+                "promotionTier"
+            ],
+            "replaceReasons": [
+                "clusterIdentifier"
+            ],
+            "detailedDiff": {
+                "clusterIdentifier": {
+                    "kind": "update-replace",
+                    "inputDiff": false
+                },
+                "copyTagsToSnapshot": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "forceDestroy": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "monitoringInterval": {
+                    "kind": "add",
+                    "inputDiff": false
+                },
+                "promotionTier": {
+                    "kind": "add",
+                    "inputDiff": false
+                }
+            }
+        },
+        {
+            "op": "update",
+            "urn": "urn:pulumi:dev::costfixture::aws:ecs/service:Service::app",
+            "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:ecs/service:Service::app",
+                "custom": true,
+                "id": "arn:aws:ecs:eu-west-2:123456789012:service/cluster-229e8df/app-0d4919b",
+                "type": "aws:ecs/service:Service",
+                "inputs": {
+                    "__defaults": [
+                        "deploymentMaximumPercent",
+                        "deploymentMinimumHealthyPercent",
+                        "name",
+                        "schedulingStrategy"
+                    ],
+                    "cluster": "arn:aws:ecs:eu-west-2:123456789012:cluster/cluster-229e8df",
+                    "deploymentMaximumPercent": 200,
+                    "deploymentMinimumHealthyPercent": 100,
+                    "desiredCount": 2,
+                    "launchType": "FARGATE",
+                    "name": "app-0d4919b",
+                    "networkConfiguration": {
+                        "__defaults": [],
+                        "assignPublicIp": true,
+                        "subnets": [
+                            "subnet-0a1b2c3d4e5f60718"
+                        ]
+                    },
+                    "region": "eu-west-2",
+                    "schedulingStrategy": "REPLICA",
+                    "tagsAll": {},
+                    "taskDefinition": "arn:aws:ecs:eu-west-2:123456789012:task-definition/app:1"
+                },
+                "outputs": {
+                    "arn": "arn:aws:ecs:eu-west-2:123456789012:service/cluster-229e8df/app-0d4919b",
+                    "availabilityZoneRebalancing": "ENABLED",
+                    "cluster": "arn:aws:ecs:eu-west-2:123456789012:cluster/cluster-229e8df",
+                    "deploymentMaximumPercent": 200,
+                    "deploymentMinimumHealthyPercent": 100,
+                    "desiredCount": 2,
+                    "enableEcsManagedTags": false,
+                    "enableExecuteCommand": false,
+                    "iamRole": "/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+                    "id": "arn:aws:ecs:eu-west-2:123456789012:service/cluster-229e8df/app-0d4919b",
+                    "launchType": "FARGATE",
+                    "name": "app-0d4919b",
+                    "networkConfiguration": {
+                        "assignPublicIp": true,
+                        "securityGroups": [],
+                        "subnets": [
+                            "subnet-0a1b2c3d4e5f60718"
+                        ]
+                    },
+                    "platformVersion": "LATEST",
+                    "region": "eu-west-2",
+                    "schedulingStrategy": "REPLICA",
+                    "tagsAll": {},
+                    "taskDefinition": "arn:aws:ecs:eu-west-2:123456789012:task-definition/app:1",
+                    "triggers": {},
+                    "waitForSteadyState": false
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "dependencies": [
+                    "urn:pulumi:dev::costfixture::aws:ecs/cluster:Cluster::cluster",
+                    "urn:pulumi:dev::costfixture::aws:ecs/taskDefinition:TaskDefinition::app"
+                ],
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "cluster": [
+                        "urn:pulumi:dev::costfixture::aws:ecs/cluster:Cluster::cluster"
+                    ],
+                    "desiredCount": [],
+                    "launchType": [],
+                    "networkConfiguration": [],
+                    "taskDefinition": [
+                        "urn:pulumi:dev::costfixture::aws:ecs/taskDefinition:TaskDefinition::app"
+                    ]
+                },
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z"
+            },
+            "newState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:ecs/service:Service::app",
+                "custom": true,
+                "type": "aws:ecs/service:Service",
+                "inputs": {
+                    "__defaults": [
+                        "deploymentMaximumPercent",
+                        "deploymentMinimumHealthyPercent",
+                        "name",
+                        "schedulingStrategy"
+                    ],
+                    "cluster": "arn:aws:ecs:eu-west-2:123456789012:cluster/cluster-229e8df",
+                    "deploymentMaximumPercent": 200,
+                    "deploymentMinimumHealthyPercent": 100,
+                    "desiredCount": 2,
+                    "launchType": "FARGATE",
+                    "name": "app-0d4919b",
+                    "networkConfiguration": {
+                        "__defaults": [],
+                        "assignPublicIp": true,
+                        "subnets": [
+                            "subnet-0a1b2c3d4e5f60718"
+                        ]
+                    },
+                    "region": "eu-west-2",
+                    "schedulingStrategy": "REPLICA",
+                    "tagsAll": {},
+                    "taskDefinition": "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "dependencies": [
+                    "urn:pulumi:dev::costfixture::aws:ecs/cluster:Cluster::cluster",
+                    "urn:pulumi:dev::costfixture::aws:ecs/taskDefinition:TaskDefinition::app"
+                ],
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::default_7_36_0::f28b81b3-6b42-46c3-9744-5888fe40b8fa",
+                "propertyDependencies": {
+                    "cluster": [
+                        "urn:pulumi:dev::costfixture::aws:ecs/cluster:Cluster::cluster"
+                    ],
+                    "desiredCount": [],
+                    "launchType": [],
+                    "networkConfiguration": [],
+                    "taskDefinition": [
+                        "urn:pulumi:dev::costfixture::aws:ecs/taskDefinition:TaskDefinition::app"
+                    ]
+                },
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z",
+                "sourcePosition": "project:///../../../costfixture/main.go#168",
+                "stackTrace": [
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#168"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#144"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#104"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../github.com/pulumi/pulumi/sdk/v3@v3.259.0/go/pulumi/run.go#53"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../costfixture/main.go#25"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/proc.go#302"
+                    },
+                    {
+                        "sourcePosition": "project:///../../../runtime/asm_amd64.s#1264"
+                    }
+                ]
+            },
+            "diffReasons": [
+                "taskDefinition"
+            ],
+            "detailedDiff": {
+                "taskDefinition": {
+                    "kind": "update",
+                    "inputDiff": false
+                }
+            }
+        },
+        {
+            "op": "delete",
+            "urn": "urn:pulumi:dev::costfixture::aws:s3/bucket:Bucket::assets",
+            "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::virginia::339a5c19-79cc-437e-8b99-887578a3efb3",
+            "oldState": {
+                "urn": "urn:pulumi:dev::costfixture::aws:s3/bucket:Bucket::assets",
+                "custom": true,
+                "id": "assets-320c4bb",
+                "type": "aws:s3/bucket:Bucket",
+                "inputs": {
+                    "__defaults": [
+                        "bucket"
+                    ],
+                    "bucket": "assets-320c4bb",
+                    "region": "us-east-1",
+                    "tags": {
+                        "team": "web"
+                    },
+                    "tagsAll": {
+                        "team": "web"
+                    }
+                },
+                "outputs": {
+                    "arn": "arn:aws:s3:::assets-320c4bb",
+                    "bucket": "assets-320c4bb",
+                    "bucketDomainName": "assets-320c4bb.s3.amazonaws.com",
+                    "bucketRegion": "us-east-1",
+                    "forceDestroy": false,
+                    "id": "assets-320c4bb",
+                    "region": "us-east-1",
+                    "tags": {
+                        "team": "web"
+                    },
+                    "tagsAll": {
+                        "team": "web"
+                    }
+                },
+                "parent": "urn:pulumi:dev::costfixture::pulumi:pulumi:Stack::costfixture-dev",
+                "provider": "urn:pulumi:dev::costfixture::pulumi:providers:aws::virginia::339a5c19-79cc-437e-8b99-887578a3efb3",
+                "propertyDependencies": {
+                    "tags": []
+                },
+                "created": "2026-10-28T20:53:06.817227055Z",
+                "modified": "2026-10-28T20:53:06.817227055Z"
+            },
+            "detailedDiff": null
+        }
+    ],
+    "duration": 5841122735,
+    "changeSummary": {
+        "create": 1,
+        "delete": 1,
+        "replace": 3,
+        "same": 5,
+        "update": 4
+    }
+}

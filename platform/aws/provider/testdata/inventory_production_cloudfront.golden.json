@@ -1,0 +1,564 @@
+{
+  "source": "ocel",
+  "scopes": [
+    {
+      "id": "project:shop",
+      "kind": "project",
+      "name": "shop"
+    },
+    {
+      "id": "project:shop/shared:production",
+      "parent": "project:shop",
+      "kind": "shared",
+      "name": "production"
+    },
+    {
+      "id": "project:shop/environment:prod",
+      "parent": "project:shop",
+      "kind": "environment",
+      "name": "prod"
+    },
+    {
+      "id": "project:shop/environment:prod/app:web",
+      "parent": "project:shop/environment:prod",
+      "kind": "app",
+      "name": "web"
+    },
+    {
+      "id": "project:shop/environment:prod/app:api",
+      "parent": "project:shop/environment:prod",
+      "kind": "app",
+      "name": "api"
+    }
+  ],
+  "resources": [
+    {
+      "id": "project:shop/shared:production/aws_s3_bucket:StateBucket",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "StateBucket",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_dynamodb_table:StateTable",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_dynamodb_table",
+      "name": "StateTable",
+      "region": "us-east-1",
+      "properties": {
+        "billing_mode": "PAY_PER_REQUEST",
+        "stream_enabled": true
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_s3_bucket:ArtifactBucket",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "ArtifactBucket",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_s3_bucket:EdgeBucket",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "EdgeBucket",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_s3_bucket:CacheBucket",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "CacheBucket",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_dynamodb_table:VariablesTable",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_dynamodb_table",
+      "name": "VariablesTable",
+      "region": "us-east-1",
+      "properties": {
+        "billing_mode": "PAY_PER_REQUEST",
+        "stream_enabled": false
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_layer_version:RuntimeLayerX8664",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_layer_version",
+      "name": "RuntimeLayerX8664",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_layer_version:RuntimeLayerArm64",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_layer_version",
+      "name": "RuntimeLayerArm64",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_kms_key:VariablesKey",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_kms_key",
+      "name": "VariablesKey",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_function:ocel-prod-env-sync",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "ocel-prod-env-sync",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "memory_size": 128,
+        "runtime": "provided.al2023",
+        "timeout": 60
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-prod-env-sync",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "/aws/lambda/ocel-prod-env-sync",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudfront_key_value_store:ocel-prod-routes",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudfront_key_value_store",
+      "name": "ocel-prod-routes",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudfront_function:ocel-prod-resolver",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudfront_function",
+      "name": "ocel-prod-resolver",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudfront_function:ocel-prod-empty-body",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudfront_function",
+      "name": "ocel-prod-empty-body",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_function:ocel-prod-optimizer",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "ocel-prod-optimizer",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "memory_size": 1769,
+        "runtime": "nodejs24.x",
+        "timeout": 20
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_function_url:ocel-prod-optimizer-url",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_function_url",
+      "name": "ocel-prod-optimizer-url",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-prod-optimizer",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "/aws/lambda/ocel-prod-optimizer",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_sqs_queue:ocel-prod-invalidator",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_sqs_queue",
+      "name": "ocel-prod-invalidator",
+      "region": "us-east-1",
+      "properties": {
+        "fifo_queue": false
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_function:ocel-prod-invalidator",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "ocel-prod-invalidator",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "memory_size": 512,
+        "runtime": "nodejs24.x",
+        "timeout": 60
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_event_source_mapping:ocel-prod-invalidator-stream",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_event_source_mapping",
+      "name": "ocel-prod-invalidator-stream",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:/aws/lambda/ocel-prod-invalidator",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "/aws/lambda/ocel-prod-invalidator",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/aws_rds_cluster:main",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_rds_cluster",
+      "name": "main",
+      "region": "us-east-1",
+      "properties": {
+        "engine": "aurora-postgresql",
+        "engine_mode": "provisioned",
+        "engine_version": "16.4",
+        "manage_master_user_password": true,
+        "serverlessv2_scaling_configuration": {
+          "max_capacity": 8,
+          "min_capacity": 0.5
+        }
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/aws_rds_cluster_instance:main",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_rds_cluster_instance",
+      "name": "main",
+      "region": "us-east-1",
+      "properties": {
+        "engine": "aurora-postgresql",
+        "instance_class": "db.serverless"
+      },
+      "references": {
+        "cluster_identifier": "project:shop/environment:prod/aws_rds_cluster:main"
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/aws_secretsmanager_secret:main",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_secretsmanager_secret",
+      "name": "main",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/environment:prod/aws_s3_bucket:uploads",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "uploads",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/environment:prod/aws_lambda_function:uploads-completer",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "uploads-completer",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "x86_64"
+        ],
+        "ephemeral_storage": {
+          "size": 512
+        },
+        "memory_size": 128,
+        "runtime": "provided.al2023",
+        "timeout": 30
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/aws_cloudwatch_log_group:uploads-completer",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "uploads-completer",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/app:web/aws_lambda_function:fn--web--entry",
+      "scope": "project:shop/environment:prod/app:web",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "fn--web--entry",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "ephemeral_storage": {
+          "size": 512
+        },
+        "memory_size": 1769,
+        "runtime": "nodejs24.x",
+        "timeout": 60
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/app:web/aws_cloudwatch_log_group:fn--web--entry",
+      "scope": "project:shop/environment:prod/app:web",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "fn--web--entry",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/app:web/aws_lambda_function_url:fn--web--entry",
+      "scope": "project:shop/environment:prod/app:web",
+      "vendor": "aws",
+      "type": "aws_lambda_function_url",
+      "name": "fn--web--entry",
+      "region": "us-east-1",
+      "properties": {
+        "invoke_mode": "RESPONSE_STREAM"
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/app:api/aws_ecs_task_definition:api",
+      "scope": "project:shop/environment:prod/app:api",
+      "vendor": "aws",
+      "type": "aws_ecs_task_definition",
+      "name": "api",
+      "region": "us-east-1",
+      "properties": {
+        "cpu": "512",
+        "memory": "1024",
+        "requires_compatibilities": [
+          "FARGATE"
+        ],
+        "runtime_platform": {
+          "cpu_architecture": "X86_64",
+          "operating_system_family": "LINUX"
+        }
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/app:api/aws_ecs_service:api",
+      "scope": "project:shop/environment:prod/app:api",
+      "vendor": "aws",
+      "type": "aws_ecs_service",
+      "name": "api",
+      "region": "us-east-1",
+      "properties": {
+        "desired_count": 1,
+        "launch_type": "FARGATE"
+      },
+      "references": {
+        "task_definition": "project:shop/environment:prod/app:api/aws_ecs_task_definition:api"
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/app:api/aws_ecr_repository:api",
+      "scope": "project:shop/environment:prod/app:api",
+      "vendor": "aws",
+      "type": "aws_ecr_repository",
+      "name": "api",
+      "region": "us-east-1",
+      "properties": {
+        "image_tag_mutability": "IMMUTABLE"
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_ecs_cluster:ocel-containers",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_ecs_cluster",
+      "name": "ocel-containers",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_lb:ocel-containers",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lb",
+      "name": "ocel-containers",
+      "region": "us-east-1",
+      "properties": {
+        "internal": true,
+        "load_balancer_type": "application"
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:ocel-containers",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "ocel-containers",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_vpc:ocel-network-production",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_vpc",
+      "name": "ocel-network-production",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_internet_gateway:ocel-network-production",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_internet_gateway",
+      "name": "ocel-network-production",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-public-1",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-public-1",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-public-2",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-public-2",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-private-1",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-private-1",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-private-2",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-private-2",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-isolated-1",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-isolated-1",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_subnet:ocel-network-production-isolated-2",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "ocel-network-production-isolated-2",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_vpc_endpoint:ocel-network-production-s3",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_vpc_endpoint",
+      "name": "ocel-network-production-s3",
+      "region": "us-east-1",
+      "properties": {
+        "vpc_endpoint_type": "Gateway"
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_vpc_endpoint:ocel-network-production-dynamodb",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_vpc_endpoint",
+      "name": "ocel-network-production-dynamodb",
+      "region": "us-east-1",
+      "properties": {
+        "vpc_endpoint_type": "Gateway"
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/aws_cloudfront_distribution:shop",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_cloudfront_distribution",
+      "name": "shop",
+      "region": "us-east-1",
+      "properties": {
+        "price_class": "PriceClass_All"
+      }
+    }
+  ]
+}

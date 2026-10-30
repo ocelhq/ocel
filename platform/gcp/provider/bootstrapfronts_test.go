@@ -606,8 +606,8 @@ func TestTheCloudflareOriginPartHoldsNoLoadBalancerAndOnlyTheCloudflareEdgePulls
 	read := surveyed(bootstrap.CloudflareOriginPart)
 	stack := provider.BootstrapStack{Name: read.Project + "/" + string(read.Tier) + "/" + bootstrap.CloudflareOriginPart, Part: bootstrap.CloudflareOriginPart, Present: true}
 	for _, part := range bootstrap.SurveyedParts(b, read, []provider.BootstrapStack{stack}) {
-		if part.Name == bootstrap.CloudflareOriginPart && part.Shape != nil {
-			t.Errorf("the described %q part is shaped as %+v, want no priced load balancer", bootstrap.CloudflareOriginPart, part.Shape)
+		if part.Name == bootstrap.CloudflareOriginPart && part.Inventory != nil {
+			t.Errorf("the described %q part is listed as %+v, want no load balancer", bootstrap.CloudflareOriginPart, part.Inventory)
 		}
 	}
 }

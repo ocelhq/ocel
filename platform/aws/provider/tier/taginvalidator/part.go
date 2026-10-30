@@ -15,9 +15,9 @@ import (
 
 func NewPart(records tier.Records, c Clients, namespace string, specFor func(context.Context, environment.Tier) (Spec, error)) tier.Part {
 	return tier.Recorded(records, tier.RecordedSpec{
-		Name:    Part,
-		Summary: Summary,
-		Shape:   func(tier environment.Tier) []pricing.Shaped { return Shape(namespace, tier) },
+		Name:      Part,
+		Summary:   Summary,
+		Inventory: func(tier environment.Tier) []pricing.Item { return Inventory(namespace, tier) },
 		Work: func(ctx context.Context, tier environment.Tier) (work tier.Work, err error) {
 			spec, err := specFor(ctx, tier)
 			if err != nil {

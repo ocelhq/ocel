@@ -20,6 +20,7 @@ use (
 	./platform/vps/box
 	./platform/vps/provider
 	./scripts/flocidispatch
+	./scripts/pricingbridge
 	./scripts/redactvet
 	./sdk
 	./tests/fixtures/deploy/go/server
