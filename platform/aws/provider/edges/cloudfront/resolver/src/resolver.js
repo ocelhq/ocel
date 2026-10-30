@@ -24,6 +24,7 @@ var CONTROL_HEADERS = [
 ];
 var ORIGIN_READ_TIMEOUT_SECONDS = 60;
 var SHIELDED_METHODS = ['GET', 'HEAD'];
+var UNDECODABLE_ESCAPE = /%(?![0-9a-fA-F]{2})/g;
 
 function isUnderAnyPrefix(uri, prefixes) {
   if (!prefixes) return false;
@@ -91,6 +92,13 @@ function assetOriginPath(prefix) {
   return path === '' ? '' : '/' + path;
 }
 
+function escapedQuery(request) {
+  var query = request.rawQueryString();
+  if (query === undefined) return null;
+  var escaped = query.replace(UNDECODABLE_ESCAPE, '%25');
+  return escaped === query ? null : escaped;
+}
+
 function originShieldFor(route, method) {
   if (route.shieldRegion && SHIELDED_METHODS.indexOf(method) >= 0) {
     return { enabled: true, region: route.shieldRegion };
@@ -151,6 +159,8 @@ async function handler(event) {
   stripClientControl(request.headers);
   var refused = await enforceGate(request, route, host);
   if (refused) return refused;
+  var query = escapedQuery(request);
+  if (query !== null) request.querystring = query;
   request.headers[FORWARDED_HOST_HEADER] = { value: host };
   request.headers[CACHE_KEY_HEADER] = {
     value: cacheKey(host, route.release, request.uri, request.headers, request.cookies),
@@ -180,6 +190,9 @@ async function handler(event) {
     return request;
   }
 
+  if (event.viewer && event.viewer.ip) {
+    request.headers[CLIENT_ADDRESS_HEADER] = { value: event.viewer.ip };
+  }
   var originHeaders = {};
   originHeaders[ORIGIN_SECRET_HEADER] = route.secret;
   cf.updateRequestOrigin({

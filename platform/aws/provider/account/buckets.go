@@ -172,20 +172,33 @@ func edgeBucketPolicyResource() cfn.Resource {
 		ID:   "EdgeBucketPolicy",
 		Type: "AWS::S3::BucketPolicy",
 		Metadata: cfn.Metadata{
-			Description: "The only bucket policy Ocel writes: CloudFront distributions in this account, and no one else, read the static assets in the edge bucket over an origin access control. One statement for the whole account, so no deploy rewrites it.",
+			Description: "The only bucket policy Ocel writes: CloudFront distributions in this account, and no one else, read the edge bucket's static assets, and list it so a missing asset is a 404. Written once for the account, so no deploy rewrites it.",
 		},
 		Properties: map[string]any{
 			"Bucket": cfn.Ref("EdgeBucket"),
-			"PolicyDocument": iam.Document([]iam.Statement{{
-				Sid:            "AllowCloudFrontOriginAccessControlRead",
-				Principal:      iam.Principal{Service: iam.CloudFrontPrincipal},
-				Actions:        []string{"s3:GetObject"},
-				ResourceValues: []any{cfn.Sub("${EdgeBucket.Arn}/" + string(naming.ObjectAssets) + "/*")},
-				Condition: map[string]any{
-					"StringEquals": map[string]any{"AWS:SourceAccount": cfn.Ref("AWS::AccountId")},
+			"PolicyDocument": iam.Document([]iam.Statement{
+				{
+					Sid:            "AllowCloudFrontOriginAccessControlRead",
+					Principal:      iam.Principal{Service: iam.CloudFrontPrincipal},
+					Actions:        []string{"s3:GetObject"},
+					ResourceValues: []any{cfn.Sub("${EdgeBucket.Arn}/" + string(naming.ObjectAssets) + "/*")},
+					Condition:      cloudFrontInThisAccount(),
 				},
-			}}),
+				{
+					Sid:            "AllowCloudFrontOriginAccessControlList",
+					Principal:      iam.Principal{Service: iam.CloudFrontPrincipal},
+					Actions:        []string{"s3:ListBucket"},
+					ResourceValues: []any{cfn.Sub("${EdgeBucket.Arn}")},
+					Condition:      cloudFrontInThisAccount(),
+				},
+			}),
 		},
+	}
+}
+
+func cloudFrontInThisAccount() map[string]any {
+	return map[string]any{
+		"StringEquals": map[string]any{"AWS:SourceAccount": cfn.Ref("AWS::AccountId")},
 	}
 }
 

@@ -63,7 +63,16 @@ function request(uri, headers = {}, cookies = {}) {
   for (const [name, value] of Object.entries(headers)) wire[name] = { value };
   const jar = {};
   for (const [name, value] of Object.entries(cookies)) jar[name] = { value };
-  return { request: { method: "GET", uri, querystring: {}, headers: wire, cookies: jar } };
+  return {
+    request: {
+      method: "GET",
+      uri,
+      rawQueryString: () => undefined,
+      querystring: {},
+      headers: wire,
+      cookies: jar,
+    },
+  };
 }
 
 async function resolve(event, entries = { "shop.example.com": ROUTE }, options) {
@@ -300,6 +309,50 @@ describe("the resolver", () => {
   });
 });
 
+describe("the query the resolver hands on", () => {
+  function withQuery(raw, parsed) {
+    const event = request("/api/probes/echo");
+    for (const [name, value] of Object.entries(parsed)) {
+      event.request.querystring[name] = { value };
+    }
+    event.request.rawQueryString = () => raw;
+    return event;
+  }
+
+  it("escapes every % no two hex digits follow, in the order the viewer sent, so a function URL decodes the query rather than refusing it", async () => {
+    const event = withQuery("a=%%URL%%&b=%zz&c=100%", { b: "%zz", a: "%%URL%%", c: "100%" });
+
+    const { answered } = await resolve(event);
+
+    expect(answered.querystring).toBe("a=%25%25URL%25%25&b=%25zz&c=100%25");
+  });
+
+  it("keeps every value of a repeated name", async () => {
+    const { answered } = await resolve(withQuery("a=%zz&a=%41", { a: "%zz" }));
+
+    expect(answered.querystring).toBe("a=%25zz&a=%41");
+  });
+
+  it("leaves a query every escape of which decodes exactly as the viewer sent it", async () => {
+    const event = withQuery("a=caf%C3%A9&b=100%25", { a: "caf%C3%A9", b: "100%25" });
+    const sent = event.request.querystring;
+
+    const { answered } = await resolve(event);
+
+    expect(answered.querystring).toBe(sent);
+  });
+
+  it("leaves a request with no query untouched", async () => {
+    const event = request("/api/probes/echo");
+    event.request.rawQueryString = () => undefined;
+    const sent = event.request.querystring;
+
+    const { answered } = await resolve(event);
+
+    expect(answered.querystring).toBe(sent);
+  });
+});
+
 describe("the headers a viewer cannot forge past the resolver", () => {
   it("never lets a viewer's own origin secret reach the origin", async () => {
     const { answered, origins } = await resolve(
@@ -332,6 +385,26 @@ describe("the headers a viewer cannot forge past the resolver", () => {
     ]) {
       expect(answered.headers[name]).toBeUndefined();
     }
+  });
+
+  it("hands the entry function the address the viewer connected from, never the one it sent", async () => {
+    const event = request("/blog", { "x-ocel-client-address": "6.6.6.6" });
+    event.viewer = { ip: "198.51.100.7" };
+
+    const { answered } = await resolve(event);
+
+    expect(answered.headers["x-ocel-client-address"].value).toBe("198.51.100.7");
+  });
+
+  it("hands a container no client address, since only the entry function consumes one", async () => {
+    const event = request("/blog");
+    event.viewer = { ip: "198.51.100.7" };
+
+    const { answered } = await resolve(event, {
+      "shop.example.com": { ...ROUTE, container: "shop-prod-web-container-r3f8a1c90", assets: "" },
+    });
+
+    expect(answered.headers["x-ocel-client-address"]).toBeUndefined();
   });
 
   it("passes a viewer's own x-ocel- header the origin has no meaning for through untouched", async () => {
