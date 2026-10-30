@@ -547,6 +547,7 @@ func functionRecord(app, release string) router.ReleaseRecord {
 	physical := "conformance-prod-" + app + "-r0a1b2c3d"
 	return router.ReleaseRecord{
 		App:                  app,
+		Environment:          "prod",
 		Release:              release,
 		RootFunction:         "/",
 		RootFunctionPhysical: physical,

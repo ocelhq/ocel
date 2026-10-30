@@ -106,3 +106,10 @@ func sealGates(ctx context.Context, cipher seal.Cipher, tier environment.Tier, r
 	}
 	return value, nil
 }
+
+func OwnerOfAssociatedData(bound seal.AssociatedData) (records.Owner, bool) {
+	if bound.Purpose() == GatesAssociatedData.Purpose() {
+		return records.Owner{Shared: true}, true
+	}
+	return records.Owner{}, false
+}

@@ -4,6 +4,7 @@ import type { Static } from "./hosting.mjs";
 
 export interface ReleaseRecord {
   app: string;
+  environment?: string;
   framework: string;
   release: string;
   buildId: string;

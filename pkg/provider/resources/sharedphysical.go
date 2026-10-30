@@ -484,3 +484,10 @@ func RecordUnrecordedHolders(ctx context.Context, store records.Store, tier envi
 	}
 	return names, nil
 }
+
+func OwnerOf(key records.Key) (records.Owner, bool) {
+	if key.Partition.Root != RootSharedPhysicals || len(key.Partition.Path) != 1 || len(key.Path) != 1 {
+		return records.Owner{}, false
+	}
+	return records.Owner{Project: key.Partition.Path[0]}, true
+}
