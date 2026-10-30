@@ -17,35 +17,35 @@ import (
 )
 
 type connectorService struct {
-	consolev1connect.UnimplementedConnectorServiceHandler
-	upsert     func(*consolev1.UpsertConnectorRequest) (*consolev1.UpsertConnectorResponse, error)
-	list       func() (*consolev1.ListConnectorsResponse, error)
-	remove     func(*consolev1.RemoveConnectorRequest) (*consolev1.RemoveConnectorResponse, error)
-	setAddress func(*consolev1.SetConnectorAddressRequest) (*consolev1.SetConnectorAddressResponse, error)
+	consolev1connect.UnimplementedEndpointServiceHandler
+	upsert     func(*consolev1.UpsertEndpointRequest) (*consolev1.UpsertEndpointResponse, error)
+	list       func() (*consolev1.ListEndpointsResponse, error)
+	remove     func(*consolev1.RemoveEndpointRequest) (*consolev1.RemoveEndpointResponse, error)
+	setAddress func(*consolev1.SetEndpointAddressRequest) (*consolev1.SetEndpointAddressResponse, error)
 	headers    http.Header
 	procedure  string
 }
 
-func (s *connectorService) Upsert(_ context.Context, req *consolev1.UpsertConnectorRequest) (*consolev1.UpsertConnectorResponse, error) {
+func (s *connectorService) Upsert(_ context.Context, req *consolev1.UpsertEndpointRequest) (*consolev1.UpsertEndpointResponse, error) {
 	return s.upsert(req)
 }
 
-func (s *connectorService) List(context.Context, *consolev1.ListConnectorsRequest) (*consolev1.ListConnectorsResponse, error) {
+func (s *connectorService) List(context.Context, *consolev1.ListEndpointsRequest) (*consolev1.ListEndpointsResponse, error) {
 	return s.list()
 }
 
-func (s *connectorService) Remove(_ context.Context, req *consolev1.RemoveConnectorRequest) (*consolev1.RemoveConnectorResponse, error) {
+func (s *connectorService) Remove(_ context.Context, req *consolev1.RemoveEndpointRequest) (*consolev1.RemoveEndpointResponse, error) {
 	return s.remove(req)
 }
 
-func (s *connectorService) SetAddress(_ context.Context, req *consolev1.SetConnectorAddressRequest) (*consolev1.SetConnectorAddressResponse, error) {
+func (s *connectorService) SetAddress(_ context.Context, req *consolev1.SetEndpointAddressRequest) (*consolev1.SetEndpointAddressResponse, error) {
 	return s.setAddress(req)
 }
 
 func serveConnectors(t *testing.T, service *connectorService) *Client {
 	t.Helper()
 	mux := http.NewServeMux()
-	path, handler := consolev1connect.NewConnectorServiceHandler(service)
+	path, handler := consolev1connect.NewEndpointServiceHandler(service)
 	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		service.headers = r.Header.Clone()
 		service.procedure = r.URL.Path
@@ -59,23 +59,23 @@ func serveConnectors(t *testing.T, service *connectorService) *Client {
 func TestUpsertConnectorRegistersTheTargetAsADialConnectorUnderTheSession(t *testing.T) {
 	t.Parallel()
 
-	var got *consolev1.UpsertConnectorRequest
-	service := &connectorService{upsert: func(req *consolev1.UpsertConnectorRequest) (*consolev1.UpsertConnectorResponse, error) {
+	var got *consolev1.UpsertEndpointRequest
+	service := &connectorService{upsert: func(req *consolev1.UpsertEndpointRequest) (*consolev1.UpsertEndpointResponse, error) {
 		got = req
-		return &consolev1.UpsertConnectorResponse{Connector: &consolev1.Connector{Id: "con_1", Target: req.GetTarget()}}, nil
+		return &consolev1.UpsertEndpointResponse{Endpoint: &consolev1.Endpoint{Id: "con_1", Target: req.GetTarget()}}, nil
 	}}
 
-	registered, err := serveConnectors(t, service).UpsertConnector(context.Background(), "tok", "vps/sha256:abc/ocel", "vps")
+	registered, err := serveConnectors(t, service).UpsertConnector(context.Background(), "tok", "staging-box", "vps/sha256:abc/ocel", "vps")
 	if err != nil {
 		t.Fatalf("UpsertConnector err = %v", err)
 	}
-	if service.procedure != consolev1connect.ConnectorServiceUpsertProcedure {
-		t.Errorf("procedure = %s, want %s", service.procedure, consolev1connect.ConnectorServiceUpsertProcedure)
+	if service.procedure != consolev1connect.EndpointServiceUpsertProcedure {
+		t.Errorf("procedure = %s, want %s", service.procedure, consolev1connect.EndpointServiceUpsertProcedure)
 	}
 	if gotAuth := service.headers.Get("Authorization"); gotAuth != "Bearer tok" {
 		t.Errorf("Authorization = %q, want %q", gotAuth, "Bearer tok")
 	}
-	want := &consolev1.UpsertConnectorRequest{Target: "vps/sha256:abc/ocel", Vendor: "vps", Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL}
+	want := &consolev1.UpsertEndpointRequest{Name: "staging-box", Target: "vps/sha256:abc/ocel", Vendor: "vps", Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL}
 	if !proto.Equal(got, want) {
 		t.Errorf("request = %v, want %v", got, want)
 	}
@@ -87,12 +87,12 @@ func TestUpsertConnectorRegistersTheTargetAsADialConnectorUnderTheSession(t *tes
 func TestListConnectorsReturnsEveryConnectorAndFindConnectorPicksOneByTarget(t *testing.T) {
 	t.Parallel()
 
-	listed := []*consolev1.Connector{
+	listed := []*consolev1.Endpoint{
 		{Id: "con_1", Target: "vps/sha256:aaaa/ocel"},
 		{Id: "con_2", Target: "vps/sha256:bbbb/ocel"},
 	}
-	service := &connectorService{list: func() (*consolev1.ListConnectorsResponse, error) {
-		return &consolev1.ListConnectorsResponse{Connectors: listed}, nil
+	service := &connectorService{list: func() (*consolev1.ListEndpointsResponse, error) {
+		return &consolev1.ListEndpointsResponse{Endpoints: listed}, nil
 	}}
 	client := serveConnectors(t, service)
 
@@ -100,8 +100,8 @@ func TestListConnectorsReturnsEveryConnectorAndFindConnectorPicksOneByTarget(t *
 	if err != nil {
 		t.Fatalf("ListConnectors err = %v", err)
 	}
-	if service.procedure != consolev1connect.ConnectorServiceListProcedure {
-		t.Errorf("procedure = %s, want %s", service.procedure, consolev1connect.ConnectorServiceListProcedure)
+	if service.procedure != consolev1connect.EndpointServiceListProcedure {
+		t.Errorf("procedure = %s, want %s", service.procedure, consolev1connect.EndpointServiceListProcedure)
 	}
 	if len(connectors) != 2 || connectors[1].GetId() != "con_2" {
 		t.Fatalf("connectors = %v, want the two listed", connectors)
@@ -123,10 +123,10 @@ func TestSetConnectorAddressSendsOnlyThePartsOfTheAddressTheCallerNamed(t *testi
 	t.Run("sends the id and only the parts of the address the caller named", func(t *testing.T) {
 		t.Parallel()
 
-		var got *consolev1.SetConnectorAddressRequest
-		service := &connectorService{setAddress: func(req *consolev1.SetConnectorAddressRequest) (*consolev1.SetConnectorAddressResponse, error) {
+		var got *consolev1.SetEndpointAddressRequest
+		service := &connectorService{setAddress: func(req *consolev1.SetEndpointAddressRequest) (*consolev1.SetEndpointAddressResponse, error) {
 			got = req
-			return &consolev1.SetConnectorAddressResponse{Connector: &consolev1.Connector{Id: req.GetId()}}, nil
+			return &consolev1.SetEndpointAddressResponse{Endpoint: &consolev1.Endpoint{Id: req.GetId()}}, nil
 		}}
 
 		_, err := serveConnectors(t, service).SetConnectorAddress(context.Background(), "tok", "con_1", ConnectorAddress{
@@ -135,10 +135,10 @@ func TestSetConnectorAddressSendsOnlyThePartsOfTheAddressTheCallerNamed(t *testi
 		if err != nil {
 			t.Fatalf("SetConnectorAddress err = %v", err)
 		}
-		if service.procedure != consolev1connect.ConnectorServiceSetAddressProcedure {
-			t.Errorf("procedure = %s, want %s", service.procedure, consolev1connect.ConnectorServiceSetAddressProcedure)
+		if service.procedure != consolev1connect.EndpointServiceSetAddressProcedure {
+			t.Errorf("procedure = %s, want %s", service.procedure, consolev1connect.EndpointServiceSetAddressProcedure)
 		}
-		want := &consolev1.SetConnectorAddressRequest{Id: "con_1", Url: "https://connector.example.test"}
+		want := &consolev1.SetEndpointAddressRequest{Id: "con_1", Url: "https://connector.example.test"}
 		if !proto.Equal(got, want) {
 			t.Errorf("request = %v, want %v", got, want)
 		}
@@ -147,10 +147,10 @@ func TestSetConnectorAddressSendsOnlyThePartsOfTheAddressTheCallerNamed(t *testi
 	t.Run("sends the public key and the compute when the caller names them", func(t *testing.T) {
 		t.Parallel()
 
-		var got *consolev1.SetConnectorAddressRequest
-		service := &connectorService{setAddress: func(req *consolev1.SetConnectorAddressRequest) (*consolev1.SetConnectorAddressResponse, error) {
+		var got *consolev1.SetEndpointAddressRequest
+		service := &connectorService{setAddress: func(req *consolev1.SetEndpointAddressRequest) (*consolev1.SetEndpointAddressResponse, error) {
 			got = req
-			return &consolev1.SetConnectorAddressResponse{Connector: &consolev1.Connector{Id: req.GetId()}}, nil
+			return &consolev1.SetEndpointAddressResponse{Endpoint: &consolev1.Endpoint{Id: req.GetId()}}, nil
 		}}
 
 		_, err := serveConnectors(t, service).SetConnectorAddress(context.Background(), "tok", "con_1", ConnectorAddress{
@@ -159,7 +159,7 @@ func TestSetConnectorAddressSendsOnlyThePartsOfTheAddressTheCallerNamed(t *testi
 		if err != nil {
 			t.Fatalf("SetConnectorAddress err = %v", err)
 		}
-		want := &consolev1.SetConnectorAddressRequest{
+		want := &consolev1.SetEndpointAddressRequest{
 			Id: "con_1", Url: "https://connector.example.test", PublicKey: proto.String("key"),
 			Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
 		}
@@ -201,17 +201,17 @@ func TestComputeNameOfSpellsTheWordsTheProviderUses(t *testing.T) {
 func TestRemoveConnectorRemovesTheConnectorWithThatID(t *testing.T) {
 	t.Parallel()
 
-	var got *consolev1.RemoveConnectorRequest
-	service := &connectorService{remove: func(req *consolev1.RemoveConnectorRequest) (*consolev1.RemoveConnectorResponse, error) {
+	var got *consolev1.RemoveEndpointRequest
+	service := &connectorService{remove: func(req *consolev1.RemoveEndpointRequest) (*consolev1.RemoveEndpointResponse, error) {
 		got = req
-		return &consolev1.RemoveConnectorResponse{}, nil
+		return &consolev1.RemoveEndpointResponse{}, nil
 	}}
 
 	if err := serveConnectors(t, service).RemoveConnector(context.Background(), "tok", "con_1"); err != nil {
 		t.Fatalf("RemoveConnector err = %v", err)
 	}
-	if service.procedure != consolev1connect.ConnectorServiceRemoveProcedure {
-		t.Errorf("procedure = %s, want %s", service.procedure, consolev1connect.ConnectorServiceRemoveProcedure)
+	if service.procedure != consolev1connect.EndpointServiceRemoveProcedure {
+		t.Errorf("procedure = %s, want %s", service.procedure, consolev1connect.EndpointServiceRemoveProcedure)
 	}
 	if got.GetId() != "con_1" {
 		t.Errorf("removed %q, want con_1", got.GetId())
@@ -221,7 +221,7 @@ func TestRemoveConnectorRemovesTheConnectorWithThatID(t *testing.T) {
 func TestAConnectorTheConsoleRefusesToChangeIsPermissionDenied(t *testing.T) {
 	t.Parallel()
 
-	service := &connectorService{remove: func(*consolev1.RemoveConnectorRequest) (*consolev1.RemoveConnectorResponse, error) {
+	service := &connectorService{remove: func(*consolev1.RemoveEndpointRequest) (*consolev1.RemoveEndpointResponse, error) {
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("Only an owner or an admin may change a connector"))
 	}}
 
@@ -237,12 +237,12 @@ func TestLivenessOfIsNeverConnectedOnlineOrOfflineFromWhatTheConsoleRecorded(t *
 	connected := timestamppb.New(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
 	tests := []struct {
 		name      string
-		connector *consolev1.Connector
+		connector *consolev1.Endpoint
 		want      Liveness
 	}{
-		{"never heard from", &consolev1.Connector{}, NeverConnected},
-		{"heard from and online", &consolev1.Connector{ConnectedAt: connected, Online: true}, Online},
-		{"heard from and not online", &consolev1.Connector{ConnectedAt: connected}, Offline},
+		{"never heard from", &consolev1.Endpoint{}, NeverConnected},
+		{"heard from and online", &consolev1.Endpoint{ConnectedAt: connected, Online: true}, Online},
+		{"heard from and not online", &consolev1.Endpoint{ConnectedAt: connected}, Offline},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

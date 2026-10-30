@@ -8,15 +8,18 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/endpointcall"
+	"github.com/ocelhq/ocel/cli/internal/jobcontext"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/progress"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	providercontract "github.com/ocelhq/ocel/pkg/provider"
 )
@@ -39,7 +42,7 @@ type OpenOptions struct {
 	Policy      consent.Policy
 	DryRun      bool
 	Cloud       *CloudTarget
-	CloudScopes []cloudv1.Scope
+	CloudScopes []scopev1.Scope
 
 	ConsoleCredential bool
 }
@@ -60,8 +63,8 @@ func (i Intent) deploys() bool {
 	return i == Deploy
 }
 
-func (o OpenOptions) sessionScopes() []cloudv1.Scope {
-	scopes := append([]cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_READ}, o.CloudScopes...)
+func (o OpenOptions) sessionScopes() []scopev1.Scope {
+	scopes := append([]scopev1.Scope{scopev1.Scope_SCOPE_APPS_READ}, o.CloudScopes...)
 	slices.Sort(scopes)
 	return slices.Compact(scopes)
 }
@@ -131,21 +134,24 @@ func (i Invocation) start(ctx context.Context, check *run.Span, cfg *project.Pro
 	return open.provider, open.identity, "", nil
 }
 
-func (i Invocation) openOnCloud(ctx context.Context, check *run.Span, cfg *project.Project, cloud *CloudTarget, scopes []cloudv1.Scope) (*openCloudSession, error) {
+func (i Invocation) openOnCloud(ctx context.Context, check *run.Span, cfg *project.Project, cloud *CloudTarget, scopes []scopev1.Scope) (*openCloudSession, error) {
 	if cloud.Offer.ProviderURL == "" {
-		return nil, &clierror.Error{Code: clierror.CodeCloudUnsupported, Cause: fmt.Errorf("%s offers Ocel Cloud and names no provider URL for it, so only `ocel deploy`, `ocel preview up` and `ocel build` reach it, as jobs: name a provider in this project's config to run this against your own account", cloud.ConsoleURL)}
+		return nil, &clierror.Error{Code: clierror.CodeCloudUnsupported, Cause: fmt.Errorf("%s offers Ocel Cloud and names no provider URL for it, so only `ocel deploy`, `ocel preview up`, `ocel preview rm`, `ocel projects destroy` and `ocel build` reach it, as jobs: name a provider in this project's config to run this against your own account", cloud.ConsoleURL)}
+	}
+	if served := cloud.Offer.Version; served != "" && served != version.Version {
+		return nil, endpointcall.RefuseUnserved(cloudVendor, cloud.Offer.ProviderURL, []string{served})
 	}
 	account := NewConsoleAccount(cloud.ConsoleURL, cloud.Credentials.AccessToken)
-	org, err := pickCloudOrganization(ctx, account, cfg.Dir)
+	org, err := pickOrganization(ctx, account, cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
-	tokens := console.NewCloudTokens(account.Client, account.Session, org.ID, scopes...)
+	tokens := console.NewEndpointTokens(account.Client, account.Session, org.ID, console.CloudEndpointID, scopes...)
 	provider, err := providerprocess.StartRemote(ctx, cfg, check, i.Questions, providerprocess.Remote{Name: CloudProviderID, URL: cloud.Offer.ProviderURL, Tokens: tokens})
 	if err != nil {
 		return nil, err
 	}
-	return &openCloudSession{provider: provider, identity: cloudIdentity(org, cloud), scopes: scopes}, nil
+	return &openCloudSession{provider: provider, identity: consoleIdentity(org, cloudVendor, cloud.Credentials.Email, cloud.ConsoleURL), scopes: scopes}, nil
 }
 
 type ProviderRun struct {
@@ -155,7 +161,7 @@ type ProviderRun struct {
 	Preflight readiness.Preflight
 	Project   *project.Project
 
-	job   *BuilderJob
+	job   *jobcontext.Job
 	cloud *CloudTarget
 }
 
@@ -204,7 +210,7 @@ func (i Invocation) WithProvider(ctx context.Context, cfg *project.Project, comm
 		check.End(err)
 		return err
 	}
-	err = work(ctx, ProviderRun{Run: running, Check: check, Provider: provider, Preflight: preflight, Project: loaded, job: i.BuilderJob, cloud: opts.Cloud})
+	err = work(ctx, ProviderRun{Run: running, Check: check, Provider: provider, Preflight: preflight, Project: loaded, job: i.Job(), cloud: opts.Cloud})
 	check.End(err)
 	return err
 }

@@ -16,11 +16,11 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ocelhq/ocel/cli/internal/cloud"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/endpointcall"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/environment"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	endpointv1 "github.com/ocelhq/ocel/pkg/proto/endpoint/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -122,8 +122,8 @@ func (f *FakeRemoteProvider) serve(w http.ResponseWriter, r *http.Request) {
 	call := RemoteCall{
 		Procedure:     r.URL.Path,
 		Authorization: r.Header.Get("Authorization"),
-		Version:       r.Header.Get(cloud.VersionHeader),
-		Session:       r.Header.Get(cloud.SessionHeader),
+		Version:       r.Header.Get(endpointcall.VersionHeader),
+		Session:       r.Header.Get(endpointcall.SessionHeader),
 	}
 	f.mu.Lock()
 	f.calls = append(f.calls, call)
@@ -138,20 +138,24 @@ func (f *FakeRemoteProvider) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *FakeRemoteProvider) admit(call RemoteCall) (http.Handler, error) {
-	tenant, known := f.tenants[strings.TrimPrefix(call.Authorization, "Bearer ")]
+	bearer, isBearer := readBearer(call.Authorization)
+	tenant, known := f.tenants[bearer.token]
 	switch {
-	case !strings.HasPrefix(call.Authorization, "Bearer ") || !known:
+	case !isBearer || !known:
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("the token is not one Ocel Cloud issued"))
 	case call.Version != f.serves:
-		return nil, refusalWith(connect.CodeFailedPrecondition, fmt.Sprintf("this Ocel Cloud serves ocel %s, and was called by ocel %s", f.serves, call.Version), &cloudv1.VersionUnserved{Served: []string{f.serves}})
+		return nil, refusalWith(connect.CodeFailedPrecondition, fmt.Sprintf("this Ocel Cloud serves ocel %s, and was called by ocel %s", f.serves, call.Version), &endpointv1.VersionUnserved{Served: []string{f.serves}})
 	case !sessionIDPattern.MatchString(call.Session):
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%q is no session id", call.Session))
+	}
+	if err := bearer.refuseUnheld(call.Procedure); err != nil {
+		return nil, err
 	}
 	session, open := f.sessions[call.Session]
 	if !open {
 		switch {
 		case f.ended[call.Session] && !strings.HasSuffix(call.Procedure, "/Configure"):
-			return nil, refusalWith(connect.CodeFailedPrecondition, "this session has ended", &cloudv1.SessionEnded{})
+			return nil, refusalWith(connect.CodeFailedPrecondition, "this session has ended", &endpointv1.SessionEnded{})
 		case !strings.HasSuffix(call.Procedure, "/Configure"):
 			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("a session opens with Configure"))
 		}
@@ -182,7 +186,7 @@ func refusalWith(code connect.Code, message string, typed proto.Message) error {
 
 type CloudProject struct {
 	FakeProject
-	Cloud  *FakeOcelCloud
+	Cloud  *FakeConsole
 	Remote *FakeRemoteProvider
 }
 
@@ -194,7 +198,7 @@ func SetUpCloudProject(t *testing.T) CloudProject {
 	}
 	p := fake.NewForProject(fake.Options{})
 	Bootstrap(t, p, environment.TierProduction, fake.PartCache, fake.PartImages)
-	cloud := ServeOcelCloud(t)
+	cloud := ServeConsole(t)
 	remote := ServeRemoteProvider(t, p)
 	cloud.ProviderURL = remote.URL
 	return CloudProject{FakeProject: FakeProject{Root: root, Provider: p, Requests: remote.Requests}, Cloud: cloud, Remote: remote}

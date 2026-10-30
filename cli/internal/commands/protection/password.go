@@ -10,8 +10,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 const (
@@ -47,18 +49,30 @@ func runReveal(ctx context.Context, invocation commands.Invocation, t target, st
 	if err := requireProtection(cfg, t); err != nil {
 		return err
 	}
-	resp, err := readProtection(ctx, invocation, cfg, "ocel protection password", t, true)
+	var status *contractv1.GetProtectionResponse
+	var revealed *contractv1.RevealProtectionPasswordResponse
+	err = invocation.WithProvider(ctx, cfg, "ocel protection password", openOptions(t.tier()), func(ctx context.Context, p commands.ProviderRun) (err error) {
+		spanCtx, span := p.Check.Child(ctx, cfg.Slug, progress.Reading.Title("the "+t.name()+" protection"))
+		defer func() { span.End(err) }()
+		if status, err = getProtection(spanCtx, p, cfg, t.tier()); err != nil || !status.GetRecorded() || !status.GetEnabled() {
+			return err
+		}
+		return p.Provider.Call(spanCtx, func(client contractv1connect.ProviderServiceClient) (err error) {
+			revealed, err = client.RevealProtectionPassword(spanCtx, &contractv1.RevealProtectionPasswordRequest{Tier: t.tier(), Slug: cfg.Slug})
+			return err
+		})
+	})
 	if err != nil {
 		return err
 	}
-	if err := refuseOpened(t, cfg.Slug, resp); err != nil {
+	if err := refuseOpened(t, cfg.Slug, status); err != nil {
 		return err
 	}
-	if !resp.GetRecorded() {
+	if !revealed.GetRecorded() {
 		return fmt.Errorf("%s has no %s password yet: the first %s deploy creates it", cfg.Slug, t.name(), t.name())
 	}
-	result := &resultv1.PasswordResult{Slug: cfg.Slug, Tier: t.tier(), Password: resp.GetPassword(), Edges: edgeResults(resp.GetEdges())}
-	return printSecret(invocation, stdout, resp.GetPassword(), result)
+	result := &resultv1.PasswordResult{Slug: cfg.Slug, Tier: t.tier(), Password: revealed.GetPassword(), Edges: edgeResults(status.GetEdges())}
+	return printSecret(invocation, stdout, revealed.GetPassword(), result)
 }
 
 func newRotateCommand(invocation commands.Invocation) *cobra.Command {

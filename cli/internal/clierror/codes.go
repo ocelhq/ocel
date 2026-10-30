@@ -28,12 +28,15 @@ const (
 	CodeConsoleNotLoggedIn         = "console.not_logged_in"
 	CodeConsoleNotLinked           = "console.not_linked"
 	CodeCloudUnsupported           = "cloud.unsupported"
-	CodeCloudJobFailed             = "cloud.job_failed"
-	CodeCloudJobCanceled           = "cloud.job_canceled"
-	CodeCloudSourceInvalid         = "cloud.source_invalid"
-	CodeCloudJobContextInvalid     = "cloud.job_context_invalid"
 	CodeCloudVersionUnserved       = "cloud.version_unserved"
 	CodeCloudTokenRefused          = "cloud.token_refused"
+	CodeJobUnsupported             = "job.unsupported"
+	CodeJobFailed                  = "job.failed"
+	CodeJobCanceled                = "job.canceled"
+	CodeJobSourceInvalid           = "job.source_invalid"
+	CodeJobContextInvalid          = "job.context_invalid"
+	CodeJobVersionUnserved         = "job.version_unserved"
+	CodeJobTokenRefused            = "job.token_refused"
 	CodeDoctorChecksFailed         = "doctor.checks_failed"
 	CodeDevCommandFailed           = "dev.command_failed"
 )
@@ -65,12 +68,15 @@ func Codes() []string {
 		CodeConsoleNotLoggedIn,
 		CodeConsoleNotLinked,
 		CodeCloudUnsupported,
-		CodeCloudJobFailed,
-		CodeCloudJobCanceled,
-		CodeCloudSourceInvalid,
-		CodeCloudJobContextInvalid,
 		CodeCloudVersionUnserved,
 		CodeCloudTokenRefused,
+		CodeJobUnsupported,
+		CodeJobFailed,
+		CodeJobCanceled,
+		CodeJobSourceInvalid,
+		CodeJobContextInvalid,
+		CodeJobVersionUnserved,
+		CodeJobTokenRefused,
 		CodeDoctorChecksFailed,
 		CodeDevCommandFailed,
 	}
@@ -78,11 +84,6 @@ func Codes() []string {
 
 func CloudCodes() []string {
 	return []string{
-		"cloud.timeout",
-		"cloud.interrupted",
-		"cloud.builder",
-		"cloud.source",
-		"cloud.run",
 		"cloud.preview_limit",
 	}
 }

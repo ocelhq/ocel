@@ -58,6 +58,10 @@
         "providerUrl": {
           "default": "",
           "type": "string"
+        },
+        "version": {
+          "default": "",
+          "type": "string"
         }
       },
       "title": "Cloud Offer",

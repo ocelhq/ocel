@@ -23,7 +23,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 )
 
-const providerSessionsEnvVar = "OCEL_TEST_PROVIDER_SESSIONS"
+const (
+	providerSessionsEnvVar = "OCEL_TEST_PROVIDER_SESSIONS"
+	spawnedNamespaceHeader = "Ocel-Test-Namespace"
+)
 
 func IsFakeSession() bool {
 	return os.Getenv(providerSessionsEnvVar) != "" && os.Getenv(localrpc.ClientCertEnvVar) != ""
@@ -37,7 +40,14 @@ func RunFakeSession() int {
 			return d.DialContext(ctx, "unix", control)
 		},
 	}}
-	resp, err := client.Post("http://fake/session", "application/x-pem-file", strings.NewReader(os.Getenv(localrpc.ClientCertEnvVar)))
+	req, err := http.NewRequest(http.MethodPost, "http://fake/session", strings.NewReader(os.Getenv(localrpc.ClientCertEnvVar)))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider: open a session:", err)
+		return 1
+	}
+	req.Header.Set("Content-Type", "application/x-pem-file")
+	req.Header.Set(spawnedNamespaceHeader, os.Getenv(provider.NamespaceEnvVar))
+	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "fake provider: open a session:", err)
 		return 1
@@ -102,6 +112,7 @@ func (s *fakeSessions) open(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	s.requests.spawnedUnder(r.Header.Get(spawnedNamespaceHeader))
 	line, err := s.serve(string(encoded))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

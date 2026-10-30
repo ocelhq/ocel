@@ -40,7 +40,9 @@ func NewCommand(invocation commands.Invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bootstrap <command>",
 		Short: "Set up the shared infrastructure deploys run on",
-		Long:  "Set up the shared infrastructure deploys run on.",
+		Long: "Set up the shared infrastructure deploys run on.\n\n" +
+			"`ocel bootstrap production` and `ocel bootstrap preview` show the changes and ask before applying them; " +
+			"--yes applies them without asking, and --dry shows them and stops.",
 		Example: "  $ ocel bootstrap production\n" +
 			"  $ ocel bootstrap preview\n" +
 			"  $ ocel bootstrap status",
@@ -154,7 +156,7 @@ func Run(ctx context.Context, invocation commands.Invocation, cwd string, tier e
 	}
 
 	command := readiness.BootstrapCommand(tier)
-	policy := consent.NewPlanPolicy(command, opts.Yes, invocation.CanAsk(stdin), stdout, stdin)
+	policy := invocation.PlanPolicy(command, opts.Yes, stdout, stdin)
 	policy.DryRun = opts.Dry
 	if err := policy.Refuse(); err != nil {
 		return err

@@ -39,6 +39,10 @@ func planLines(present Presentation, plan *planv1.ChangePlan) []string {
 	return out
 }
 
+func PlanText(plan *planv1.ChangePlan) string {
+	return strings.Join(planLines(Resolve(Conditions{ColorAsked: ColorNever}), plan), "\n")
+}
+
 func planHeadline(plan *planv1.ChangePlan) string {
 	headline := plan.GetHeadline()
 	if headline == "" {

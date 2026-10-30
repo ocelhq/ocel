@@ -113,6 +113,18 @@ func (p Prompt) Input(ctx context.Context, title, description string) (string, b
 	return strings.TrimSpace(typed), true, nil
 }
 
+func (p Prompt) Secret(ctx context.Context, title, description string) (string, bool, error) {
+	if !p.attended {
+		return p.inputLine(ctx, title, description)
+	}
+	var typed string
+	answered, err := p.answer(ctx, huh.NewInput().Title(title).Description(description).EchoMode(huh.EchoModePassword).Value(&typed))
+	if !answered {
+		return "", false, err
+	}
+	return strings.TrimSpace(typed), true, nil
+}
+
 func (p Prompt) AwaitEnter(ctx context.Context, question string) (bool, error) {
 	if !p.attended {
 		return p.awaitEnterLine(ctx, question)

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/githubactions"
+	"github.com/ocelhq/ocel/cli/internal/jobcontext"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
@@ -22,7 +22,7 @@ var (
 
 type Console struct {
 	LoadCredentials func() (console.Credentials, error)
-	Getenv          func(string) string
+	Context         *jobcontext.Context
 	Timeout         time.Duration
 }
 
@@ -46,22 +46,40 @@ func (c Console) ReportDeployment(ctx context.Context, projectDir string, deploy
 	})
 }
 
+func (c Console) StartDeployment(ctx context.Context, projectDir string, start *consolev1.DeploymentStart) {
+	if start.GetTarget() == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, cmp.Or(c.Timeout, DefaultTimeout))
+	defer cancel()
+	session, err := c.readSession(ctx, projectDir)
+	if err != nil || session == nil {
+		return
+	}
+	_ = console.New(session.apiURL).StartDeployment(ctx, session.accessToken, session.projectID, start)
+}
+
 func (c Console) ReportEnvironmentEvent(ctx context.Context, projectDir string, event *consolev1.EnvironmentEvent, stderr io.Writer) {
 	c.send(ctx, projectDir, "environment event "+event.GetId(), stderr, func(ctx context.Context, client *console.Client, accessToken, projectID string) error {
 		return client.RecordEnvironmentEvent(ctx, accessToken, projectID, event)
 	})
 }
 
-func (c Console) send(ctx context.Context, projectDir, subject string, stderr io.Writer, call consoleCall) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cmp.Or(c.Timeout, DefaultTimeout))
-	defer cancel()
-	var session *reportSession
-	var err error
-	if githubactions.IsRunning(c.getenv) && c.getenv(console.ProjectIDEnvVar) != "" {
-		session, err = c.readPipelineSession(ctx)
-	} else {
-		session, err = c.readSavedLoginSession(projectDir)
+func (c Console) bounded(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), cmp.Or(c.Timeout, DefaultTimeout))
+}
+
+func (c Console) readSession(ctx context.Context, projectDir string) (*reportSession, error) {
+	if c.Context != nil {
+		return c.readContextSession(ctx)
 	}
+	return c.readSavedLoginSession(projectDir)
+}
+
+func (c Console) send(ctx context.Context, projectDir, subject string, stderr io.Writer, call consoleCall) {
+	ctx, cancel := c.bounded(ctx)
+	defer cancel()
+	session, err := c.readSession(ctx, projectDir)
 	if errors.Is(err, console.ErrNotLinked) {
 		fmt.Fprintln(stderr, "This directory isn't linked to a console project, so nothing was reported there. Run `ocel link` to link it.")
 		return
@@ -74,17 +92,12 @@ func (c Console) send(ctx context.Context, projectDir, subject string, stderr io
 	}
 }
 
-func (c Console) readPipelineSession(ctx context.Context) (*reportSession, error) {
-	apiURL := console.NormalizeBaseURL(c.getenv(console.URLEnvVar))
-	audience, err := console.Origin(apiURL)
+func (c Console) readContextSession(ctx context.Context) (*reportSession, error) {
+	bearer, err := c.Context.Bearer(ctx)
 	if err != nil {
 		return nil, err
 	}
-	idToken, err := githubactions.RequestIDToken(ctx, c.getenv, audience)
-	if err != nil {
-		return nil, err
-	}
-	return &reportSession{apiURL: apiURL, accessToken: idToken, projectID: c.getenv(console.ProjectIDEnvVar)}, nil
+	return &reportSession{apiURL: c.Context.ConsoleURL, accessToken: bearer, projectID: c.Context.ProjectID}, nil
 }
 
 func (c Console) readSavedLoginSession(projectDir string) (*reportSession, error) {
@@ -108,13 +121,6 @@ func (c Console) readSavedLoginSession(projectDir string) (*reportSession, error
 		return nil, console.ErrNotLinked
 	}
 	return &reportSession{apiURL: apiURL, accessToken: credentials.AccessToken, projectID: link.ProjectID}, nil
-}
-
-func (c Console) getenv(name string) string {
-	if c.Getenv == nil {
-		return ""
-	}
-	return c.Getenv(name)
 }
 
 func (c Console) loadCredentials() (console.Credentials, error) {

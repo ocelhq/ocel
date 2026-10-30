@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
 )
@@ -24,16 +25,38 @@ const FixtureConsoleTargetID = "0199c3a2-5b7e-7c4d-8a1f-2e3d4c5b6a80"
 
 type FakeConsole struct {
 	consolev1connect.UnimplementedTargetServiceHandler
+	consolev1connect.UnimplementedDeploymentServiceHandler
 
-	URL string
+	URL         string
+	ProviderURL string
+	Runner      *FakeRunner
 
 	Credential        *consolev1.IssueCredentialResponse
 	CredentialRefusal *connect.Error
 
-	mu        sync.Mutex
+	mu             sync.Mutex
+	Organizations  []console.Organization
+	ActiveOrg      string
+	Projects       []*consolev1.Project
+	Created        []*consolev1.CreateProjectRequest
+	ActivatedOrgs  []string
+	TokenOrgs      []string
+	TokenScopes    [][]string
+	TokenEndpoints []string
+	RefusedClaims  []string
+	Resolved       []*consolev1.ResolveRunnerRequest
+	Bindings       map[environmentv1.Tier]*consolev1.ResolveRunnerResponse
+	RunnerVersion  string
+	Dispatched     []*consolev1.DispatchJobRequest
+	DispatchFails  []error
+	DispatchTries  []string
+	GetRefusal     error
+
 	reports   []*consolev1.ReportRequest
+	starts    []*consolev1.StartRequest
 	events    []*consolev1.RecordEnvironmentEventRequest
 	issued    []*consolev1.IssueCredentialRequest
+	bearers   []string
 	prepared  []*consolev1.PrepareTargetRequest
 	recorded  []*consolev1.RecordTargetTierRequest
 	forgotten []*consolev1.ForgetTargetTierRequest
@@ -41,13 +64,41 @@ type FakeConsole struct {
 
 func ServeConsole(t *testing.T) *FakeConsole {
 	t.Helper()
-	fake := &FakeConsole{}
+	fake := &FakeConsole{
+		Organizations: []console.Organization{{ID: "org_1", Name: "Acme Inc", Slug: "acme"}},
+		Runner:        ServeRunner(t),
+	}
 	validated := connect.WithInterceptors(connectvalidate.NewInterceptor())
 	path, handler := consolev1connect.NewDeploymentServiceHandler(fake, validated)
-	targetsPath, targets := consolev1connect.NewTargetServiceHandler(fake)
+	targetsPath, targets := consolev1connect.NewTargetServiceHandler(fake, connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			fake.mu.Lock()
+			fake.bearers = append(fake.bearers, req.Header().Get("Authorization"))
+			fake.mu.Unlock()
+			return next(ctx, req)
+		}
+	})))
 	mux := http.NewServeMux()
 	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
 	mux.Handle("/api/connect"+targetsPath, http.StripPrefix("/api/connect", targets))
+	fake.mountAccounts(mux)
+	for _, mount := range []func() (string, http.Handler){
+		func() (string, http.Handler) {
+			return consolev1connect.NewEndpointServiceHandler(fakeEndpoints{console: fake}, validated)
+		},
+		func() (string, http.Handler) {
+			return consolev1connect.NewJobServiceHandler(fakeJobService{console: fake}, validated)
+		},
+		func() (string, http.Handler) {
+			return consolev1connect.NewProjectServiceHandler(fakeProjects{console: fake}, validated)
+		},
+		func() (string, http.Handler) {
+			return consolev1connect.NewConsoleServiceHandler(fakeConsoleService{console: fake}, validated)
+		},
+	} {
+		path, handler := mount()
+		mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
+	}
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	fake.URL = srv.URL
@@ -59,6 +110,19 @@ func (f *FakeConsole) Report(_ context.Context, req *consolev1.ReportRequest) (*
 	defer f.mu.Unlock()
 	f.reports = append(f.reports, req)
 	return &consolev1.ReportResponse{}, nil
+}
+
+func (f *FakeConsole) Start(_ context.Context, req *consolev1.StartRequest) (*consolev1.StartResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.starts = append(f.starts, req)
+	return &consolev1.StartResponse{}, nil
+}
+
+func (f *FakeConsole) Starts() []*consolev1.StartRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*consolev1.StartRequest(nil), f.starts...)
 }
 
 func (f *FakeConsole) RecordEnvironmentEvent(_ context.Context, req *consolev1.RecordEnvironmentEventRequest) (*consolev1.RecordEnvironmentEventResponse, error) {
@@ -76,6 +140,12 @@ func (f *FakeConsole) IssueCredential(_ context.Context, req *consolev1.IssueCre
 		return nil, f.CredentialRefusal
 	}
 	return f.Credential, nil
+}
+
+func (f *FakeConsole) Bearers() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.bearers...)
 }
 
 func (f *FakeConsole) Prepare(_ context.Context, req *consolev1.PrepareTargetRequest) (*consolev1.PrepareTargetResponse, error) {
@@ -147,7 +217,7 @@ func (f *FakeConsole) Link(t *testing.T, projectDir string) {
 
 func LinkToConsole(t *testing.T, projectDir, apiURL string) {
 	t.Helper()
-	link := console.Link{APIURL: apiURL, OrganizationID: "org_1", ProjectID: FixtureConsoleProjectID, ProjectName: "fixture"}
+	link := console.Link{APIURL: apiURL, OrganizationID: "org_1", ProjectID: FixtureConsoleProjectID, ProjectName: FixtureSlug}
 	if err := console.WriteLink(projectDir, link); err != nil {
 		t.Fatal(err)
 	}

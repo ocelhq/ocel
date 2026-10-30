@@ -18,7 +18,7 @@ import (
 type consoleService struct {
 	consolev1connect.UnimplementedConsoleServiceHandler
 	describe   func() (*consolev1.DescribeResponse, error)
-	issue      func(*consolev1.IssueCloudTokenRequest) (*consolev1.IssueCloudTokenResponse, error)
+	issue      func(*consolev1.IssueEndpointTokenRequest) (*consolev1.IssueEndpointTokenResponse, error)
 	described  atomic.Int64
 	issued     atomic.Int64
 	authorized atomic.Value
@@ -29,7 +29,7 @@ func (s *consoleService) Describe(context.Context, *consolev1.DescribeRequest) (
 	return s.describe()
 }
 
-func (s *consoleService) IssueCloudToken(_ context.Context, req *consolev1.IssueCloudTokenRequest) (*consolev1.IssueCloudTokenResponse, error) {
+func (s *consoleService) IssueEndpointToken(_ context.Context, req *consolev1.IssueEndpointTokenRequest) (*consolev1.IssueEndpointTokenResponse, error) {
 	s.issued.Add(1)
 	return s.issue(req)
 }
@@ -52,7 +52,7 @@ func offering(apiURL string) func() (*consolev1.DescribeResponse, error) {
 		return &consolev1.DescribeResponse{
 			ConsoleVersion: "1.0.0",
 			Capabilities:   []string{"cloud"},
-			Cloud:          &consolev1.CloudOffer{ApiUrl: apiURL, ProviderUrl: apiURL + "/providers", Audience: "ocel-cloud"},
+			Cloud:          &consolev1.CloudOffer{ApiUrl: apiURL, ProviderUrl: apiURL + "/providers", Audience: "ocel-cloud", Version: "1.4.0"},
 		}, nil
 	}
 }
@@ -68,7 +68,7 @@ func TestReadCloudOfferAnswersTheOfferAndNoOfferFromAConsoleThatMakesNone(t *tes
 		if err != nil {
 			t.Fatalf("ReadCloudOffer err = %v", err)
 		}
-		want := CloudOffer{APIURL: "https://cloud.example.test", ProviderURL: "https://cloud.example.test/providers", Audience: "ocel-cloud"}
+		want := CloudOffer{APIURL: "https://cloud.example.test", ProviderURL: "https://cloud.example.test/providers", Audience: "ocel-cloud", Version: "1.4.0"}
 		if offer == nil || *offer != want {
 			t.Errorf("offer = %+v, want %+v", offer, want)
 		}

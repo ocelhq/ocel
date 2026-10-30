@@ -4,39 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
-	"github.com/ocelhq/ocel/cli/internal/jobinput"
+	"github.com/ocelhq/ocel/cli/internal/confirmation"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-type Prompt interface {
-	Attended() bool
-	Confirm(ctx context.Context, question string) (bool, error)
-}
-
 type Questions struct {
-	Prompt Prompt
-	Out    io.Writer
-	IsJSON func() bool
-	Job    *jobinput.Answers
-	run    *run.Run
+	Respondent confirmation.Respondent
+	run        *run.Run
 }
 
 func (q Questions) attended() bool {
-	return q.Prompt != nil && q.Out != nil && q.Prompt.Attended() && (q.IsJSON == nil || !q.IsJSON())
-}
-
-func (q Questions) holding(ask func() error) error {
-	if q.run == nil {
-		return ask()
-	}
-	return q.run.Ask(ask)
+	return q.Respondent != nil && q.Respondent.CanAnswer()
 }
 
 func (q Questions) answer(ctx context.Context, t transport, refused error) (bool, error) {
@@ -44,7 +28,7 @@ func (q Questions) answer(ctx context.Context, t transport, refused error) (bool
 	if !asked {
 		return false, refused
 	}
-	if !q.attended() && q.Job == nil {
+	if !q.attended() {
 		return false, clierror.NewInputRequired(refused, printable(question.GetRemedy()))
 	}
 	client, err := t.Client()
@@ -72,16 +56,11 @@ func (q Questions) answer(ctx context.Context, t transport, refused error) (bool
 }
 
 func (q Questions) ask(ctx context.Context, question *contractv1.Question) (bool, error) {
-	if q.Job != nil {
-		return q.Job.Confirm(ctx, q.run, printable(question.GetFinding()), printable(question.GetPrompt()))
+	var holder confirmation.Holder
+	if q.run != nil {
+		holder = q.run
 	}
-	var confirmed bool
-	err := q.holding(func() (err error) {
-		fmt.Fprintln(q.Out, printable(question.GetFinding()))
-		confirmed, err = q.Prompt.Confirm(ctx, printable(question.GetPrompt()))
-		return err
-	})
-	return confirmed, err
+	return q.Respondent.Confirm(ctx, confirmation.HolderOr(holder), confirmation.Question{Finding: printable(question.GetFinding()), Text: printable(question.GetPrompt())})
 }
 
 func questionIn(err error) (*contractv1.Question, bool) {

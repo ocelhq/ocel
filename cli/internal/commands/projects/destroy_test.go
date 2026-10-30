@@ -2,16 +2,23 @@ package projects
 
 import (
 	"context"
+	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
+	"github.com/ocelhq/ocel/cli/internal/consolecredential"
+
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
+	"github.com/ocelhq/ocel/cli/internal/jobcontext"
+	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
@@ -371,5 +378,50 @@ func TestProjectsDestroyOfAnotherProjectRecordsNoConsoleEvent(t *testing.T) {
 	}
 	if events := console.Events(); len(events) != 0 {
 		t.Errorf("the console received %v, want nothing: this directory links test-app, not blog", events)
+	}
+}
+
+func TestProjectsDestroyInsideAJobPutsEachPlanToTheConsoleRatherThanRefusing(t *testing.T) {
+	project := deployedToBothTiers(t)
+	invocation := clitest.NewInvocation()
+	invocation.JobContext = &jobcontext.Context{Job: &jobcontext.Job{ID: "job_1", Slug: clitest.FixtureSlug, Input: jobinput.New(strings.NewReader(""))}}
+
+	got := runDestroyCommand(t, invocation, project.Root, "", "--tier", "production")
+	if got.err == nil || strings.Contains(got.err.Error(), "needs a terminal") {
+		t.Fatalf("err = %v, want the run to wait on the console's answer, not refuse for want of a terminal", got.err)
+	}
+	if !strings.Contains(got.stdout, "The job asks: Apply this plan to "+clitest.FixtureSlug+"?") || !strings.Contains(got.stdout, `This will permanently destroy production project "test-app"`) {
+		t.Fatalf("stdout = %s, want the plan put to the console as the question's finding", got.stdout)
+	}
+	if _, removed := removals(t, project); len(removed) != 0 {
+		t.Fatalf("removed %d tiers, want none before the console answers", len(removed))
+	}
+}
+
+func TestProjectsDestroyInsideAJobAsksTheConsoleForTheCredentialOfTheTierItDestroys(t *testing.T) {
+	project := deployedToBothTiers(t)
+	served := clitest.ServeConsole(t)
+	served.CredentialRefusal = connect.NewError(connect.CodeNotFound, errors.New("no target"))
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte("job-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	job := &jobcontext.Context{
+		ConsoleURL: served.URL, ProjectID: clitest.FixtureConsoleProjectID, Credential: jobcontext.JobToken{File: tokenFile},
+		Job: &jobcontext.Job{ID: "job_1", Slug: clitest.FixtureSlug, Tier: environmentv1.Tier_TIER_PREVIEW, Input: jobinput.New(strings.NewReader(""))},
+	}
+	invocation := clitest.NewInvocation()
+	invocation.JobContext = job
+	invocation.ConsoleCredential = consolecredential.Console{Context: job, Version: "1.2.3"}
+
+	got := runDestroyCommand(t, invocation, project.Root, "", "--tier", "preview", "--yes")
+	if got.err != nil {
+		t.Fatalf("err = %v; stdout=%s", got.err, got.stdout)
+	}
+	issued := served.IssuedCredentials()
+	if len(issued) == 0 || slices.ContainsFunc(issued, func(req *consolev1.IssueCredentialRequest) bool {
+		return req.GetTier() != environmentv1.Tier_TIER_PREVIEW
+	}) {
+		t.Fatalf("issued %v, want every credential asked for preview, the tier the job destroys", issued)
 	}
 }

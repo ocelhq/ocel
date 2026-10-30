@@ -14,14 +14,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-func loggedIn(t *testing.T) (commands.Invocation, *clitest.FakeOcelCloud) {
+func loggedIn(t *testing.T) (commands.Invocation, *clitest.FakeConsole) {
 	t.Helper()
-	fake := clitest.ServeOcelCloud(t)
+	fake := clitest.ServeConsole(t)
 	invocation := clitest.NewInvocation()
 	fake.LogIn(&invocation)
 	return invocation, fake
@@ -81,7 +81,7 @@ func TestWithNoConfigALoginToOcelCloudRunsTheDirectoryAsAProjectNamedAfterIt(t *
 	if !target.IsCloud() || target.Project.Slug != "my-shop" || target.Project.Dir != root {
 		t.Fatalf("target = %+v, want Ocel Cloud running %s as my-shop", target, root)
 	}
-	if target.Cloud.ConsoleURL != fake.ConsoleURL || target.Cloud.Offer.APIURL != fake.APIURL {
+	if target.Cloud.ConsoleURL != fake.URL || target.Cloud.Offer.APIURL != fake.Runner.URL {
 		t.Fatalf("cloud = %+v, want the console logged in to and its offer", target.Cloud)
 	}
 	if !strings.Contains(target.Derived, "my-shop") || !strings.Contains(target.Derived, "named after this directory") {
@@ -134,7 +134,7 @@ func TestATypeScriptConfigWithoutNodeRunsOnOcelCloudOnlyAsTheConsoleProjectItIsL
 			root := filepath.Join(t.TempDir(), "web")
 			clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), tt.config)
 			if tt.link != "" {
-				if err := console.WriteLink(root, console.Link{APIURL: fake.ConsoleURL, OrganizationID: "org_1", ProjectID: "p", ProjectName: tt.link}); err != nil {
+				if err := console.WriteLink(root, console.Link{APIURL: fake.URL, OrganizationID: "org_1", ProjectID: "p", ProjectName: tt.link}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -216,8 +216,30 @@ func TestACommandThatRunsOnOcelCloudOpensASessionOnTheProviderOcelCloudServes(t 
 		t.Fatal(err)
 	}
 	calls := project.Remote.Calls()
-	if len(calls) != 2 || !strings.HasSuffix(calls[0].Procedure, "/Configure") || calls[0].Authorization != "Bearer "+clitest.FakeCloudToken {
+	if len(calls) != 2 || !strings.HasSuffix(calls[0].Procedure, "/Configure") || calls[0].Authorization != "Bearer "+clitest.FakeCloudToken+"|apps.read" {
 		t.Fatalf("calls = %+v, want Configure and the call, with the token the console issued", calls)
+	}
+}
+
+func TestASessionOnAnOcelCloudThatPublishesAnotherOcelIsRefusedBeforeItOpens(t *testing.T) {
+	project := clitest.SetUpCloudProject(t)
+	project.Cloud.RunnerVersion = "9.9.9"
+	invocation := clitest.NewInvocation()
+	project.LogIn(&invocation)
+	target, err := invocation.ResolveTarget(t.Context(), project.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = invocation.WithProvider(t.Context(), target.Project, "ocel preview ls", commands.OpenOptions{Cloud: target.Cloud}, func(context.Context, commands.ProviderRun) error {
+		t.Error("ran a command on a session Ocel Cloud does not serve")
+		return nil
+	})
+	if got := clierror.NewRunError(err); got.GetCode() != clierror.CodeCloudVersionUnserved || !strings.Contains(got.GetMessage(), "serves ocel 9.9.9") {
+		t.Fatalf("run error = %v, want %s naming the version Ocel Cloud serves", got, clierror.CodeCloudVersionUnserved)
+	}
+	if calls := project.Remote.Calls(); len(calls) != 0 {
+		t.Fatalf("called %v, want no session opened", calls)
 	}
 }
 
@@ -231,7 +253,7 @@ func TestASessionOnOcelCloudHoldsTheScopesItsCommandDeclaresAndIsReusedOnlyWhere
 	}
 
 	reading := commands.OpenOptions{Cloud: target.Cloud}
-	writing := commands.OpenOptions{Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}}
+	writing := commands.OpenOptions{Cloud: target.Cloud, CloudScopes: []scopev1.Scope{scopev1.Scope_SCOPE_APPS_WRITE}}
 	err = invocation.WithProvider(t.Context(), target.Project, "ocel test", reading, func(ctx context.Context, p commands.ProviderRun) error {
 		for _, opts := range []commands.OpenOptions{writing, reading, writing} {
 			provider, _, err := invocation.OpenProvider(ctx, p.Check, target.Project, opts)
@@ -250,7 +272,7 @@ func TestASessionOnOcelCloudHoldsTheScopesItsCommandDeclaresAndIsReusedOnlyWhere
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := [][]string{{"cloud.apps.read"}, {"cloud.apps.read", "cloud.apps.write"}}
+	want := [][]string{{"apps.read"}, {"apps.read", "apps.write"}}
 	if !slices.EqualFunc(project.Cloud.TokenScopes, want, slices.Equal) {
 		t.Fatalf("tokens issued with scopes %v, want %v: a reading session, then one writing session the later opens reuse", project.Cloud.TokenScopes, want)
 	}

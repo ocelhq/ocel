@@ -17,8 +17,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 )
 
 type lineRig struct {
@@ -268,27 +268,27 @@ func TestAHoldLeavesNoLiveLineOnScreenAndNoTickDrawsOneWhileItLasts(t *testing.T
 	}
 }
 
-func TestAnOcelCloudJobsInputShowsAtOnceAboveWhereTheLiveLineWasAndNoTickDrawsOverIt(t *testing.T) {
+func TestARemoteJobsInputShowsAtOnceAboveWhereTheLiveLineWasAndNoTickDrawsOverIt(t *testing.T) {
 	t.Parallel()
 
 	rig := newLineRig(t, Presentation{Width: 80})
 	rig.run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "shop", progress.Title{Started: "Waiting for the job", Ended: "Waited for the job"})
 	before := rig.out.String()
 	rig.run.Hold(&streamv1.WaitingEvent{
-		Url:   "https://console.test/cloud/jobs/job_1",
-		Input: &cloudv1.JobInput{Id: "in_1", Need: &cloudv1.JobInput_Confirmation{Confirmation: &cloudv1.Confirmation{Question: "Continue?"}}},
+		Url:   "https://console.test/projects/shop/deployments/4bf92f3577b34da6a3ce929d0e0e4736?org=org_1",
+		Input: &runnerv1.JobInput{Id: "in_1", Need: &runnerv1.JobInput_Confirmation{Confirmation: &runnerv1.Confirmation{Question: "Continue?"}}},
 	})
 	rig.clock.pass(100 * time.Millisecond)
 	rig.tick()
 
 	want := before + "\x1b[?2026h\r\x1b[K" +
-		"Ocel Cloud asks: Continue?\n" +
+		"The job asks: Continue?\n" +
 		"\n" +
-		"  Answer it on Ocel Cloud at:\n" +
+		"  Answer it on the console at:\n" +
 		"\n" +
-		"    https://console.test/cloud/jobs/job_1\n" +
+		"    https://console.test/projects/shop/deployments/4bf92f3577b34da6a3ce929d0e0e4736?org=org_1\n" +
 		"\n" +
-		"  Waiting for Ocel Cloud — press Ctrl-C to stop watching; the job waits there either way.\n" +
+		"  Waiting for the console — press Ctrl-C to stop watching; the job waits there either way.\n" +
 		"\n" +
 		"\x1b[?2026l"
 	if got := rig.out.String(); got != want {

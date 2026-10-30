@@ -9,26 +9,27 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
-func TestCloudTokensReuseATokenOnlyWhileItHasMoreThanAMinuteLeft(t *testing.T) {
+func TestEndpointTokensReuseATokenOnlyWhileItHasMoreThanAMinuteLeft(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
-	var scopes []string
-	var organization string
+	var scopes []scopev1.Scope
+	var organization, endpoint string
 	service := &consoleService{}
-	service.issue = func(req *consolev1.IssueCloudTokenRequest) (*consolev1.IssueCloudTokenResponse, error) {
+	service.issue = func(req *consolev1.IssueEndpointTokenRequest) (*consolev1.IssueEndpointTokenResponse, error) {
 		scopes = req.GetScopes()
 		organization = req.GetOrganizationId()
-		return &consolev1.IssueCloudTokenResponse{
+		endpoint = req.GetEndpointId()
+		return &consolev1.IssueEndpointTokenResponse{
 			Token:     fmt.Sprintf("cloud-%d", service.issued.Load()),
 			ExpiresAt: timestamppb.New(now.Add(5 * time.Minute)),
 		}, nil
 	}
-	tokens := NewCloudTokens(New(serveConsole(t, service)), "session", "org_1", cloudv1.Scope_SCOPE_APPS_READ, cloudv1.Scope_SCOPE_APPS_WRITE)
+	tokens := NewEndpointTokens(New(serveConsole(t, service)), "session", "org_1", CloudEndpointID, scopev1.Scope_SCOPE_APPS_READ, scopev1.Scope_SCOPE_APPS_WRITE)
 	tokens.now = func() time.Time { return now }
 
 	first, err := tokens.Ensure(context.Background())
@@ -38,8 +39,11 @@ func TestCloudTokensReuseATokenOnlyWhileItHasMoreThanAMinuteLeft(t *testing.T) {
 	if bearer := service.authorized.Load(); bearer != "Bearer session" {
 		t.Errorf("Authorization = %q, want the console session", bearer)
 	}
-	if !slices.Equal(scopes, []string{"cloud.apps.read", "cloud.apps.write"}) {
-		t.Errorf("scopes = %v, want the claims of apps read and write", scopes)
+	if !slices.Equal(scopes, []scopev1.Scope{scopev1.Scope_SCOPE_APPS_READ, scopev1.Scope_SCOPE_APPS_WRITE}) {
+		t.Errorf("scopes = %v, want apps read and write", scopes)
+	}
+	if endpoint != CloudEndpointID {
+		t.Errorf("endpoint = %q, want Ocel Cloud's", endpoint)
 	}
 	if organization != "org_1" {
 		t.Errorf("organization = %q, want the organization the run picked", organization)

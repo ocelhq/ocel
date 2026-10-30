@@ -10,14 +10,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
+
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	"github.com/ocelhq/ocel/cli/internal/jobcontext"
 	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/environment"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -27,25 +31,25 @@ type ocelCloudAnswers struct {
 	t      *testing.T
 	out    *syncBuffer
 	stdin  *io.PipeWriter
-	inputs []*cloudv1.JobInput
+	inputs []*runnerv1.JobInput
 }
 
 func inAJob(t *testing.T, dependencies *Dependencies) *ocelCloudAnswers {
 	t.Helper()
 	stdin, write := io.Pipe()
 	t.Cleanup(func() { _ = write.Close() })
-	dependencies.JobAnswers = jobinput.New(stdin)
+	dependencies.JobContext = &jobcontext.Context{Job: &jobcontext.Job{ID: "job_1", Slug: clitest.FixtureSlug, Input: jobinput.New(stdin)}}
 	useJSONFormat(t, dependencies)
 	answers := &ocelCloudAnswers{t: t, out: &syncBuffer{}, stdin: write}
 	dependencies.Events.Attach(terminal.NewJSONLines(answers.out))
 	return answers
 }
 
-func (a *ocelCloudAnswers) next() *cloudv1.JobInput {
+func (a *ocelCloudAnswers) next() *runnerv1.JobInput {
 	a.t.Helper()
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
-		var held []*cloudv1.JobInput
+		var held []*runnerv1.JobInput
 		for _, ev := range envelopes(a.t, a.out.String()) {
 			if input := ev.GetWaiting().GetInput(); input != nil {
 				held = append(held, input)
@@ -135,8 +139,8 @@ func TestInsideAJobVariablesLeftUnresolvedOnOcelCloudFailTheDeployAsMissing(t *t
 	cloud.answer(fmt.Sprintf(`{"inputId":%q,"resolved":false}`, cloud.next().GetId()))
 
 	err := ended(t, done)
-	if got := clierror.NewRunError(err); got.GetCode() != clierror.CodeVariablesMissing || !strings.Contains(got.GetMessage(), "Ocel Cloud") {
-		t.Errorf("run error = %v, want %s saying Ocel Cloud gave no values", got, clierror.CodeVariablesMissing)
+	if got := clierror.NewRunError(err); got.GetCode() != clierror.CodeVariablesMissing || !strings.Contains(got.GetMessage(), "The console") {
+		t.Errorf("run error = %v, want %s saying the console gave no values", got, clierror.CodeVariablesMissing)
 	}
 	if message := err.Error(); !strings.Contains(message, "Fill them in: run `ocel deploy` again and enter them on its job page") || strings.Contains(message, "ocel env") {
 		t.Errorf("err = %v, want it to send the values to the job page of a deploy run again, not to ocel env", err)
@@ -152,5 +156,25 @@ func TestInsideAJobYesIsRefusedBecauseOcelCloudAnswersEveryConfirmation(t *testi
 	var coded *clierror.Error
 	if !errors.As(err, &coded) || coded.Code != clierror.CodeUsage || !strings.Contains(err.Error(), "--yes") {
 		t.Errorf("err = %v, want --yes refused as usage inside a job", err)
+	}
+}
+
+func TestInsideAJobMissingValuesWithNoVariablesKeyRecordTheWantForTheNextBootstrap(t *testing.T) {
+	fixture := setUpVariablesProject(t, stripeSecretRequired)
+	offerVariablesKey(fixture)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+	cloud := inAJob(t, &dependencies)
+
+	err := ended(t, deployingInAJob(t, dependencies, fixture.Root, deployOptions{}))
+	if err == nil || !strings.Contains(err.Error(), "ocel bootstrap production") {
+		t.Fatalf("deploy err = %v, want the missing key refused naming the bootstrap to run: %s", err, cloud.out.String())
+	}
+	wants, err := stackrecords.ListBootstrapWants(context.Background(), fixture.Provider.KeyValues(), environment.TierProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(wants[provider.VariablesKeyPart]) != 1 {
+		t.Fatalf("wants = %v, want the job to record the key as wanted, for `ocel bootstrap production` to add", wants)
 	}
 }

@@ -17,33 +17,34 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/executables"
+	"github.com/ocelhq/ocel/cli/internal/jobcontext"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
+	"github.com/ocelhq/ocel/pkg/runner"
 )
 
-func TestADeployOfAProjectNamingNoProviderStartsAnOcelCloudJobBeforeAnythingRunsLocally(t *testing.T) {
+func TestADeployOfAProjectNamingNoProviderDispatchesAnOcelCloudJobBeforeAnythingRunsLocally(t *testing.T) {
 	for name, tc := range map[string]struct {
 		target Target
-		want   func(t *testing.T, started *cloudv1.StartJobRequest)
+		want   func(t *testing.T, started *consolev1.DispatchJobRequest)
 	}{
-		"deploy": {target: Production("v1.2.0"), want: func(t *testing.T, started *cloudv1.StartJobRequest) {
-			if started.GetCommand() != cloudv1.JobCommand_JOB_COMMAND_DEPLOY || started.GetTag() != "v1.2.0" || started.GetPreview() != nil {
-				t.Fatalf("started %v, want a deploy tagged v1.2.0", started)
+		"deploy": {target: Production("v1.2.0"), want: func(t *testing.T, started *consolev1.DispatchJobRequest) {
+			if started.GetJob().GetCommand() != runnerv1.JobCommand_JOB_COMMAND_DEPLOY || started.GetJob().GetTag() != "v1.2.0" || started.GetJob().GetPreview() != nil {
+				t.Fatalf("started %s, want a deploy tagged v1.2.0", clitest.DescribeDispatch(started))
 			}
 		}},
-		"preview up": {target: Preview("feature", true), want: func(t *testing.T, started *cloudv1.StartJobRequest) {
-			if started.GetCommand() != cloudv1.JobCommand_JOB_COMMAND_PREVIEW_UP || started.GetTag() != "" ||
-				started.GetPreview().GetName() != "feature" || !started.GetPreview().GetPersistent() {
-				t.Fatalf("started %v, want the persistent preview feature", started)
+		"preview up": {target: Preview("feature", true), want: func(t *testing.T, started *consolev1.DispatchJobRequest) {
+			if started.GetJob().GetCommand() != runnerv1.JobCommand_JOB_COMMAND_PREVIEW_UP || started.GetJob().GetTag() != "" ||
+				started.GetJob().GetPreview().GetName() != "feature" || !started.GetJob().GetPreview().GetPersistent() {
+				t.Fatalf("started %s, want the persistent preview feature", clitest.DescribeDispatch(started))
 			}
 		}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			fake := clitest.ServeOcelCloud(t)
+			fake := clitest.ServeConsole(t)
 			dependencies := newTestDependencies()
 			fake.LogIn(&dependencies.Invocation)
 			dependencies.BuildApps = func(context.Context, *project.Project, map[string]build.AppVariables, map[string]string, build.HostedWorkers, build.Host, build.Log) (build.Output, error) {
@@ -59,16 +60,16 @@ func TestADeployOfAProjectNamingNoProviderStartsAnOcelCloudJobBeforeAnythingRuns
 			if err := To(t.Context(), dependencies, root, tc.target, Options{}, &stdout, io.Discard, strings.NewReader("")); err != nil {
 				t.Fatal(err)
 			}
-			if got := fake.CommittedPaths(); len(got) != 2 {
+			if got := fake.Runner.CommittedPaths(); len(got) != 2 {
 				t.Fatalf("committed %q, want the project's source", got)
 			}
-			if len(fake.Started) != 1 {
-				t.Fatalf("started %d jobs, want one", len(fake.Started))
+			if len(fake.Dispatched) != 1 {
+				t.Fatalf("started %d jobs, want one", len(fake.Dispatched))
 			}
-			if fake.Started[0].GetSlug() != "shop" || fake.Started[0].GetSourceId() != clitest.FakeCloudSourceID {
-				t.Fatalf("started %v, want shop's committed source", fake.Started[0])
+			if fake.Dispatched[0].GetJob().GetSourceId() != clitest.FakeCloudSourceID {
+				t.Fatalf("started %s, want shop's committed source", clitest.DescribeDispatch(fake.Dispatched[0]))
 			}
-			tc.want(t, fake.Started[0])
+			tc.want(t, fake.Dispatched[0])
 		})
 	}
 }
@@ -87,9 +88,9 @@ func TestADeployRefusesNoWaitWhenTheProjectDoesNotRunOnOcelCloud(t *testing.T) {
 
 func TestADeployToOcelCloudRefusesWhatOnlyALocalDeployDoes(t *testing.T) {
 	for _, target := range []Target{Production(""), Preview("feature", false)} {
-		for flag, opts := range map[string]Options{"--dry": {Dry: true}, "--prebuilt": {Prebuilt: true}, "--yes": {Yes: true}} {
+		for flag, opts := range map[string]Options{"--dry": {Dry: true}, "--prebuilt": {Prebuilt: true}} {
 			t.Run(target.command()+" "+flag, func(t *testing.T) {
-				fake := clitest.ServeOcelCloud(t)
+				fake := clitest.ServeConsole(t)
 				dependencies := newTestDependencies()
 				fake.LogIn(&dependencies.Invocation)
 				root := t.TempDir()
@@ -97,10 +98,10 @@ func TestADeployToOcelCloudRefusesWhatOnlyALocalDeployDoes(t *testing.T) {
 
 				err := To(t.Context(), dependencies, root, target, opts, io.Discard, io.Discard, strings.NewReader(""))
 				var coded *clierror.Error
-				if !errors.As(err, &coded) || coded.Code != clierror.CodeCloudUnsupported || !strings.Contains(err.Error(), flag) {
+				if !errors.As(err, &coded) || coded.Code != clierror.CodeJobUnsupported || !strings.Contains(err.Error(), flag) {
 					t.Fatalf("err = %v, want %s refused on Ocel Cloud", err, flag)
 				}
-				if fake.Committed != nil || len(fake.Started) != 0 {
+				if fake.Runner.Committed != nil || len(fake.Dispatched) != 0 {
 					t.Fatal("uploaded the source of a run it refused, or started its job")
 				}
 			})
@@ -129,10 +130,12 @@ func gitCheckout(t *testing.T, branch string, detached bool) string {
 	return root
 }
 
-func builderEnv(t *testing.T, started *cloudv1.StartJobRequest) func(string) string {
+func builderEnv(t *testing.T, started *consolev1.DispatchJobRequest) func(string) string {
 	t.Helper()
-	encoded, err := protojson.Marshal(&cloudv1.JobContext{
-		JobId: clitest.FakeCloudJobID, Slug: started.GetSlug(), PreviewLabel: started.GetPreview().GetLabel(), Git: started.GetGit(),
+	encoded, err := protojson.Marshal(&runnerv1.JobContext{
+		JobId: clitest.FakeJobID, ProjectId: clitest.FixtureConsoleProjectID, Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "shop",
+		PreviewLabel: started.GetJob().GetPreview().GetLabel(), Git: started.GetJob().GetGit(),
+		ConsoleUrl: "https://console.example.com", JobTokenFile: "/workspace/job/token",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +144,7 @@ func builderEnv(t *testing.T, started *cloudv1.StartJobRequest) func(string) str
 	if err := os.WriteFile(path, encoded, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	env := map[string]string{commands.CloudJobContextEnvVar: path, executables.OverrideEnvVar: t.TempDir()}
+	env := map[string]string{runner.ContextEnvVar: path}
 	return func(name string) string { return env[name] }
 }
 
@@ -190,7 +193,7 @@ func TestAPreviewOnOcelCloudIsTheSameEnvironmentInTheJobAsOnTheMachineThatStarte
 				t.Setenv(key, value)
 			}
 			root := gitCheckout(t, tc.branch, tc.detached)
-			fake := clitest.ServeOcelCloud(t)
+			fake := clitest.ServeConsole(t)
 			laptop := newTestDependencies()
 			laptop.ReadGitBranch, laptop.DiscoverPRNumber = previewid.ReadGitBranch, previewid.DiscoverPRNumber
 			fake.LogIn(&laptop.Invocation)
@@ -198,10 +201,10 @@ func TestAPreviewOnOcelCloudIsTheSameEnvironmentInTheJobAsOnTheMachineThatStarte
 			if err := To(t.Context(), laptop, root, tc.target, Options{}, io.Discard, io.Discard, strings.NewReader("")); err != nil {
 				t.Fatal(err)
 			}
-			if len(fake.Started) != 1 {
-				t.Fatalf("started %d jobs, want one", len(fake.Started))
+			if len(fake.Dispatched) != 1 {
+				t.Fatalf("started %d jobs, want one", len(fake.Dispatched))
 			}
-			started := fake.Started[0]
+			started := fake.Dispatched[0]
 			want := &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Lifecycle: tc.lifecycle, Identity: tc.identity, Label: tc.label}
 			onLaptop, err := tc.target.environment(context.Background(), laptop, root)
 			if err != nil {
@@ -210,30 +213,30 @@ func TestAPreviewOnOcelCloudIsTheSameEnvironmentInTheJobAsOnTheMachineThatStarte
 			if !proto.Equal(onLaptop, want) {
 				t.Fatalf("on the laptop the preview is %v, want %v", onLaptop, want)
 			}
-			sent := &cloudv1.PreviewTarget{Name: tc.identity, Label: tc.label, Persistent: tc.lifecycle == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT}
-			if !proto.Equal(started.GetPreview(), sent) {
-				t.Fatalf("the job was started for the preview %v, want %v", started.GetPreview(), sent)
+			sent := &runnerv1.PreviewTarget{Name: tc.identity, Label: tc.label, Persistent: tc.lifecycle == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT}
+			if !proto.Equal(started.GetJob().GetPreview(), sent) {
+				t.Fatalf("the job was started for the preview %v, want %v", started.GetJob().GetPreview(), sent)
 			}
-			if started.GetGit().GetBranch() != tc.gitBranch || started.GetGit().GetPullRequest() != tc.pr || started.GetGit().GetCommit() == "" {
-				t.Fatalf("the job was started with git %v, want branch %s, pull request %d and the commit", started.GetGit(), tc.gitBranch, tc.pr)
+			if started.GetJob().GetGit().GetBranch() != tc.gitBranch || started.GetJob().GetGit().GetPullRequest() != tc.pr || started.GetJob().GetGit().GetCommit() == "" {
+				t.Fatalf("the job was started with git %v, want branch %s, pull request %d and the commit", started.GetJob().GetGit(), tc.gitBranch, tc.pr)
 			}
 
 			builder := newTestDependencies()
-			job, err := commands.ReadBuilderJob(builderEnv(t, started))
+			read, err := jobcontext.Read(builderEnv(t, started))
 			if err != nil {
 				t.Fatal(err)
 			}
-			builder.BuilderJob = job
-			builder.ReadGitBranch, builder.DiscoverPRNumber = builder.BuilderJob.ReadGitBranch, builder.BuilderJob.DiscoverPRNumber
-			inJob, err := Preview(started.GetPreview().GetName(), started.GetPreview().GetPersistent()).environment(context.Background(), builder, t.TempDir())
+			builder.JobContext = read
+			builder.ReadGitBranch, builder.DiscoverPRNumber = read.Job.ReadGitBranch, read.Job.DiscoverPRNumber
+			inJob, err := Preview(started.GetJob().GetPreview().GetName(), started.GetJob().GetPreview().GetPersistent()).environment(context.Background(), builder, t.TempDir())
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !proto.Equal(inJob, onLaptop) {
 				t.Fatalf("in the job the preview is %v, want the laptop's %v", inJob, onLaptop)
 			}
-			if source := builder.BuilderJob.Source(); source.GetBranch() != tc.gitBranch || source.GetCommit() != started.GetGit().GetCommit() {
-				t.Fatalf("in the job the source is %v, want the laptop's git %v", source, started.GetGit())
+			if source := read.Job.Source(); source.GetBranch() != tc.gitBranch || source.GetCommit() != started.GetJob().GetGit().GetCommit() {
+				t.Fatalf("in the job the source is %v, want the laptop's git %v", source, started.GetJob().GetGit())
 			}
 		})
 	}

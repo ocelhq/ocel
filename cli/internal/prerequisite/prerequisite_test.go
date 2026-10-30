@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/confirmation"
+
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
@@ -63,8 +65,9 @@ func (r *recordedSetup) setup(changesAccount bool, fixes func()) prerequisite.Se
 	}
 }
 
-func terminalPolicy(answers string, out *bytes.Buffer) consent.Policy {
-	return consent.Policy{Command: "ocel deploy", Interactive: true, In: strings.NewReader(answers), Out: out}
+func terminalPolicy(typed string, out *bytes.Buffer) consent.Policy {
+	answers := strings.NewReader(typed)
+	return consent.Policy{Command: "ocel deploy", Interactive: true, In: answers, Out: out, Respondent: confirmation.OnTerminal(out, answers)}
 }
 
 func TestAMissingProjectIsSetUpAndCheckedAgain(t *testing.T) {

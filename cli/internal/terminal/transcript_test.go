@@ -14,10 +14,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/progress"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -1265,27 +1265,27 @@ func TestTheVariablesGateIsSetApartByBlankLinesAndTheResumeIsALineNamingItsSpan(
 	}
 }
 
-func TestAnOcelCloudJobWaitingForValuesListsThemAndItsPageTheMomentItWaitsAndTheResumeEndsIt(t *testing.T) {
+func TestARemoteJobWaitingForValuesListsThemAndItsPageTheMomentItWaitsAndTheResumeEndsIt(t *testing.T) {
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{})
 	_, watching := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "shop", progress.Title{Started: "Waiting for the job", Ended: "Waited for the job"})
 	watching.Say("Building web")
 	resume := watching.Hold(&streamv1.WaitingEvent{
-		Url:     "https://console.test/cloud/jobs/job_1",
+		Url:     "https://console.test/projects/shop/deployments/4bf92f3577b34da6a3ce929d0e0e4736?org=org_1",
 		Missing: &streamv1.MissingVariables{Cells: []*streamv1.MissingVariable{{Key: "STRIPE_API_KEY", Reason: "no value"}}},
-		Input:   &cloudv1.JobInput{Id: "in_1", Need: &cloudv1.JobInput_Variables{Variables: &cloudv1.VariablesNeeded{}}},
+		Input:   &runnerv1.JobInput{Id: "in_1", Need: &runnerv1.JobInput_Variables{Variables: &runnerv1.VariablesNeeded{}}},
 	})
 
 	waiting := "✗ 1 variable is not ready — nothing has been built.\n" +
 		"\n" +
 		"  ✗ STRIPE_API_KEY  root  no value\n" +
 		"\n" +
-		"  Fill them in on Ocel Cloud at:\n" +
+		"  Fill them in on the console at:\n" +
 		"\n" +
-		"    https://console.test/cloud/jobs/job_1\n" +
+		"    https://console.test/projects/shop/deployments/4bf92f3577b34da6a3ce929d0e0e4736?org=org_1\n" +
 		"\n" +
-		"  Waiting for Ocel Cloud — press Ctrl-C to stop watching; the job waits there either way.\n" +
+		"  Waiting for the console — press Ctrl-C to stop watching; the job waits there either way.\n" +
 		"\n"
 	if got := out.String(); got != waiting {
 		t.Fatalf("while the job waits got\n%s\nwant\n%s", got, waiting)
@@ -1302,27 +1302,27 @@ func TestAnOcelCloudJobWaitingForValuesListsThemAndItsPageTheMomentItWaitsAndThe
 	}
 }
 
-func TestAnOcelCloudJobAskingAQuestionShowsItAndWhereToAnswerItTheMomentItWaits(t *testing.T) {
+func TestARemoteJobAskingAQuestionShowsItAndWhereToAnswerItTheMomentItWaits(t *testing.T) {
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{})
 	_, watching := run.Phase(progressv1.Phase_PHASE_DEPLOY).Child(t.Context(), "shop", progress.Title{Started: "Waiting for the job", Ended: "Waited for the job"})
 	watching.Hold(&streamv1.WaitingEvent{
-		Url: "https://console.test/cloud/jobs/job_1",
-		Input: &cloudv1.JobInput{Id: "in_1", Need: &cloudv1.JobInput_Confirmation{Confirmation: &cloudv1.Confirmation{
+		Url: "https://console.test/projects/shop/deployments/4bf92f3577b34da6a3ce929d0e0e4736?org=org_1",
+		Input: &runnerv1.JobInput{Id: "in_1", Need: &runnerv1.JobInput_Confirmation{Confirmation: &runnerv1.Confirmation{
 			Finding:  "The database web-db is replaced.",
 			Question: "Replace it?",
 		}}},
 	})
 
 	want := "The database web-db is replaced.\n" +
-		"Ocel Cloud asks: Replace it?\n" +
+		"The job asks: Replace it?\n" +
 		"\n" +
-		"  Answer it on Ocel Cloud at:\n" +
+		"  Answer it on the console at:\n" +
 		"\n" +
-		"    https://console.test/cloud/jobs/job_1\n" +
+		"    https://console.test/projects/shop/deployments/4bf92f3577b34da6a3ce929d0e0e4736?org=org_1\n" +
 		"\n" +
-		"  Waiting for Ocel Cloud — press Ctrl-C to stop watching; the job waits there either way.\n" +
+		"  Waiting for the console — press Ctrl-C to stop watching; the job waits there either way.\n" +
 		"\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
@@ -1377,19 +1377,19 @@ func TestARunThatFailedOnceAChangingPhaseStartedClaimsNothingChanged(t *testing.
 	}
 }
 
-func TestAnOcelCloudJobWaitingForInputItDoesNotNameStillSaysWhereToGiveIt(t *testing.T) {
+func TestARemoteJobWaitingForInputItDoesNotNameStillSaysWhereToGiveIt(t *testing.T) {
 	t.Parallel()
 
 	run, out, _ := groupedRun(t, Presentation{})
-	run.Hold(&streamv1.WaitingEvent{Url: "https://console.test/cloud/jobs/job_1", Input: &cloudv1.JobInput{}})
+	run.Hold(&streamv1.WaitingEvent{Url: "https://console.test/projects/shop/deployments/4bf92f3577b34da6a3ce929d0e0e4736?org=org_1", Input: &runnerv1.JobInput{}})
 
 	want := "The job needs your input.\n" +
 		"\n" +
-		"  Answer it on Ocel Cloud at:\n" +
+		"  Answer it on the console at:\n" +
 		"\n" +
-		"    https://console.test/cloud/jobs/job_1\n" +
+		"    https://console.test/projects/shop/deployments/4bf92f3577b34da6a3ce929d0e0e4736?org=org_1\n" +
 		"\n" +
-		"  Waiting for Ocel Cloud — press Ctrl-C to stop watching; the job waits there either way.\n" +
+		"  Waiting for the console — press Ctrl-C to stop watching; the job waits there either way.\n" +
 		"\n"
 	if got := out.String(); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)

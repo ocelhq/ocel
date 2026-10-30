@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/confirmation"
+
 	"connectrpc.com/connect"
 	"github.com/creack/pty"
 
@@ -35,8 +37,12 @@ func (a *scriptedPrompt) Confirm(_ context.Context, question string) (bool, erro
 	return a.answer, a.err
 }
 
-func answering(prompt Prompt, out io.Writer) Questions {
-	return Questions{Prompt: prompt, Out: out}
+func (a *scriptedPrompt) Phrase(context.Context, string, string) (bool, error) {
+	return a.answer, a.err
+}
+
+func answering(prompt *scriptedPrompt, out io.Writer) Questions {
+	return Questions{Respondent: confirmation.Terminal{Prompt: prompt, Out: out}}
 }
 
 type questionFake struct {
@@ -161,7 +167,7 @@ func TestAQuestionNobodyCanAnswerReportsInputRequired(t *testing.T) {
 
 	for name, questions := range map[string]Questions{
 		"no terminal":      answering(&scriptedPrompt{attended: false, answer: true}, io.Discard),
-		"under --json":     {Prompt: &scriptedPrompt{attended: true, answer: true}, Out: io.Discard, IsJSON: func() bool { return true }},
+		"under --json":     {Respondent: confirmation.Terminal{Prompt: &scriptedPrompt{attended: true, answer: true}, Out: io.Discard, IsJSON: func() bool { return true }}},
 		"no prompt at all": {},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -232,7 +238,7 @@ func TestAQuestionUnderJSONIsNeverAskedOnATerminal(t *testing.T) {
 	asker := &scriptedPrompt{attended: true, answer: true}
 	var out bytes.Buffer
 
-	err := fake.call(t, Questions{Prompt: asker, Out: &out, IsJSON: func() bool { return true }})
+	err := fake.call(t, Questions{Respondent: confirmation.Terminal{Prompt: asker, Out: &out, IsJSON: func() bool { return true }}})
 	if err == nil {
 		t.Fatal("call error = nil, want a refusal")
 	}
@@ -252,7 +258,7 @@ func TestQuestionsBuiltOverAPipeNeverPromptIntoABuffer(t *testing.T) {
 
 	fake := newQuestionFake(t, "unknown-host-key")
 	var log bytes.Buffer
-	questions := Questions{Prompt: prompt.New(&log, strings.NewReader("y\n")), Out: &log}
+	questions := Questions{Respondent: confirmation.Terminal{Prompt: prompt.New(&log, strings.NewReader("y\n")), Out: &log}}
 
 	if err := fake.call(t, questions); err == nil {
 		t.Fatal("call error = nil, want a refusal when neither end is a terminal")
@@ -287,7 +293,7 @@ func TestAQuestionThatLandsWhereNobodyCanReadItIsNeverAsked(t *testing.T) {
 	}
 
 	var log bytes.Buffer
-	questions := Questions{Prompt: prompt.New(&log, tty), Out: &log}
+	questions := Questions{Respondent: confirmation.Terminal{Prompt: prompt.New(&log, tty), Out: &log}}
 
 	if err := fake.call(t, questions); err == nil {
 		t.Fatal("call error = nil, want a refusal when the question would go to a redirected stream")
@@ -391,7 +397,7 @@ func TestARetriedCallThatAsksAgainIsNeverAskedTwice(t *testing.T) {
 	asker := &scriptedPrompt{attended: true, answer: true}
 
 	calls := 0
-	err := callRefusing(t, answering(asker, io.Discard), func() error { calls++; return asking(fakeQuestionID) })
+	err := callRefusing(t, Questions{Respondent: confirmation.Terminal{Prompt: asker, Out: io.Discard}}, func() error { calls++; return asking(fakeQuestionID) })
 	if err == nil {
 		t.Fatal("call error = nil, want the second refusal returned")
 	}
@@ -409,6 +415,8 @@ type answersInTurn struct {
 }
 
 func (a *answersInTurn) Attended() bool { return true }
+
+func (a *answersInTurn) Phrase(context.Context, string, string) (bool, error) { return false, nil }
 
 func (a *answersInTurn) Confirm(_ context.Context, question string) (bool, error) {
 	a.asked = append(a.asked, question)
@@ -447,7 +455,7 @@ func TestDecliningTheQuestionAConfirmAsksAgainRetriesNothing(t *testing.T) {
 	asker := &answersInTurn{answers: []bool{true, false}}
 
 	calls := 0
-	err := callRefusingIn(t, "asks-again-on-confirm", answering(asker, io.Discard), func() error { calls++; return asking(fakeQuestionID) })
+	err := callRefusingIn(t, "asks-again-on-confirm", Questions{Respondent: confirmation.Terminal{Prompt: asker, Out: io.Discard}}, func() error { calls++; return asking(fakeQuestionID) })
 	if got := clierror.NewRunError(err).GetCode(); got != clierror.CodeConfirmationRequired {
 		t.Fatalf("call error = %v (code %q), want %q", err, got, clierror.CodeConfirmationRequired)
 	}

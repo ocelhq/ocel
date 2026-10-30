@@ -25,13 +25,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/english"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
+	"github.com/ocelhq/ocel/pkg/runner"
 )
 
-const (
-	MaxFileBytes  = 512 << 20
-	MaxTotalBytes = 2 << 30
-)
+const MaxFileBytes = 512 << 20
 
 const (
 	gitignoreName    = ".gitignore"
@@ -54,7 +52,7 @@ type Blob struct {
 
 type Archive struct {
 	Root     string
-	Manifest *cloudv1.SourceManifest
+	Manifest *runnerv1.SourceManifest
 	blobs    map[string]blobFile
 }
 
@@ -295,14 +293,14 @@ func refuseOversized(root string, entries []entry) error {
 			english.And(named(biggest(oversized))), english.Number(len(oversized), "is", "are"), english.Bytes(MaxFileBytes),
 			english.Number(len(oversized), "it", "them"), gitignoreName, dockerignoreName))
 	}
-	if total > MaxTotalBytes {
+	if total > runner.MaxSourceBytes {
 		return sourceInvalid(fmt.Errorf("the source under %s is %s, over the %s an upload may be; the biggest files are %s: ignore what the build does not need in %s or %s",
-			root, english.Bytes(total), english.Bytes(MaxTotalBytes), english.And(named(biggest(entries))), gitignoreName, dockerignoreName))
+			root, english.Bytes(total), english.Bytes(runner.MaxSourceBytes), english.And(named(biggest(entries))), gitignoreName, dockerignoreName))
 	}
 	return nil
 }
 
-func refuseInvalidManifest(root string, manifest *cloudv1.SourceManifest) error {
+func refuseInvalidManifest(root string, manifest *runnerv1.SourceManifest) error {
 	err := protovalidate.Validate(manifest)
 	var invalid *protovalidate.ValidationError
 	if !errors.As(err, &invalid) {
@@ -317,11 +315,11 @@ func refuseInvalidManifest(root string, manifest *cloudv1.SourceManifest) error 
 			broken = append(broken, fmt.Sprintf("%s: %s", english.Count(len(files), "file"), violation.Proto.GetMessage()))
 		}
 	}
-	return sourceInvalid(fmt.Errorf("the source under %s breaks a limit Ocel Cloud sets: %s", root, strings.Join(broken, "; ")))
+	return sourceInvalid(fmt.Errorf("the source under %s breaks a limit a runner sets: %s", root, strings.Join(broken, "; ")))
 }
 
 func sourceInvalid(cause error) error {
-	return &clierror.Error{Code: clierror.CodeCloudSourceInvalid, Cause: cause}
+	return &clierror.Error{Code: clierror.CodeJobSourceInvalid, Cause: cause}
 }
 
 func biggest(entries []entry) []entry {
@@ -339,9 +337,9 @@ func named(entries []entry) []string {
 }
 
 func digest(root string, entries []entry) (*Archive, error) {
-	archive := &Archive{Root: root, Manifest: &cloudv1.SourceManifest{}, blobs: map[string]blobFile{}}
+	archive := &Archive{Root: root, Manifest: &runnerv1.SourceManifest{}, blobs: map[string]blobFile{}}
 	for _, e := range entries {
-		file := &cloudv1.SourceFile{Path: e.rel, SymlinkTarget: e.symlink}
+		file := &runnerv1.SourceFile{Path: e.rel, SymlinkTarget: e.symlink}
 		if e.symlink == "" {
 			sum, size, err := hashFile(e.abs)
 			if err != nil {
@@ -352,7 +350,7 @@ func digest(root string, entries []entry) (*Archive, error) {
 		}
 		archive.Manifest.Files = append(archive.Manifest.Files, file)
 	}
-	slices.SortFunc(archive.Manifest.Files, func(x, y *cloudv1.SourceFile) int { return strings.Compare(x.GetPath(), y.GetPath()) })
+	slices.SortFunc(archive.Manifest.Files, func(x, y *runnerv1.SourceFile) int { return strings.Compare(x.GetPath(), y.GetPath()) })
 	return archive, nil
 }
 

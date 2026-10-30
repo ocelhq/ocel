@@ -1,4 +1,4 @@
-package cloud
+package endpointcall
 
 import (
 	"context"
@@ -50,7 +50,7 @@ func (Headers) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.S
 func (h Headers) set(ctx context.Context, header http.Header) error {
 	token, err := h.Tokens.Ensure(ctx)
 	if err != nil {
-		return fmt.Errorf("issue a token for Ocel Cloud: %w", err)
+		return fmt.Errorf("issue a token for the endpoint: %w", err)
 	}
 	header.Set("Authorization", "Bearer "+token)
 	header.Set(VersionHeader, version.Version)

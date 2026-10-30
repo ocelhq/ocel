@@ -9,7 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/cloud"
+	"github.com/ocelhq/ocel/cli/internal/endpointcall"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
@@ -27,7 +27,7 @@ func (s *remoteSession) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		}
 		opened := s.openedTimes()
 		resp, err := next(ctx, req)
-		if !cloud.IsSessionEnded(err) {
+		if !endpointcall.IsSessionEnded(err) {
 			return resp, err
 		}
 		if err := s.reopen(ctx, opened); err != nil {
@@ -93,7 +93,7 @@ func (c *reopeningConn) Receive(msg any) error {
 		c.received = true
 		return nil
 	}
-	if c.received || c.request == nil || !cloud.IsSessionEnded(err) {
+	if c.received || c.request == nil || !endpointcall.IsSessionEnded(err) {
 		return err
 	}
 	if err := c.session.reopen(c.ctx, c.opened); err != nil {

@@ -2,8 +2,14 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/progress"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
@@ -82,4 +88,75 @@ func ProjectSlugs(projects []*consolev1.Project) string {
 		slugs[i] = p.GetSlug()
 	}
 	return strings.Join(slugs, ", ")
+}
+
+func pickOrganization(ctx context.Context, account ConsoleAccount, projectDir string) (*console.Organization, error) {
+	orgs, err := account.ListOrganizations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	link, err := console.ReadLink(projectDir, account.URL)
+	if err != nil {
+		return nil, err
+	}
+	if link != nil {
+		if org := FindOrganization(orgs, func(org console.Organization) bool { return org.ID == link.OrganizationID }); org != nil {
+			return org, nil
+		}
+		return nil, fmt.Errorf("this directory is linked to %s in an organization you no longer belong to — run `ocel link` to link it again", link.ProjectName)
+	}
+	if read, err := account.Client.GetSession(ctx, account.Session); err == nil && read != nil {
+		if org := FindOrganization(orgs, func(org console.Organization) bool { return org.ID == read.Session.ActiveOrganizationID }); org != nil {
+			return org, nil
+		}
+	}
+	if len(orgs) == 1 {
+		return &orgs[0], nil
+	}
+	return nil, clierror.NewInputRequired(
+		fmt.Errorf("you belong to %d organizations in %s and none is active — run `ocel link --org <slug>` to pick the one this project deploys under: %s", len(orgs), account.URL, OrganizationSlugs(orgs)),
+		"ocel link --org <slug>",
+	)
+}
+
+func linkProject(ctx context.Context, check *run.Span, account ConsoleAccount, cfg *project.Project, org *console.Organization) (*console.Link, error) {
+	if link, err := console.ReadLink(cfg.Dir, account.URL); err != nil || link != nil {
+		return link, err
+	}
+	selected, err := findOrCreateProject(ctx, check, account, cfg.Slug, org)
+	if err != nil {
+		return nil, err
+	}
+	link, err := account.WriteLink(cfg.Dir, org, selected)
+	if err != nil {
+		return nil, err
+	}
+	check.Say(LinkedMessage(org, selected))
+	return &link, nil
+}
+
+func findOrCreateProject(ctx context.Context, check *run.Span, account ConsoleAccount, slug string, org *console.Organization) (*consolev1.Project, error) {
+	find := func(ctx context.Context) (*consolev1.Project, error) {
+		projects, err := account.ListProjects(ctx, org)
+		return FindProject(projects, slug), err
+	}
+	loadingCtx, loading := check.Child(ctx, slug, progress.Loading.Title("the projects in "+org.Name))
+	found, err := find(loadingCtx)
+	loading.End(err)
+	if err != nil || found != nil {
+		return found, err
+	}
+	ctx, creating := check.Child(ctx, slug, progress.Creating.Title("the project in "+org.Name))
+	created, err := account.Client.CreateProject(ctx, account.Session, slug, slug)
+	if console.IsConflict(err) {
+		created, err = find(ctx)
+		if err == nil && created == nil {
+			err = errors.New("the console reports the project exists but does not list it")
+		}
+	}
+	if err != nil {
+		err = fmt.Errorf("create the project %s in %s: %w", slug, org.Name, err)
+	}
+	creating.End(err)
+	return created, err
 }

@@ -50,6 +50,22 @@ func bootstrapWith(t *testing.T, project clitest.FakeProject, invocation command
 	return clitest.RequestsTo[*contractv1.BootstrapRequest](t, project.Requests, contractv1connect.ProviderServiceBootstrapProcedure), stdout.String() + stderr.String(), err
 }
 
+func TestABootstrapNamesItsNamespaceToTheTargetTheConsolePrepares(t *testing.T) {
+	for given, want := range map[string]string{"": string(provider.DefaultNamespace), "team-a": "team-a"} {
+		t.Run(want, func(t *testing.T) {
+			t.Setenv(provider.NamespaceEnvVar, given)
+			project, invocation, served := consoleTrustProject(t, true)
+
+			if _, out, err := bootstrapWith(t, project, invocation, Options{Yes: true}); err != nil {
+				t.Fatalf("Run() = %v; %s", err, out)
+			}
+			if prepared := served.PreparedTargets(); len(prepared) != 1 || prepared[0].GetNamespace() != want {
+				t.Errorf("Prepare got %v, want the namespace %s", prepared, want)
+			}
+		})
+	}
+}
+
 func TestABootstrapLinkedToAConsoleTrustsItToDeployTheTierAndRecordsTheIdentity(t *testing.T) {
 	project, invocation, served := consoleTrustProject(t, true)
 

@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/confirmation"
+
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/project"
@@ -44,7 +46,8 @@ func TestTheInitSetupAsksForTheProviderAndWhatItRequiresThenWritesTheConfig(t *t
 	dir := initTestDir(t, "shop")
 
 	var out bytes.Buffer
-	policy := consent.Policy{Interactive: true, In: strings.NewReader(choiceOf(t, "vps") + "\n203.0.113.7\n"), Out: &out}
+	answers := strings.NewReader(choiceOf(t, "vps") + "\n203.0.113.7\n")
+	policy := consent.Policy{Interactive: true, In: answers, Out: &out, Respondent: confirmation.OnTerminal(&out, answers)}
 	if err := NewSetup(dependencies).Run(context.Background(), policy, run.NewBus(time.Now).Preamble(context.Background()), missingConfigIn(t, dir)); err != nil {
 		t.Fatalf("Run err = %v, want the project initialized", err)
 	}
@@ -65,7 +68,8 @@ func TestAnInitSetupLeftUnansweredIsADecline(t *testing.T) {
 	stubPackageManager(&dependencies, nil)
 	dir := initTestDir(t, "shop")
 
-	policy := consent.Policy{Interactive: true, In: strings.NewReader(""), Out: &bytes.Buffer{}}
+	answers, written := strings.NewReader(""), &bytes.Buffer{}
+	policy := consent.Policy{Interactive: true, In: answers, Out: written, Respondent: confirmation.OnTerminal(written, answers)}
 	err := NewSetup(dependencies).Run(context.Background(), policy, run.NewBus(time.Now).Preamble(context.Background()), missingConfigIn(t, dir))
 	if !prerequisite.IsDeclined(err) {
 		t.Errorf("Run err = %v, want a decline", err)

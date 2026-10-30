@@ -1,17 +1,18 @@
 {
-  "name": "cloud-token",
+  "name": "endpoint-token-ocel-cloud",
   "request": {
     "method": "POST",
-    "path": "/api/connect/console.v1.ConsoleService/IssueCloudToken",
+    "path": "/api/connect/console.v1.ConsoleService/IssueEndpointToken",
     "headers": {
       "Authorization": "Bearer {{session.token}}",
       "Content-Type": "application/json"
     },
     "body": {
+      "organizationId": "{{organization.id}}",
+      "endpointId": "ocel-cloud",
       "scopes": [
-        "cloud.apps.read"
-      ],
-      "organizationId": "{{organization.id}}"
+        "SCOPE_APPS_READ"
+      ]
     }
   },
   "response": {

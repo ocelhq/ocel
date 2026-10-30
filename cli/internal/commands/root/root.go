@@ -48,12 +48,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
 	"github.com/ocelhq/ocel/cli/internal/executables"
+	"github.com/ocelhq/ocel/cli/internal/jobcontext"
 	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/skill"
 	"github.com/ocelhq/ocel/cli/internal/telemetry"
@@ -209,12 +209,12 @@ func newCommand() *command {
 	invocation.Setups[prerequisite.Domain] = domain.NewSetup()
 	rootCmd.AddCommand(projectinit.NewCommand(initDependencies))
 	rootCmd.AddCommand(generate.NewCommand(generate.Dependencies{Invocation: invocation, CollectDeclarations: declaration.Collect}))
-	rootCmd.AddCommand(buildcommand.NewCommand(buildcommand.Dependencies{Invocation: invocation, BuildApps: build.Apps, CollectDeclarations: declaration.Collect, OpenBrowser: browser.OpenURL, ReadGitBranch: previewid.ReadGitBranch, DiscoverPRNumber: previewid.DiscoverPRNumber}))
-	rootCmd.AddCommand(lock.NewCommand(lock.Dependencies{Invocation: invocation, Pin: executables.Pin}))
 	readGitBranch, discoverPRNumber := previewid.ReadGitBranch, previewid.DiscoverPRNumber
-	if job := invocation.BuilderJob; job != nil {
+	if job := invocation.Job(); job != nil {
 		readGitBranch, discoverPRNumber = job.ReadGitBranch, job.DiscoverPRNumber
 	}
+	rootCmd.AddCommand(buildcommand.NewCommand(buildcommand.Dependencies{Invocation: invocation, BuildApps: build.Apps, CollectDeclarations: declaration.Collect, ReadGitBranch: readGitBranch, DiscoverPRNumber: discoverPRNumber}))
+	rootCmd.AddCommand(lock.NewCommand(lock.Dependencies{Invocation: invocation, Pin: executables.Pin}))
 	deployDependencies := deploy.Dependencies{
 		Invocation:              invocation,
 		BuildApps:               build.Apps,
@@ -222,7 +222,6 @@ func newCommand() *command {
 		ReadPrebuilt:            build.ReadPrebuilt,
 		BuildID:                 build.BuildID,
 		CollectDeclarations:     declaration.Collect,
-		OpenBrowser:             browser.OpenURL,
 		ServeVariableEditor:     env.ServeVariableEditor,
 		ReadGitBranch:           readGitBranch,
 		DiscoverPRNumber:        discoverPRNumber,
@@ -290,25 +289,26 @@ func isShellCompletion(cmd *cobra.Command) bool {
 
 func newInvocation(bus *run.Bus, set *flags) (commands.Invocation, error) {
 	isJSON := func() bool { return set.json }
-	job, err := commands.ReadBuilderJob(os.Getenv)
+	jobContext, err := jobcontext.Read(os.Getenv)
 	invocation := commands.Invocation{
 		Events:          bus,
 		Presentation:    set.presentation,
 		StdinIsTerminal: func(in io.Reader) bool { return terminal.IsTerminal(in) },
 		IsJSON:          isJSON,
-		Questions:       providerprocess.Questions{Prompt: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr, IsJSON: isJSON},
+		Values:          prompt.New(os.Stderr, os.Stdin),
+		OpenBrowser:     browser.OpenURL,
 		ConfigPath:      set.explicitConfigPath,
 
-		Console:           deployreport.Console{LoadCredentials: console.LoadCredentials, Getenv: os.Getenv},
-		ConsoleCredential: consolecredential.Console{Getenv: os.Getenv, Version: version.Version},
+		Console:           deployreport.Console{LoadCredentials: console.LoadCredentials, Context: jobContext},
+		ConsoleCredential: consolecredential.Console{Context: jobContext, Version: version.Version},
 		CloudOffer:        console.NewCloudOffers(console.LoadCredentials, console.SaveCredentials).Resolve,
 		CloudSessions:     commands.NewCloudSessions(),
-		BuilderJob:        job,
+		JobContext:        jobContext,
 	}
-	if invocation.BuilderJob != nil {
-		invocation.Console, invocation.ConsoleCredential, invocation.CloudOffer = deployreport.Console{}, consolecredential.Console{}, nil
-		invocation.JobAnswers = jobinput.New(os.Stdin)
-		invocation.Questions.Job = invocation.JobAnswers
+	if invocation.Job() != nil {
+		invocation.Console.LoadCredentials, invocation.CloudOffer = nil, nil
+		jobContext.Job.Input = jobinput.New(os.Stdin)
 	}
+	invocation.Questions.Respondent = invocation.Respondent(os.Stderr, os.Stdin)
 	return invocation, err
 }

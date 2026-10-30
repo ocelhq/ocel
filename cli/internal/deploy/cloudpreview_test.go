@@ -3,15 +3,16 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
@@ -43,28 +44,27 @@ func TestPreviewLsRmAndPruneRunOnOcelCloudThroughTheProviderItServes(t *testing.
 		if !strings.Contains(stdout.String(), identity) {
 			t.Fatalf("stdout = %q, want %s listed", stdout.String(), identity)
 		}
-		requireTokenScopes(t, project.Cloud, "cloud.apps.read")
+		requireTokenScopes(t, project.Cloud, "apps.read")
 	})
 
-	t.Run("rm tears down the current branch's preview and records it in the linked console project", func(t *testing.T) {
+	t.Run("rm dispatches a job that tears down the current branch's preview", func(t *testing.T) {
 		project, dependencies, identity := previewOnOcelCloud(t, "feature/login")
-		if err := console.WriteLink(project.Root, console.Link{APIURL: project.Cloud.ConsoleURL, OrganizationID: "org_1", ProjectID: clitest.FixtureConsoleProjectID, ProjectName: clitest.FixtureSlug}); err != nil {
-			t.Fatal(err)
-		}
+		project.Cloud.Link(t, project.Root)
+		clitest.WriteFile(t, filepath.Join(project.Root, "ocel.json"), `{"slug": "`+clitest.FixtureSlug+`"}`)
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &stdout)
-		if err := runPreviewRemove(t.Context(), dependencies, project.Root, previewRemoveOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		if err := runPreviewRemove(t.Context(), dependencies, project.Root, previewRemoveOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
+		dispatched := project.Cloud.Dispatched
+		if len(dispatched) != 1 || dispatched[0].GetTier() != environmentv1.Tier_TIER_PREVIEW || dispatched[0].GetJob().GetCommand() != runnerv1.JobCommand_JOB_COMMAND_PREVIEW_RM ||
+			dispatched[0].GetJob().GetPreview().GetName() != identity {
+			t.Fatalf("dispatched %v, want one preview rm job for %s", clitest.DescribeDispatched(dispatched), identity)
+		}
 		left, err := stackrecords.PreviewEnvironments(context.Background(), project.Provider.KeyValues(), clitest.FixtureSlug)
-		if err != nil || len(left) != 0 {
-			t.Fatalf("previews left = %+v, err = %v, want %s torn down", left, err, identity)
+		if err != nil || len(left) != 1 {
+			t.Fatalf("previews left = %+v, err = %v, want the job, not this run, to tear %s down", left, err, identity)
 		}
-		events := project.Cloud.RecordedEvents()
-		if len(events) != 1 || events[0].GetEvent().GetKind() != consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_PREVIEW_REMOVED || events[0].GetEvent().GetEnvironment().GetIdentity() != identity {
-			t.Fatalf("events = %v, want the preview's removal recorded", events)
-		}
-		requireTokenScopes(t, project.Cloud, "cloud.apps.read", "cloud.apps.write")
 	})
 
 	t.Run("prune reaches Ocel Cloud", func(t *testing.T) {
@@ -77,11 +77,11 @@ func TestPreviewLsRmAndPruneRunOnOcelCloudThroughTheProviderItServes(t *testing.
 		if !strings.Contains(stdout.String(), "Pruned the promotions of preview") {
 			t.Fatalf("stdout = %q, want the prune reported", stdout.String())
 		}
-		requireTokenScopes(t, project.Cloud, "cloud.apps.read", "cloud.apps.write")
+		requireTokenScopes(t, project.Cloud, "apps.read", "apps.write")
 	})
 }
 
-func requireTokenScopes(t *testing.T, cloud *clitest.FakeOcelCloud, want ...string) {
+func requireTokenScopes(t *testing.T, cloud *clitest.FakeConsole, want ...string) {
 	t.Helper()
 	if len(cloud.TokenScopes) == 0 || slices.ContainsFunc(cloud.TokenScopes, func(got []string) bool { return !slices.Equal(got, want) }) {
 		t.Fatalf("tokens issued with scopes %v, want each with exactly %v", cloud.TokenScopes, want)

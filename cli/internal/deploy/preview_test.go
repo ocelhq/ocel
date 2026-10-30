@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/build"
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/jobcontext"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -210,9 +210,9 @@ func TestPreviewUpSendsThePreviewEnvironmentItsNameAndFlagsDescribe(t *testing.T
 		assertEnvironment(t, env, environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL, "some-fixture")
 	})
 
-	t.Run("inside an Ocel Cloud job a name carries the label the job was started with", func(t *testing.T) {
+	t.Run("inside a job a name carries the label the job was started with", func(t *testing.T) {
 		dependencies := newTestDependencies()
-		dependencies.BuilderJob = &commands.BuilderJob{ID: "job_1", PreviewLabel: "pr-12"}
+		dependencies.JobContext = &jobcontext.Context{Job: &jobcontext.Job{ID: "job_1", PreviewLabel: "pr-12"}}
 
 		env, err := Preview("feature-login-1a2b3c4d", false).environment(context.Background(), dependencies, "")
 		if err != nil {

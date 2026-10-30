@@ -1,4 +1,4 @@
-package cloud
+package runnerclient
 
 import (
 	"bytes"
@@ -22,10 +22,11 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
+	"github.com/ocelhq/ocel/cli/internal/endpointcall"
 	"github.com/ocelhq/ocel/cli/internal/sourcearchive"
 	"github.com/ocelhq/ocel/cli/internal/wireerror"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
-	"github.com/ocelhq/ocel/pkg/proto/cloud/v1/cloudv1connect"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
+	"github.com/ocelhq/ocel/pkg/proto/runner/v1/runnerv1connect"
 	"github.com/ocelhq/ocel/pkg/tracing"
 )
 
@@ -42,26 +43,26 @@ const (
 )
 
 type Client struct {
+	name    string
 	apiURL  string
 	http    *http.Client
-	headers Headers
-	upload  cloudv1connect.UploadServiceClient
-	jobs    cloudv1connect.JobServiceClient
+	headers endpointcall.Headers
+	runner  runnerv1connect.RunnerServiceClient
 	sleep   func(ctx context.Context, d time.Duration) error
 }
 
-func New(apiURL string, tokens TokenSource) *Client {
+func New(name, apiURL string, tokens endpointcall.TokenSource) *Client {
 	c := &Client{
+		name:    name,
 		apiURL:  strings.TrimRight(apiURL, "/"),
 		http:    tracing.NewClient(0),
-		headers: Headers{Tokens: tokens},
+		headers: endpointcall.Headers{Tokens: tokens},
 		sleep:   sleep,
 	}
 	interceptors := connect.WithInterceptors(c.headers, wireerror.Interceptor(func(err *connect.Error) *clierror.Error {
-		return RefusalOf(c.apiURL, err)
+		return endpointcall.RefusalOf(endpointcall.Runner, c.name, c.apiURL, err)
 	}))
-	c.upload = cloudv1connect.NewUploadServiceClient(c.http, c.apiURL, interceptors)
-	c.jobs = cloudv1connect.NewJobServiceClient(c.http, c.apiURL, interceptors)
+	c.runner = runnerv1connect.NewRunnerServiceClient(c.http, c.apiURL, interceptors)
 	return c
 }
 
@@ -77,15 +78,15 @@ type Source interface {
 
 type Upload struct {
 	Blob   sourcearchive.Blob
-	Target *cloudv1.Upload
+	Target *runnerv1.Upload
 }
 
-type Planned struct {
-	Missing    []Upload
+type Missing struct {
+	Uploads    []Upload
 	TotalBytes uint64
 }
 
-func (c *Client) Plan(ctx context.Context, source Source) (Planned, error) {
+func (c *Client) ListMissing(ctx context.Context, source Source) (Missing, error) {
 	blobs := source.Blobs()
 	bySum := make(map[string]sourcearchive.Blob, len(blobs))
 	digests := make([]string, 0, len(blobs))
@@ -93,41 +94,41 @@ func (c *Client) Plan(ctx context.Context, source Source) (Planned, error) {
 		bySum[blob.Digest] = blob
 		digests = append(digests, blob.Digest)
 	}
-	var planned Planned
+	var found Missing
 	for start := 0; start < len(digests); start += MaxDigestsPerCall {
 		batch := digests[start:min(start+MaxDigestsPerCall, len(digests))]
-		var missing *cloudv1.MissingResponse
+		var missing *runnerv1.ListMissingBlobsResponse
 		err := c.retry(ctx, func(ctx context.Context) (time.Duration, error) {
 			ctx, cancel := context.WithTimeout(ctx, callTimeout)
 			defer cancel()
 			var err error
-			missing, err = c.upload.Missing(ctx, &cloudv1.MissingRequest{Digests: batch})
+			missing, err = c.runner.ListMissingBlobs(ctx, &runnerv1.ListMissingBlobsRequest{Digests: batch})
 			return 0, retryableCall(err)
 		})
 		if err != nil {
-			return Planned{}, fmt.Errorf("ask Ocel Cloud at %s which source files it lacks: %w", c.apiURL, err)
+			return Missing{}, fmt.Errorf("ask %s at %s which source files it lacks: %w", c.name, c.apiURL, err)
 		}
 		if err := protovalidate.Validate(missing); err != nil {
-			return Planned{}, fmt.Errorf("%s handed out upload targets that break their rules: %w", c.apiURL, err)
+			return Missing{}, fmt.Errorf("%s handed out upload targets that break their rules: %w", c.apiURL, err)
 		}
 		for _, target := range missing.GetUploads() {
 			blob, asked := bySum[target.GetDigest()]
 			if !asked {
-				return Planned{}, fmt.Errorf("%s named %s missing, which this upload never asked about", c.apiURL, target.GetDigest())
+				return Missing{}, fmt.Errorf("%s named %s missing, which this upload never asked about", c.apiURL, target.GetDigest())
 			}
-			planned.Missing = append(planned.Missing, Upload{Blob: blob, Target: target})
-			planned.TotalBytes += blob.Size
+			found.Uploads = append(found.Uploads, Upload{Blob: blob, Target: target})
+			found.TotalBytes += blob.Size
 		}
 	}
-	return planned, nil
+	return found, nil
 }
 
-func (c *Client) Send(ctx context.Context, source Source, planned Planned, progress func(Progress)) error {
-	tally := &tally{report: progress, at: Progress{TotalBytes: planned.TotalBytes, TotalFiles: len(planned.Missing)}}
+func (c *Client) Send(ctx context.Context, source Source, found Missing, progress func(Progress)) error {
+	tally := &tally{report: progress, at: Progress{TotalBytes: found.TotalBytes, TotalFiles: len(found.Uploads)}}
 	tally.publish()
 	group, ctx := errgroup.WithContext(ctx)
 	group.SetLimit(uploadConcurrency)
-	for _, upload := range planned.Missing {
+	for _, upload := range found.Uploads {
 		group.Go(func() error {
 			if err := c.send(ctx, source, upload, tally); err != nil {
 				return err
@@ -139,17 +140,17 @@ func (c *Client) Send(ctx context.Context, source Source, planned Planned, progr
 	return group.Wait()
 }
 
-func (c *Client) Commit(ctx context.Context, manifest *cloudv1.SourceManifest) (string, error) {
-	var committed *cloudv1.CommitSourceResponse
+func (c *Client) Commit(ctx context.Context, manifest *runnerv1.SourceManifest) (string, error) {
+	var committed *runnerv1.CommitSourceResponse
 	err := c.retry(ctx, func(ctx context.Context) (time.Duration, error) {
 		ctx, cancel := context.WithTimeout(ctx, callTimeout)
 		defer cancel()
 		var err error
-		committed, err = c.upload.CommitSource(ctx, &cloudv1.CommitSourceRequest{Manifest: manifest})
+		committed, err = c.runner.CommitSource(ctx, &runnerv1.CommitSourceRequest{Manifest: manifest})
 		return 0, retryableCall(err)
 	})
 	if err != nil {
-		return "", fmt.Errorf("commit the source to Ocel Cloud at %s: %w", c.apiURL, err)
+		return "", fmt.Errorf("commit the source to %s at %s: %w", c.name, c.apiURL, err)
 	}
 	return committed.GetSourceId(), nil
 }
@@ -195,7 +196,7 @@ func (c *Client) send(ctx context.Context, source Source, upload Upload, tally *
 		return 0, err
 	})
 	if err != nil {
-		return fmt.Errorf("upload the source file %s to Ocel Cloud: %w", blob.Digest, err)
+		return fmt.Errorf("upload the source file %s to %s: %w", blob.Digest, c.name, err)
 	}
 	return nil
 }

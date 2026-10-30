@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-const pageURL = "https://console.test/cloud/jobs/job_1?tab=input&x=1"
+const pageURL = "https://console.test/projects/shop/deployments/4bf92f3577b34da6a3ce929d0e0e4736?org=org_1&x=1"
 
 type fallback struct{ opened []string }
 
