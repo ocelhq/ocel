@@ -122,6 +122,20 @@ func (f *fakeACM) DeleteCertificate(_ context.Context, in *acm.DeleteCertificate
 	return &acm.DeleteCertificateOutput{}, nil
 }
 
+type heldACM struct {
+	*fakeACM
+	waited  *time.Duration
+	heldFor time.Duration
+}
+
+func (h *heldACM) DeleteCertificate(ctx context.Context, in *acm.DeleteCertificateInput, opts ...func(*acm.Options)) (*acm.DeleteCertificateOutput, error) {
+	if *h.waited < h.heldFor {
+		h.deletes++
+		return nil, &acmtypes.ResourceInUseException{}
+	}
+	return h.fakeACM.DeleteCertificate(ctx, in, opts...)
+}
+
 func (f *fakeACM) ListCertificates(_ context.Context, in *acm.ListCertificatesInput, _ ...func(*acm.Options)) (*acm.ListCertificatesOutput, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
@@ -394,6 +408,24 @@ func TestIssuerDiscard(t *testing.T) {
 		}
 		if api.deletes != 3 {
 			t.Errorf("deletes = %d, want the two refusals ridden out", api.deletes)
+		}
+		if len(api.deleted) != 1 || api.deleted[0] != testARN {
+			t.Errorf("deleted = %v, want %q", api.deleted, testARN)
+		}
+	})
+
+	t.Run("a certificate CloudFront holds through a distribution deployment of nearly fifteen minutes is deleted once it lets go", func(t *testing.T) {
+		t.Parallel()
+
+		var waited time.Duration
+		api := &heldACM{fakeACM: &fakeACM{}, waited: &waited, heldFor: 14*time.Minute + 30*time.Second}
+		issuer := testIssuer(api, 1)
+		issuer.Wait = func(_ context.Context, d time.Duration) error {
+			waited += d
+			return nil
+		}
+		if err := issuer.Discard(t.Context(), Certificate{ARN: testARN}, progress.Discard()); err != nil {
+			t.Fatalf("Discard after %s = %v, want the certificate deleted once the deployment releases it", waited, err)
 		}
 		if len(api.deleted) != 1 || api.deleted[0] != testARN {
 			t.Errorf("deleted = %v, want %q", api.deleted, testARN)
