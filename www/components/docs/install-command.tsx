@@ -2,6 +2,7 @@
 
 import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { capture } from "@/lib/analytics";
 
 export type InstallMethod = { name: string; command: string; highlighted: ReactNode };
 
@@ -18,7 +19,7 @@ export function InstallCommand({ methods }: { methods: InstallMethod[] }) {
   const [copied, setCopied] = useState(false);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const id = useId();
-  const { command, highlighted } = methods[selected];
+  const { name, command, highlighted } = methods[selected];
 
   function choose(index: number) {
     setSelected(index);
@@ -43,6 +44,7 @@ export function InstallCommand({ methods }: { methods: InstallMethod[] }) {
     try {
       await navigator.clipboard.writeText(command);
       setCopied(true);
+      capture("cli_install_command_copied", { command, method: name });
     } catch {
       setCopied(false);
     }

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
+import { capture } from "@/lib/analytics";
 import { LABEL } from "./label";
 
 export type RenderedPane = { owner: string; filename?: string; node: ReactNode };
@@ -113,6 +114,7 @@ export function Picker({
   function select(slug: string) {
     setSelected(slug);
     window.history.replaceState(null, "", `?vs=${slug}`);
+    capture("compare_tool_selected", { tool: slug });
   }
 
   const family = families.find((each) =>
