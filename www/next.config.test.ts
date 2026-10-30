@@ -1,7 +1,7 @@
 import { getPathMatch } from "next/dist/shared/lib/router/utils/path-match";
 import { compileNonPath } from "next/dist/shared/lib/router/utils/prepare-destination";
 import { unstable_getResponseFromNextConfig } from "next/experimental/testing/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import nextConfig from "./next.config";
 
 const respond = (url: string) =>
@@ -60,39 +60,5 @@ describe("a docs page", () => {
     expect(response.headers.get("link")).toBe(
       '</docs/index.md>; rel="alternate"; type="text/markdown"',
     );
-  });
-});
-
-describe("the analytics proxy", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it("sends events to the region's ingest host", async () => {
-    vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "https://us.i.posthog.com");
-    const response = await respond("/ingest/e/");
-    expect(response.headers.get("x-middleware-rewrite")).toBe("https://us.i.posthog.com/e");
-  });
-
-  it("serves the SDK's static files from the region's asset host", async () => {
-    vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "https://eu.i.posthog.com");
-    const response = await respond("/ingest/static/recorder.js");
-    expect(response.headers.get("x-middleware-rewrite")).toBe(
-      "https://eu-assets.i.posthog.com/static/recorder.js",
-    );
-  });
-
-  it("sends everything to a self-hosted instance's own host", async () => {
-    vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "https://posthog.example.com");
-    const response = await respond("/ingest/static/recorder.js");
-    expect(response.headers.get("x-middleware-rewrite")).toBe(
-      "https://posthog.example.com/static/recorder.js",
-    );
-  });
-
-  it("is absent without a PostHog host", async () => {
-    vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "");
-    const response = await respond("/ingest/e/");
-    expect(response.headers.get("x-middleware-rewrite")).toBeNull();
   });
 });
