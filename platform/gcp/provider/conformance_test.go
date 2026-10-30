@@ -20,7 +20,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/router"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
 )
 
@@ -37,20 +38,20 @@ func TestGCPProvider(t *testing.T) {
 		Server:       providerserver.Config{Version: "test", New: gcp.New},
 		Options:      provider.Options{"project": "conformance", "region": "europe-west1"},
 		Binary:       buildProvider(t),
-		Certificates: &conformance.CertificateChecks{Kind: alb.Kind},
+		Certificates: &conformance.CertificateChecks{Kind: albresources.Kind},
 	})
 }
 
 func TestTheCredentialsPortAnswersOrSaysWhyItCannot(t *testing.T) {
 	withoutApplicationDefaultCredentials(t)
 
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 	conformance.RunCredentials(t, p.Facts(), p.Credentials())
 }
 
 func TestAConsoleCanBeTrustedToDeployWhereTheProviderDeploysWithAWebIdentity(t *testing.T) {
 	withoutApplicationDefaultCredentials(t)
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 	bootstrap, err := p.Bootstrap(p.Facts().DefaultEdge)
 	if err != nil {
 		t.Fatal(err)
@@ -61,13 +62,13 @@ func TestAConsoleCanBeTrustedToDeployWhereTheProviderDeploysWithAWebIdentity(t *
 
 func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 	facts := p.Facts()
 
 	conformance.RunEdges(t, facts, p.Edges())
 
-	if got := facts.Edges; !slices.Equal(got, []edge.Kind{alb.Kind, "cloudflare"}) {
-		t.Errorf("Facts().Edges = %v, want %q and cloudflare", got, alb.Kind)
+	if got := facts.Edges; !slices.Equal(got, []edge.Kind{albresources.Kind, "cloudflare"}) {
+		t.Errorf("Facts().Edges = %v, want %q and cloudflare", got, albresources.Kind)
 	}
 	if got := facts.DefaultEdge; got != edge.None {
 		t.Errorf("Facts().DefaultEdge = %q, want no edge: a deploy that names none is answered on the url Cloud Run gave it", got)
@@ -75,7 +76,7 @@ func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 	if got := facts.ListPairedRouters(edge.None); !slices.Equal(got, []router.Kind{cloudrun.RouterKind}) {
 		t.Errorf("ListPairedRouters(no edge) = %v, want Cloud Run alone", got)
 	}
-	if got := facts.ListPairedRouters(alb.Kind); !slices.Equal(got, []router.Kind{router.Kind(alb.Kind)}) {
+	if got := facts.ListPairedRouters(albresources.Kind); !slices.Equal(got, []router.Kind{router.Kind(albresources.Kind)}) {
 		t.Errorf("ListPairedRouters(alb) = %v, want the load balancer, which is edge and router in one", got)
 	}
 	for _, gone := range []edge.Kind{"direct", "cloud-run"} {
@@ -87,19 +88,19 @@ func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 
 func TestTheRouterRegistryOpensTheRouterEveryEdgePairsWith(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 	conformance.RunRouters(t, p.Facts(), p.Edges(), p.Routers())
 }
 
 func TestAContainerBuiltFromAFunctionPassesTheConformanceSuite(t *testing.T) {
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).PullingImagesWith(func(ctx context.Context, ref string) (v1.Image, error) {
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"}).PullingImagesWith(func(ctx context.Context, ref string) (v1.Image, error) {
 		return fake.PullStandInImage(ctx, ref, "amd64")
 	})
 	conformance.RunFunctionContainers(t, p.Facts(), p.Runtime())
 }
 
 func TestAProjectWithNoEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 	registry := p.Edges()
 
 	front, err := registry.Open(edge.None, nil)
@@ -122,7 +123,7 @@ func TestAProjectWithNoEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 	if err == nil {
 		t.Fatal("BindDomain() bound a hostname with no edge in front to claim it")
 	}
-	if !strings.Contains(err.Error(), string(alb.Kind)) {
+	if !strings.Contains(err.Error(), string(albresources.Kind)) {
 		t.Errorf("BindDomain() = %v, want it to name the edge that would serve the hostname", err)
 	}
 }
@@ -130,7 +131,7 @@ func TestAProjectWithNoEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 	conformance.RunDNS(t, p.Facts(), p.DNS())
 }
 
@@ -152,13 +153,13 @@ func buildProvider(t *testing.T) string {
 
 func TestTopicsTasksAndWorkersAreRefusedAtPreflightAsUnsupported(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 	conformance.RunWorkers(t, p.Facts())
 }
 
 func TestKVStoresPassTheConformanceSuite(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 	if served := p.Facts().Bindings; !slices.Contains(served, provider.BindingKV) {
 		t.Errorf("Facts().Bindings = %v, and a project declaring a kv store is refused at deploy on gcp", served)
 	}
@@ -167,7 +168,7 @@ func TestKVStoresPassTheConformanceSuite(t *testing.T) {
 
 func TestRealtimePassesTheConformanceSuite(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 	if served := p.Facts().Bindings; !slices.Contains(served, provider.BindingRealtime) {
 		t.Errorf("Facts().Bindings = %v, and a project declaring realtime is refused at deploy on gcp", served)
 	}

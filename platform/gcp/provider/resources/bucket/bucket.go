@@ -478,13 +478,19 @@ func New(openClients func(ctx context.Context) (*gcloud.Clients, error), store r
 	return &Bucket{openClients: openClients, records: store}
 }
 
+var bindingTypes = []provider.BindingType{provider.BindingBucket}
+
+func (p *Bucket) Listing() component.Component {
+	return component.Component{Types: bindingTypes, ListResources: p.ListResources}
+}
+
 func (p *Bucket) Component() component.Component {
 	return component.Component{
-		Types:         []provider.BindingType{provider.BindingBucket},
+		Types:         bindingTypes,
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
 		Preflight:     refusePublicBucket,
-		Shape:         shapeBuckets,
+		Inventory:     inventoryBuckets,
 		Grants: func(_ context.Context, app component.App) ([]grants.Grant, error) {
 			return bucketGrants(app.Spec, app.Account, app.Member), nil
 		},
@@ -502,20 +508,20 @@ func refusePublicBucket(resource provider.Resource) error {
 	return nil
 }
 
-func shapeBuckets(shape component.Shape, declared []provider.Resource) error {
+func inventoryBuckets(inventory component.Inventory, declared []provider.Resource) error {
 	for _, resource := range declared {
-		bucket, err := shape.Names.UntaggedAppBucket(shape.Request.Deploy.Slug, shape.Request.Deploy.Env, resource.Name)
+		bucket, err := inventory.Names.UntaggedAppBucket(inventory.Request.Deploy.Slug, inventory.Request.Deploy.Env, resource.Name)
 		if err != nil {
 			return err
 		}
-		result := shape.Transforms.For(transformKind, resource.Name)
+		result := inventory.Transforms.For(transformKind, resource.Name)
 		known, unknown := bucketSurface.SplitOutputs(result.Patches[transformSurface])
 		patched, err := bucketSurface.Patch("bucket "+resource.Name, storage.BucketAttrs{StorageClass: defaultStorageClass}, known, nil, surface.Recorded{})
 		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.StorageBucketType, bucket, shape.Region,
-			map[string]any{"location": shape.Region, "storage_class": patched.Desired.StorageClass, "versioning": map[string]any{"enabled": patched.Desired.VersioningEnabled}},
+		inventory.Tree.Add(inventory.Environment, inventory.Vendor, cost.StorageBucketType, bucket, inventory.Region,
+			map[string]any{"location": inventory.Region, "storage_class": patched.Desired.StorageClass, "versioning": map[string]any{"enabled": patched.Desired.VersioningEnabled}},
 			surface.ListPriced(unknown, pricedPaths)...)
 	}
 	return nil

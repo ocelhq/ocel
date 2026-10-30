@@ -1,4 +1,4 @@
-package gcp
+package control
 
 import (
 	"encoding/json"
@@ -11,19 +11,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
 func listingProvider() *Provider {
 	return &Provider{
-		options:   Options{Project: googletest.Project, Region: googletest.Region},
-		namespace: googletest.Names.Namespace(),
-		resolved:  googletest.Clients("http://127.0.0.1:1"),
-		records:   fake.NewKeyValues(),
-		images:    &run.Images{},
+		Options:   Options{Project: googletest.Project, Region: googletest.Region},
+		Namespace: googletest.Names.Namespace(),
+		Clients:   googletest.Clients("http://127.0.0.1:1"),
+		Records:   fake.NewKeyValues(),
 	}
 }
 
@@ -31,7 +30,7 @@ var listedRef = provider.StackRef{Project: "shop", Tier: environment.TierProduct
 
 func listStackResources(t *testing.T, p *Provider, recorded provider.StackResult) []provider.PhysicalResource {
 	t.Helper()
-	listed, err := p.resourceHooks().ListResources(t.Context(), listedRef, recorded)
+	listed, err := p.ListStackResources(t.Context(), listedRef, recorded)
 	if err != nil {
 		t.Fatalf("ListResources() = %v", err)
 	}
@@ -60,7 +59,7 @@ func TestStackResourcesNameTheDatabaseABindingProvisioned(t *testing.T) {
 	p := listingProvider()
 	instance := must(googletest.Names.PostgresInstance("shop", "prod", "db", "a1b2c3"))
 	key := records.Partition{Tier: listedRef.Tier, Root: postgres.RootPostgres}.Key("shop", "prod", "db")
-	if _, err := p.records.Write(t.Context(), records.Entry{Key: key, Value: []byte(`{"sealed":"c2VhbGVk","setOn":"` + instance + `"}`)}); err != nil {
+	if _, err := p.Records.Write(t.Context(), records.Entry{Key: key, Value: []byte(`{"sealed":"c2VhbGVk","setOn":"` + instance + `"}`)}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -186,4 +185,30 @@ func TestStackResourcesNameTheGatewayTopicAndSecretsRealtimeBindingsProvisionedO
 	if !slices.Equal(listed, want) {
 		t.Errorf("ListResources() = %+v, want %+v: every realtime of an environment shares one gateway, its topic and its keys", listed, want)
 	}
+}
+
+func TestAnEndpointReadsAStacksResourcesFromItsRecordWithNoProvisioningEngine(t *testing.T) {
+	t.Parallel()
+
+	p := listingProvider()
+	recorded := stackrecords.Stack{Kind: provider.StackApp, Functions: []provider.Function{{Name: "web", Physical: "ocel-shop-prod-web"}}}
+	if err := stackrecords.Write(t.Context(), p.Records, listedRef.Tier, listedRef.Project, listedRef.Name, recorded); err != nil {
+		t.Fatalf("Write() = %v", err)
+	}
+
+	listed, err := p.Stacks().Resources(t.Context(), provider.StackResources{Ref: listedRef})
+	if err != nil {
+		t.Fatalf("Stacks().Resources() = %v, want the recorded stack's resources: they are read from its record, which needs no engine", err)
+	}
+	want := []provider.PhysicalResource{{Kind: string(bootstrap.KindService), ID: "ocel-shop-prod-web", Location: googletest.Region}}
+	if !slices.Equal(listed, want) {
+		t.Errorf("Stacks().Resources() = %v, want %v", listed, want)
+	}
+}
+
+func must[T any](value T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return value
 }

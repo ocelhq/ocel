@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/functions"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 )
 
 var IngressFor = run.IngressFor
@@ -24,8 +23,6 @@ func MakeProjectDatabase(ctx context.Context, p *Provider, tier environment.Tier
 func AddParts(ctx context.Context, p *Provider, tier environment.Tier, names ...string) error {
 	return p.addParts(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: tier, Slug: "live-suite"}}, names)
 }
-
-func (p *Provider) TopicHooks() *topic.Topic { return p.topicHooks() }
 
 func (p *Provider) FunctionImages() functions.Images { return p.functionImages() }
 

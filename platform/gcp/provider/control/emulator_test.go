@@ -1,4 +1,4 @@
-package gcp_test
+package control_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/refusal"
-	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -27,8 +27,8 @@ func TestWhoamiNamesTheProviderTheIdentityCameFrom(t *testing.T) {
 
 	server := tokenInfo(t, `{"email":"deployer@acme.iam.gserviceaccount.com"}`)
 
-	principal, err := gcp.Credentials{
-		Project:      gcp.Named("acme-prod"),
+	principal, err := control.Credentials{
+		Project:      control.Named("acme-prod"),
 		Region:       "europe-west1",
 		Tokens:       fixedToken{token: mintedAccessToken},
 		TokenInfoURL: server.URL,
@@ -51,8 +51,8 @@ func TestWhoamiAsksWhetherTheCredentialReachesTheProjectItWillDeployInto(t *test
 		t.Parallel()
 
 		reader := &reachedProject{}
-		if _, err := (gcp.Credentials{
-			Project:      gcp.Named("acme-prod"),
+		if _, err := (control.Credentials{
+			Project:      control.Named("acme-prod"),
 			Region:       "europe-west1",
 			Tokens:       fixedToken{token: mintedAccessToken},
 			TokenInfoURL: server.URL,
@@ -70,8 +70,8 @@ func TestWhoamiAsksWhetherTheCredentialReachesTheProjectItWillDeployInto(t *test
 
 		denied := refusal.Refuse(refusal.CodeDenied, "this credential cannot see project acme-prod")
 		var refused refusal.Refusal
-		_, err := gcp.Credentials{
-			Project:      gcp.Named("acme-prod"),
+		_, err := control.Credentials{
+			Project:      control.Named("acme-prod"),
 			Region:       "europe-west1",
 			Tokens:       fixedToken{token: mintedAccessToken},
 			TokenInfoURL: server.URL,
@@ -88,8 +88,8 @@ func TestAgainstTheEmulatorWhoamiSkipsGooglesTokenEndpointAndSaysWhereItIs(t *te
 
 	endpoint := "http://127.0.0.1:4588"
 	reader := &reachedProject{}
-	principal, err := gcp.Credentials{
-		Project:  gcp.Named("floci-local"),
+	principal, err := control.Credentials{
+		Project:  control.Named("floci-local"),
 		Region:   "europe-west1",
 		Tokens:   fixedToken{err: errors.New("google: could not find default credentials")},
 		Endpoint: endpoint,
@@ -117,10 +117,10 @@ func TestTheEmulatorEndpointIsReadOnceWhenTheProviderIsMade(t *testing.T) {
 	endpoint := "http://127.0.0.1:4588"
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", endpoint)
 
-	p := newProvider(t, gcp.Options{Project: "floci-local", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "floci-local", Region: "europe-west1"})
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "http://127.0.0.1:9999")
 
-	credentials, own := p.Credentials().(gcp.Credentials)
+	credentials, own := p.Credentials().(control.Credentials)
 	if !own {
 		t.Fatalf("Credentials() = %T, want this provider's own", p.Credentials())
 	}
@@ -133,7 +133,7 @@ func TestWithoutTheEmulatorEveryClientAddressesGoogle(t *testing.T) {
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "")
 	t.Setenv("OCEL_FLOCI_FIRESTORE_ENDPOINT", "")
 
-	credentials, own := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Credentials().(gcp.Credentials)
+	credentials, own := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"}).Credentials().(control.Credentials)
 	if !own {
 		t.Fatal("Credentials() is not this provider's own")
 	}
@@ -148,7 +148,7 @@ func TestAnEmulatorEndpointBeyondLoopbackIsRefusedRatherThanAddressedWithoutCred
 			t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", endpoint)
 
 			var refused refusal.Refusal
-			_, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+			_, err := control.NewProvider(control.Options{Project: "acme-prod", Region: "europe-west1"})
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 				t.Fatalf("NewProvider() with %s naming %q = %v, want an %s refusal: every client at that endpoint is built with no authentication at all",
 					"OCEL_FLOCI_GCP_ENDPOINT", endpoint, err, refusal.CodeInvalid)
@@ -162,11 +162,11 @@ func TestAnEmulatorEndpointOnLoopbackIsAddressed(t *testing.T) {
 		t.Run(endpoint, func(t *testing.T) {
 			t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", endpoint)
 
-			p, err := gcp.NewProvider(gcp.Options{Project: "floci-local", Region: "europe-west1"})
+			p, err := control.NewProvider(control.Options{Project: "floci-local", Region: "europe-west1"})
 			if err != nil {
 				t.Fatalf("NewProvider() against %q = %v, want the emulator addressed", endpoint, err)
 			}
-			credentials, own := p.Credentials().(gcp.Credentials)
+			credentials, own := p.Credentials().(control.Credentials)
 			if !own || credentials.Endpoint != endpoint {
 				t.Errorf("the provider reaches %q, want %q", credentials.Endpoint, endpoint)
 			}
@@ -181,7 +181,7 @@ func TestATagEmulatorEndpointBeyondLoopbackIsRefused(t *testing.T) {
 			t.Setenv("OCEL_FLOCI_FIRESTORE_ENDPOINT", endpoint)
 
 			var refused refusal.Refusal
-			_, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+			_, err := control.NewProvider(control.Options{Project: "acme-prod", Region: "europe-west1"})
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 				t.Fatalf("NewProvider() with OCEL_FLOCI_FIRESTORE_ENDPOINT naming %q = %v, want an %s refusal", endpoint, err, refusal.CodeInvalid)
 			}
@@ -197,7 +197,7 @@ func TestATagEmulatorEndpointWithoutTheFlociEmulatorIsRefused(t *testing.T) {
 	t.Setenv("OCEL_FLOCI_FIRESTORE_ENDPOINT", "http://127.0.0.1:8085")
 
 	var refused refusal.Refusal
-	_, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	_, err := control.NewProvider(control.Options{Project: "acme-prod", Region: "europe-west1"})
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("NewProvider() = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
@@ -212,7 +212,16 @@ func TestATagEmulatorEndpointOnLoopbackBesideTheFlociEmulatorIsAccepted(t *testi
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "http://127.0.0.1:4588")
 	t.Setenv("OCEL_FLOCI_FIRESTORE_ENDPOINT", "http://127.0.0.1:8085")
 
-	if _, err := gcp.NewProvider(gcp.Options{Project: "floci-local", Region: "europe-west1"}); err != nil {
+	if _, err := control.NewProvider(control.Options{Project: "floci-local", Region: "europe-west1"}); err != nil {
 		t.Fatalf("NewProvider() = %v, want the tag emulator addressed", err)
 	}
+}
+
+func newProvider(t *testing.T, options control.Options) *control.Provider {
+	t.Helper()
+	p, err := control.NewProvider(options)
+	if err != nil {
+		t.Fatalf("NewProvider(%+v) = %v", options, err)
+	}
+	return p
 }

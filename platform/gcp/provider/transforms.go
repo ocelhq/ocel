@@ -24,7 +24,7 @@ func transformPass(root string, modules []string) transform.Pass {
 }
 
 func (p *Provider) evaluateTransforms(ctx context.Context, spec provider.StackSpec) (context.Context, error) {
-	registry := p.components()
+	registry := p.Components()
 	var candidates []transform.Resource
 	if spec.App == nil {
 		candidates = registry.TransformCandidates(spec.Resources)
@@ -39,7 +39,7 @@ func (p *Provider) evaluateTransforms(ctx context.Context, spec provider.StackSp
 }
 
 func (p *Provider) transformed() map[string]surface.Allowed {
-	allowed := p.components().Transformed()
+	allowed := p.Components().Transformed()
 	maps.Copy(allowed, release.Transformed())
 	return allowed
 }

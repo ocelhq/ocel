@@ -28,7 +28,7 @@ func TestTheFirstValueATierSealsAddsTheKeysPartRecordedAsAddedByItsProject(t *te
 		t.Fatalf("Seal() on a tier with no keys = %v, want the keys part added and the value sealed", err)
 	}
 
-	if !server.HasKeyRing(gcloud.KeyRingPath(p.resolved)) || !server.HasKey(gcloud.KeyPath(p.resolved, string(tier))) {
+	if !server.HasKeyRing(gcloud.KeyRingPath(p.Clients)) || !server.HasKey(gcloud.KeyPath(p.Clients, string(tier))) {
 		t.Error("the first seal left no key ring or no tier key")
 	}
 	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), tier, bootstrap.KeysPart)
@@ -47,7 +47,7 @@ func TestTheFirstValueOfNoProjectATierSealsAddsTheTierKeyRecordedAsAddedByNoProj
 		t.Fatalf("Seal() on a tier with no keys = %v", err)
 	}
 
-	if !server.HasKey(gcloud.KeyPath(p.resolved, string(tier))) {
+	if !server.HasKey(gcloud.KeyPath(p.Clients, string(tier))) {
 		t.Errorf("the first seal of a value of no project left no %s key to seal it under", tier)
 	}
 	if recorded, _, err := stackrecords.ReadBootstrapPart(ctx, p.KeyValues(), tier, bootstrap.KeysPart); err != nil || recorded.AddedBy != "" {

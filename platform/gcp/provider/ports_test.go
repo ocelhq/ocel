@@ -16,16 +16,17 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func testProvider(t *testing.T) *gcp.Provider {
 	t.Helper()
-	return newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	return newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 }
 
-func newProvider(t *testing.T, options gcp.Options) *gcp.Provider {
+func newProvider(t *testing.T, options control.Options) *gcp.Provider {
 	t.Helper()
 	p, err := gcp.NewProvider(options)
 	if err != nil {
@@ -48,15 +49,15 @@ func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
 
 	p := testProvider(t)
 	registry := p.Edges()
-	if got := p.Facts().Edges; !slices.Contains(got, alb.Kind) {
-		t.Fatalf("Facts().Edges = %v, want the %q edge among them: a config that names it would be refused", got, alb.Kind)
+	if got := p.Facts().Edges; !slices.Contains(got, albresources.Kind) {
+		t.Fatalf("Facts().Edges = %v, want the %q edge among them: a config that names it would be refused", got, albresources.Kind)
 	}
-	front, err := registry.Open(alb.Kind, nil)
+	front, err := registry.Open(albresources.Kind, nil)
 	if err != nil {
-		t.Fatalf("Open(%q) = %v", alb.Kind, err)
+		t.Fatalf("Open(%q) = %v", albresources.Kind, err)
 	}
-	if front.Kind() != alb.Kind {
-		t.Errorf("Open(%q) opened the %q edge", alb.Kind, front.Kind())
+	if front.Kind() != albresources.Kind {
+		t.Errorf("Open(%q) opened the %q edge", albresources.Kind, front.Kind())
 	}
 	if !front.Facts().InvalidatesByCacheTag {
 		t.Error("Facts() says the alb edge does not invalidate by cache tag, and Cloud CDN invalidates by Cache-Tag")
@@ -64,9 +65,9 @@ func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
 	if !front.Facts().CachesResponses {
 		t.Error("Facts() says the alb edge does not cache responses, and Cloud CDN does")
 	}
-	routes, err := p.Routers().Open(router.Kind(alb.Kind))
+	routes, err := p.Routers().Open(router.Kind(albresources.Kind))
 	if err != nil {
-		t.Fatalf("Routers().Open(%q) = %v", alb.Kind, err)
+		t.Fatalf("Routers().Open(%q) = %v", albresources.Kind, err)
 	}
 	if routes.Facts().AddressesItself {
 		t.Error("Facts() says the alb router addresses itself, and a deploy would then never be asked for the hostname it fronts")
@@ -90,7 +91,7 @@ func TestAnEdgeThisProviderCannotFrontWithIsRefusedWithThePriceOfTheOneThatCan(t
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Open(firebase) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
-	for _, said := range []string{string(alb.Kind), "$18"} {
+	for _, said := range []string{string(albresources.Kind), "$18"} {
 		if !strings.Contains(refused.Message, said) {
 			t.Errorf("the refusal reads %q, want it to name %q so the reader knows what to name instead and what it costs", refused.Message, said)
 		}
@@ -193,7 +194,7 @@ func TestTheCloudflareRouterOnGCPSignsAndDispatchesAndHasNoOriginHooks(t *testin
 func TestTheALBRoutersFactsAreUnchangedByTheCloudflareEdge(t *testing.T) {
 	t.Parallel()
 
-	opened, err := testProvider(t).Routers().Open(router.Kind(alb.Kind))
+	opened, err := testProvider(t).Routers().Open(router.Kind(albresources.Kind))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,9 +206,9 @@ func TestTheALBRoutersFactsAreUnchangedByTheCloudflareEdge(t *testing.T) {
 func TestAFrontedServiceStopsAnsweringOnItsOwnCloudRunUrl(t *testing.T) {
 	t.Parallel()
 
-	front, err := testProvider(t).Edges().Open(alb.Kind, nil)
+	front, err := testProvider(t).Edges().Open(albresources.Kind, nil)
 	if err != nil {
-		t.Fatalf("Open(%q) = %v", alb.Kind, err)
+		t.Fatalf("Open(%q) = %v", albresources.Kind, err)
 	}
 	unfronted, err := testProvider(t).Edges().Open(edge.None, nil)
 	if err != nil {
@@ -215,7 +216,7 @@ func TestAFrontedServiceStopsAnsweringOnItsOwnCloudRunUrl(t *testing.T) {
 	}
 	if !front.Facts().ShieldsOrigin {
 		t.Errorf("the %q edge does not declare that it shields the origin, and the ingress a release takes is read from that fact "+
-			"rather than from which edge it is", alb.Kind)
+			"rather than from which edge it is", albresources.Kind)
 	}
 	if unfronted.Facts().ShieldsOrigin {
 		t.Error("a project with no edge in front declares that it shields the origin, and the url Cloud Run gives each service is the whole of what serves it")

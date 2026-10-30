@@ -1,4 +1,4 @@
-package gcp_test
+package control_test
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -52,8 +52,8 @@ func TestWhoamiNamesTheProjectTheRegionAndWhoTheTokenBelongsTo(t *testing.T) {
 
 	server := tokenInfo(t, `{"email":"deployer@acme.iam.gserviceaccount.com","email_verified":"true"}`)
 
-	principal, err := gcp.Credentials{
-		Project:      gcp.Named("acme-prod"),
+	principal, err := control.Credentials{
+		Project:      control.Named("acme-prod"),
 		Region:       "europe-west1",
 		Tokens:       fixedToken{token: mintedAccessToken},
 		TokenInfoURL: server.URL,
@@ -83,28 +83,28 @@ func TestWhoamiRefusesWhenThereAreNoApplicationDefaultCredentials(t *testing.T) 
 
 	for _, tc := range []struct {
 		name        string
-		credentials gcp.Credentials
+		credentials control.Credentials
 	}{
 		{
 			name: "no credentials to mint a token from",
-			credentials: gcp.Credentials{
-				Project:      gcp.Named("acme-prod"),
+			credentials: control.Credentials{
+				Project:      control.Named("acme-prod"),
 				Tokens:       fixedToken{err: errors.New("google: could not find default credentials")},
 				TokenInfoURL: server.URL,
 			},
 		},
 		{
 			name: "a token nothing will vouch for",
-			credentials: gcp.Credentials{
-				Project:      gcp.Named("acme-prod"),
+			credentials: control.Credentials{
+				Project:      control.Named("acme-prod"),
 				Tokens:       fixedToken{token: "expired"},
 				TokenInfoURL: server.URL,
 			},
 		},
 		{
 			name: "nothing listening where the token endpoint should be",
-			credentials: gcp.Credentials{
-				Project:      gcp.Named("acme-prod"),
+			credentials: control.Credentials{
+				Project:      control.Named("acme-prod"),
 				Tokens:       fixedToken{token: mintedAccessToken},
 				TokenInfoURL: unreachable(t),
 			},
@@ -145,8 +145,8 @@ func TestTheAccessTokenReachesNoUrlAndNoErrorString(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := gcp.Credentials{
-				Project:      gcp.Named("acme-prod"),
+			_, err := control.Credentials{
+				Project:      control.Named("acme-prod"),
 				Tokens:       fixedToken{token: mintedAccessToken},
 				TokenInfoURL: endpoint,
 			}.Whoami(context.Background())
@@ -180,8 +180,8 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 		}))
 		t.Cleanup(server.Close)
 
-		principal, err := gcp.Credentials{
-			Project:      gcp.Named("acme-prod"),
+		principal, err := control.Credentials{
+			Project:      control.Named("acme-prod"),
 			Tokens:       fixedToken{token: mintedAccessToken},
 			TokenInfoURL: server.URL,
 			Projects:     &reachedProject{},
@@ -215,8 +215,8 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 			t.Cleanup(cancel)
 
 			var refused refusal.Refusal
-			_, err := gcp.Credentials{
-				Project:      gcp.Named("acme-prod"),
+			_, err := control.Credentials{
+				Project:      control.Named("acme-prod"),
 				Tokens:       fixedToken{token: mintedAccessToken},
 				TokenInfoURL: server.URL,
 			}.Whoami(ctx)
@@ -238,7 +238,7 @@ func TestPermissionsRefuseTheTierThatIsNoTier(t *testing.T) {
 	t.Parallel()
 
 	var refused refusal.Refusal
-	if _, err := (gcp.Credentials{}).Permissions("neither", environment.TierProduction); !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+	if _, err := (control.Credentials{}).Permissions("neither", environment.TierProduction); !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Permissions(neither) = %v, want an invalid refusal", err)
 	}
 }
@@ -248,8 +248,8 @@ func TestWhoamiRefusesATokenThatNamesNoPrincipal(t *testing.T) {
 
 	server := tokenInfo(t, `{"scope":"https://www.googleapis.com/auth/cloud-platform"}`)
 
-	_, err := gcp.Credentials{
-		Project:      gcp.Named("acme-prod"),
+	_, err := control.Credentials{
+		Project:      control.Named("acme-prod"),
 		Tokens:       fixedToken{token: mintedAccessToken},
 		TokenInfoURL: server.URL,
 		Projects:     &reachedProject{},

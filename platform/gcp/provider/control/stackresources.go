@@ -1,4 +1,4 @@
-package gcp
+package control
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 )
 
 func (p *Provider) ListStackResources(ctx context.Context, ref provider.StackRef, recorded provider.StackResult) ([]provider.PhysicalResource, error) {
-	clients, err := p.resolveClients(ctx)
+	clients, err := p.ResolveClients(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -21,7 +21,7 @@ func (p *Provider) ListStackResources(ctx context.Context, ref provider.StackRef
 	for _, container := range recorded.Containers {
 		listed = append(listed, provider.PhysicalResource{Kind: string(bootstrap.KindService), ID: container.Physical, Location: clients.Region})
 	}
-	registry := p.components()
+	registry := p.listings()
 	for _, binding := range recorded.Bindings {
 		served, found := registry.For(binding.Type)
 		if !found || served.ListResources == nil {

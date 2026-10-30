@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -23,7 +23,7 @@ func requested(t *testing.T, server *certServer, hostname string) (provider.Cert
 	t.Helper()
 	var proved []edge.Record
 	cert, err := server.open(t).Issue(context.Background(), provider.CertificateRequest{
-		Kind:     alb.Kind,
+		Kind:     albresources.Kind,
 		Hostname: hostname,
 		Progress: progress.Discard(),
 		Prove: func(_ context.Context, cert provider.Certificate, records []edge.Record) (provider.Certificate, error) {
@@ -146,7 +146,7 @@ func TestACertificateManagerRefusedToIssueIsReportedRatherThanWaitedOutForever(t
 
 	var refused refusal.Refusal
 	_, err := server.open(t).Issue(context.Background(), provider.CertificateRequest{
-		Kind:     alb.Kind,
+		Kind:     albresources.Kind,
 		Hostname: "shop.example.com",
 		Progress: progress.Discard(),
 		Prove: func(_ context.Context, cert provider.Certificate, _ []edge.Record) (provider.Certificate, error) {
@@ -170,7 +170,7 @@ func TestACertificateStillProvisioningWhenThePatienceRunsOutIsLeftPending(t *tes
 	server.provisioning = 5
 
 	_, err := server.open(t).Issue(context.Background(), provider.CertificateRequest{
-		Kind:     alb.Kind,
+		Kind:     albresources.Kind,
 		Hostname: "shop.example.com",
 		Progress: progress.Discard(),
 		Prove: func(_ context.Context, cert provider.Certificate, _ []edge.Record) (provider.Certificate, error) {
@@ -189,7 +189,7 @@ func TestACertificateStillProvisioningIsWaitedOutRatherThanReportedIssued(t *tes
 	server.provisioning = 2
 	cert, _ := requested(t, server, "shop.example.com")
 
-	health, err := server.open(t).Inspect(context.Background(), alb.Kind, "", "shop.example.com", cert)
+	health, err := server.open(t).Inspect(context.Background(), albresources.Kind, "", "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate(%s) = %v", cert.ID, err)
 	}
@@ -204,7 +204,7 @@ func TestAnInspectedCertificateSaysWhatItCoversAndWhenItLapses(t *testing.T) {
 	server := newCertServer()
 	cert, _ := requested(t, server, "shop.example.com")
 
-	health, err := server.open(t).Inspect(context.Background(), alb.Kind, "", "shop.example.com", cert)
+	health, err := server.open(t).Inspect(context.Background(), albresources.Kind, "", "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate(%s) = %v", cert.ID, err)
 	}

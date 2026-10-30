@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	gcpenvsource "github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -234,7 +235,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 	here := bootstrapped(t, p, tier)
 
 	t.Setenv(provider.NamespaceEnvVar, namesOf(t, p).Namespace().String()+"-beside")
-	beside := newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
+	beside := newProvider(t, control.Options{Project: liveProject(), Region: liveRegion()})
 	if namesOf(t, beside).TierBucketStem(tier, naming.StorageState) == namesOf(t, p).TierBucketStem(tier, naming.StorageState) {
 		t.Fatalf("both namespaces name the state bucket %s, and this test turns on them naming different ones", namesOf(t, beside).TierBucketStem(tier, naming.StorageState))
 	}
@@ -555,7 +556,7 @@ func TestProjectAZoneIsRefusedBeforeItsBootstrapIsReadNamingTheRegionItSitsIn(t 
 	onRealGoogleCloud(t)
 
 	zone := liveRegion() + "-f"
-	inAZone := newProvider(t, gcp.Options{Project: liveProject(), Region: zone})
+	inAZone := newProvider(t, control.Options{Project: liveProject(), Region: zone})
 	var refused refusal.Refusal
 	_, err := bootstrapOf(t, inAZone).Describe(context.Background(), environment.TierProduction)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
@@ -819,7 +820,7 @@ func TestProjectADatabaseInAnotherRegionIsRefusedRatherThanUsed(t *testing.T) {
 	tier := environment.TierProduction
 	bootstrapped(t, p, tier)
 
-	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: elsewhereRegion()})
+	elsewhere := newProvider(t, control.Options{Project: liveProject(), Region: elsewhereRegion()})
 	var refused refusal.Refusal
 	err := bootstrapOf(t, elsewhere).Apply(context.Background(),
 		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil)

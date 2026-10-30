@@ -22,8 +22,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
@@ -185,7 +185,7 @@ func TestADeployAddsThePartsWhatItDeclaresAndShipsNeedOnFirstUse(t *testing.T) {
 func TestADeployBehindAnEdgeThatServesFromTheTierAddsTheEdgeBucketAndTheKeys(t *testing.T) {
 	t.Parallel()
 
-	for _, front := range []edge.Kind{alb.Kind, cloudflare.Kind} {
+	for _, front := range []edge.Kind{albresources.Kind, cloudflare.Kind} {
 		pre := deployingApps(environment.TierProduction, shippingApp("api", buildoutput.FrameworkGo))
 		pre.Edge = front
 		got, err := pushing(t, "").partsUsedBy(context.Background(), pre)
@@ -194,7 +194,7 @@ func TestADeployBehindAnEdgeThatServesFromTheTierAddsTheEdgeBucketAndTheKeys(t *
 		}
 	}
 	pre := deployingApps(environment.TierProduction, shippingApp("api", buildoutput.FrameworkGo))
-	pre.Edge = alb.Kind
+	pre.Edge = albresources.Kind
 	got, _ := pushing(t, "").partsUsedBy(context.Background(), pre)
 	if edgeAt, albAt := slices.Index(got, bootstrap.EdgeBucketPart), slices.Index(got, albpart.PartName); albAt < 0 || edgeAt > albAt {
 		t.Errorf("partsUsedBy() behind the alb = %v, want the edge bucket named before the load balancer that serves from it", got)
@@ -233,7 +233,7 @@ func TestADeployDeclaringAResourcePlansTheKeysItsPublishedBindingIsSealedUnder(t
 	if _, err := p.Cipher().Seal(ctx, tier, seal.BindToProject("shop", "binding", string(tier), "production", "uploads"), []byte(`{"bucket":"b"}`)); err != nil {
 		t.Fatalf("Seal() of the bucket's published binding = %v", err)
 	}
-	if !server.HasKeyRing(gcloud.KeyRingPath(p.resolved)) || !server.HasKey(gcloud.KeyPath(p.resolved, string(tier))) {
+	if !server.HasKeyRing(gcloud.KeyRingPath(p.Clients)) || !server.HasKey(gcloud.KeyPath(p.Clients, string(tier))) {
 		t.Fatal("publishing the bucket's binding made no key ring or tier key, so this test proves nothing")
 	}
 	if !slices.Contains(parts, bootstrap.KeysPart) {
@@ -307,6 +307,24 @@ func TestTheKeysAreKeptWhileAnyProjectOfTheTierIsRecorded(t *testing.T) {
 	for _, change := range groups[0].Changes {
 		if change.Kind == string(bootstrap.KindKeyRing) && change.Action != provider.ActionKeep {
 			t.Errorf("removing the keys part plans %+v, want the ring kept: Google never deletes a key ring", change)
+		}
+	}
+}
+
+func TestNoTierKeepsADatabaseOfRunsOrTagRecordsAndADeployMayMakeEachProjectsOwn(t *testing.T) {
+	t.Parallel()
+
+	names := names.New("ocel", "acme-prod")
+	for _, tier := range googletest.BothTiers {
+		for _, item := range bootstrap.Resources(names, tier, false) {
+			if item.Kind == bootstrap.KindDatabase && item.Name != names.RecordsDatabase(tier) {
+				t.Errorf("a %s bootstrap provisions database %s, and every database but the tier's records is a project's own", tier, item.Name)
+			}
+		}
+	}
+	for _, offered := range composed(bootstrap.Engine{}).Parts() {
+		if offered.Name == "tasks" || offered.Name == "tag-database" {
+			t.Errorf("the bootstrap offers the %s part, and runs and tag records are kept in the database each project keeps its records in", offered.Name)
 		}
 	}
 }

@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 )
@@ -22,7 +22,7 @@ const cdnPurgeRolePath = "projects/acme-prod/roles/ocel_cdn_purge"
 
 func behindTheALB(t *testing.T, p *Provider) provider.StackSpec {
 	t.Helper()
-	front, err := p.Edges().Open(alb.Kind, nil)
+	front, err := p.Edges().Open(albresources.Kind, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestANextAppBehindTheALBMayClearCloudCDNAndNothingElseOnTheLoadBalancer(t *
 	if _, err := p.ProvisionFunctions(context.Background(), behindTheALB(t, p), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
-	c, err := p.openClients(context.Background())
+	c, err := p.OpenClients(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestAnAppNoEnvironmentRunsLosesItsCachePurgeGrant(t *testing.T) {
 	if _, err := p.ProvisionFunctions(context.Background(), behindTheALB(t, p), nil); err != nil {
 		t.Fatal(err)
 	}
-	c, err := p.openClients(context.Background())
+	c, err := p.OpenClients(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,8 +14,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	raw "google.golang.org/api/storage/v1"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
 type storageServer struct {

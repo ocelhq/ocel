@@ -56,7 +56,7 @@ func (s stacks) Provision(ctx context.Context, spec provider.StackSpec, runProgr
 		return provider.StackResult{}, err
 	}
 	ctx = release.WithEdgeFacts(ctx, spec, facts)
-	routeTableKey, err := s.p.objects().PutEdgeRouteTable(ctx, spec, runProgress)
+	routeTableKey, err := s.p.Objects().PutEdgeRouteTable(ctx, spec, runProgress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}

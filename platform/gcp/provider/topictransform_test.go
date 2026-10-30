@@ -174,15 +174,15 @@ func TestRemovingATopicForgetsWhatItsTransformsPatched(t *testing.T) {
 	server.holdSubscription(subscriptionPath(t, p, "ship"))
 	spec := topicStack()
 	result := provisionTopicStack(t, p, spec)
-	if len(p.records.(*fake.KeyValues).Snapshot()) == 0 {
+	if len(p.Records.(*fake.KeyValues).Snapshot()) == 0 {
 		t.Fatal("the provision recorded nothing, want what its patches reached recorded")
 	}
 
-	if err := p.topicHooks().Remove(context.Background(), spec.Ref, result.Bindings[0], &fake.Log{}); err != nil {
+	if err := p.TopicHooks().Remove(context.Background(), spec.Ref, result.Bindings[0], &fake.Log{}); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	for key := range p.records.(*fake.KeyValues).Snapshot() {
+	for key := range p.Records.(*fake.KeyValues).Snapshot() {
 		if strings.Contains(key, "patches") {
 			t.Errorf("%s is left behind, want every record a topic's patches wrote removed with it", key)
 		}

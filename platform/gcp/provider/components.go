@@ -10,26 +10,22 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/topic"
 )
 
-func (p *Provider) components() component.Registry {
+func (p *Provider) Components() component.Registry {
 	return component.Registry{
-		postgres.New(p.openClients, p.KeyValues(), p.Cipher(), p.skipChecks).Component(),
-		bucket.New(p.openClients, p.KeyValues()).Component(),
-		kv.New(p.openClients, p.KeyValues(), p.skipChecks).Component(),
-		p.topicHooks().Component(),
-		p.realtimeHooks().Component(),
+		postgres.New(p.OpenClients, p.KeyValues(), p.Cipher(), p.SkipChecks).Component(),
+		bucket.New(p.OpenClients, p.KeyValues()).Component(),
+		kv.New(p.OpenClients, p.KeyValues(), p.SkipChecks).Component(),
+		p.TopicHooks().Component(),
+		realtime.New(p.OpenClients, p.KeyValues(), p.Services(), p.pushBinary, p.ContainerEndpoint()).Component(),
 	}
 }
 
-func (p *Provider) topicHooks() *topic.Topic {
-	return topic.New(p.openClients, p.KeyValues())
-}
-
-func (p *Provider) realtimeHooks() *realtime.Realtime {
-	return realtime.New(p.openClients, p.KeyValues(), p.services(), p.pushBinary, p.containerEndpoint())
+func (p *Provider) TopicHooks() *topic.Topic {
+	return topic.New(p.OpenClients, p.KeyValues())
 }
 
 func (p *Provider) resourceHooks() resources.Hooks {
-	registry := p.components()
+	registry := p.Components()
 	if p.transforms != nil {
 		registry = registry.WithEvaluationRequired()
 	}

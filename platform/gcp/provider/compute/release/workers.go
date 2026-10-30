@@ -15,11 +15,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
-var WorkerCeilings = []provider.WorkerCeiling{
-	{Compute: provider.ComputeServerless, MaxDuration: topic.PushCeiling},
-	{Compute: provider.ComputeContainer, MaxDuration: topic.PushCeiling},
-}
-
 func WorkerServing(worker provider.WorkerSpec, placed run.Serving) run.Serving {
 	env := maps.Clone(placed.Env)
 	if env == nil {
@@ -27,7 +22,7 @@ func WorkerServing(worker provider.WorkerSpec, placed run.Serving) run.Serving {
 	}
 	env[processenv.WorkerEnvVar] = worker.Name
 	placed.Env = env
-	placed.Compute, placed.Ingress, placed.Timeout, placed.Concurrency = provider.ComputeServerless, run.IngressInternal, topic.PushCeiling, worker.Concurrency
+	placed.Compute, placed.Ingress, placed.Timeout, placed.Concurrency = provider.ComputeServerless, run.IngressInternal, topics.PushAckDeadline, worker.Concurrency
 	return placed
 }
 

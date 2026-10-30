@@ -1,4 +1,4 @@
-package gcp
+package control
 
 import (
 	"net"
@@ -13,7 +13,6 @@ import (
 const (
 	emulatorEndpointVariable    = "OCEL_FLOCI_GCP_ENDPOINT"
 	tagEmulatorEndpointVariable = "OCEL_FLOCI_FIRESTORE_ENDPOINT"
-	hostFromContainers          = "host.docker.internal"
 )
 
 func emulatorEndpoint() (string, error) {
@@ -43,6 +42,8 @@ func tagEmulatorEndpoint(flociEndpoint string) (string, error) {
 	return endpoint, nil
 }
 
+const hostFromContainers = "host.docker.internal"
+
 func containerAddress(endpoint string) string {
 	at, err := url.Parse(endpoint)
 	if err != nil || at.Host == "" {
@@ -52,11 +53,11 @@ func containerAddress(endpoint string) string {
 	return at.String()
 }
 
-func (p *Provider) containerEndpoint() string { return containerAddress(p.endpoint) }
+func (p *Provider) ContainerEndpoint() string { return containerAddress(p.Emulator) }
 
-func (p *Provider) containerTagEndpoint() string {
-	if p.tagEndpoint == "" {
-		return p.containerEndpoint()
+func (p *Provider) ContainerTagEndpoint() string {
+	if p.TagEmulator == "" {
+		return p.ContainerEndpoint()
 	}
-	return containerAddress(p.tagEndpoint)
+	return containerAddress(p.TagEmulator)
 }

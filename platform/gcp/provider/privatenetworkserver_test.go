@@ -9,13 +9,14 @@ import (
 	"sync"
 	"testing"
 
+	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/networkconnectivity/v1"
+
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
-	"google.golang.org/api/compute/v1"
-	"google.golang.org/api/networkconnectivity/v1"
 )
 
 const serviceAgent = "serviceAccount:service-123456789@serverless-robot-prod.iam.gserviceaccount.com"

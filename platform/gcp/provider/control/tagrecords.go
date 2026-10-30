@@ -1,4 +1,4 @@
-package gcp
+package control
 
 import (
 	"context"
@@ -43,7 +43,7 @@ func unindexedTagFields() []string {
 	return []string{tagWrittenAtField, tagField, tagStaleField, tagExpiredField}
 }
 
-func tagLayout() variables.Layout {
+func TagLayout() variables.Layout {
 	layout := variables.Layout{}
 	for _, field := range unindexedTagFields() {
 		layout.Unindexed = append(layout.Unindexed, variables.LayoutField{Group: tagCollection, Path: field})
@@ -59,7 +59,7 @@ func (a artifacts) removeTagRecords(ctx context.Context, tier environment.Tier, 
 	if err != nil {
 		return err
 	}
-	resolved, err := a.p.openClients(ctx)
+	resolved, err := a.p.OpenClients(ctx)
 	if err != nil {
 		return err
 	}

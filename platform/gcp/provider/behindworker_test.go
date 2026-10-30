@@ -34,9 +34,9 @@ func (f shieldingFront) Facts() edge.Facts {
 
 func adoptBehindTheWorker(t *testing.T, p *Provider, kinds ...edge.Kind) {
 	t.Helper()
-	p.records = fake.NewKeyValues()
+	p.Records = fake.NewKeyValues()
 	for _, kind := range append([]edge.Kind{cloudflareKind}, kinds...) {
-		err := cloudflareorigin.AdoptOffers(context.Background(), p.resolved, p.records, environment.TierProduction, kind,
+		err := cloudflareorigin.AdoptOffers(context.Background(), p.Clients, p.Records, environment.TierProduction, kind,
 			fullOffers("c1"), &fake.Log{})
 		if err != nil {
 			t.Fatal(err)
@@ -47,7 +47,7 @@ func adoptBehindTheWorker(t *testing.T, p *Provider, kinds ...edge.Kind) {
 
 func mintOriginSecret(t *testing.T, p *Provider, tier environment.Tier, kind edge.Kind) {
 	t.Helper()
-	if err := cloudflareorigin.EnsureOriginSecret(context.Background(), p.resolved, tier, kind, time.Now(), &fake.Log{}); err != nil {
+	if err := cloudflareorigin.EnsureOriginSecret(context.Background(), p.Clients, tier, kind, time.Now(), &fake.Log{}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -75,7 +75,7 @@ func containerRelease(buildID string) provider.StackSpec {
 
 func originSecretOf(t *testing.T, p *Provider) originsecret.Secret {
 	t.Helper()
-	secret, found, err := cloudflareorigin.ReadOriginSecret(context.Background(), p.resolved, environment.TierProduction, cloudflareKind)
+	secret, found, err := cloudflareorigin.ReadOriginSecret(context.Background(), p.Clients, environment.TierProduction, cloudflareKind)
 	if err != nil || !found {
 		t.Fatalf("ReadOriginSecret() = %+v, %v, %v, want the secret the bootstrap minted", secret, found, err)
 	}
@@ -85,7 +85,7 @@ func originSecretOf(t *testing.T, p *Provider) originsecret.Secret {
 func rotateOriginSecret(t *testing.T, p *Provider) originsecret.Secret {
 	t.Helper()
 	minted := originSecretOf(t, p)
-	if err := cloudflareorigin.EnsureOriginSecret(context.Background(), p.resolved, environment.TierProduction, cloudflareKind, minted.CreatedAt.Add(originsecret.MaxAge), &fake.Log{}); err != nil {
+	if err := cloudflareorigin.EnsureOriginSecret(context.Background(), p.Clients, environment.TierProduction, cloudflareKind, minted.CreatedAt.Add(originsecret.MaxAge), &fake.Log{}); err != nil {
 		t.Fatal(err)
 	}
 	rotated := originSecretOf(t, p)
@@ -232,8 +232,8 @@ func TestAWorkerServiceOfAnAppBehindTheWorkerIsHandedNoOriginSecret(t *testing.T
 func TestAContainerBehindTheWorkerOnATierWithNoOriginSecretIsRefusedBeforeAnythingRuns(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
-	p.records = fake.NewKeyValues()
-	if err := cloudflareorigin.AdoptOffers(context.Background(), p.resolved, p.records, environment.TierProduction, cloudflareKind, fullOffers("c1"), &fake.Log{}); err != nil {
+	p.Records = fake.NewKeyValues()
+	if err := cloudflareorigin.AdoptOffers(context.Background(), p.Clients, p.Records, environment.TierProduction, cloudflareKind, fullOffers("c1"), &fake.Log{}); err != nil {
 		t.Fatal(err)
 	}
 

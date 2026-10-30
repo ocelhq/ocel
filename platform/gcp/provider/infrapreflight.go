@@ -38,7 +38,7 @@ func (p *Provider) listPartsResourcesNeed(ctx context.Context, pre provider.Depl
 	if len(pre.Resources) == 0 {
 		return nil, nil
 	}
-	parts, err := deployUse{deploy: pre.Deploy, resources: pre.Resources}.partNames(p.components())
+	parts, err := deployUse{deploy: pre.Deploy, resources: pre.Resources}.partNames(p.Components())
 	if err != nil {
 		return nil, err
 	}

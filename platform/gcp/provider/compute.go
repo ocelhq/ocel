@@ -9,23 +9,23 @@ import (
 
 func (p *Provider) release() *release.Release {
 	return &release.Release{
-		OpenClients:       p.openClients,
+		OpenClients:       p.OpenClients,
 		ReadNames:         p.Names,
-		Services:          p.services(),
+		Services:          p.Services(),
 		Records:           p.KeyValues(),
 		Cipher:            p.Cipher(),
-		Components:        p.components(),
-		Topics:            p.topicHooks(),
-		Objects:           p.objects(),
+		Components:        p.Components(),
+		Topics:            p.TopicHooks(),
+		Objects:           p.Objects(),
 		CacheGrants:       cacheGrants,
 		Offers:            p.offers(),
-		Region:            p.options.Region,
-		ContainerEndpoint: p.containerEndpoint(),
+		Region:            p.Options.Region,
+		ContainerEndpoint: p.ContainerEndpoint(),
 
-		ContainerTagEndpoint: p.containerTagEndpoint(),
+		ContainerTagEndpoint: p.ContainerTagEndpoint(),
 		GateInEnv:            p.gateInEnv,
 		Transformed:          p.transforms != nil,
-		SkipChecks:           p.skipChecks,
+		SkipChecks:           p.SkipChecks,
 	}
 }
 
@@ -43,6 +43,6 @@ func (p *Provider) computeHooks(hooks resources.Hooks) resources.Hooks {
 		Remove:    p.RemoveContainers,
 		Shared:    &resources.SharedHooks[provider.AppContainer]{Name: p.NameContainers, RemoveRevisions: p.RemoveContainerRevisions},
 	}
-	hooks.Retention = &resources.ImageRetentionHooks{Reconcile: p.services().ReconcileImages}
+	hooks.Retention = &resources.ImageRetentionHooks{Reconcile: p.Services().ReconcileImages}
 	return hooks
 }

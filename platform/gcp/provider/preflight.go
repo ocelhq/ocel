@@ -9,8 +9,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
@@ -21,7 +21,7 @@ const (
 )
 
 func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
-	if pre.Edge == alb.Kind {
+	if pre.Edge == albresources.Kind {
 		if err := p.refuseUnusableFrontPolicies(ctx, pre); err != nil {
 			return provider.Plan{}, err
 		}
@@ -47,7 +47,7 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 	}
 	var plan provider.Plan
 	if keeps {
-		if plan.Groups, err = variables.PlanProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.options.OwnDatabase); err != nil {
+		if plan.Groups, err = variables.PlanProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.Options.OwnDatabase); err != nil {
 			return provider.Plan{}, err
 		}
 	}
@@ -56,7 +56,7 @@ func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflig
 		return provider.Plan{}, err
 	}
 	plan.Groups = append(plan.Groups, groups...)
-	if pre.Edge == alb.Kind {
+	if pre.Edge == albresources.Kind {
 		repatched, err := p.edges().OpenALB().PlanFrontRepatch(ctx, pre.Deploy.Tier, pre.Deploy.Slug)
 		if err != nil {
 			return provider.Plan{}, err
@@ -79,7 +79,7 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	if err := p.warnStaleOriginSecret(ctx, pre); err != nil {
 		return err
 	}
-	if pre.Edge == alb.Kind {
+	if pre.Edge == albresources.Kind {
 		if err := p.refuseUnusableFrontPolicies(ctx, pre); err != nil {
 			return err
 		}
@@ -108,7 +108,7 @@ func (p *Provider) warnStaleOriginSecret(ctx context.Context, pre provider.Deplo
 	if err != nil || !front.Facts().RunsCode {
 		return err
 	}
-	c, err := p.openClients(ctx)
+	c, err := p.OpenClients(ctx)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func servesCompute(app provider.AppEntry) bool {
 }
 
 func (p *Provider) listAPIsToCheck(pre provider.DeployPreflight) []string {
-	if p.skipChecks {
+	if p.SkipChecks {
 		return nil
 	}
 	return deployAPIs(pre)
@@ -161,7 +161,7 @@ func (p *Provider) ensureProjectDatabase(ctx context.Context, pre provider.Deplo
 	if err != nil {
 		return err
 	}
-	return variables.EnsureProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.options.OwnDatabase, pre.Progress, appDatabaseLayouts()...)
+	return variables.EnsureProjectDatabase(ctx, b, pre.Deploy.Tier, pre.Deploy.Slug, p.Options.OwnDatabase, pre.Progress, appDatabaseLayouts()...)
 }
 
 func (p *Provider) leaveALB(ctx context.Context, pre provider.DeployPreflight) error {

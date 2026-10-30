@@ -17,12 +17,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider/functioncode"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 const CopiedFromKey = "ocel-copied-from"
 
-func (p *Store) CopyImmutableFiles(ctx context.Context, tier environment.Tier, from, to alb.StaticRoutes) error {
+func (p *Store) CopyImmutableFiles(ctx context.Context, tier environment.Tier, from, to albresources.StaticRoutes) error {
 	objects := p
 	bucket, err := objects.bucket(ctx, tier, naming.ObjectAssets)
 	if err != nil {

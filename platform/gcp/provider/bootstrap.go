@@ -20,7 +20,7 @@ func (g bootstrapGate) Parts() []provider.Part {
 }
 
 func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, error) {
-	opened, err := g.p.openClients(ctx)
+	opened, err := g.p.OpenClients(ctx)
 	if err != nil {
 		return bootstrap.Engine{}, err
 	}
@@ -35,15 +35,15 @@ func (g bootstrapGate) openBootstrap(ctx context.Context) (bootstrap.Engine, err
 		Records:        g.p.KeyValues(),
 		WrittenBy:      g.p.writtenBy,
 		Surveyed:       &g.p.surveyed,
-		SkipChecks:     g.p.skipChecks,
+		SkipChecks:     g.p.SkipChecks,
 		Removable:      tierParts(network.Patches{}),
-		Accounts:       tierAccounts(g.p.components()),
+		Accounts:       tierAccounts(g.p.Components()),
 		FrontParts:     tierFronts(),
 		TakeRecords:    variables.TakeProjectRecords,
 		SweepAccounts:  release.DeleteUnusedAccounts,
 		PushBinary:     g.p.pushBinary,
-		DeployAndRoute: g.p.services().DeployAndRoute,
-		TearDown:       g.p.services().TearDown,
+		DeployAndRoute: g.p.Services().DeployAndRoute,
+		TearDown:       g.p.Services().TearDown,
 	}, nil
 }
 

@@ -1,4 +1,4 @@
-package gcp
+package control
 
 import (
 	"context"
@@ -19,7 +19,7 @@ func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provide
 	if q.Tier.Sibling() == "" {
 		return ports.Tierless("a log read")
 	}
-	resolved, err := p.openClients(ctx)
+	resolved, err := p.OpenClients(ctx)
 	if q.Tail && ctx.Err() != nil {
 		return nil
 	}

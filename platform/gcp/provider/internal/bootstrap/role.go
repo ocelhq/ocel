@@ -54,7 +54,7 @@ type customRole struct {
 }
 
 func FindCustomRole(names names.Names, id string) (customRole, bool) {
-	for _, role := range []customRole{NewCDNPurgeRole(names), NewPartsRole(names)} {
+	for _, role := range []customRole{NewCDNPurgeRole(names), NewPartsRole(names), NewConnectorRole(names), NewConnectorRoutingRole(names)} {
 		if role.ID == id {
 			return role, true
 		}
@@ -166,6 +166,34 @@ func refusePurgedRole(path string) error {
 		"the custom role %s was deleted, and Google undeletes a role only in the first 7 days and holds its id from reuse until it is purged, up to 44 days after the deletion.\n"+
 			"Bootstrap again once Google has purged it, or under another namespace in %s",
 		path, provider.NamespaceEnvVar)
+}
+
+func NewConnectorRole(names names.Names) customRole {
+	return customRole{
+		ID:          names.ConnectorRole(),
+		title:       "ocel connector (" + string(names.Namespace()) + ")",
+		description: "lets the connector check the project, region and billing it serves every call in",
+		Permissions: []string{"resourcemanager.projects.get", "run.locations.list", "serviceusage.services.get"},
+		DriftReason: "its permissions drifted",
+	}
+}
+
+func NewConnectorRoutingRole(names names.Names) customRole {
+	return customRole{
+		ID:          names.ConnectorRoutingRole(),
+		title:       "ocel connector routing (" + string(names.Namespace()) + ")",
+		description: "lets the connector route hostnames through the alb's url map, purge its cache and read its certificates, and nothing it provisions",
+		Permissions: []string{
+			"compute.urlMaps.get", "compute.urlMaps.update", "compute.urlMaps.invalidateCache",
+			"compute.backendServices.use", "compute.backendBuckets.use",
+			"compute.globalOperations.get", "compute.globalAddresses.get", "compute.projects.get",
+			"certificatemanager.certmapentries.list",
+			"certificatemanager.certs.get", "certificatemanager.certs.create", "certificatemanager.certs.delete",
+			"certificatemanager.dnsauthorizations.get", "certificatemanager.dnsauthorizations.create", "certificatemanager.dnsauthorizations.delete",
+			"certificatemanager.operations.get",
+		},
+		DriftReason: "its permissions drifted",
+	}
 }
 
 func NewCDNPurgeRole(names names.Names) customRole {

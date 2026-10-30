@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 )
@@ -63,7 +63,7 @@ func TestAnInfraRunsPreflightPlansThePartsItsResourcesNeedAndNoneTheEdgeServesFr
 	p, server := deployingNetworks(t)
 	pre := declaringADatabase("17")
 	pre.Deploy.Slug = "shop"
-	pre.Edge = alb.Kind
+	pre.Edge = albresources.Kind
 
 	plan, err := p.PlanInfraPreflight(context.Background(), pre)
 	if err != nil {
@@ -82,7 +82,7 @@ func TestAnInfraRunsPreflightPlansThePartsItsResourcesNeedAndNoneTheEdgeServesFr
 func TestAnInfraRunsPreflightDeclaringNothingCallsNothingAndRecordsNothing(t *testing.T) {
 	p := failingOnAnyCall(t)
 	ctx := context.Background()
-	pre := provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: environment.TierProduction, Slug: "shop"}, Edge: alb.Kind}
+	pre := provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: environment.TierProduction, Slug: "shop"}, Edge: albresources.Kind}
 
 	if plan, err := p.PlanInfraPreflight(ctx, pre); err != nil || len(plan.Groups) != 0 {
 		t.Errorf("PlanInfraPreflight() of no resource = %+v, %v, want nothing planned", plan.Groups, err)
@@ -106,7 +106,7 @@ func TestAnInfraRunsPreflightThatCannotAddAPartRecordsNoPartUsed(t *testing.T) {
 	ctx := context.Background()
 	pre := declaringADatabase("17")
 	pre.Deploy.Slug = "shop"
-	pre.Edge = alb.Kind
+	pre.Edge = albresources.Kind
 
 	if err := p.ApplyInfraPreflight(ctx, pre); err == nil {
 		t.Fatal("ApplyInfraPreflight() on a project that refuses every call = nil, want the error adding its parts")

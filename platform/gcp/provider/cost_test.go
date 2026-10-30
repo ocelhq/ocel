@@ -25,8 +25,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
-	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")
@@ -38,10 +38,10 @@ func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1co
 
 func costServedIn(t *testing.T, region string) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
-	return costServedWith(t, gcp.Options{Project: "acme-prod", Region: region})
+	return costServedWith(t, control.Options{Project: "acme-prod", Region: region})
 }
 
-func costServedWith(t *testing.T, options gcp.Options) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
+func costServedWith(t *testing.T, options control.Options) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
 	for _, variable := range []string{"OCEL_FLOCI_GCP_ENDPOINT", "OCEL_FLOCI_FIRESTORE_ENDPOINT"} {
 		t.Setenv(variable, "")
@@ -115,17 +115,17 @@ func typeCounts(set *costv1.ResourceSet) map[string]int {
 	return counts
 }
 
-func TestShapeDescribesAProductionDeployServedDirect(t *testing.T) {
+func TestInventoryDescribesAProductionDeployServedDirect(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_production_direct", set)
+	golden(t, "inventory_production_direct", set)
 
 	counts := typeCounts(set)
 	if counts["google_cloud_run_v2_service"] != 3 || counts["google_cloud_scheduler_job"] != 1 || counts["google_storage_bucket"] != 2 || counts["google_compute_global_forwarding_rule"] != 0 ||
@@ -148,15 +148,15 @@ func TestShapeDescribesAProductionDeployServedDirect(t *testing.T) {
 	}
 }
 
-func TestShapeOfADeclaredBucketIsOneStorageBucketInTheEnvironmentThatDeclaresIt(t *testing.T) {
+func TestInventoryOfADeclaredBucketIsOneStorageBucketInTheEnvironmentThatDeclaresIt(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	var declared []*costv1.Resource
 	for _, r := range set.GetResources() {
@@ -165,25 +165,25 @@ func TestShapeOfADeclaredBucketIsOneStorageBucketInTheEnvironmentThatDeclaresIt(
 		}
 	}
 	if len(declared) != 1 || declared[0].GetName() != "ocel-app-shop-prod-uploads" {
-		t.Fatalf("the environment shapes buckets %v, want the one bucket uploads stores into", declared)
+		t.Fatalf("the environment inventories buckets %v, want the one bucket uploads stores into", declared)
 	}
 	if properties := declared[0].GetProperties().AsMap(); properties["location"] != "europe-west1" || properties["storage_class"] != "STANDARD" {
-		t.Errorf("the bucket is shaped as %v, want a standard bucket in the deploy's region", properties)
+		t.Errorf("the bucket is inventoried as %v, want a standard bucket in the deploy's region", properties)
 	}
 }
 
-func TestShapeBehindTheLoadBalancerFrontsEveryHostname(t *testing.T) {
+func TestInventoryBehindTheLoadBalancerFrontsEveryHostname(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
-		Edge:        &contractv1.EdgeSelection{Kind: string(alb.Kind)},
+		Edge:        &contractv1.EdgeSelection{Kind: string(albresources.Kind)},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_production_alb", set)
+	golden(t, "inventory_production_alb", set)
 
 	counts := typeCounts(set)
 	if counts["google_compute_global_forwarding_rule"] != 1 || counts["google_compute_backend_service"] != 2 || counts["google_compute_region_network_endpoint_group"] != 1 {
@@ -191,18 +191,18 @@ func TestShapeBehindTheLoadBalancerFrontsEveryHostname(t *testing.T) {
 	}
 }
 
-func TestShapeOfAPreviewBehindTheLoadBalancerIncludesTheWildcardCertificate(t *testing.T) {
+func TestInventoryOfAPreviewBehindTheLoadBalancerIncludesTheWildcardCertificate(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"},
-		Edge:        &contractv1.EdgeSelection{Kind: string(alb.Kind)},
+		Edge:        &contractv1.EdgeSelection{Kind: string(albresources.Kind)},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_preview_alb", set)
+	golden(t, "inventory_preview_alb", set)
 
 	counts := typeCounts(set)
 	if counts["google_certificate_manager_certificate_map_entry"] != 2 || counts["google_compute_region_network_endpoint_group"] != 1 {
@@ -210,16 +210,16 @@ func TestShapeOfAPreviewBehindTheLoadBalancerIncludesTheWildcardCertificate(t *t
 	}
 }
 
-func TestShapeBehindCloudflareCarriesTheWorkerAndNoLoadBalancer(t *testing.T) {
+func TestInventoryBehindCloudflareCarriesTheWorkerAndNoLoadBalancer(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		Edge:        &contractv1.EdgeSelection{Kind: string(cloudflare.Kind)},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 
 	counts := typeCounts(set)
@@ -228,7 +228,7 @@ func TestShapeBehindCloudflareCarriesTheWorkerAndNoLoadBalancer(t *testing.T) {
 	}
 	for typ := range counts {
 		if strings.HasPrefix(typ, "google_compute_") || strings.HasPrefix(typ, "google_certificate_manager_") {
-			t.Errorf("the shape lists %s, and the worker reaches each release on its revision-tag URL with no load balancer between", typ)
+			t.Errorf("the inventory lists %s, and the worker reaches each release on its revision-tag URL with no load balancer between", typ)
 		}
 	}
 }
@@ -243,15 +243,15 @@ func storeManifest(memory string) *contractv1.Manifest {
 	return manifest
 }
 
-func shapeOfAStore(t *testing.T, environment *environmentv1.Environment, memory string) (*costv1.ResourceSet, *costv1.Estimate) {
+func inventoryOfAStore(t *testing.T, environment *environmentv1.Environment, memory string) (*costv1.ResourceSet, *costv1.Estimate) {
 	t.Helper()
 	client, costs := costServedIn(t, "us-central1")
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    storeManifest(memory),
 		Environment: environment,
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
@@ -267,41 +267,41 @@ func resourceOfType(t *testing.T, set *costv1.ResourceSet, typ string) *costv1.R
 			return resource
 		}
 	}
-	t.Fatalf("the shape lists no %s", typ)
+	t.Fatalf("the inventory lists no %s", typ)
 	return nil
 }
 
 var productionEnvironment = &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION}
 
-func TestShapeOfADeclaredStoreIsAMemorystoreNodeWithOneReplicaOnTheTiersNetwork(t *testing.T) {
-	set, _ := shapeOfAStore(t, productionEnvironment, "2gb")
+func TestInventoryOfADeclaredStoreIsAMemorystoreNodeWithOneReplicaOnTheTiersNetwork(t *testing.T) {
+	set, _ := inventoryOfAStore(t, productionEnvironment, "2gb")
 
 	instance := resourceOfType(t, set, "google_memorystore_instance")
 	if instance.GetScope() != "project:shop/environment:prod" {
-		t.Errorf("the store is shaped under %s, want the environment that declares it", instance.GetScope())
+		t.Errorf("the store is inventoried under %s, want the environment that declares it", instance.GetScope())
 	}
 	properties := instance.GetProperties().AsMap()
 	if properties["node_type"] != "custom-mini" || properties["replica_count"] != float64(1) ||
 		properties["persistence_config"].(map[string]any)["mode"] != "AOF" {
-		t.Errorf("the store is shaped as %v, want a custom-mini node and its one replica with append-only persistence", properties)
+		t.Errorf("the store is inventoried as %v, want a custom-mini node and its one replica with append-only persistence", properties)
 	}
 	for _, typ := range []string{"google_compute_network", "google_compute_subnetwork", "google_network_connectivity_service_connection_policy"} {
 		if scope := resourceOfType(t, set, typ).GetScope(); scope != "project:shop/shared:production" {
-			t.Errorf("the %s is shaped under %s, want the tier it is bootstrapped for", typ, scope)
+			t.Errorf("the %s is inventoried under %s, want the tier it is bootstrapped for", typ, scope)
 		}
 	}
 }
 
-func TestShapeOfAPreviewStoreIsAMemorystoreNodeWithoutAReplica(t *testing.T) {
-	set, _ := shapeOfAStore(t, &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"}, "256mb")
+func TestInventoryOfAPreviewStoreIsAMemorystoreNodeWithoutAReplica(t *testing.T) {
+	set, _ := inventoryOfAStore(t, &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"}, "256mb")
 
 	if replicas := resourceOfType(t, set, "google_memorystore_instance").GetProperties().AsMap()["replica_count"]; replicas != float64(0) {
-		t.Errorf("a preview store is shaped with %v replicas, want none", replicas)
+		t.Errorf("a preview store is inventoried with %v replicas, want none", replicas)
 	}
 }
 
 func TestPriceOfAStoreBillsItsNodeItsReplicaAndTheirAppendOnlyFilesEveryHourAndTrafficFromOtherZonesByTheGiB(t *testing.T) {
-	set, est := shapeOfAStore(t, productionEnvironment, "256mb")
+	set, est := inventoryOfAStore(t, productionEnvironment, "256mb")
 
 	store := estimateOfType(t, est, set, "google_memorystore_instance", "project:shop/environment:prod")
 	if got := componentNamed(t, est, store.GetResource(), "Node").GetMonthlyCost(); got != "44.97" {
@@ -324,12 +324,12 @@ func TestPriceOfAStoreBillsItsNodeItsReplicaAndTheirAppendOnlyFilesEveryHourAndT
 	}
 }
 
-func shapeOfADatabase(t *testing.T) (*costv1.ResourceSet, *costv1.Estimate) {
+func inventoryOfADatabase(t *testing.T) (*costv1.ResourceSet, *costv1.Estimate) {
 	t.Helper()
-	return shapeOfADatabaseIn(t, &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION})
+	return inventoryOfADatabaseIn(t, &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION})
 }
 
-func shapeOfADatabaseIn(t *testing.T, environment *environmentv1.Environment) (*costv1.ResourceSet, *costv1.Estimate) {
+func inventoryOfADatabaseIn(t *testing.T, environment *environmentv1.Environment) (*costv1.ResourceSet, *costv1.Estimate) {
 	t.Helper()
 	client, costs := costServedIn(t, "us-central1")
 	manifest := shopManifest()
@@ -338,12 +338,12 @@ func shapeOfADatabaseIn(t *testing.T, environment *environmentv1.Environment) (*
 		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders"},
 		Config:      &contractv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{Version: "17"}},
 	})
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    manifest,
 		Environment: environment,
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
@@ -352,21 +352,21 @@ func shapeOfADatabaseIn(t *testing.T, environment *environmentv1.Environment) (*
 	return set, est
 }
 
-func TestShapeOfADeclaredDatabaseIsOneCloudSQLInstanceOnTheTiersNetwork(t *testing.T) {
-	set, _ := shapeOfADatabase(t)
+func TestInventoryOfADeclaredDatabaseIsOneCloudSQLInstanceOnTheTiersNetwork(t *testing.T) {
+	set, _ := inventoryOfADatabase(t)
 
 	instance := resourceOfType(t, set, "google_sql_database_instance")
 	if instance.GetScope() != "project:shop/environment:prod" {
-		t.Errorf("the database is shaped under %s, want the environment that declares it", instance.GetScope())
+		t.Errorf("the database is inventoried under %s, want the environment that declares it", instance.GetScope())
 	}
 	properties := instance.GetProperties().AsMap()
 	settings, _ := properties["settings"].(map[string]any)
 	if properties["database_version"] != "POSTGRES_17" || settings["tier"] != "db-custom-1-3840" || settings["availability_type"] != "REGIONAL" || settings["disk_size"] != float64(10) {
-		t.Errorf("the database is shaped as %v, want POSTGRES_17 on a regional db-custom-1-3840 with 10 GB of disk", properties)
+		t.Errorf("the database is inventoried as %v, want POSTGRES_17 on a regional db-custom-1-3840 with 10 GB of disk", properties)
 	}
 	for _, typ := range []string{"google_compute_network", "google_compute_subnetwork", "google_network_connectivity_service_connection_policy"} {
 		if scope := resourceOfType(t, set, typ).GetScope(); scope != "project:shop/shared:production" {
-			t.Errorf("the %s is shaped under %s, want the tier it is bootstrapped for", typ, scope)
+			t.Errorf("the %s is inventoried under %s, want the tier it is bootstrapped for", typ, scope)
 		}
 	}
 	if counts := typeCounts(set); counts["google_network_connectivity_service_connection_policy"] != 2 {
@@ -375,7 +375,7 @@ func TestShapeOfADeclaredDatabaseIsOneCloudSQLInstanceOnTheTiersNetwork(t *testi
 }
 
 func TestPriceOfAProductionDatabaseBillsItsCoreAndMemoryEveryHourAtTheHighAvailabilityRate(t *testing.T) {
-	set, est := shapeOfADatabase(t)
+	set, est := inventoryOfADatabase(t)
 
 	database := estimateOfType(t, est, set, "google_sql_database_instance", "project:shop/environment:prod")
 	if got := componentNamed(t, est, database.GetResource(), "vCPU").GetMonthlyCost(); got != "60.30" {
@@ -390,7 +390,7 @@ func TestPriceOfAProductionDatabaseBillsItsCoreAndMemoryEveryHourAtTheHighAvaila
 }
 
 func TestPriceOfADatabaseBillsItsInstanceEveryHourAndItsDiskByTheGiB(t *testing.T) {
-	set, est := shapeOfADatabaseIn(t, &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"})
+	set, est := inventoryOfADatabaseIn(t, &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"})
 
 	database := estimateOfType(t, est, set, "google_sql_database_instance", "project:shop/environment:pr-42")
 	if got := componentNamed(t, est, database.GetResource(), "Instance").GetMonthlyCost(); got != "7.67" {
@@ -434,15 +434,15 @@ func topicsManifest() *contractv1.Manifest {
 	return manifest
 }
 
-func TestShapeOfTopicsAndTasksIsTheirPubSubTopologyTheTiersQueueAndDatabaseAndEachWorkerBesideTheProjectsRecords(t *testing.T) {
+func TestInventoryOfTopicsAndTasksIsTheirPubSubTopologyTheTiersQueueAndDatabaseAndEachWorkerBesideTheProjectsRecords(t *testing.T) {
 	client, costs := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    topicsManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	counts := typeCounts(set)
 	for typ, want := range map[string]int{
@@ -454,18 +454,18 @@ func TestShapeOfTopicsAndTasksIsTheirPubSubTopologyTheTiersQueueAndDatabaseAndEa
 		"google_cloud_scheduler_job":  2,
 	} {
 		if counts[typ] != want {
-			t.Errorf("the shape lists %d %s, want %d: %v", counts[typ], typ, want, counts)
+			t.Errorf("the inventory lists %d %s, want %d: %v", counts[typ], typ, want, counts)
 		}
 	}
 	for _, r := range set.GetResources() {
 		switch {
 		case r.GetType() == "google_pubsub_topic" || r.GetType() == "google_pubsub_subscription":
 			if r.GetScope() != "project:shop/environment:prod" {
-				t.Errorf("%s is shaped under %s, want the environment that declares it", r.GetName(), r.GetScope())
+				t.Errorf("%s is inventoried under %s, want the environment that declares it", r.GetName(), r.GetScope())
 			}
 		case r.GetType() == "google_cloud_tasks_queue":
 			if r.GetScope() != "project:shop/shared:production" {
-				t.Errorf("the delay queue is shaped under %s, want the tier it is bootstrapped for", r.GetScope())
+				t.Errorf("the delay queue is inventoried under %s, want the tier it is bootstrapped for", r.GetScope())
 			}
 		case r.GetType() == "google_cloud_run_v2_service" && r.GetScope() == "project:shop/environment:prod/app:web" && r.GetProperties().AsMap()["ingress"] == "INGRESS_TRAFFIC_INTERNAL_ONLY":
 			template := r.GetProperties().AsMap()["template"].(map[string]any)
@@ -518,20 +518,20 @@ func nextManifest(container bool) *contractv1.Manifest {
 	return &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{app}}
 }
 
-func TestShapeOfAServerlessNextAppListsNoTaskQueueOrAccountBeyondAContainerAppsOwn(t *testing.T) {
+func TestInventoryOfAServerlessNextAppListsNoTaskQueueOrAccountBeyondAContainerAppsOwn(t *testing.T) {
 	client, _ := costServed(t)
-	shaped := func(container bool) *costv1.ResourceSet {
-		set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	inventoried := func(container bool) *costv1.ResourceSet {
+		set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 			Manifest:    nextManifest(container),
 			Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		})
 		if err != nil {
-			t.Fatalf("Shape() = %v", err)
+			t.Fatalf("Inventory() = %v", err)
 		}
 		return set
 	}
 
-	counts, without := typeCounts(shaped(false)), typeCounts(shaped(true))
+	counts, without := typeCounts(inventoried(false)), typeCounts(inventoried(true))
 
 	if counts["google_cloud_tasks_queue"] != 0 {
 		t.Errorf("counts = %v, want no delay queue: a Next app that declares no topic or task queues nothing", counts)
@@ -544,15 +544,15 @@ func TestShapeOfAServerlessNextAppListsNoTaskQueueOrAccountBeyondAContainerAppsO
 	}
 }
 
-func TestShapeOfANextAppOnContainerComputeListsNoTaskQueue(t *testing.T) {
+func TestInventoryOfANextAppOnContainerComputeListsNoTaskQueue(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    nextManifest(true),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 
 	if counts := typeCounts(set); counts["google_cloud_tasks_queue"] != 0 {
@@ -562,12 +562,12 @@ func TestShapeOfANextAppOnContainerComputeListsNoTaskQueue(t *testing.T) {
 
 func TestAServerlessNextAppIsPricedForEveryHourItsInstanceLivesAtTheInstanceRate(t *testing.T) {
 	client, costs := costServed(t)
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    nextManifest(false),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
@@ -599,12 +599,12 @@ func TestANextAppIsPricedAtTheMemoryItsServicesRunWith(t *testing.T) {
 		},
 	}
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    manifest,
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 
 	want := map[string]string{
@@ -626,6 +626,6 @@ func TestANextAppIsPricedAtTheMemoryItsServicesRunWith(t *testing.T) {
 		}
 	}
 	if len(seen) != len(want) {
-		t.Errorf("shaped the services of %v, want one for each of %v", seen, want)
+		t.Errorf("inventoried the services of %v, want one for each of %v", seen, want)
 	}
 }
