@@ -91,7 +91,7 @@ func aLiveProxy(t *testing.T) liveProxy {
 			t.Fatal(err)
 		}
 	}
-	runnable(t, proxy.binary, switchboardBinary(arch), 0o755)
+	runnable(t, proxy.binary, switchboardBinary(testAssets, arch), 0o755)
 	proxy.here = strings.NewReplacer(
 		boxapi.FrontDir, filepath.Join(dir, "front"),
 		boxapi.SwitchboardControlDir, filepath.Join(dir, "control"),
@@ -115,7 +115,7 @@ func aLiveProxy(t *testing.T) liveProxy {
 	taken(t, board)
 	taken(t, name)
 	for what, script := range map[string]string{
-		"the switchboard": switchboardBox(switchboardBinary(arch), front.Proxy{}).Writing(docker.ContainerRising),
+		"the switchboard": switchboardBox(switchboardBinary(testAssets, arch), front.Proxy{}).Writing(docker.ContainerRising),
 		"the proxy":       frontProxy().Writing(docker.ContainerRising),
 	} {
 		if out, err := exec.Command("/bin/sh", "-c", proxy.here(script)).CombinedOutput(); err != nil {
@@ -178,7 +178,7 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front") + ":ro",
 			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 		}},
-		{proxy.board, switchboardBox(switchboardBinary(arch), front.Proxy{}), []string{
+		{proxy.board, switchboardBox(switchboardBinary(testAssets, arch), front.Proxy{}), []string{
 			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
 			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
@@ -223,14 +223,14 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front") + ":ro",
 			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 		}},
-		{proxy.board, switchboardBox(switchboardBinary(arch), front.Proxy{}), filepath.Join(proxy.dir, "connector"), false, []string{
+		{proxy.board, switchboardBox(switchboardBinary(testAssets, arch), front.Proxy{}), filepath.Join(proxy.dir, "connector"), false, []string{
 			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
 			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
 			filepath.Join(proxy.dir, "control") + ":" + filepath.Join(proxy.dir, "control"),
 			filepath.Join(proxy.dir, "front") + ":" + filepath.Join(proxy.dir, "front"),
 		}},
-		{proxy.board, switchboardBox(switchboardBinary(arch), front.Proxy{}), filepath.Dir(proxy.binary), true, []string{
+		{proxy.board, switchboardBox(switchboardBinary(testAssets, arch), front.Proxy{}), filepath.Dir(proxy.binary), true, []string{
 			filepath.Join(proxy.dir, "switchboard") + ":" + boxapi.SwitchboardMount + ":ro",
 			filepath.Join(proxy.dir, "routing") + ":" + filepath.Join(proxy.dir, "routing") + ":ro",
 			filepath.Join(proxy.dir, "connector") + ":" + filepath.Join(proxy.dir, "connector") + ":ro",
@@ -248,7 +248,7 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 			if err := os.RemoveAll(target.replaced + ".gone"); err != nil {
 				t.Fatal(err)
 			}
-			runnable(t, proxy.binary, switchboardBinary(arch), 0o755)
+			runnable(t, proxy.binary, switchboardBinary(testAssets, arch), 0o755)
 		}
 		rendered, err := exec.Command("/bin/sh", "-c", proxy.here(containerProbe(target.as))).Output()
 		if err != nil {

@@ -33,6 +33,8 @@ type Target struct {
 
 func (Target) AlsoAString() {}
 
+func (t Target) Destination() string { return t.session().Destination() }
+
 func (t Target) session() ssh.Target {
 	return ssh.Target{
 		Alias:        t.Alias,

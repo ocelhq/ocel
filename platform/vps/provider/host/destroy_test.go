@@ -120,7 +120,7 @@ func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 		return machine.Item{Kind: machine.KindFile, Name: machine.StampPath(tier), Mode: 0o644, Owner: machine.RootOwner, Content: []byte(`{"state": "compl`)}
 	}
 	box := newBench(map[environment.Tier][]machine.Item{
-		tier:   append(Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), truncated(tier)),
+		tier:   append(Items(testAssets, tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), truncated(tier)),
 		beside: {truncated(beside)},
 	})
 
@@ -299,8 +299,8 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastTierAndByNoOther(t *testi
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	current := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(production, keys, ssh.AMD64, front.Proxy{}))}
-	beside := Reading{Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(preview, keys, ssh.AMD64, front.Proxy{}))}
+	current := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(testAssets, production, keys, ssh.AMD64, front.Proxy{}))}
+	beside := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(testAssets, preview, keys, ssh.AMD64, front.Proxy{}))}
 	singletons := []string{
 		boxapi.StateRoot, boxapi.LibDir, LiveBinary, boxapi.SwitchboardBinary, ProxyConfig, boxapi.RoutingTablePath, sshDir, boxapi.TierRoot, deployUser,
 	}
@@ -310,7 +310,7 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastTierAndByNoOther(t *testi
 			t.Errorf("destroying one tier takes %s, and the sibling tier still installed on this host deploys through it", singleton)
 		}
 	}
-	last := removing(current, Reading{Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
+	last := removing(current, Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Observed: map[string]string{}}, appsPresent{})
 	for _, singleton := range singletons {
 		if gone := removalOf(last, singleton); gone.Action != provider.ActionDelete {
 			t.Errorf("destroying the last tier plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, gone.Action)

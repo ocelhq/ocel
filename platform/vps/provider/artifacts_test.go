@@ -9,7 +9,7 @@ import (
 
 func storeless(t *testing.T) *vps.Provider {
 	t.Helper()
-	return vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	return vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 }
 
 func TestTheProviderSaysItKeepsNoArtifactStore(t *testing.T) {

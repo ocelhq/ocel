@@ -22,7 +22,7 @@ func Grants(tier environment.Tier, fronting front.Proxy) []Grant {
 }
 
 func grants(tier environment.Tier, arch string, fronting front.Proxy) []Grant {
-	items := Items(tier, nil, arch, fronting)
+	items := Items(itemNamesOnly, tier, nil, arch, fronting)
 	deployer := deployLogin()
 
 	var grants []Grant

@@ -70,7 +70,7 @@ func probingAt(t *testing.T, header string) *vps.Provider {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	probedAt(p, at.Host, trusted)
 	return p
 }
@@ -111,7 +111,7 @@ func TestTheRouterIsReadOffTheHostnameProbedAndNotOffWhereverItPointsOn(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	probedAt(p, at.Host, trusted)
 
 	kind, err := p.ServingRouter(context.Background(), "shop.example.com")
@@ -136,7 +136,7 @@ func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	probedAt(p, at.Host, untrusted)
 
 	kind, err := p.ServingRouter(context.Background(), "shop.example.com")
@@ -166,7 +166,7 @@ func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
 		t.Fatal(err)
 	}
 	refused := true
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	probedAt(p, at.Host, trusted)
 	p.Dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
 		if refused {
@@ -193,7 +193,7 @@ func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
 func TestAProbeTheRunGaveUpOnSaysSoRatherThanReportingTheHostnameUnserved(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	p.System = resolvesNothing{}
 
 	ctx, stop := context.WithCancel(context.Background())
@@ -207,7 +207,7 @@ func TestAProbeTheRunGaveUpOnSaysSoRatherThanReportingTheHostnameUnserved(t *tes
 func TestAHostnameNothingAnswersIsNotAnErrorTheCutoverGivesUpOn(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	p.System = resolvesNothing{}
 
 	kind, err := p.ServingRouter(context.Background(), "nothing.invalid")
@@ -233,7 +233,7 @@ func TestAHostnameWhoseAnswerNamesTheSwitchboardIsServedByTheSwitchboard(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	probedAt(p, at.Host, trusted)
 
 	kind, err := p.ServingRouter(context.Background(), hostname)

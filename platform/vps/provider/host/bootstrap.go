@@ -287,17 +287,7 @@ func (r Reading) adopting() error {
 }
 
 func (b Bootstrap) write(ctx context.Context, read Reading, items []machine.Item, progress progress.Log) error {
-	for _, item := range items {
-		if read.current(item) {
-			progress.Debug(machine.Capitalized(item.Phrase()) + " is " + machine.ReasonCurrent)
-			continue
-		}
-		if err := b.host.Install(ctx, item); err != nil {
-			return err
-		}
-		progress.Say("Installed " + item.Phrase())
-	}
-	return nil
+	return b.host.InstallChanged(ctx, items, read.current, progress)
 }
 
 func (b Bootstrap) PlanRemove(ctx context.Context, tier environment.Tier) (provider.Plan, error) {

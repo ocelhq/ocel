@@ -148,7 +148,7 @@ func (vm liveBox) provider(t *testing.T, shaped ...shaping) *vps.Provider {
 	for _, shape := range shaped {
 		shape(&options)
 	}
-	return vps.NewProvider(options)
+	return vps.NewProvider(vps.TestAssets, options)
 }
 
 func closing(t *testing.T, p *vps.Provider) {

@@ -81,12 +81,12 @@ func TestTheSwitchboardIsPublishedOnLoopbackForACaddyOnTheHost(t *testing.T) {
 func TestACaddyServiceIsReloadedThroughOneSudoersLineThatBootstrapWritesAndGrants(t *testing.T) {
 	t.Parallel()
 
-	items := ProxyItems(ssh.AMD64, caddyService())
+	items := ProxyItems(testAssets, ssh.AMD64, caddyService())
 	line := itemAt(t, items, machine.KindFile, machine.SudoersCaddyReload)
 	if want := deployUser + " ALL=(root) NOPASSWD: /usr/bin/systemctl reload caddy.service\n"; string(line.Content) != want || line.Mode != 0o440 || line.Owner != machine.RootOwner {
 		t.Errorf("%s holds %q at %04o owned by %s, want %q at 0440 owned by root", machine.SudoersCaddyReload, line.Content, line.Mode, line.Owner, want)
 	}
-	if slices.ContainsFunc(ProxyItems(ssh.AMD64, coolifysCaddy()), func(item machine.Item) bool { return item.Name == machine.SudoersCaddyReload }) {
+	if slices.ContainsFunc(ProxyItems(testAssets, ssh.AMD64, coolifysCaddy()), func(item machine.Item) bool { return item.Name == machine.SudoersCaddyReload }) {
 		t.Errorf("a Caddy in a container is given %s, want no sudo: docker exec reloads it", machine.SudoersCaddyReload)
 	}
 	granted := slices.ContainsFunc(grants(environment.TierProduction, ssh.AMD64, caddyService()), func(grant Grant) bool {
@@ -121,11 +121,11 @@ func TestTheCaddyReloadLineIsGrantedOnlyWhereBootstrapWritesIt(t *testing.T) {
 func TestDestroyUnplacesOcelCaddyReloadsYourCaddyAndTakesTheSudoersLine(t *testing.T) {
 	t.Parallel()
 
-	read := Reading{Tier: environment.TierProduction, Front: caddyService(), Observed: map[string]string{
+	read := Reading{Assets: testAssets, Tier: environment.TierProduction, Front: caddyService(), Observed: map[string]string{
 		machine.KindFile + " " + machine.SudoersCaddyReload: "",
 		machine.KindContainer + " " + boxapi.Switchboard:    "",
 	}}
-	taken := removing(read, Reading{Tier: environment.TierPreview}, appsPresent{})
+	taken := removing(read, Reading{Assets: testAssets, Tier: environment.TierPreview}, appsPresent{})
 	at := slices.IndexFunc(taken, func(r machine.Removal) bool { return r.Kind == machine.KindPlaced })
 	if at < 0 {
 		t.Fatalf("the last tier's destroy takes %v, want /etc/caddy/ocel.d/ocel.caddy unplaced", taken)
@@ -196,7 +196,7 @@ func TestBootstrapRefusesACaddyWhoseAdminEndpointIsOff(t *testing.T) {
 		}
 		return ssh.Result{}, false
 	}
-	err := box.fronted(caddyService()).refuseServingPortsHeld(context.Background(), Reading{Tier: environment.TierProduction, Front: caddyService()})
+	err := box.fronted(caddyService()).refuseServingPortsHeld(context.Background(), Reading{Assets: testAssets, Tier: environment.TierProduction, Front: caddyService()})
 	if err == nil || !strings.Contains(err.Error(), "admin off") {
 		t.Errorf("refuseServingPortsHeld() = %v, want a Caddy with its admin endpoint off refused: caddy reload needs it", err)
 	}
@@ -217,7 +217,7 @@ func TestBootstrapRefusesACaddyContainerOffTheHostsNetworkWithoutANetworkNamingI
 		}
 		return ssh.Result{}, false
 	}
-	err := box.fronted(front).refuseServingPortsHeld(context.Background(), Reading{Tier: environment.TierProduction, Front: front})
+	err := box.fronted(front).refuseServingPortsHeld(context.Background(), Reading{Assets: testAssets, Tier: environment.TierProduction, Front: front})
 	if err == nil || !strings.Contains(err.Error(), "proxy.caddy.network") {
 		t.Errorf("refuseServingPortsHeld() = %v, want it refused naming proxy.caddy.network", err)
 	}

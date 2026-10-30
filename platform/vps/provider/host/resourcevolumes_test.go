@@ -14,8 +14,8 @@ import (
 func TestATierDestroyTakesTheVolumesItsResourcesKeptTheirDataOn(t *testing.T) {
 	t.Parallel()
 
-	empty := Reading{Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: map[string]string{}}
-	beside := Reading{Arch: ssh.AMD64, Tier: environment.TierPreview, Observed: map[string]string{}}
+	empty := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: map[string]string{}}
+	beside := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: environment.TierPreview, Observed: map[string]string{}}
 	taken := removing(empty, beside, appsPresent{containers: true, volumes: true})
 
 	containers, volumes := -1, -1

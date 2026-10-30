@@ -138,7 +138,7 @@ func TestAContainerWithAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 
 	tier := environment.TierProduction
 	keys := []byte(aKey + "\n")
-	items := Items(tier, keys, ssh.AMD64, front.Proxy{})
+	items := Items(testAssets, tier, keys, ssh.AMD64, front.Proxy{})
 	minted := []byte("the key this box minted for itself")
 	for _, item := range []machine.Item{frontItem(), boardItem()} {
 		moved := bytes.Replace(item.Content, []byte(docker.MountsFact+docker.MountsIntact), []byte(docker.MountsFact+docker.MountsMoved), 1)
@@ -147,7 +147,7 @@ func TestAContainerWithAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 		}
 		observed := machine.DigestsOf(items)
 		observed[item.ID()] = machine.DigestOf(machine.KindContainer, item.Name, 0, machine.RootOwner, machine.ContentSum(moved))
-		read := Reading{
+		read := Reading{Assets: testAssets,
 			Tier: tier, Present: true, Keys: keys, Arch: ssh.AMD64, Observed: observed,
 			Seal: machine.Seal{Fingerprint: machine.ContentSum(minted)},
 			Stamp: machine.Stamp{
