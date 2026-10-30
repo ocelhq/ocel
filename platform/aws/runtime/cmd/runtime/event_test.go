@@ -555,6 +555,39 @@ func TestTheAppHearsTheClientAddressAnEdgeHoldingTheOriginSecretCarriedAppendedT
 	}
 }
 
+func TestTheAppHearsTheClientAddressACallBearingTheSecretItsChildGuardsCarried(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		secret string
+		want   string
+	}{
+		{name: "the child's secret", secret: "s3cret", want: "203.0.113.9, 198.51.100.7"},
+		{name: "a forged secret", secret: "forged", want: "203.0.113.9"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ev, err := parseEvent([]byte(`{
+				"rawPath": "/",
+				"headers": {"x-forwarded-for": "203.0.113.9", "x-ocel-client-address": "198.51.100.7", "x-ocel-origin-secret": "` + tc.secret + `"},
+				"requestContext": {"http": {"method": "GET"}}
+			}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			u := upstream{port: 4321, childGuard: originguard.NewGuard("s3cret")}
+			req, err := u.buildForwardRequest(t.Context(), ev)
+			if err != nil {
+				t.Fatalf("buildForwardRequest: %v", err)
+			}
+			if got := req.Header.Get("X-Forwarded-For"); got != tc.want {
+				t.Errorf("X-Forwarded-For = %q, want %q", got, tc.want)
+			}
+			if got := req.Header.Get(edge.OriginSecretHeader); got != tc.secret {
+				t.Errorf("%s = %q, want it handed on to the child that checks it", edge.OriginSecretHeader, got)
+			}
+		})
+	}
+}
+
 func TestTheAppIsToldHTTPSWhenNoHopNamedTheScheme(t *testing.T) {
 	ev, err := parseEvent([]byte(`{"rawPath": "/", "headers": {}, "requestContext": {"http": {"method": "GET"}}}`))
 	if err != nil {
