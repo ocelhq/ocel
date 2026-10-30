@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -28,6 +29,8 @@ const (
 
 var testSubnets = []string{"subnet-a", "subnet-b"}
 
+var ec2AcceptedDescription = regexp.MustCompile(`^[a-zA-Z0-9. _\-:/()#,@\[\]+=&;{}!$*]{0,255}$`)
+
 type role struct {
 	arn      string
 	boundary string
@@ -37,12 +40,13 @@ type role struct {
 }
 
 type securityGroup struct {
-	id      string
-	name    string
-	vpc     string
-	tags    map[string]string
-	ingress []ec2types.IpPermission
-	egress  []ec2types.IpPermission
+	id          string
+	name        string
+	description string
+	vpc         string
+	tags        map[string]string
+	ingress     []ec2types.IpPermission
+	egress      []ec2types.IpPermission
 }
 
 type task struct {
@@ -544,6 +548,10 @@ func (a *account) CreateSecurityGroup(_ context.Context, in *ec2.CreateSecurityG
 			return nil, &smithy.GenericAPIError{Code: "InvalidGroup.Duplicate", Message: "already exists"}
 		}
 	}
+	description := aws.ToString(in.Description)
+	if !ec2AcceptedDescription.MatchString(description) {
+		return nil, &smithy.GenericAPIError{Code: "InvalidParameterValue", Message: "Invalid security group description: " + description}
+	}
 	a.record("CreateSecurityGroup " + name)
 	tags := map[string]string{}
 	for _, spec := range in.TagSpecifications {
@@ -552,10 +560,11 @@ func (a *account) CreateSecurityGroup(_ context.Context, in *ec2.CreateSecurityG
 		}
 	}
 	created := &securityGroup{
-		id:   a.id("sg"),
-		name: name,
-		vpc:  aws.ToString(in.VpcId),
-		tags: tags,
+		id:          a.id("sg"),
+		name:        name,
+		description: description,
+		vpc:         aws.ToString(in.VpcId),
+		tags:        tags,
 		egress: []ec2types.IpPermission{{
 			IpProtocol: aws.String("-1"),
 			IpRanges:   []ec2types.IpRange{{CidrIp: aws.String("0.0.0.0/0")}},

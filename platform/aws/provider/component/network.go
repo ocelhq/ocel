@@ -8,13 +8,13 @@ import (
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/aws/provider/securitygroup"
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 const (
-	MaxSecurityGroupDescriptionLen = 255
-	MaxSubnetGroupDescriptionLen   = 255
+	MaxSubnetGroupDescriptionLen = 255
 
 	SecurityGroupSuffix = "sg"
 	nameTag             = "Name"
@@ -39,7 +39,7 @@ func NewVPCSecurityGroup(ctx *pulumi.Context, at naming.Coordinate, group VPCSec
 	maps.Copy(tags, group.Tags)
 	return ec2.NewSecurityGroup(ctx, group.Name, &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(group.Name),
-		Description: CapDescription(at.Description("security group for "+group.Subject), MaxSecurityGroupDescriptionLen),
+		Description: pulumi.String(securitygroup.FitDescription(at.Description("security group for " + group.Subject))),
 		VpcId:       pulumi.String(group.VPCID),
 		Ingress: ec2.SecurityGroupIngressArray{
 			&ec2.SecurityGroupIngressArgs{
@@ -47,7 +47,7 @@ func NewVPCSecurityGroup(ctx *pulumi.Context, at naming.Coordinate, group VPCSec
 				FromPort:       pulumi.Int(group.Port),
 				ToPort:         pulumi.Int(group.Port),
 				SecurityGroups: pulumi.StringArray{pulumi.String(group.Clients)},
-				Description:    CapDescription(at.Description(group.Engine+" access to "+group.Subject+" from the tier clients group"), MaxSecurityGroupDescriptionLen),
+				Description:    pulumi.String(securitygroup.FitDescription(at.Description(group.Engine + " access to " + group.Subject + " from the tier clients group"))),
 			},
 		},
 		Egress: group.Egress,

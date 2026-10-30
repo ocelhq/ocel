@@ -1,6 +1,7 @@
 package function
 
 import (
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -43,8 +44,9 @@ var mockARNs = map[string]string{
 }
 
 type inputRecorder struct {
-	mu       sync.Mutex
-	recorded map[string]resource.PropertyMap
+	mu           sync.Mutex
+	recorded     map[string]resource.PropertyMap
+	dependencies map[string][]string
 }
 
 func (r *inputRecorder) registered(typeToken string) []string {
@@ -64,8 +66,10 @@ func (r *inputRecorder) NewResource(args pulumi.MockResourceArgs) (string, resou
 	defer r.mu.Unlock()
 	if r.recorded == nil {
 		r.recorded = map[string]resource.PropertyMap{}
+		r.dependencies = map[string][]string{}
 	}
 	r.recorded[args.TypeToken+"::"+args.Name] = args.Inputs
+	r.dependencies[args.TypeToken+"::"+args.Name] = args.RegisterRPC.GetDependencies()
 	if args.TypeToken == "aws:lambda/functionUrl:FunctionUrl" {
 		state := args.Inputs.Copy()
 		state["functionUrl"] = resource.NewStringProperty("https://" + args.Name + ".lambda-url.us-east-1.on.aws/")
@@ -115,6 +119,14 @@ func (r *inputRecorder) inputs(typeToken, name string) resource.PropertyMap {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.recorded[typeToken+"::"+name]
+}
+
+func (r *inputRecorder) dependsOn(typeToken, name, dependencyToken, dependencyName string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.ContainsFunc(r.dependencies[typeToken+"::"+name], func(urn string) bool {
+		return strings.HasSuffix(urn, "::"+dependencyToken+"::"+dependencyName)
+	})
 }
 
 func (r *inputRecorder) object(t *testing.T, typeToken, name, key string) resource.PropertyMap {
