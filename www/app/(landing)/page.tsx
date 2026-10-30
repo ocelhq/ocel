@@ -197,7 +197,7 @@ export default async function Home() {
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-stretch">
               <div className="w-full sm:max-w-[28rem] [&>button]:h-full [&>button]:items-center">
-                <CopyCommand command={install} />
+                <CopyCommand command={install} method="curl" />
               </div>
               <a
                 href="/docs/quick-start"
