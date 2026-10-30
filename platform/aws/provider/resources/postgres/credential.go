@@ -5,6 +5,11 @@ import "github.com/ocelhq/ocel/platform/aws/provider/iam"
 func credential(s iam.Scope) []iam.Statement {
 	return []iam.Statement{
 		{
+			Actions:   []string{"iam:CreateServiceLinkedRole"},
+			Resources: []string{iam.RDSLinkedRoleARN},
+			Condition: iam.LinkedRoleFor("rds.amazonaws.com"),
+		},
+		{
 			Actions: []string{
 				"rds:AddTagsToResource",
 				"rds:CreateDBCluster",

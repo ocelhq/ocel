@@ -11,6 +11,8 @@ const (
 
 	AppSecretARN = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
 
+	RDSLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/rds.amazonaws.com/*"
+
 	AnyCacheClusterARN       = "arn:aws:elasticache:*:*:cluster:*"
 	ElastiCacheLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/elasticache.amazonaws.com/*"
 
