@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { ThemeSync } from "@/components/theme-sync";
 import { cn } from "@/lib/utils";
 
 const spaceGrotesk = localFont({
@@ -58,6 +59,7 @@ const themeScript = `(() => {
     root.style.colorScheme = dark ? "dark" : "light";
   };
   apply();
+  window.__applyTheme = apply;
   media.addEventListener("change", apply);
 })();`;
 
@@ -83,7 +85,10 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ThemeSync />
+        {children}
+      </body>
     </html>
   );
 }
