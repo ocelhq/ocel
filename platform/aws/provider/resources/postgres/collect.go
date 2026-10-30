@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"encoding/pem"
 	"fmt"
-	"strings"
 	"sync"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -40,22 +39,18 @@ var rdsRoots = sync.OnceValues(func() ([]rdsRoot, error) {
 	}
 })
 
-func rdsRootCAs(region string) (string, error) {
+func serverCARootOf(region string) (string, error) {
 	roots, err := rdsRoots()
 	if err != nil {
 		return "", err
 	}
-	prefix := "Amazon RDS " + region + " Root CA "
-	var out strings.Builder
+	commonName := "Amazon RDS " + region + " Root CA " + serverCARoot
 	for _, root := range roots {
-		if strings.HasPrefix(root.commonName, prefix) {
-			out.Write(pem.EncodeToMemory(root.block))
+		if root.commonName == commonName {
+			return string(pem.EncodeToMemory(root.block)), nil
 		}
 	}
-	if out.Len() == 0 {
-		return "", fmt.Errorf("ocel knows no RDS root CA for %s, so no app could verify the database it serves; this build of ocel predates the region", region)
-	}
-	return out.String(), nil
+	return "", fmt.Errorf("ocel knows no root of %s for %s, so no app could verify the database it serves; this build of ocel predates the region", serverCA, region)
 }
 
 func collectBinding(region, name string, fields map[string]any) (*variablestorev1.PublishedBinding, error) {
@@ -89,7 +84,7 @@ func collectBinding(region, name string, fields map[string]any) (*variablestorev
 		port = int(p)
 	}
 
-	roots, err := rdsRootCAs(region)
+	root, err := serverCARootOf(region)
 	if err != nil {
 		return nil, fmt.Errorf("postgres %s: %w", name, err)
 	}
@@ -103,7 +98,7 @@ func collectBinding(region, name string, fields map[string]any) (*variablestorev
 				Database: database,
 				Username: username,
 				TlsMode:  bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL,
-				TlsCa:    roots,
+				TlsCa:    root,
 			}},
 		},
 		Grants: grants(dbUserARN(region, account, resourceID, username)),

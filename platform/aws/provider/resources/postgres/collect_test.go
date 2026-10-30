@@ -11,6 +11,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 )
@@ -88,7 +89,7 @@ func TestThePostgresBindingConnectsAsTheAppRoleByIAMAndMayReachNoSecret(t *testi
 	}
 }
 
-func TestThePostgresBindingVerifiesTheServerAgainstItsRegionsRDSRoots(t *testing.T) {
+func TestThePostgresBindingVerifiesTheServerAgainstTheRootOfTheCATheInstanceIsPinnedTo(t *testing.T) {
 	t.Parallel()
 
 	binding, err := collectTestPostgres(t, "eu-west-1")
@@ -100,12 +101,21 @@ func TestThePostgresBindingVerifiesTheServerAgainstItsRegionsRDSRoots(t *testing
 		t.Errorf("tls mode = %s, want VERIFY_FULL so an SDK refuses a server that is not the cluster", properties.GetTlsMode())
 	}
 	names := certificateNames(t, properties.GetTlsCa())
-	if len(names) == 0 {
-		t.Fatal("the binding names no CA, and no system pool trusts the RDS roots")
+	if want := []string{"Amazon RDS eu-west-1 Root CA RSA2048 G1"}; !slices.Equal(names, want) {
+		t.Errorf("the CA trusts %q, want %q, the root of %s alone", names, want, serverCA)
 	}
-	for _, name := range names {
-		if !strings.HasPrefix(name, "Amazon RDS eu-west-1 Root CA ") {
-			t.Errorf("the CA trusts %q, want only the RDS roots of eu-west-1", name)
+}
+
+func TestAPostgresBindingFitsTheLimitOfABoundValue(t *testing.T) {
+	t.Parallel()
+
+	for _, region := range []string{"us-east-1", "ap-southeast-7"} {
+		binding, err := collectTestPostgres(t, region)
+		if err != nil {
+			t.Fatalf("collectBinding(%s): %v", region, err)
+		}
+		if _, err := variablestoreserver.BindingPair("shop", binding); err != nil {
+			t.Errorf("BindingPair(%s) = %v, want the binding stored", region, err)
 		}
 	}
 }

@@ -31,6 +31,8 @@ const (
 	Port                         = 5432
 	postgresMasterUsername       = "ocel"
 	postgresDatabaseName         = "ocel"
+	serverCA                     = "rds-ca-rsa2048-g1"
+	serverCARoot                 = "RSA2048 G1"
 
 	finalSnapshotStampChars = 7
 )
@@ -179,6 +181,7 @@ func register(ctx *pulumi.Context, stack component.Stack, logicalName string, ar
 		Engine:             rds.EngineType(args.Engine),
 		EngineVersion:      cluster.EngineVersion,
 		InstanceClass:      pulumi.String(args.InstanceClass),
+		CaCertIdentifier:   pulumi.String(serverCA),
 		PubliclyAccessible: pulumi.Bool(args.PubliclyAccessible),
 		Tags:               component.Tags(at.Kind, "", args.Tags),
 	})

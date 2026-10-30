@@ -271,6 +271,19 @@ func TestAClusterLetsItsAppRoleSignInByIAMAndTheDeployCreateItThroughTheDataAPI(
 	}
 }
 
+func TestAClusterInstanceIsPinnedToTheCAWhoseRootTheBindingTrusts(t *testing.T) {
+	t.Parallel()
+
+	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+		return register(ctx, testStack("shop", testNetwork), "db--main", translate(&provider.PostgresSpec{}, environment.TierProduction))
+	}, masterUserSecret)
+
+	got := rec.InputsOf(t, component.TokenRDSClusterMember, testCluster+"-1")["caCertIdentifier"]
+	if !got.IsString() || got.StringValue() != serverCA {
+		t.Errorf("caCertIdentifier = %v, want %q: an account may override the RDS default, and the binding trusts one root alone", got, serverCA)
+	}
+}
+
 func TestADatabaseAdmitsItsPortFromTheTiersVPCClientsAlone(t *testing.T) {
 	t.Parallel()
 
