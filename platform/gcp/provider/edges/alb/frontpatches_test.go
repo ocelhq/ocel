@@ -13,14 +13,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 func sslPatched(policy string) transform.Result {
-	return transform.Result{Patches: transform.Patches{surfaceHTTPSProxy: {"sslPolicy": policy}}}
+	return transform.Result{Patches: transform.Patches{albresources.SurfaceHTTPSProxy: {"sslPolicy": policy}}}
 }
 
 func evaluatingFront(balancer *Edge, result *transform.Result) {
-	balancer.deps.EvaluateFront = func(context.Context, environment.Tier) (transform.Result, error) {
+	balancer.deps.Engine.EvaluateFront = func(context.Context, environment.Tier) (transform.Result, error) {
 		return *result, nil
 	}
 }
@@ -28,7 +29,7 @@ func evaluatingFront(balancer *Edge, result *transform.Result) {
 func frontUps(w *world) int {
 	ups := 0
 	for _, stack := range w.raised() {
-		if stack == LoadBalancerStack(environment.TierProduction) {
+		if stack == albresources.LoadBalancerStack(environment.TierProduction) {
 			ups++
 		}
 	}
@@ -65,7 +66,7 @@ func TestADeployWhoseFrontPatchesDifferFromTheLoadBalancersProvisionsItAgainWith
 	if got := frontUps(w); got != 1 {
 		t.Fatalf("the deploy raised the load balancer %d times, want once: it carries none of the patches this deploy evaluated", got)
 	}
-	proxy := w.declarations(LoadBalancerStack(environment.TierProduction))["ocel-prod-alb-https"]
+	proxy := w.declarations(albresources.LoadBalancerStack(environment.TierProduction))["ocel-prod-alb-https"]
 	if got := proxy.Patch["sslPolicy"]; got != "modern-tls" {
 		t.Errorf("the https proxy was raised with %v, want the patch's ssl policy", proxy.Patch)
 	}
@@ -98,7 +99,7 @@ func TestADeployOfAnotherProjectWithNoFrontPatchesLeavesTheLoadBalancerAsItIsPat
 	if _, err := balancer.Bootstrap(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("Bootstrap() = %v", err)
 	}
-	proxy := w.declarations(LoadBalancerStack(environment.TierProduction))["ocel-prod-alb-https"]
+	proxy := w.declarations(albresources.LoadBalancerStack(environment.TierProduction))["ocel-prod-alb-https"]
 	if got := proxy.Patch["sslPolicy"]; got != "modern-tls" {
 		t.Errorf("raising the load balancer with nothing evaluated applied %v, want the patches it records: a bootstrap names no project whose patches it could drop", proxy.Patch)
 	}
@@ -119,7 +120,7 @@ func TestADeployOfTheProjectThatPatchedTheFrontWithNoPatchesPutsTheLoadBalancerB
 	if got := frontUps(w); got != 2 {
 		t.Fatalf("shop's deploy with its front patch removed raised the load balancer %d times in all, want twice: removing a patch puts its fields back", got)
 	}
-	if got, set := w.declarations(LoadBalancerStack(environment.TierProduction))["ocel-prod-alb-https"].Patch["sslPolicy"]; set {
+	if got, set := w.declarations(albresources.LoadBalancerStack(environment.TierProduction))["ocel-prod-alb-https"].Patch["sslPolicy"]; set {
 		t.Errorf("the https proxy keeps the ssl policy %v, want it put back", got)
 	}
 	reconcileShop(t, balancer, &said)
@@ -143,7 +144,7 @@ func TestABootstrapBetweenDeploysLeavesTheProjectThatPatchedTheFrontAbleToPutItB
 	evaluated = transform.Result{}
 	reconcileShop(t, balancer, &said)
 
-	if got, set := w.declarations(LoadBalancerStack(environment.TierProduction))["ocel-prod-alb-https"].Patch["sslPolicy"]; set {
+	if got, set := w.declarations(albresources.LoadBalancerStack(environment.TierProduction))["ocel-prod-alb-https"].Patch["sslPolicy"]; set {
 		t.Errorf("the https proxy keeps the ssl policy %v, want it put back: shop patched it, and a bootstrap names no project to take that over", got)
 	}
 }
@@ -159,7 +160,7 @@ func TestThePlanOfADeployWhoseFrontPatchesDifferSaysTheLoadBalancerIsProvisioned
 	if err != nil {
 		t.Fatalf("PlanFrontRepatch() = %v", err)
 	}
-	if group == nil || group.Action != provider.ActionUpdate || group.Name != LoadBalancerStack(environment.TierProduction) {
+	if group == nil || group.Action != provider.ActionUpdate || group.Name != albresources.LoadBalancerStack(environment.TierProduction) {
 		t.Fatalf("PlanFrontRepatch() = %+v, want the tier's load balancer stack updated", group)
 	}
 

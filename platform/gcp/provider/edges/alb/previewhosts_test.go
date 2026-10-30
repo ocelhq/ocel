@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 const (
@@ -57,11 +58,11 @@ func TestADeploymentHostnameIsRoutedToTheRevisionItsDeployTagged(t *testing.T) {
 		t.Fatalf("MovePointer(deployment) = %v", err)
 	}
 
-	backend := must(backendName("ocel", "shop", environment.TierPreview, deploymentHost))
+	backend := must(albresources.BackendName("ocel", "shop", environment.TierPreview, deploymentHost))
 	if got := w.hosts(tierRoutes)[deploymentHost]; got != backend {
 		t.Errorf("%s is routed to %q, want its own backend %q: a deployment hostname is an exact host rule", deploymentHost, got, backend)
 	}
-	neg, declaredNEG := w.declarations(BindingStack("shop", environment.TierPreview))[must(negName("ocel", "shop", environment.TierPreview, deploymentHost))]
+	neg, declaredNEG := w.declarations(albresources.BindingStack("shop", environment.TierPreview))[must(albresources.NegName("ocel", "shop", environment.TierPreview, deploymentHost))]
 	if !declaredNEG {
 		t.Fatalf("the binding declares no serverless neg for %s", deploymentHost)
 	}
@@ -86,7 +87,7 @@ func TestADeploymentHostnameOfAFunctionAppIsRoutedToItsEntryFunctionsTaggedRevis
 		t.Fatalf("MovePointer(deployment) = %v", err)
 	}
 
-	backend := must(backendName("ocel", "shop", environment.TierPreview, deploymentHost))
+	backend := must(albresources.BackendName("ocel", "shop", environment.TierPreview, deploymentHost))
 	if got := w.hosts(tierRoutes)[deploymentHost]; got != backend {
 		t.Errorf("%s is routed to %q, want %q", deploymentHost, got, backend)
 	}
@@ -125,7 +126,7 @@ func TestADeploymentHostnameTheUrlMapHasNoHostRuleLeftForIsRefusedBeforeAnything
 	if remedy := "`ocel projects destroy --tier preview`"; !strings.Contains(err.Error(), remedy) {
 		t.Errorf("MovePointer onto a full url map = %v, want it to name %s as the way to free host rules", err, remedy)
 	}
-	if _, declared := w.declarations(BindingStack("shop", environment.TierPreview))[must(negName("ocel", "shop", environment.TierPreview, deploymentHost))]; declared {
+	if _, declared := w.declarations(albresources.BindingStack("shop", environment.TierPreview))[must(albresources.NegName("ocel", "shop", environment.TierPreview, deploymentHost))]; declared {
 		t.Errorf("the binding declares a neg for %s, want nothing raised: Compute refuses the host rule only after the neg and backend service exist", deploymentHost)
 	}
 }
@@ -140,7 +141,7 @@ func TestADeploymentHostnameTheProjectHasNoBackendServiceQuotaLeftForIsRefusedBe
 	if !errors.As(err, &refused) {
 		t.Fatalf("MovePointer with every backend service the project's quota allows in use = %v, want a refusal", err)
 	}
-	if _, declared := w.declarations(BindingStack("shop", environment.TierPreview))[must(negName("ocel", "shop", environment.TierPreview, deploymentHost))]; declared {
+	if _, declared := w.declarations(albresources.BindingStack("shop", environment.TierPreview))[must(albresources.NegName("ocel", "shop", environment.TierPreview, deploymentHost))]; declared {
 		t.Errorf("the binding declares a neg for %s, want nothing raised: Compute refuses the backend service only after the neg exists", deploymentHost)
 	}
 }
@@ -179,7 +180,7 @@ func TestRemovingADeploymentUnroutesItsHostnameAndTakesTheTagOffItsRevision(t *t
 	if got, routed := w.hosts(tierRoutes)[deploymentHost]; routed {
 		t.Errorf("%s is still routed to %q after its deployment was removed", deploymentHost, got)
 	}
-	if got := w.torn(); !slices.Contains(got, BindingStack("shop", environment.TierPreview)) {
+	if got := w.torn(); !slices.Contains(got, albresources.BindingStack("shop", environment.TierPreview)) {
 		t.Errorf("the router tore down %v, want the project's binding stack: its last backend served the removed deployment", got)
 	}
 	tag := w.tagOf(previewService, record.Revisions[previewService])
@@ -408,7 +409,7 @@ func rotatedMove(promotionID string, record router.ReleaseRecord, superseded ...
 
 func wantAliasRouted(t *testing.T, w *world, hostname string) {
 	t.Helper()
-	if got, want := w.hosts(tierRoutes)[hostname], must(backendName("ocel", "shop", environment.TierPreview, hostname)); got != want {
+	if got, want := w.hosts(tierRoutes)[hostname], must(albresources.BackendName("ocel", "shop", environment.TierPreview, hostname)); got != want {
 		t.Errorf("the tier url map routes %s to %q, want %q: the move failed, so it keeps serving", hostname, got, want)
 	}
 }
@@ -421,7 +422,7 @@ func TestAnAliasWhoseReplacementFailsToRaiseIsRoutedAgain(t *testing.T) {
 	if err := stack.MovePointer(ctx, aliasMove("p1", aliasHost, previewRecord("b1")), progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(p1) = %v", err)
 	}
-	w.breakUp(BindingStack("shop", environment.TierPreview), errors.New("the binding stack would not rise"))
+	w.breakUp(albresources.BindingStack("shop", environment.TierPreview), errors.New("the binding stack would not rise"))
 	err := stack.MovePointer(ctx, rotatedMove("p2", previewRecord("b2"), aliasHost), progress.Discard())
 
 	var unserved router.Unserved

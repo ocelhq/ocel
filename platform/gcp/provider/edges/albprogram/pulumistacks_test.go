@@ -1,4 +1,4 @@
-package alb
+package albprogram
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
@@ -26,13 +27,13 @@ func TestEachProjectsBindingKeepsItsStateUnderAPrefixOfItsOwn(t *testing.T) {
 	stacks := stacking(t)
 	tier := environment.TierProduction
 	prefixes := map[string]string{}
-	for _, target := range []Target{
+	for _, stack := range []albresources.Stack{
 		{Tier: tier},
 		{Tier: tier, Slug: "shop"},
 		{Tier: tier, Slug: "blog"},
 	} {
-		config, _ := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", target, "secret")
-		prefixes[target.Slug] = config.Backend.URL
+		config, _ := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", stack, "secret")
+		prefixes[stack.Slug] = config.Backend.URL
 	}
 
 	bucket := "gs://ocel-prod-state-k3x9q2/"
@@ -51,7 +52,7 @@ func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t 
 	t.Parallel()
 
 	stacks := stacking(t)
-	front, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", Target{Tier: environment.TierProduction}, "secret")
+	front, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", albresources.Stack{Tier: environment.TierProduction}, "secret")
 	if front.Refresh == nil || !front.Refresh(ref, pulumi.OperationProvision) {
 		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by keeping " +
 			"what state says: state that never saw the host rules a bind wrote puts every project in the tier back to unrouted")
@@ -64,7 +65,7 @@ func TestTheFrontIsRefreshedBeforeItIsDestroyedOnlyWhenTheChecksAreNotSkipped(t 
 	for skipChecks, wantRefreshed := range map[bool]bool{false: true, true: false} {
 		stacks := stacking(t)
 		stacks.SkipChecks = skipChecks
-		front, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", Target{Tier: environment.TierProduction}, "secret")
+		front, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", albresources.Stack{Tier: environment.TierProduction}, "secret")
 		if refreshed := front.Refresh(ref, pulumi.OperationDestroy); refreshed != wantRefreshed {
 			t.Errorf("refresh before the front's destroy with the checks skipped %t = %t, want %t: the harness skips them to trade the drift check for speed", skipChecks, refreshed, wantRefreshed)
 		}
@@ -78,7 +79,7 @@ func TestAnALBStackIsTornDownWithoutBeingHandedTheProgramThatRaisedIt(t *testing
 	t.Parallel()
 
 	stacks := stacking(t)
-	config, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", Target{Tier: environment.TierProduction, Slug: "shop"}, "secret")
+	config, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", albresources.Stack{Tier: environment.TierProduction, Slug: "shop"}, "secret")
 	if _, err := pulumi.New(config).Workspace(ref, Program{}); err != nil {
 		t.Errorf("Workspace() for a teardown = %v, want the stack ready to destroy: a teardown has no program to hand it", err)
 	}
@@ -94,37 +95,32 @@ func unsealedStacks(t *testing.T) PulumiStacks {
 	return PulumiStacks{OpenClients: googletest.Opener(googletest.Clients(server.URL))}
 }
 
-func TestATierWhosePassphraseWasNeverMadeHasNoLoadBalancerInstalledOrHostnameBound(t *testing.T) {
+func TestATierWhosePassphraseWasNeverMadeHasNoLoadBalancerOutputs(t *testing.T) {
 	t.Parallel()
 
-	balancer := New(Deps{Stacks: unsealedStacks(t), Entries: newWorld()})
-	installed, err := balancer.bootstrapInstalled(context.Background(), environment.TierProduction)
-	if err != nil || installed {
-		t.Errorf("bootstrapInstalled() = %v, %v, want false and no error: no state is sealed under a passphrase that was never made, "+
-			"and refusing leaves a bootstrap that failed before making it unable to be read or resumed", installed, err)
-	}
-	bound, err := balancer.boundHostnames(context.Background(), environment.TierProduction)
-	if err != nil || len(bound) > 0 {
-		t.Errorf("boundHostnames() = %v, %v, want none and no error: no load balancer exists to bind a hostname to", bound, err)
+	outputs, err := unsealedStacks(t).Outputs(context.Background(), albresources.Stack{Tier: environment.TierProduction})
+	if err != nil || len(outputs) > 0 {
+		t.Errorf("Outputs() = %v, %v, want none and no error: no state is sealed under a passphrase that was never made, "+
+			"and refusing leaves a bootstrap that failed before making it unable to be read or resumed", outputs, err)
 	}
 }
 
 func TestATierWhosePassphraseWasNeverMadeRefusesToRaiseItsLoadBalancer(t *testing.T) {
 	t.Parallel()
 
-	target := Target{Tier: environment.TierProduction}
-	_, err := unsealedStacks(t).Up(context.Background(), target, Program{}, progress.Discard())
+	spec := albresources.LoadBalancerSpec{Tier: environment.TierProduction, Names: albresources.LoadBalancerNames("ocel", environment.TierProduction)}
+	_, err := unsealedStacks(t).UpLoadBalancer(context.Background(), spec, progress.Discard())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Errorf("Up() = %v, want a %s refusal naming `ocel bootstrap`: it seals state under the passphrase", err, refusal.CodeNotReady)
+		t.Errorf("UpLoadBalancer() = %v, want a %s refusal naming `ocel bootstrap`: it seals state under the passphrase", err, refusal.CodeNotReady)
 	}
 }
 
 func TestATierWhosePassphraseWasNeverMadeHasNoLoadBalancerToDestroy(t *testing.T) {
 	t.Parallel()
 
-	target := Target{Tier: environment.TierProduction}
-	if err := unsealedStacks(t).Destroy(context.Background(), target, progress.Discard()); err != nil {
+	stack := albresources.Stack{Tier: environment.TierProduction}
+	if err := unsealedStacks(t).Destroy(context.Background(), stack, progress.Discard()); err != nil {
 		t.Errorf("Destroy() = %v, want nil: no state is sealed under a passphrase that was never made, and refusing leaves "+
 			"a bootstrap that failed before making it, or a removal retried after deleting it, unable to be removed", err)
 	}

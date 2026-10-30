@@ -1,4 +1,4 @@
-package alb
+package albprogram
 
 import (
 	"maps"
@@ -9,20 +9,10 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider/transform"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
-type bindingSpec struct {
-	Namespace      string
-	Region         string
-	Slug           string
-	Tier           environment.Tier
-	CertificateMap string
-	Hosts          map[string]Host
-	Patches        map[string]transform.Result
-}
-
-func bindingProgram(spec bindingSpec) (Program, error) {
+func Binding(spec albresources.BindingSpec) (Program, error) {
 	patches, err := newAppPatches(spec)
 	if err != nil {
 		return Program{}, err
@@ -32,7 +22,7 @@ func bindingProgram(spec bindingSpec) (Program, error) {
 		for _, hostname := range slices.Sorted(maps.Keys(spec.Hosts)) {
 			host := spec.Hosts[hostname]
 			if host.Certificate != "" {
-				entry, err := entryName(spec.Namespace, spec.Slug, spec.Tier, hostname)
+				entry, err := albresources.EntryName(spec.Namespace, spec.Slug, spec.Tier, hostname)
 				if err != nil {
 					return err
 				}
@@ -53,7 +43,7 @@ func bindingProgram(spec bindingSpec) (Program, error) {
 			if host.Service == "" {
 				continue
 			}
-			neg, err := negName(spec.Namespace, spec.Slug, spec.Tier, hostname)
+			neg, err := albresources.NegName(spec.Namespace, spec.Slug, spec.Tier, hostname)
 			if err != nil {
 				return err
 			}
@@ -65,12 +55,12 @@ func bindingProgram(spec bindingSpec) (Program, error) {
 	}}, nil
 }
 
-func servingBackend(ctx *pulumi.Context, project pulumi.String, region, neg string, host Host, cdn *compute.BackendServiceCdnPolicyArgs, headers pulumi.StringArray) error {
+func servingBackend(ctx *pulumi.Context, project pulumi.String, region, neg string, host albresources.BindingHost, cdn *compute.BackendServiceCdnPolicyArgs, headers pulumi.StringArray) error {
 	group, err := compute.NewRegionNetworkEndpointGroup(ctx, neg, &compute.RegionNetworkEndpointGroupArgs{
 		Name:                pulumi.String(neg),
 		Project:             project,
 		Region:              pulumi.String(region),
-		NetworkEndpointType: pulumi.String(serverlessNEG),
+		NetworkEndpointType: pulumi.String(albresources.ServerlessNEG),
 		CloudRun: &compute.RegionNetworkEndpointGroupCloudRunArgs{
 			Service: pulumi.String(host.Service),
 			Tag:     pulumi.StringPtrFromPtr(omitEmpty(host.Tag)),
@@ -83,7 +73,7 @@ func servingBackend(ctx *pulumi.Context, project pulumi.String, region, neg stri
 		Name:                pulumi.String(host.Backend),
 		Project:             project,
 		Protocol:            pulumi.String("HTTPS"),
-		LoadBalancingScheme: pulumi.String(externalManaged),
+		LoadBalancingScheme: pulumi.String(albresources.ExternalManaged),
 		EnableCdn:           pulumi.Bool(cdn != nil),
 		Backends: compute.BackendServiceBackendArray{
 			&compute.BackendServiceBackendArgs{Group: group.SelfLink},

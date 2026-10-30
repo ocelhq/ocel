@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 type HostResources struct {
@@ -18,7 +19,7 @@ type HostResources struct {
 func ReadHostResources(namespace string, state edge.StackState) ([]HostResources, error) {
 	var recorded edgeRecord
 	if err := state.Private.Into(&recorded); err != nil {
-		return nil, fmt.Errorf("read the hosts the %s edge binds for %s: %w", Kind, state.Slug, err)
+		return nil, fmt.Errorf("read the hosts the %s edge binds for %s: %w", albresources.Kind, state.Slug, err)
 	}
 	listed := make([]HostResources, 0, len(recorded.Hosts))
 	for _, hostname := range slices.Sorted(maps.Keys(recorded.Hosts)) {
@@ -26,12 +27,12 @@ func ReadHostResources(namespace string, state edge.StackState) ([]HostResources
 		held := HostResources{Hostname: hostname}
 		var err error
 		if host.Certificate != "" {
-			if held.CertificateMapEntry, err = entryName(namespace, state.Slug, state.Tier, hostname); err != nil {
+			if held.CertificateMapEntry, err = albresources.EntryName(namespace, state.Slug, state.Tier, hostname); err != nil {
 				return nil, err
 			}
 		}
 		if host.Service != "" {
-			if held.NetworkEndpointGroup, err = negName(namespace, state.Slug, state.Tier, hostname); err != nil {
+			if held.NetworkEndpointGroup, err = albresources.NegName(namespace, state.Slug, state.Tier, hostname); err != nil {
 				return nil, err
 			}
 			held.BackendService = host.Backend

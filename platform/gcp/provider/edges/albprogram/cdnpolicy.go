@@ -1,4 +1,4 @@
-package alb
+package albprogram
 
 import (
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/compute"

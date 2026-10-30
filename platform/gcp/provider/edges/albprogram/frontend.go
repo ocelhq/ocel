@@ -1,40 +1,21 @@
-package alb
+package albprogram
 
 import (
-	"strings"
-
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/certificatemanager"
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/compute"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 const (
-	externalManaged = "EXTERNAL_MANAGED"
-	premiumTier     = "PREMIUM"
-	httpsPortRange  = "443"
 	cacheOnOrigin   = "USE_ORIGIN_HEADERS"
-	serverlessNEG   = "SERVERLESS"
 	certificateHost = "//certificatemanager.googleapis.com/projects/%s/locations/global/certificateMaps/%s"
 )
 
 var claimedRouting = []string{"hostRules", "pathMatchers"}
-
-func dashed(parts ...string) string { return strings.Join(parts, "-") }
-
-type loadBalancerSpec struct {
-	Namespace string
-	Region    string
-	Names     names
-	Tier      environment.Tier
-	Assets    *AssetsBucket
-	Preview   previewEntry
-	Patches   transform.Result
-}
 
 const notFoundStatus = 404
 
@@ -54,19 +35,19 @@ func markingHeaderAction() compute.URLMapHeaderActionPtrInput {
 		ResponseHeadersToAdds: compute.URLMapHeaderActionResponseHeadersToAddArray{
 			&compute.URLMapHeaderActionResponseHeadersToAddArgs{
 				HeaderName:  pulumi.String(router.HeaderRouter),
-				HeaderValue: pulumi.String(string(Kind)),
+				HeaderValue: pulumi.String(string(albresources.Kind)),
 				Replace:     pulumi.Bool(true),
 			},
 		},
 	}
 }
 
-func previewWildcardResources(ctx *pulumi.Context, spec loadBalancerSpec, project string) error {
+func previewWildcardResources(ctx *pulumi.Context, spec albresources.LoadBalancerSpec, project string) error {
 	base := spec.Preview.BaseDomain
 	if base == "" {
 		return nil
 	}
-	entry, err := previewEntryName(spec.Namespace, base)
+	entry, err := albresources.PreviewEntryName(spec.Namespace, base)
 	if err != nil {
 		return err
 	}
@@ -80,7 +61,7 @@ func previewWildcardResources(ctx *pulumi.Context, spec loadBalancerSpec, projec
 	return err
 }
 
-func loadBalancerProgram(spec loadBalancerSpec) (Program, error) {
+func LoadBalancer(spec albresources.LoadBalancerSpec) (Program, error) {
 	patches, err := newFrontPatches(spec.Names, spec.Tier, spec.Patches)
 	if err != nil {
 		return Program{}, err
@@ -103,7 +84,7 @@ func loadBalancerProgram(spec loadBalancerSpec) (Program, error) {
 			Name:                pulumi.String(spec.Names.NotFound),
 			Project:             projectID,
 			Protocol:            pulumi.String("HTTPS"),
-			LoadBalancingScheme: pulumi.String(externalManaged),
+			LoadBalancingScheme: pulumi.String(albresources.ExternalManaged),
 			Description: pulumi.String(
 				"answers every hostname no project has claimed, so an unclaimed name reaches nothing rather than whichever project bound first"),
 		})
@@ -115,7 +96,7 @@ func loadBalancerProgram(spec loadBalancerSpec) (Program, error) {
 			if err != nil {
 				return err
 			}
-			ctx.Export(outputAssetsBackend, assets.Name)
+			ctx.Export(albresources.OutputAssetsBackend, assets.Name)
 		}
 		certificateArgs := &certificatemanager.CertificateMapResourceArgs{
 			Name:    pulumi.String(spec.Names.CertificateMap),
@@ -152,9 +133,9 @@ func loadBalancerProgram(spec loadBalancerSpec) (Program, error) {
 			Project:             projectID,
 			Target:              proxy.SelfLink,
 			IpAddress:           address.Address,
-			PortRange:           pulumi.String(httpsPortRange),
-			LoadBalancingScheme: pulumi.String(externalManaged),
-			NetworkTier:         pulumi.String(premiumTier),
+			PortRange:           pulumi.String(albresources.HTTPSPortRange),
+			LoadBalancingScheme: pulumi.String(albresources.ExternalManaged),
+			NetworkTier:         pulumi.String(albresources.PremiumTier),
 		}
 		if patches.labels != nil {
 			ruleArgs.Labels = patches.labels
@@ -165,10 +146,10 @@ func loadBalancerProgram(spec loadBalancerSpec) (Program, error) {
 		if err := previewWildcardResources(ctx, spec, project); err != nil {
 			return err
 		}
-		ctx.Export(outputAddress, address.Address)
-		ctx.Export(outputCertificateMap, certificates.Name)
-		ctx.Export(outputURLMap, routes.Name)
-		ctx.Export(outputNotFound, notFound.Name)
+		ctx.Export(albresources.OutputAddress, address.Address)
+		ctx.Export(albresources.OutputCertificateMap, certificates.Name)
+		ctx.Export(albresources.OutputURLMap, routes.Name)
+		ctx.Export(albresources.OutputNotFound, notFound.Name)
 		return nil
 	}}, nil
 }

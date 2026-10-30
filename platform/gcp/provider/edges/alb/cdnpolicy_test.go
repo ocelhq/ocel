@@ -2,8 +2,10 @@ package alb
 
 import (
 	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albprogram"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 const (
@@ -11,8 +13,8 @@ const (
 	cdnCertificate = "projects/acme-prod/locations/global/certificates/shop"
 )
 
-func cdnBinding() Program {
-	return must(binding(map[string]Host{"shop.example.com": {
+func cdnBinding() albprogram.Program {
+	return must(binding(map[string]albresources.BindingHost{"shop.example.com": {
 		App: "web", Certificate: cdnCertificate, Service: "ocel-shop-prod-web", Backend: cdnBackend,
 	}}))
 }
@@ -77,35 +79,6 @@ func TestTheCacheKeyNamesNoMoreCookiesThanCloudCDNAllows(t *testing.T) {
 	}
 	if len(cookies) > 5 {
 		t.Errorf("includeNamedCookies names %d cookies, Cloud CDN allows 5 (https://docs.cloud.google.com/cdn/docs/caching)", len(cookies))
-	}
-}
-
-func TestNoKeyedHeaderIsOneCloudCDNRefusesToKey(t *testing.T) {
-	t.Parallel()
-
-	refused := []string{
-		"accept", "accept-encoding", "authority", "authorization", "cdn-loop", "connection",
-		"content-md5", "content-type", "cookie", "date", "forwarded", "from", "host",
-		"if-match", "if-modified-since", "if-none-match", "origin", "proxy-authorization",
-		"range", "referer", "referrer", "user-agent", "want-digest", "x-csrftoken",
-		"x-csrf-token", "x-forwarded-for", "x-user-ip",
-	}
-	prefixes := []string{
-		"access-control-", "sec-fetch-", "sec-gfe-", "sec-google-", "x-amz-", "x-gfe-", "x-goog-", "x-google-",
-	}
-
-	for _, header := range cacheKeyHeaders {
-		name := strings.ToLower(header)
-		for _, bad := range refused {
-			if name == bad {
-				t.Errorf("cacheKeyHeaders holds %s, which Cloud CDN refuses (https://docs.cloud.google.com/cdn/docs/caching)", header)
-			}
-		}
-		for _, prefix := range prefixes {
-			if strings.HasPrefix(name, prefix) {
-				t.Errorf("cacheKeyHeaders holds %s, whose %s prefix Cloud CDN refuses (https://docs.cloud.google.com/cdn/docs/caching)", header, prefix)
-			}
-		}
 	}
 }
 

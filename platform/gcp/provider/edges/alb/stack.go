@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
@@ -30,18 +31,23 @@ func (s *stack) openLedger() *ledger.Ledger {
 	return ledgerFor(s.e.deps.KeyValues, s.state.Tier, s.state.Slug)
 }
 
-func (s *stack) released(ctx context.Context, records map[string]router.ReleaseRecord, progress progress.Log) error {
-	hosts := maps.Clone(s.recorded.Hosts)
-	var took, moved []string
-	for _, hostname := range slices.Sorted(maps.Keys(hosts)) {
-		host := hosts[hostname]
+type release struct {
+	hosts map[string]Host
+	took  []string
+	moved []string
+}
+
+func (s *stack) planRelease(records map[string]router.ReleaseRecord) (release, error) {
+	planned := release{hosts: maps.Clone(s.recorded.Hosts)}
+	for _, hostname := range slices.Sorted(maps.Keys(planned.hosts)) {
+		host := planned.hosts[hostname]
 		if isWildcard(hostname) || host.Pointer != "" {
 			continue
 		}
 		record, found := records[host.App]
 		routes, err := encodeStaticRoutes(record, s.recorded.LoadBalancer)
 		if err != nil {
-			return err
+			return release{}, err
 		}
 		switch {
 		case host.Service == "":
@@ -50,37 +56,44 @@ func (s *stack) released(ctx context.Context, records map[string]router.ReleaseR
 				continue
 			}
 			host.Service, host.StaticRoutes = service, routes
-			took = append(took, hostname)
+			planned.took = append(planned.took, hostname)
 		case found && pin.ResolveService(record) == host.Service && host.StaticRoutes != routes:
 			host.StaticRoutes = routes
-			moved = append(moved, hostname)
+			planned.moved = append(planned.moved, hostname)
 		default:
 			continue
 		}
-		hosts[hostname] = host
+		planned.hosts[hostname] = host
 	}
-	if len(took) == 0 && len(moved) == 0 {
+	return planned, nil
+}
+
+func (s *stack) raiseTaken(ctx context.Context, planned release, progress progress.Log) error {
+	if len(planned.took) == 0 {
 		return nil
 	}
-	if err := s.admitGatedHosts(ctx, took, progress); err != nil {
+	if err := s.admitGatedHosts(ctx, planned.took, progress); err != nil {
 		return err
 	}
-	if len(took) > 0 {
-		if err := s.raise(ctx, hosts); err != nil {
-			return err
-		}
+	return s.raise(ctx, planned.hosts)
+}
+
+func (s *stack) routeReleased(ctx context.Context, planned release, progress progress.Log) error {
+	if len(planned.took) == 0 && len(planned.moved) == 0 {
+		return nil
 	}
-	for _, hostname := range slices.Concat(took, moved) {
-		if progress != nil && slices.Contains(took, hostname) {
+	hosts := planned.hosts
+	for _, hostname := range slices.Concat(planned.took, planned.moved) {
+		if progress != nil && slices.Contains(planned.took, hostname) {
 			progress.Say("Routing " + hostname + " to " + hosts[hostname].App + "'s Cloud Run service " + hosts[hostname].Service)
 		}
 		if err := s.reach(ctx, hosts[hostname], hostname); err != nil {
-			if len(took) == 0 {
+			if len(planned.took) == 0 {
 				return err
 			}
 			return errors.Join(err, s.raise(ctx, s.recorded.Hosts))
 		}
-		if slices.Contains(moved, hostname) {
+		if slices.Contains(planned.moved, hostname) {
 			s.recordHost(hostname, hosts[hostname])
 		}
 	}
@@ -120,12 +133,12 @@ func (s *stack) reach(ctx context.Context, host Host, hostname string) error {
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
 	if binding.Hostname == "" {
-		return refusal.Refuse(refusal.CodeInvalid, "the %q edge is asked to bind a hostname nothing named", Kind)
+		return refusal.Refuse(refusal.CodeInvalid, "the %q edge is asked to bind a hostname nothing named", albresources.Kind)
 	}
 	if !s.recorded.LoadBalancer.provisioned() {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"no %s load balancer is provisioned for tier %s, and %s is served by writing a host rule into its url map: the first deploy behind the %s edge adds it, so deploy this project first",
-			Kind, s.state.Tier, binding.Hostname, Kind)
+			albresources.Kind, s.state.Tier, binding.Hostname, albresources.Kind)
 	}
 	served, err := s.serving(ctx, binding.App)
 	if err != nil {
@@ -143,7 +156,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if hosts == nil {
 		hosts = map[string]Host{}
 	}
-	backend, err := backendName(s.e.deps.Namespace, s.state.Slug, s.state.Tier, binding.Hostname)
+	backend, err := albresources.BackendName(s.e.deps.Namespace, s.state.Slug, s.state.Tier, binding.Hostname)
 	if err != nil {
 		return err
 	}
@@ -212,29 +225,31 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	return nil
 }
 
-func (s *stack) target() Target { return Target{Tier: s.state.Tier, Slug: s.state.Slug} }
+func (s *stack) bindingStack() albresources.Stack {
+	return albresources.Stack{Tier: s.state.Tier, Slug: s.state.Slug}
+}
 
 func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
-	target := s.target()
+
 	if len(hosts) == 0 {
-		return s.e.deps.Stacks.Destroy(ctx, target, progress.Discard())
+		return s.e.deps.Engine.Stacks.Destroy(ctx, s.bindingStack(), progress.Discard())
 	}
-	program, err := bindingProgram(bindingSpec{
+	binding := albresources.BindingSpec{
 		Namespace:      s.e.deps.Namespace,
 		Region:         s.e.deps.Region,
 		Slug:           s.state.Slug,
 		Tier:           s.state.Tier,
 		CertificateMap: s.recorded.LoadBalancer.CertificateMap,
-		Hosts:          hosts,
+		Hosts:          make(map[string]albresources.BindingHost, len(hosts)),
 		Patches:        s.recorded.appResults(),
-	})
-	if err != nil {
-		return err
 	}
-	if _, err := s.e.deps.Stacks.Up(ctx, target, program, progress.Discard()); err != nil {
-		return err
+	for hostname, host := range hosts {
+		binding.Hosts[hostname] = albresources.BindingHost{
+			App: host.App, Certificate: host.Certificate, Service: host.Service, Tag: host.Tag, Backend: host.Backend,
+		}
 	}
-	return program.Patches.RefuseUnclaimed()
+	_, err := s.e.deps.Engine.Stacks.UpBinding(ctx, binding, progress.Discard())
+	return err
 }
 
 func (s *stack) serving(ctx context.Context, app string) (Host, error) {
@@ -264,13 +279,13 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	name := s.e.claim(s.state.Tier, hostname)
 	entry, err := records.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
 	if err != nil {
-		return false, fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
+		return false, fmt.Errorf("read what serves %s on the %s edge: %w", hostname, albresources.Kind, err)
 	}
 	owner := Surface(s.e.deps.Namespace, s.state.Slug, s.state.Tier)
 	if len(entry.Value) > 0 {
 		var existing claim
 		if err := json.Unmarshal(entry.Value, &existing); err != nil {
-			return false, fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
+			return false, fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, albresources.Kind, err)
 		}
 		if existing.Owner == owner {
 			return false, nil
@@ -279,7 +294,7 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	}
 	encoded, err := json.Marshal(claim{Owner: owner})
 	if err != nil {
-		return false, fmt.Errorf("encode what serves %s on the %s edge: %w", hostname, Kind, err)
+		return false, fmt.Errorf("encode what serves %s on the %s edge: %w", hostname, albresources.Kind, err)
 	}
 	entry.Value = encoded
 	_, err = s.e.deps.KeyValues.Write(ctx, entry)
@@ -287,7 +302,7 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 		return false, s.claimedMeanwhile(ctx, hostname, name)
 	}
 	if err != nil {
-		return false, fmt.Errorf("record what serves %s on the %s edge: %w", hostname, Kind, err)
+		return false, fmt.Errorf("record what serves %s on the %s edge: %w", hostname, albresources.Kind, err)
 	}
 	return true, nil
 }
@@ -296,11 +311,11 @@ func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name reco
 	entry, err := records.ReadOrEmpty(ctx, s.e.deps.KeyValues, name)
 	if err != nil || len(entry.Value) == 0 {
 		return refusal.Refuse(refusal.CodeBusy,
-			"%s was claimed on the %s edge while this bind was claiming it: bind it again once the other run has finished", hostname, Kind)
+			"%s was claimed on the %s edge while this bind was claiming it: bind it again once the other run has finished", hostname, albresources.Kind)
 	}
 	var existing claim
 	if err := json.Unmarshal(entry.Value, &existing); err != nil {
-		return fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
+		return fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, albresources.Kind, err)
 	}
 	return claimedBy(hostname, existing.Owner)
 }
@@ -308,12 +323,12 @@ func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name reco
 func claimedBy(hostname, owner string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
 		"%s is served by %s on the %s edge, and one hostname is routed to one project: release it there with `ocel domain remove` first",
-		hostname, owner, Kind)
+		hostname, owner, albresources.Kind)
 }
 
 func (s *stack) disown(ctx context.Context, hostname string) error {
 	if err := records.Forget(ctx, s.e.deps.KeyValues, s.e.claim(s.state.Tier, hostname)); err != nil {
-		return fmt.Errorf("release what served %s on the %s edge: %w", hostname, Kind, err)
+		return fmt.Errorf("release what served %s on the %s edge: %w", hostname, albresources.Kind, err)
 	}
 	return nil
 }
@@ -328,7 +343,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		}
 	}
 	if len(s.recorded.Hosts) > 0 {
-		if err := s.e.deps.Stacks.Destroy(ctx, s.target(), progress.Discard()); err != nil {
+		if err := s.e.deps.Engine.Stacks.Destroy(ctx, s.bindingStack(), progress.Discard()); err != nil {
 			return err
 		}
 	}
@@ -342,7 +357,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		s.state.PublishAddress(hostname, "")
 	}
 	s.state.Bound = nil
-	return s.e.releaseFront(ctx, s.state.Tier, s.state.Slug)
+	return s.e.deps.Engine.FrontPart.Release(ctx, s.state.Tier, s.state.Slug)
 }
 
 func isWildcard(hostname string) bool { return strings.HasPrefix(hostname, "*.") }

@@ -1,4 +1,4 @@
-package alb
+package albprogram
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
@@ -27,24 +28,43 @@ type PulumiStacks struct {
 	SkipChecks  bool
 }
 
-func (s PulumiStacks) Up(
-	ctx context.Context,
-	target Target,
-	program Program,
-	progress progress.Log,
-) (map[string]string, error) {
-	automation, ref, err := s.opened(ctx, target)
+func (s PulumiStacks) UpLoadBalancer(ctx context.Context, spec albresources.LoadBalancerSpec, progress progress.Log) (map[string]string, error) {
+	program, err := LoadBalancer(spec)
+	if err != nil {
+		return nil, err
+	}
+	return s.up(ctx, albresources.Stack{Tier: spec.Tier}, program, progress)
+}
+
+func (s PulumiStacks) UpBinding(ctx context.Context, spec albresources.BindingSpec, progress progress.Log) (map[string]string, error) {
+	program, err := Binding(spec)
+	if err != nil {
+		return nil, err
+	}
+	return s.up(ctx, albresources.Stack{Tier: spec.Tier, Slug: spec.Slug}, program, progress)
+}
+
+func (s PulumiStacks) UpGate(ctx context.Context, tier environment.Tier, publish func(ctx context.Context, write bool) (albresources.GateSpec, error), progress progress.Log) (map[string]string, error) {
+	return s.up(ctx, albresources.Stack{Tier: tier, Gate: true}, Gate(publish), progress)
+}
+
+func (s PulumiStacks) up(ctx context.Context, stack albresources.Stack, program Program, progress progress.Log) (map[string]string, error) {
+	automation, ref, err := s.opened(ctx, stack)
 	if err != nil {
 		return nil, err
 	}
 	if _, err := automation.Run(ctx, ref, program, provider.Lease{}, progress); err != nil {
 		return nil, err
 	}
-	return outputsOf(ctx, automation, ref)
+	outputs, err := outputsOf(ctx, automation, ref)
+	if err != nil {
+		return nil, err
+	}
+	return outputs, program.Patches.RefuseUnclaimed()
 }
 
-func (s PulumiStacks) Destroy(ctx context.Context, target Target, progress progress.Log) error {
-	automation, ref, err := s.opened(ctx, target)
+func (s PulumiStacks) Destroy(ctx context.Context, stack albresources.Stack, progress progress.Log) error {
+	automation, ref, err := s.opened(ctx, stack)
 	if errors.As(err, new(noPassphrase)) {
 		return nil
 	}
@@ -54,8 +74,8 @@ func (s PulumiStacks) Destroy(ctx context.Context, target Target, progress progr
 	return automation.Destroy(ctx, ref, provider.Lease{}, progress)
 }
 
-func (s PulumiStacks) Outputs(ctx context.Context, target Target) (map[string]string, error) {
-	automation, ref, err := s.opened(ctx, target)
+func (s PulumiStacks) Outputs(ctx context.Context, stack albresources.Stack) (map[string]string, error) {
+	automation, ref, err := s.opened(ctx, stack)
 	if errors.As(err, new(noPassphrase)) {
 		return nil, nil
 	}
@@ -79,25 +99,25 @@ func outputsOf(ctx context.Context, automation *pulumi.Automation[Program], ref 
 	return read, nil
 }
 
-func (s PulumiStacks) opened(ctx context.Context, target Target) (*pulumi.Automation[Program], provider.StackRef, error) {
+func (s PulumiStacks) opened(ctx context.Context, stack albresources.Stack) (*pulumi.Automation[Program], provider.StackRef, error) {
 	clients, err := s.OpenClients(ctx)
 	if err != nil {
 		return nil, provider.StackRef{}, err
 	}
-	passphrase, err := s.passphrase(ctx, clients, target.Tier)
+	passphrase, err := s.passphrase(ctx, clients, stack.Tier)
 	if err != nil {
 		return nil, provider.StackRef{}, err
 	}
-	buckets, err := clients.TierBuckets(ctx, target.Tier, naming.StorageState)
+	buckets, err := clients.TierBuckets(ctx, stack.Tier, naming.StorageState)
 	if err != nil {
 		return nil, provider.StackRef{}, err
 	}
-	config, ref := s.config(clients, buckets[naming.StorageState], target, passphrase)
+	config, ref := s.config(clients, buckets[naming.StorageState], stack, passphrase)
 	return pulumi.New(config), ref, nil
 }
 
-func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, target Target, passphrase string) (pulumi.Config[Program], provider.StackRef) {
-	project := naming.PulumiProject(target.Prefix())
+func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, stack albresources.Stack, passphrase string) (pulumi.Config[Program], provider.StackRef) {
+	project := naming.PulumiProject(stack.Prefix())
 	config := pulumi.Config[Program]{
 		Backend: pulumi.Backend{
 			URL:        naming.StateBackendURL(cloudStorageScheme, stateBucket, project),
@@ -115,17 +135,10 @@ func (s PulumiStacks) config(clients *gcloud.Clients, stateBucket string, target
 			return program.Run(ctx, clients.Project())
 		},
 	}
-	if target.Slug == "" {
+	if stack.Slug == "" {
 		config.Refresh = s.refreshesTheFront
 	}
-	return config, provider.StackRef{Project: project, Tier: target.Tier, Name: naming.InfraStack(target.Name())}
-}
-
-func ListTierProjects(tier environment.Tier) []string {
-	return []string{
-		naming.PulumiProject(LoadBalancerStack(tier)),
-		naming.PulumiProject(GateStack(tier)),
-	}
+	return config, provider.StackRef{Project: project, Tier: stack.Tier, Name: naming.InfraStack(stack.Name())}
 }
 
 func (s PulumiStacks) refreshesTheFront(_ provider.StackRef, op pulumi.Operation) bool {
@@ -146,16 +159,16 @@ func (s PulumiStacks) passphrase(ctx context.Context, clients *gcloud.Clients, t
 		if gcloud.Absent(err) {
 			return "", noPassphrase{refusal.Refusal{Code: refusal.CodeNotReady, Message: fmt.Sprintf(
 				"the %s edge keeps the state of the load balancer it provisions sealed under the %s secret, and this project has none for tier %s: run `ocel bootstrap` for this tier first",
-				Kind, secret, tier)}}
+				albresources.Kind, secret, tier)}}
 		}
-		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %w", Kind, err)
+		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %w", albresources.Kind, err)
 	}
 	if version.Payload == nil {
-		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %s has a version with no payload", Kind, secret)
+		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %s has a version with no payload", albresources.Kind, secret)
 	}
 	passphrase, err := base64.StdEncoding.DecodeString(version.Payload.Data)
 	if err != nil {
-		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %w", Kind, err)
+		return "", fmt.Errorf("read the passphrase the %s edge's state is sealed with: %w", albresources.Kind, err)
 	}
 	return string(passphrase), nil
 }
@@ -163,5 +176,3 @@ func (s PulumiStacks) passphrase(ctx context.Context, clients *gcloud.Clients, t
 type noPassphrase struct{ refusal.Refusal }
 
 func (n noPassphrase) Unwrap() error { return n.Refusal }
-
-var _ Stacks = PulumiStacks{}

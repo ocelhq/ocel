@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 func staticRecord(build string) router.ReleaseRecord {
@@ -24,8 +25,8 @@ func staticRecord(build string) router.ReleaseRecord {
 	}
 }
 
-func staticRoutesFor(build string) *StaticRoutes {
-	return &StaticRoutes{
+func staticRoutesFor(build string) *albresources.StaticRoutes {
+	return &albresources.StaticRoutes{
 		Backend:    assetsBackend,
 		Objects:    "/assets/shop/prod/web/r000000" + build + "/",
 		Immutable:  []string{"/_next/static/"},
@@ -55,7 +56,7 @@ func bindShop(t *testing.T, stack edge.EdgeStack) {
 	}
 }
 
-func expectStaticRoutes(t *testing.T, w *world, hostname string, want *StaticRoutes, why string) {
+func expectStaticRoutes(t *testing.T, w *world, hostname string, want *albresources.StaticRoutes, why string) {
 	t.Helper()
 	if got := w.staticRoutesRouted(tierRoutes, hostname); !reflect.DeepEqual(got, want) {
 		t.Errorf("%s is routed with static routes %+v, want %+v: %s", hostname, got, want, why)

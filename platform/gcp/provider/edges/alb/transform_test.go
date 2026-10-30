@@ -13,12 +13,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albprogram"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
-func patchedFront(tier environment.Tier, result transform.Result) loadBalancerSpec {
-	return loadBalancerSpec{
+func patchedFront(tier environment.Tier, result transform.Result) albresources.LoadBalancerSpec {
+	return albresources.LoadBalancerSpec{
 		Namespace: "ocel",
-		Names:     loadBalancerNames("ocel", tier),
+		Names:     albresources.LoadBalancerNames("ocel", tier),
 		Tier:      tier,
 		Assets:    &tierAssets,
 		Patches:   result,
@@ -29,12 +31,12 @@ func TestAFrontPatchReachesTheResourceOfTheTiersLoadBalancerItNames(t *testing.T
 	t.Parallel()
 
 	patches := transform.Patches{}
-	for _, key := range LoadBalancerSurfaces {
+	for _, key := range albresources.LoadBalancerSurfaces {
 		patches[key] = map[string]any{"description": "patched " + key}
 	}
-	program, err := loadBalancerProgram(patchedFront(environment.TierProduction, transform.Result{Patches: patches}))
+	program, err := albprogram.LoadBalancer(patchedFront(environment.TierProduction, transform.Result{Patches: patches}))
 	if err != nil {
-		t.Fatalf("loadBalancerProgram() = %v", err)
+		t.Fatalf("albprogram.LoadBalancer() = %v", err)
 	}
 	seen, err := declared(program)
 	if err != nil {
@@ -42,13 +44,13 @@ func TestAFrontPatchReachesTheResourceOfTheTiersLoadBalancerItNames(t *testing.T
 	}
 
 	for key, name := range map[string]string{
-		surfaceAddress:         "ocel-prod-alb-address",
-		surfaceNotFoundBackend: "ocel-prod-alb-notfound",
-		surfaceAssetsBackend:   "ocel-prod-alb-assets",
-		surfaceCertificateMap:  "ocel-prod-alb-certs",
-		surfaceURLMap:          "ocel-prod-alb-routes",
-		surfaceHTTPSProxy:      "ocel-prod-alb-https",
-		surfaceForwardingRule:  "ocel-prod-alb-forward",
+		albresources.SurfaceAddress:         "ocel-prod-alb-address",
+		albresources.SurfaceNotFoundBackend: "ocel-prod-alb-notfound",
+		albresources.SurfaceAssetsBackend:   "ocel-prod-alb-assets",
+		albresources.SurfaceCertificateMap:  "ocel-prod-alb-certs",
+		albresources.SurfaceURLMap:          "ocel-prod-alb-routes",
+		albresources.SurfaceHTTPSProxy:      "ocel-prod-alb-https",
+		albresources.SurfaceForwardingRule:  "ocel-prod-alb-forward",
 	} {
 		if got := seen[name].Patch["description"]; got != "patched "+key {
 			t.Errorf("%s carries %v, want the patch written under loadBalancer.%s", name, seen[name].Patch, key)
@@ -63,10 +65,10 @@ func TestAPatchOnAResourceTheFrontDidNotDeclareIsRefusedAfterTheRun(t *testing.T
 	t.Parallel()
 
 	spec := patchedFront(environment.TierProduction, transform.Result{Patches: transform.Patches{
-		surfaceAssetsBackend: {"compressionMode": "AUTOMATIC"},
+		albresources.SurfaceAssetsBackend: {"compressionMode": "AUTOMATIC"},
 	}})
 	spec.Assets = nil
-	program := must(loadBalancerProgram(spec))
+	program := must(albprogram.LoadBalancer(spec))
 	if _, err := declared(program); err != nil {
 		t.Fatal(err)
 	}
@@ -81,8 +83,8 @@ func TestAPatchOnAResourceTheFrontDidNotDeclareIsRefusedAfterTheRun(t *testing.T
 func TestAPreviewAssetsBucketAddsAPatchsHeadersAfterItsNoindexHeader(t *testing.T) {
 	t.Parallel()
 
-	program := must(loadBalancerProgram(patchedFront(environment.TierPreview, transform.Result{Patches: transform.Patches{
-		surfaceAssetsBackend: {"customResponseHeaders": []any{"Strict-Transport-Security: max-age=31536000"}},
+	program := must(albprogram.LoadBalancer(patchedFront(environment.TierPreview, transform.Result{Patches: transform.Patches{
+		albresources.SurfaceAssetsBackend: {"customResponseHeaders": []any{"Strict-Transport-Security: max-age=31536000"}},
 	}})))
 	seen, err := declared(program)
 	if err != nil {
@@ -102,7 +104,7 @@ func TestAPreviewAssetsBucketAddsAPatchsHeadersAfterItsNoindexHeader(t *testing.
 func TestAFrontRulesTagsLabelTheLoadBalancersLabelledResources(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(patchedFront(environment.TierProduction, transform.Result{Tags: map[string]string{"team": "web"}})))
+	seen, err := declared(albprogram.LoadBalancer(patchedFront(environment.TierProduction, transform.Result{Tags: map[string]string{"team": "web"}})))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +119,7 @@ func TestAFrontRulesTagsLabelTheLoadBalancersLabelledResources(t *testing.T) {
 func TestAFrontWithNoTagsCarriesNoLabels(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(frontSpec()))
+	seen, err := declared(albprogram.LoadBalancer(frontSpec()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,17 +128,17 @@ func TestAFrontWithNoTagsCarriesNoLabels(t *testing.T) {
 	}
 }
 
-func patchedHosts(tier environment.Tier) bindingSpec {
-	return bindingSpec{
+func patchedHosts(tier environment.Tier) albresources.BindingSpec {
+	return albresources.BindingSpec{
 		Namespace:      "ocel",
 		Region:         "europe-west1",
 		Slug:           "shop",
 		Tier:           tier,
 		CertificateMap: "certs",
-		Hosts: map[string]Host{
-			"shop.example.com":  {App: "web", Certificate: "cert", Service: "svc-web", Backend: must(backendName("ocel", "shop", tier, "shop.example.com"))},
-			"www.example.com":   {App: "web", Certificate: "cert", Service: "svc-web", Backend: must(backendName("ocel", "shop", tier, "www.example.com"))},
-			"admin.example.com": {App: "admin", Certificate: "cert", Service: "svc-admin", Backend: must(backendName("ocel", "shop", tier, "admin.example.com"))},
+		Hosts: map[string]albresources.BindingHost{
+			"shop.example.com":  {App: "web", Certificate: "cert", Service: "svc-web", Backend: must(albresources.BackendName("ocel", "shop", tier, "shop.example.com"))},
+			"www.example.com":   {App: "web", Certificate: "cert", Service: "svc-web", Backend: must(albresources.BackendName("ocel", "shop", tier, "www.example.com"))},
+			"admin.example.com": {App: "admin", Certificate: "cert", Service: "svc-admin", Backend: must(albresources.BackendName("ocel", "shop", tier, "admin.example.com"))},
 		},
 	}
 }
@@ -146,28 +148,28 @@ func TestAnAppsEdgePatchReachesTheResourcesOfEveryHostnameItServesAndNoOther(t *
 
 	spec := patchedHosts(environment.TierProduction)
 	spec.Patches = map[string]transform.Result{"web": {Patches: transform.Patches{
-		surfaceBackendService:      {"securityPolicy": "web-armor"},
-		surfaceNEG:                 {"description": "web's neg"},
-		surfaceCertificateMapEntry: {"description": "web's entry"},
+		albresources.SurfaceBackendService:      {"securityPolicy": "web-armor"},
+		albresources.SurfaceNEG:                 {"description": "web's neg"},
+		albresources.SurfaceCertificateMapEntry: {"description": "web's entry"},
 	}}}
-	program := must(bindingProgram(spec))
+	program := must(albprogram.Binding(spec))
 	seen, err := declared(program)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, hostname := range []string{"shop.example.com", "www.example.com"} {
-		if got := seen[must(backendName("ocel", "shop", environment.TierProduction, hostname))].Patch["securityPolicy"]; got != "web-armor" {
+		if got := seen[must(albresources.BackendName("ocel", "shop", environment.TierProduction, hostname))].Patch["securityPolicy"]; got != "web-armor" {
 			t.Errorf("%s's backend service carries %v, want web's security policy", hostname, got)
 		}
-		if got := seen[must(negName("ocel", "shop", environment.TierProduction, hostname))].Patch["description"]; got != "web's neg" {
+		if got := seen[must(albresources.NegName("ocel", "shop", environment.TierProduction, hostname))].Patch["description"]; got != "web's neg" {
 			t.Errorf("%s's neg carries %v, want web's patch", hostname, got)
 		}
-		if got := seen[must(entryName("ocel", "shop", environment.TierProduction, hostname))].Patch["description"]; got != "web's entry" {
+		if got := seen[must(albresources.EntryName("ocel", "shop", environment.TierProduction, hostname))].Patch["description"]; got != "web's entry" {
 			t.Errorf("%s's certificate map entry carries %v, want web's patch", hostname, got)
 		}
 	}
-	if got := seen[must(backendName("ocel", "shop", environment.TierProduction, "admin.example.com"))].Patch; got != nil {
+	if got := seen[must(albresources.BackendName("ocel", "shop", environment.TierProduction, "admin.example.com"))].Patch; got != nil {
 		t.Errorf("admin's backend service carries %v, want nothing: the patch was written for web", got)
 	}
 	if err := program.Patches.RefuseUnclaimed(); err != nil {
@@ -180,19 +182,19 @@ func TestAPreviewBackendAddsAnAppsHeadersAfterItsNoindexHeader(t *testing.T) {
 
 	spec := patchedHosts(environment.TierPreview)
 	spec.Patches = map[string]transform.Result{"web": {Patches: transform.Patches{
-		surfaceBackendService: {"customResponseHeaders": []any{"Strict-Transport-Security: max-age=31536000"}},
+		albresources.SurfaceBackendService: {"customResponseHeaders": []any{"Strict-Transport-Security: max-age=31536000"}},
 	}}}
-	seen, err := declared(bindingProgram(spec))
+	seen, err := declared(albprogram.Binding(spec))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	backend := seen[must(backendName("ocel", "shop", environment.TierPreview, "shop.example.com"))]
+	backend := seen[must(albresources.BackendName("ocel", "shop", environment.TierPreview, "shop.example.com"))]
 	want := []any{"X-Robots-Tag: noindex", "Strict-Transport-Security: max-age=31536000"}
 	if got := backend.Args["customResponseHeaders"]; !reflect.DeepEqual(got, want) {
 		t.Errorf("web's preview backend adds %v, want %v", got, want)
 	}
-	admin := seen[must(backendName("ocel", "shop", environment.TierPreview, "admin.example.com"))]
+	admin := seen[must(albresources.BackendName("ocel", "shop", environment.TierPreview, "admin.example.com"))]
 	if got := admin.Args["customResponseHeaders"]; !reflect.DeepEqual(got, []any{"X-Robots-Tag: noindex"}) {
 		t.Errorf("admin's preview backend adds %v, want only the noindex header", got)
 	}
@@ -203,15 +205,15 @@ func TestAnAppsTagsLabelItsCertificateMapEntries(t *testing.T) {
 
 	spec := patchedHosts(environment.TierProduction)
 	spec.Patches = map[string]transform.Result{"web": {Tags: map[string]string{"team": "storefront"}}}
-	seen, err := declared(bindingProgram(spec))
+	seen, err := declared(albprogram.Binding(spec))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if got := seen[must(entryName("ocel", "shop", environment.TierProduction, "shop.example.com"))].Args["labels"]; !reflect.DeepEqual(got, map[string]any{"team": "storefront"}) {
+	if got := seen[must(albresources.EntryName("ocel", "shop", environment.TierProduction, "shop.example.com"))].Args["labels"]; !reflect.DeepEqual(got, map[string]any{"team": "storefront"}) {
 		t.Errorf("web's entry is labelled %v, want team=storefront", got)
 	}
-	if got, labelled := seen[must(entryName("ocel", "shop", environment.TierProduction, "admin.example.com"))].Args["labels"]; labelled {
+	if got, labelled := seen[must(albresources.EntryName("ocel", "shop", environment.TierProduction, "admin.example.com"))].Args["labels"]; labelled {
 		t.Errorf("admin's entry is labelled %v, want none", got)
 	}
 }
@@ -221,12 +223,12 @@ func TestAPatchGivingCustomResponseHeadersSomethingButHeadersIsRefused(t *testin
 
 	spec := patchedHosts(environment.TierProduction)
 	spec.Patches = map[string]transform.Result{"web": {Patches: transform.Patches{
-		surfaceBackendService: {"customResponseHeaders": "X-Frame-Options: DENY"},
+		albresources.SurfaceBackendService: {"customResponseHeaders": "X-Frame-Options: DENY"},
 	}}}
-	_, err := bindingProgram(spec)
+	_, err := albprogram.Binding(spec)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || !strings.Contains(refused.Message, "customResponseHeaders") {
-		t.Errorf("bindingProgram() = %v, want the header patch refused by name", err)
+		t.Errorf("albprogram.Binding() = %v, want the header patch refused by name", err)
 	}
 }
 
@@ -247,15 +249,15 @@ func outputOf(kind, name, property string) map[string]any {
 func TestTheTiersLoadBalancerIsEvaluatedWithNoEnvironmentOrApp(t *testing.T) {
 	t.Parallel()
 
-	pass := &evaluatingPass{result: transform.Result{Patches: transform.Patches{surfaceHTTPSProxy: {"sslPolicy": "modern-tls"}}}}
+	pass := &evaluatingPass{result: transform.Result{Patches: transform.Patches{albresources.SurfaceHTTPSProxy: {"sslPolicy": "modern-tls"}}}}
 	result, err := EvaluateFront(context.Background(), pass, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("EvaluateFront() = %v", err)
 	}
-	if got := result.Patches[surfaceHTTPSProxy]["sslPolicy"]; got != "modern-tls" {
+	if got := result.Patches[albresources.SurfaceHTTPSProxy]["sslPolicy"]; got != "modern-tls" {
 		t.Errorf("EvaluateFront() = %v, want the proxy's patch", result)
 	}
-	want := transform.Request{Provider: "gcp", EnvTier: "production", Resources: []transform.Resource{{Type: TransformKindLoadBalancer, Name: "production"}}}
+	want := transform.Request{Provider: "gcp", EnvTier: "production", Resources: []transform.Resource{{Type: albresources.TransformKindLoadBalancer, Name: "production"}}}
 	if len(pass.asked) != 1 || !reflect.DeepEqual(pass.asked[0], want) {
 		t.Errorf("the pass was asked %+v, want %+v: the load balancer belongs to every environment and app of the tier", pass.asked, want)
 	}
@@ -265,7 +267,7 @@ func TestTheTiersLoadBalancerReadsNoProjectsBindings(t *testing.T) {
 	t.Parallel()
 
 	pass := &evaluatingPass{result: transform.Result{Patches: transform.Patches{
-		surfaceHTTPSProxy: {"sslPolicy": outputOf("custom", "tls", "policy")},
+		albresources.SurfaceHTTPSProxy: {"sslPolicy": outputOf("custom", "tls", "policy")},
 	}}}
 	_, err := EvaluateFront(context.Background(), pass, environment.TierProduction)
 	var refused refusal.Refusal
@@ -317,7 +319,7 @@ func appStack(app string) provider.StackSpec {
 	return provider.StackSpec{
 		Ref:      provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.AppStack("prod", app, naming.NewReleaseToken("b1", ""))},
 		Kind:     provider.StackApp,
-		Edge:     kindOnly{kind: Kind},
+		Edge:     kindOnly{kind: albresources.Kind},
 		App:      &provider.AppSpec{App: app},
 		Bindings: namedBindings{bindings: []provider.Binding{{Name: "armor", Properties: map[string]string{"policy": "web-armor"}}}},
 	}
@@ -327,16 +329,16 @@ func TestAnAppsEdgePatchReadsTheBindingOutputsOfTheStackItShipsWith(t *testing.T
 	t.Parallel()
 
 	pass := &evaluatingPass{result: transform.Result{Patches: transform.Patches{
-		surfaceBackendService: {"securityPolicy": outputOf("custom", "armor", "policy")},
+		albresources.SurfaceBackendService: {"securityPolicy": outputOf("custom", "armor", "policy")},
 	}}}
 	result, err := EvaluateApp(context.Background(), pass, appStack("web"))
 	if err != nil {
 		t.Fatalf("EvaluateApp() = %v", err)
 	}
-	if got := result.Patches[surfaceBackendService]["securityPolicy"]; got != "web-armor" {
+	if got := result.Patches[albresources.SurfaceBackendService]["securityPolicy"]; got != "web-armor" {
 		t.Errorf("the backend service's security policy = %v, want the value the published record holds", got)
 	}
-	want := transform.Request{Provider: "gcp", EnvTier: "production", Resources: []transform.Resource{{Type: TransformKindEdge, Name: "web", App: "web"}}}
+	want := transform.Request{Provider: "gcp", EnvTier: "production", Resources: []transform.Resource{{Type: albresources.TransformKindEdge, Name: "web", App: "web"}}}
 	if len(pass.asked) != 1 || !reflect.DeepEqual(pass.asked[0], want) {
 		t.Errorf("the pass was asked %+v, want %+v: one backend serves a hostname in every environment of the tier", pass.asked, want)
 	}
@@ -346,7 +348,7 @@ func TestAnAppsHeaderPatchThatIsNoListOfHeadersIsRefusedWhenItIsEvaluated(t *tes
 	t.Parallel()
 
 	pass := &evaluatingPass{result: transform.Result{Patches: transform.Patches{
-		surfaceBackendService: {"customResponseHeaders": []any{float64(1)}},
+		albresources.SurfaceBackendService: {"customResponseHeaders": []any{float64(1)}},
 	}}}
 	_, err := EvaluateApp(context.Background(), pass, appStack("web"))
 	var refused refusal.Refusal
@@ -370,7 +372,7 @@ func TestAnAppsEdgePatchToAFieldOcelOwnsIsRefusedWhenItIsEvaluated(t *testing.T)
 	t.Parallel()
 
 	pass := &evaluatingPass{result: transform.Result{Patches: transform.Patches{
-		surfaceBackendService: {"cdnPolicy": nil},
+		albresources.SurfaceBackendService: {"cdnPolicy": nil},
 	}}}
 	_, err := EvaluateApp(context.Background(), pass, appStack("web"))
 	var refused refusal.Refusal
@@ -383,7 +385,7 @@ func TestAFrontPatchToAFieldOcelOwnsIsRefusedWhenItIsEvaluated(t *testing.T) {
 	t.Parallel()
 
 	pass := &evaluatingPass{result: transform.Result{Patches: transform.Patches{
-		surfaceURLMap: {"defaultService": "elsewhere"},
+		albresources.SurfaceURLMap: {"defaultService": "elsewhere"},
 	}}}
 	_, err := EvaluateFront(context.Background(), pass, environment.TierProduction)
 	var refused refusal.Refusal
