@@ -299,6 +299,9 @@ func TestEnsureMakesEverythingADistributionSharesAndRecordsHowToFindIt(t *testin
 				t.Errorf("%s = %q, want %q", router.HeaderRouter, aws.ToString(item.Value), cloudfrontpart.Kind)
 			}
 		}
+		if timing := headers.ServerTimingHeadersConfig; timing == nil || !aws.ToBool(timing.Enabled) || aws.ToFloat64(timing.SamplingRate) != 100 {
+			t.Errorf("server timing = %+v, want it on every response: the viewer-response function reads the edge's cache tier from it", timing)
+		}
 		if want := tier == environment.TierPreview; noindex != want {
 			t.Errorf("the %s headers policy marks answers noindex = %t, want %t: only previews are kept out of search engines", tier, noindex, want)
 		}

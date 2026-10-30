@@ -103,3 +103,45 @@ describe("the vary a browser is handed", () => {
     expect(load()(response({})).headers.vary).toBeUndefined();
   });
 });
+
+describe("the cache tier the edge stamps", () => {
+  it("names a response CloudFront answered from its cache a HIT, whatever the origin stamped", () => {
+    for (const metric of ["cdn-cache-hit", "cdn-cache-refresh"]) {
+      const answered = load()(
+        response({
+          "x-ocel-cache": "MISS",
+          "server-timing": `${metric},cdn-pop;desc="IAD12-P4",cdn-hit-layer;desc="EDGE"`,
+        }),
+      );
+
+      expect(header(answered, "x-ocel-cache")).toBe("HIT");
+    }
+  });
+
+  it("names a response CloudFront fetched from the origin a MISS unless the origin said more", () => {
+    const missed = { "server-timing": 'cdn-upstream-layer;desc="EDGE",cdn-cache-miss' };
+
+    expect(header(load()(response(missed)), "x-ocel-cache")).toBe("MISS");
+    expect(header(load()(response({ ...missed, "x-ocel-cache": "BYPASS" })), "x-ocel-cache")).toBe(
+      "BYPASS",
+    );
+  });
+
+  it("names a request carrying the draft cookie a BYPASS, since its key is its own", () => {
+    const answered = load()(
+      response({ "server-timing": "cdn-cache-miss" }, undefined, { __prerender_bypass: "t" }),
+    );
+
+    expect(header(answered, "x-ocel-cache")).toBe("BYPASS");
+  });
+
+  it("hands a browser the origin's own Server-Timing and none of CloudFront's", () => {
+    const answered = load()(
+      response({ "server-timing": 'app;dur=12,cdn-cache-hit,cdn-pop;desc="IAD12-P4"' }),
+    );
+    const bare = load()(response({ "server-timing": 'cdn-cache-hit,cdn-rid;desc="abc"' }));
+
+    expect(header(answered, "server-timing")).toBe("app;dur=12");
+    expect(bare.headers["server-timing"]).toBeUndefined();
+  });
+});
