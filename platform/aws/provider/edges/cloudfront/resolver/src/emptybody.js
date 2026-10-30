@@ -1,6 +1,7 @@
 var EMPTY_BODY_HEADER = 'x-ocel-empty-body';
 var REMAPPED_PREFIX = 'x-amzn-remapped-';
 var RESTORABLE = ['www-authenticate', 'server', 'date', 'content-md5', 'max-forwards'];
+var ORIGIN_VARY_HEADER = 'x-ocel-vary';
 var BROWSER_REVALIDATES = 'public, max-age=0, must-revalidate';
 var UNSHAREABLE = ['private', 'no-store', 'no-cache'];
 
@@ -15,6 +16,12 @@ function restoreRemappedHeaders(headers) {
     }
     delete headers[names[i]];
   }
+}
+
+function restoreOriginVary(headers) {
+  if (headers[ORIGIN_VARY_HEADER] === undefined) return;
+  headers.vary = headers[ORIGIN_VARY_HEADER];
+  delete headers[ORIGIN_VARY_HEADER];
 }
 
 function directiveNames(cacheControl) {
@@ -38,6 +45,7 @@ function revalidateInBrowser(headers) {
 function handler(event) {
   var response = event.response;
   restoreRemappedHeaders(response.headers);
+  restoreOriginVary(response.headers);
   revalidateInBrowser(response.headers);
   if (response.headers[EMPTY_BODY_HEADER] === undefined) return response;
   delete response.headers[EMPTY_BODY_HEADER];

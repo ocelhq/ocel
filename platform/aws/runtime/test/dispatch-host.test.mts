@@ -5,7 +5,7 @@ import type { NextRouteTable } from "@framework/next-protocol/route-table";
 import { type DispatchHost, dispatchRequest } from "@framework/next-runtime/dispatch-host";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { s3AssetBucket } from "../src/next/dispatch-assets.mjs";
-import { awsDispatchAccess } from "../src/next/dispatch-host.mjs";
+import { awsDispatchAccess, dispatchForAws } from "../src/next/dispatch-host.mjs";
 import { envCredentials, isLoopback, signedOriginFetch } from "../src/next/dispatch-signing.mjs";
 
 const LOCAL_BUNDLE = "local-bundle";
@@ -110,6 +110,40 @@ test("a sibling route is signed against its Function URL", async () => {
   expect(request.headers.get("x-ocel-entry")).toBe("/sibling");
   expect(request.headers.get("x-middleware-rewrite")).toBeNull();
   expect(request.headers.get("next-resume")).toBeNull();
+});
+
+const routerVary =
+  "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch";
+
+function varying(routerKind: string): DispatchHost {
+  const answering = (async () =>
+    new Response("flight", {
+      status: 200,
+      headers: { vary: routerVary },
+    })) as unknown as typeof fetch;
+  return { ...host(), routerKind, originFetch: answering };
+}
+
+test("a response to the CloudFront edge carries its Vary as x-ocel-vary, which CloudFront would strip", async () => {
+  const response = await dispatchForAws(
+    new Request("https://app.example/sibling"),
+    varying("cloudfront"),
+    () => {},
+  );
+
+  expect(response.headers.get("vary")).toBeNull();
+  expect(response.headers.get("x-ocel-vary")).toBe(routerVary);
+});
+
+test("a response to any other edge keeps its Vary", async () => {
+  const response = await dispatchForAws(
+    new Request("https://app.example/sibling"),
+    varying(ROUTER_KIND),
+    () => {},
+  );
+
+  expect(response.headers.get("vary")).toBe(routerVary);
+  expect(response.headers.get("x-ocel-vary")).toBeNull();
 });
 
 test("only the loopback origin goes unsigned", () => {

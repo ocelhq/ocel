@@ -1,8 +1,10 @@
 import {
   type DispatchAccess,
-  newDispatchInvoke,
+  type DispatchHost,
+  dispatchRequest,
   readDispatchHost,
 } from "@framework/next-runtime/dispatch-host";
+import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
 import type { Invoke } from "@framework/node-runtime/host";
 import { bucketVars } from "@platform/edge-contract/runtime-env";
 import { s3AssetBucket } from "./dispatch-assets.mjs";
@@ -41,10 +43,34 @@ export function awsDispatchAccess(
   };
 }
 
+const cloudFrontRouterKind = "cloudfront";
+
+const originVaryHeader = "x-ocel-vary";
+
+function carryVary(response: Response): Response {
+  const vary = response.headers.get("vary");
+  if (vary === null) return response;
+  const carried = new Response(response.body, response);
+  carried.headers.delete("vary");
+  carried.headers.set(originVaryHeader, vary);
+  return carried;
+}
+
+export async function dispatchForAws(
+  request: Request,
+  host: DispatchHost,
+  waitUntil: (promise: Promise<unknown>) => void,
+): Promise<Response> {
+  const response = await dispatchRequest(request, host, waitUntil);
+  return host.routerKind === cloudFrontRouterKind ? carryVary(response) : response;
+}
+
 export function newAwsDispatchInvoke(
   localOrigin: string,
   env: NodeJS.ProcessEnv = process.env,
   credentials?: CredentialSource,
 ): Invoke {
-  return newDispatchInvoke(readDispatchHost(env, localOrigin, awsDispatchAccess(env, credentials)));
+  const host = readDispatchHost(env, localOrigin, awsDispatchAccess(env, credentials));
+  return (req, res, ocel) =>
+    fetchToNodeHandler((request) => dispatchForAws(request, host, ocel.waitUntil))(req, res, ocel);
 }

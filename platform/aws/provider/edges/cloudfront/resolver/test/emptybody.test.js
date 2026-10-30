@@ -88,3 +88,18 @@ describe("the cache-control a browser is handed", () => {
     }
   });
 });
+
+describe("the vary a browser is handed", () => {
+  it("gives back the Vary the origin carried past CloudFront as x-ocel-vary", () => {
+    const vary = "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch";
+
+    const answered = load()(response({ "x-ocel-vary": vary }));
+
+    expect(header(answered, "vary")).toBe(vary);
+    expect(answered.headers["x-ocel-vary"]).toBeUndefined();
+  });
+
+  it("adds no Vary to a response that carried none", () => {
+    expect(load()(response({})).headers.vary).toBeUndefined();
+  });
+});
