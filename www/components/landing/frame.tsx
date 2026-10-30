@@ -34,7 +34,7 @@ export function Frame({
   return (
     <figure
       className={cn(
-        "m-0 min-w-0 border-[1.5px] border-foreground",
+        "m-0 min-w-0 border-[1.5px] border-rule",
         dark ? "bg-terminal" : "bg-background",
         !flat && "shadow-float",
         className,

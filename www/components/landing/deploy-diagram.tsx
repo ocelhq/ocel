@@ -94,7 +94,7 @@ export function DeployDiagram(props: SVGProps<SVGSVGElement>) {
         width={TERMINAL.w}
         height={TERMINAL.h}
         fill="#16181a"
-        stroke="var(--foreground)"
+        stroke="var(--rule)"
         strokeWidth="1.5"
       />
       <circle cx={TERMINAL.x + 16} cy={TERMINAL.y + 15} r="4" fill="#ff5f57" />

@@ -70,7 +70,7 @@ export function EarlyAccess({
       <label htmlFor={id} className="sr-only">
         Email address
       </label>
-      <div className="flex min-w-0 border-[1.5px] border-foreground focus-within:ring-2 focus-within:ring-electric/40">
+      <div className="flex min-w-0 border-[1.5px] border-rule focus-within:ring-2 focus-within:ring-electric/40">
         <input
           id={id}
           name="email"

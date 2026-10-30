@@ -1,4 +1,5 @@
 import type { SVGProps } from "react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const cutRing = "M66.94 2.96 A50 50 0 1 0 98.62 38.33 L72.36 44.63 A23 23 0 1 1 57.79 28.36 Z";
@@ -20,7 +21,7 @@ function Mark(props: SVGProps<SVGSVGElement>) {
 
 export function SiteBar() {
   return (
-    <header className="sticky top-0 z-50 border-b-[1.5px] border-foreground bg-background/85 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b-[1.5px] border-rule bg-background/85 backdrop-blur-md">
       <nav
         aria-label="ocel.dev"
         className="mx-auto flex h-14 max-w-[1180px] items-stretch px-5 md:px-10"
@@ -31,7 +32,7 @@ export function SiteBar() {
             ocel
           </span>
           <span className="sr-only">, home</span>
-          <span className="ml-1.5 border border-foreground px-[5px] pt-[4px] pb-[3px] font-mono text-[11px] leading-none font-medium tracking-[0.14em] text-foreground uppercase">
+          <span className="ml-1.5 border border-rule px-[5px] pt-[4px] pb-[3px] font-mono text-[11px] leading-none font-medium tracking-[0.14em] text-foreground uppercase">
             Alpha
           </span>
         </a>
@@ -53,6 +54,7 @@ export function SiteBar() {
             </svg>
             <span className="sr-only md:not-sr-only">GitHub</span>
           </a>
+          <ThemeToggle />
           <a
             href="https://app.ocelhq.com"
             className={cn(

@@ -91,7 +91,7 @@ function Sheet({
     <section
       id={id}
       className={cn(
-        "relative border-t-[1.5px] border-foreground py-16 md:py-24",
+        "relative border-t-[1.5px] border-rule py-16 md:py-24",
         tone === "fog" && "bg-muted",
         className,
       )}
@@ -233,7 +233,7 @@ export default async function Home() {
             One command. Any target.
           </Heading>
           <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-12">
-            <figure className="m-0 grid place-items-center border-[1.5px] border-foreground bg-muted px-4 py-10 md:px-8 lg:col-span-5">
+            <figure className="m-0 grid place-items-center border-[1.5px] border-rule bg-muted px-4 py-10 md:px-8 lg:col-span-5">
               <DeployDiagram className="h-auto w-full max-w-[28rem]" />
             </figure>
             <div className="min-w-0 lg:col-span-7">
@@ -306,7 +306,7 @@ export default async function Home() {
         </Sheet>
       </main>
 
-      <footer className="border-t-[1.5px] border-foreground">
+      <footer className="border-t-[1.5px] border-rule">
         <Container className="flex flex-wrap items-center gap-x-6 gap-y-3 py-8 text-[13px] text-muted-foreground">
           <span className="font-display text-[15px] font-extrabold tracking-[-0.04em] text-foreground lowercase">
             ocel
