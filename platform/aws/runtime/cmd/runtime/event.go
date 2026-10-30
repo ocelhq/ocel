@@ -79,7 +79,7 @@ func (ev *httpEvent) query() string {
 	return values.Encode()
 }
 
-func (ev *httpEvent) header() http.Header {
+func (ev *httpEvent) header(guarded bool) http.Header {
 	h := http.Header{}
 	for name, value := range ev.Headers {
 		h.Set(name, value)
@@ -101,7 +101,7 @@ func (ev *httpEvent) header() http.Header {
 		}
 	}
 	h.Del(edge.HeaderClientAuthorization)
-	if client := h.Get(edge.HeaderClientAddress); client != "" && signed {
+	if client := h.Get(edge.HeaderClientAddress); client != "" && (signed || guarded) {
 		if prior := h.Get("X-Forwarded-For"); prior != "" {
 			client = prior + ", " + client
 		}
@@ -122,7 +122,7 @@ func (ev *httpEvent) decodedBody() ([]byte, error) {
 	return b, nil
 }
 
-func buildLoopbackRequest(ctx context.Context, nodePort int, ev *httpEvent) (*http.Request, error) {
+func buildLoopbackRequest(ctx context.Context, nodePort int, ev *httpEvent, guarded bool) (*http.Request, error) {
 	body, err := ev.decodedBody()
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func buildLoopbackRequest(ctx context.Context, nodePort int, ev *httpEvent) (*ht
 	if len(body) > 0 {
 		req.Close = true
 	}
-	req.Header = ev.header()
+	req.Header = ev.header(guarded)
 	if host := publicHost(req.Header); host != "" {
 		req.Host = host
 	}

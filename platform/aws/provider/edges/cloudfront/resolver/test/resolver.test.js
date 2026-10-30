@@ -334,6 +334,26 @@ describe("the headers a viewer cannot forge past the resolver", () => {
     }
   });
 
+  it("hands the entry function the address the viewer connected from, never the one it sent", async () => {
+    const event = request("/blog", { "x-ocel-client-address": "6.6.6.6" });
+    event.viewer = { ip: "198.51.100.7" };
+
+    const { answered } = await resolve(event);
+
+    expect(answered.headers["x-ocel-client-address"].value).toBe("198.51.100.7");
+  });
+
+  it("hands a container no client address, since only the entry function consumes one", async () => {
+    const event = request("/blog");
+    event.viewer = { ip: "198.51.100.7" };
+
+    const { answered } = await resolve(event, {
+      "shop.example.com": { ...ROUTE, container: "shop-prod-web-container-r3f8a1c90", assets: "" },
+    });
+
+    expect(answered.headers["x-ocel-client-address"]).toBeUndefined();
+  });
+
   it("passes a viewer's own x-ocel- header the origin has no meaning for through untouched", async () => {
     const { answered } = await resolve(request("/blog", { "x-ocel-probe": "probe-value" }));
 

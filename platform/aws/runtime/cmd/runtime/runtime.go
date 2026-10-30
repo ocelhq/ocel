@@ -332,7 +332,7 @@ func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWrit
 	if err != nil {
 		return false, u.fail(rw, http.StatusBadGateway, fmt.Sprintf("bad event payload: %v", err))
 	}
-	if !u.guard.Admits(&http.Request{Header: ev.header()}) {
+	if !u.guard.Admits(&http.Request{Header: ev.header(false)}) {
 		return false, u.relay(ctx, rw, &http.Response{StatusCode: http.StatusForbidden, Header: http.Header{}, Body: http.NoBody})
 	}
 	resp, err := u.forwardToApp(ctx, ev)
@@ -401,7 +401,7 @@ func (u upstream) forwardToApp(ctx context.Context, ev *httpEvent) (*http.Respon
 }
 
 func (u upstream) buildForwardRequest(ctx context.Context, ev *httpEvent) (*http.Request, error) {
-	req, err := buildLoopbackRequest(ctx, u.port, ev)
+	req, err := buildLoopbackRequest(ctx, u.port, ev, u.guard != nil)
 	if err != nil {
 		return nil, err
 	}

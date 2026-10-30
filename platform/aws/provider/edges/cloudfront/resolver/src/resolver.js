@@ -180,6 +180,9 @@ async function handler(event) {
     return request;
   }
 
+  if (event.viewer && event.viewer.ip) {
+    request.headers[CLIENT_ADDRESS_HEADER] = { value: event.viewer.ip };
+  }
   var originHeaders = {};
   originHeaders[ORIGIN_SECRET_HEADER] = route.secret;
   cf.updateRequestOrigin({

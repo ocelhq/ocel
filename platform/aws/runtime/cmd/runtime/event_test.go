@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 )
 
 func TestParseEvent(t *testing.T) {
@@ -91,10 +92,10 @@ func TestParseEvent(t *testing.T) {
 		if ev.query() != "a=1&a=2" {
 			t.Errorf("query = %q, want a=1&a=2; a repeated parameter must survive", ev.query())
 		}
-		if got := ev.header().Values("Accept"); len(got) != 2 || got[0] != "text/html" || got[1] != "application/json" {
+		if got := ev.header(false).Values("Accept"); len(got) != 2 || got[0] != "text/html" || got[1] != "application/json" {
 			t.Errorf("Accept = %v, want both values the REST API sent", got)
 		}
-		if got := ev.header().Get("Content-Type"); got != "application/json" {
+		if got := ev.header(false).Get("Content-Type"); got != "application/json" {
 			t.Errorf("Content-Type = %q, want the single-valued header passed through", got)
 		}
 		body, err := ev.decodedBody()
@@ -121,7 +122,7 @@ func TestParseEvent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parseEvent: %v", err)
 		}
-		req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+		req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
 		if err != nil {
 			t.Fatalf("buildLoopbackRequest: %v", err)
 		}
@@ -145,7 +146,7 @@ func TestBuildLoopbackRequestFromARestProxyEvent(t *testing.T) {
 		t.Fatalf("parseEvent: %v", err)
 	}
 
-	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
 	if err != nil {
 		t.Fatalf("buildLoopbackRequest: %v", err)
 	}
@@ -181,7 +182,7 @@ func TestBuildLoopbackRequest(t *testing.T) {
 		}
 		ev.RequestContext.HTTP.Method = "POST"
 
-		req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+		req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
 		if err != nil {
 			t.Fatalf("buildLoopbackRequest: %v", err)
 		}
@@ -242,7 +243,7 @@ func TestBuildLoopbackRequest(t *testing.T) {
 				ev := &httpEvent{RawPath: "/", Headers: tc.headers}
 				ev.RequestContext.HTTP.Method = "GET"
 
-				req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+				req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
 				if err != nil {
 					t.Fatalf("buildLoopbackRequest: %v", err)
 				}
@@ -418,7 +419,7 @@ func TestLoopbackClientDoesNotHangOnAConnectionPoisonedByAnUnreadBody(t *testing
 
 	unread := &httpEvent{RawPath: "/_middleware", Body: string(bytes.Repeat([]byte("a"), 300_000))}
 	unread.RequestContext.HTTP.Method = "POST"
-	req1, err := buildLoopbackRequest(t.Context(), port, unread)
+	req1, err := buildLoopbackRequest(t.Context(), port, unread, false)
 	if err != nil {
 		t.Fatalf("buildLoopbackRequest: %v", err)
 	}
@@ -433,7 +434,7 @@ func TestLoopbackClientDoesNotHangOnAConnectionPoisonedByAnUnreadBody(t *testing
 	defer cancel()
 	next := &httpEvent{RawPath: "/file"}
 	next.RequestContext.HTTP.Method = "GET"
-	req2, err := buildLoopbackRequest(ctx, port, next)
+	req2, err := buildLoopbackRequest(ctx, port, next, false)
 	if err != nil {
 		t.Fatalf("buildLoopbackRequest: %v", err)
 	}
@@ -461,7 +462,7 @@ func TestTheAppHearsTheAuthorizationTheClientSentBehindASigningEdge(t *testing.T
 		t.Fatal(err)
 	}
 
-	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
 	if err != nil {
 		t.Fatalf("buildLoopbackRequest: %v", err)
 	}
@@ -480,7 +481,7 @@ func TestTheAppHearsTheClientsAuthorizationUntouchedWhenNothingCarriedIt(t *test
 	}
 	ev.RequestContext.HTTP.Method = http.MethodGet
 
-	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
 	if err != nil {
 		t.Fatalf("buildLoopbackRequest: %v", err)
 	}
@@ -499,7 +500,7 @@ func TestTheAppNeverHearsTheEdgesOwnSignatureWhenTheClientSentNoAuthorization(t 
 		t.Fatal(err)
 	}
 
-	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
 	if err != nil {
 		t.Fatalf("buildLoopbackRequest: %v", err)
 	}
@@ -517,9 +518,34 @@ func TestTheAppHearsTheClientAddressASigningEdgeCarriedAppendedToTheChain(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
 	if err != nil {
 		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+	if got := req.Header.Get("X-Forwarded-For"); got != "203.0.113.9, 198.51.100.7" {
+		t.Errorf("X-Forwarded-For = %q, want the edge's client appended to the chain", got)
+	}
+	if got := req.Header.Values(edge.HeaderClientAddress); len(got) != 0 {
+		t.Errorf("%s = %q, want the carrier consumed", edge.HeaderClientAddress, got)
+	}
+}
+
+func TestTheAppHearsTheClientAddressAnEdgeHoldingTheOriginSecretCarriedAppendedToTheChain(t *testing.T) {
+	ev, err := parseEvent([]byte(`{
+		"rawPath": "/",
+		"headers": {"x-forwarded-for": "203.0.113.9", "x-ocel-client-address": "198.51.100.7", "x-ocel-origin-secret": "s3cret"},
+		"requestContext": {"http": {"method": "GET"}}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := upstream{port: 4321, guard: originguard.NewGuard("s3cret")}
+	if !u.guard.Admits(&http.Request{Header: ev.header(false)}) {
+		t.Fatal("the guard refused the secret it was made with")
+	}
+	req, err := u.buildForwardRequest(t.Context(), ev)
+	if err != nil {
+		t.Fatalf("buildForwardRequest: %v", err)
 	}
 	if got := req.Header.Get("X-Forwarded-For"); got != "203.0.113.9, 198.51.100.7" {
 		t.Errorf("X-Forwarded-For = %q, want the edge's client appended to the chain", got)
@@ -538,7 +564,7 @@ func TestTheAppIgnoresAClientAddressOnACallNoSigningEdgeMade(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
 	if err != nil {
 		t.Fatalf("buildLoopbackRequest: %v", err)
 	}
@@ -559,7 +585,7 @@ func TestTheAppIgnoresAnAuthorizationCarrierOnACallNoSigningEdgeMade(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
 	if err != nil {
 		t.Fatalf("buildLoopbackRequest: %v", err)
 	}
