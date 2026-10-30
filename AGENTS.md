@@ -36,7 +36,8 @@ before — the CLI works on its own; the SDK and console do not.
 target: a project that names no provider deploys there when the console it is logged in to
 offers it, with nothing but the CLI installed. Ocel Cloud is one target among others, never
 the default for a project that names a provider, and the open-source engine never depends
-on it: its implementation is private, its contracts (`proto/cloud/v1`) are public.
+on it: its implementation is private, its contracts (`proto/runner/v1`, `proto/endpoint/v1`,
+`proto/common/scope/v1`) are public.
 
 ## Trust > Ops > Product > Polish
 
@@ -85,7 +86,9 @@ which are tooling.
   what more than one host must run to serve a plain node function, and nothing that knows
   which host is running it: a host's own entry, packaging and paths stay with that host.
 - **`cli/`** — the `ocel` binary: Go internals plus the Node half that is bundled and
-  embedded into it.
+  embedded into it, and under `cli/jobimage/` the job image a runner runs it in. Under
+  `cli/ocel-job/`, the `ocel-job` binary: the job agent that runs `ocel` in that image,
+  wiring `pkg/runner/agent` to the CLI internals it needs. It is never an `ocel` command.
 - **`sdk/`** — the Go SDK apps import to declare resources and talk to the dev server.
   Deliberately lean; never depends on the CLI.
 - **`python/`** — the uv workspace of everything published to PyPI, and nothing else.

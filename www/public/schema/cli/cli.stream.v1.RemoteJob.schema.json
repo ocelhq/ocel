@@ -1,18 +1,22 @@
 {
   "$defs": {
-    "cli.stream.v1.CloudJob.jsonschema.json": {
+    "cli.stream.v1.RemoteJob.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
         "error": {
-          "$ref": "#/$defs/cloud.v1.JobError.jsonschema.json"
+          "$ref": "#/$defs/runner.v1.JobError.jsonschema.json"
         },
         "id": {
           "default": "",
           "type": "string"
         },
         "result": {
-          "$ref": "#/$defs/cloud.v1.JobResult.jsonschema.json"
+          "$ref": "#/$defs/runner.v1.JobResult.jsonschema.json"
+        },
+        "runner": {
+          "default": "",
+          "type": "string"
         },
         "state": {
           "anyOf": [
@@ -45,10 +49,10 @@
           "type": "string"
         }
       },
-      "title": "Cloud Job",
+      "title": "Remote Job",
       "type": "object"
     },
-    "cloud.v1.AppBuild.jsonschema.json": {
+    "runner.v1.AppBuild.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "patternProperties": {
@@ -70,7 +74,7 @@
       "title": "App Build",
       "type": "object"
     },
-    "cloud.v1.JobError.jsonschema.json": {
+    "runner.v1.JobError.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
@@ -86,25 +90,15 @@
       "title": "Job Error",
       "type": "object"
     },
-    "cloud.v1.JobResult.jsonschema.json": {
+    "runner.v1.JobResult.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
-      "patternProperties": {
-        "^(deployment_id)$": {
-          "default": "",
-          "type": "string"
-        }
-      },
       "properties": {
         "builds": {
           "items": {
-            "$ref": "#/$defs/cloud.v1.AppBuild.jsonschema.json"
+            "$ref": "#/$defs/runner.v1.AppBuild.jsonschema.json"
           },
           "type": "array"
-        },
-        "deploymentId": {
-          "default": "",
-          "type": "string"
         },
         "urls": {
           "items": {
@@ -117,7 +111,7 @@
       "type": "object"
     }
   },
-  "$id": "https://ocel.dev/schema/cli/cli.stream.v1.CloudJob.schema.json",
-  "$ref": "#/$defs/cli.stream.v1.CloudJob.jsonschema.json",
+  "$id": "https://ocel.dev/schema/cli/cli.stream.v1.RemoteJob.schema.json",
+  "$ref": "#/$defs/cli.stream.v1.RemoteJob.jsonschema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema"
 }

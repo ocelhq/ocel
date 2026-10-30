@@ -1,19 +1,14 @@
 ```bash
 ocel connector add
-ocel connector add --allow-write=false --allow-reveal
 ```
 
 `add` puts a connector on the target this project's config names and tells the console where to
 dial it. Sign in and link the directory first, with [`ocel login`](/docs/cli/login) and
 [`ocel link`](/docs/link).
 
-What the console may do through it is set when you add it:
-
-| Console may | Default | Flag |
-| --- | --- | --- |
-| Read variables | always | |
-| Write variables | yes | `--allow-write=false` withholds it |
-| Read a secret value back in the clear | no | `--allow-reveal` grants it |
+A connector lets the console do everything a person's role allows on this target: read the
+deployed apps and act on them (a rollback, a hostname, protection), and read, write and reveal
+variables. What each person may do is still capped by their role in the console.
 
 `--compute` picks what the connector runs on, `serverless` or `container`; otherwise the provider's
 default.
@@ -21,4 +16,4 @@ default.
 ## One connector per target
 
 A second `add` against the same target repoints the connector already there. That is also how you
-change what the console may do, and how you finish an add that stopped partway.
+finish an add that stopped partway.
