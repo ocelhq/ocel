@@ -39,6 +39,8 @@ require (
 	github.com/aws/smithy-go v1.28.1
 	github.com/evanw/esbuild v0.28.1
 	github.com/google/go-containerregistry v0.21.7
+	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.4.2
 	github.com/mmmorris1975/ssm-session-client v0.500.1
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/pkg/provider/pulumi v0.0.0
@@ -121,8 +123,6 @@ require (
 	github.com/golang/glog v1.2.5 // indirect
 	github.com/google/cel-go v0.26.1 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
-	github.com/google/uuid v1.6.0 // indirect
-	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
