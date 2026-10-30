@@ -91,3 +91,63 @@ func EdgeStackKey(tier environment.Tier, slug string) records.Key {
 func WildcardKey(tier environment.Tier) records.Key {
 	return records.Partition{Tier: tier, Root: RootWildcard}.Key(wildcardKey)
 }
+
+func OwnerOf(key records.Key) (records.Owner, bool) {
+	partition, path := key.Partition, key.Path
+	switch partition.Root {
+	case RootProjects:
+		if len(path) == 1 || (len(path) == 2 && path[1] == partsSegment) {
+			return records.Owner{Project: path[0]}, true
+		}
+	case RootStacks:
+		if len(partition.Path) == 1 {
+			return ownerOfStackKey(partition.Path[0], path)
+		}
+	case RootEnvironments, RootEnvironmentLeases:
+		if len(partition.Path) == 1 && len(path) == 1 {
+			return records.Owner{Project: partition.Path[0], Environment: path[0]}, true
+		}
+	case RootProjectLeases, RootEdgeStacks:
+		if len(path) == 1 {
+			return records.Owner{Project: path[0]}, true
+		}
+	case RootWildcard:
+		if len(path) == 1 && path[0] == wildcardKey {
+			return records.Owner{Shared: true}, true
+		}
+	case RootBootstrap:
+		return ownerOfBootstrapKey(path)
+	}
+	return records.Owner{}, false
+}
+
+func ownerOfStackKey(slug string, path []string) (records.Owner, bool) {
+	var stack string
+	switch {
+	case len(path) == 1:
+		stack = path[0]
+	case len(path) == 3 && path[0] == appImagesSegment:
+		stack = path[2]
+	case len(path) == 2 && path[0] == resourcesSegment:
+		stack = path[1]
+	default:
+		return records.Owner{}, false
+	}
+	name, err := naming.ParseStackName(stack)
+	if err != nil {
+		return records.Owner{}, false
+	}
+	return records.Owner{Project: slug, Environment: name.Env}, true
+}
+
+func ownerOfBootstrapKey(path []string) (records.Owner, bool) {
+	switch {
+	case len(path) == 2 && path[0] == partsSegment:
+		return records.Owner{Shared: true}, true
+	case len(path) == 3 && path[0] == wantsSegment:
+		return records.Owner{Project: path[1]}, true
+	case len(path) == 1 && (path[0] == previewKeyRecord || path[0] == gatesRecord):
+		return records.Owner{Shared: true}, true
+	}
+	return records.Owner{}, false
+}
