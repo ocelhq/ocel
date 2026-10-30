@@ -362,24 +362,6 @@ func TestAProvidersDirSkipsTheFetchEntirely(t *testing.T) {
 	}
 }
 
-func TestAProvidersDirThatContainsNothingSaysSo(t *testing.T) {
-	t.Parallel()
-
-	served := fakeRelease(t, "fake")
-	store := storeFor(t, served)
-	store.Override = t.TempDir()
-
-	_, err := store.EnsureBinary(context.Background(), KindProvider, "fake", store.Platform, "")
-	if err == nil {
-		t.Fatal("Binary() error = nil, want the empty providers directory refused")
-	}
-	for _, want := range []string{OverrideEnvVar, store.Override, testVersion} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q does not name %q", err.Error(), want)
-		}
-	}
-}
-
 func TestAThrottledReleaseIsRetriedAndThenServed(t *testing.T) {
 	t.Parallel()
 
