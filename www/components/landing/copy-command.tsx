@@ -2,13 +2,15 @@
 
 import { Check, Copy } from "@phosphor-icons/react";
 import { useState } from "react";
+import { capture } from "@/lib/analytics";
 
-export function CopyCommand({ command }: { command: string }) {
+export function CopyCommand({ command, method }: { command: string; method: string }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(command);
+      capture("cli_install_command_copied", { command, method });
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     } catch {}
