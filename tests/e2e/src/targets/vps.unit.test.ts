@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { REDACTED } from "../checks/context";
 import {
+  appLogs,
   appOrigin,
   boxDiagnosis,
   boxDiagnosisScript,
@@ -142,6 +143,25 @@ describe("boxDiagnosis", () => {
   it("bounds every docker call, so a docker that stopped answering cannot hang the diagnosis too", () => {
     const calls = said.match(/[^\n;|]*docker (ps|logs)[^\n;|]*/g) ?? [];
     expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call).toContain("timeout ");
+    }
+  });
+});
+
+describe("appLogs", () => {
+  const said = appLogs("j-kv");
+
+  it("tails the logs of each container the project's apps and their workers run in", () => {
+    expect(said).toContain(
+      "docker ps --all --filter label=ocel.project=j-kv --filter label=ocel.app --format '{{.Names}}'",
+    );
+    expect(said).toContain('docker logs --timestamps --tail 500 "$name"');
+  });
+
+  it("bounds every docker call, so a docker that stopped answering cannot hang the read", () => {
+    const calls = said.match(/[^\n;|]*docker (ps|logs)[^\n;|]*/g) ?? [];
+    expect(calls).toHaveLength(2);
     for (const call of calls) {
       expect(call).toContain("timeout ");
     }

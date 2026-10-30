@@ -43,6 +43,7 @@ import { type Gateway, openGateway, type Scheme } from "./gateway";
 import { hostnameUrls } from "./hostnames";
 import { plannedWrites } from "./planStream";
 import type {
+  AppLogs,
   Commands,
   Deployment,
   Exposure,
@@ -71,6 +72,7 @@ const OCEL_PATHS = [
 const STAMP = "/etc/ocel/production/stamp.json";
 const BOX_READ_SECONDS = 30;
 const RESOURCE_LOG_LINES = 200;
+const APP_LOG_LINES = 500;
 
 const BOX_DIAGNOSIS_SECONDS = 90;
 const BOX_LOG = "box.log";
@@ -189,6 +191,17 @@ export function boxDiagnosisScript(slug: string): string {
   ].join("\n");
 }
 
+export function appLogs(slug: string): string {
+  const docker = `sudo timeout ${BOX_READ_SECONDS} docker`;
+  const apps = `--filter label=ocel.project=${slug} --filter label=ocel.app --format '{{.Names}}'`;
+  return [
+    `for name in $(${docker} ps --all ${apps} 2>/dev/null); do`,
+    `echo "### $name"`,
+    `${docker} logs --timestamps --tail ${APP_LOG_LINES} "$name" 2>&1`,
+    "done",
+  ].join("\n");
+}
+
 export function resourceRestart(slug: string): string {
   return `sudo docker ps -q --filter label=ocel.project=${slug} --filter label=ocel.resource | xargs -r sudo docker restart`;
 }
@@ -300,7 +313,7 @@ export function stampRewritten(before: string, after: string): string | undefine
   return `the stamp a re-apply left at ${STAMP}: ${missed.join("; ")}`;
 }
 
-export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Commands {
+export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Commands, AppLogs {
   readonly name = "vps";
   readonly workers = 2;
   readonly maxRequestBodyBytes = UNCAPPED_BODY_BYTES;
@@ -589,6 +602,11 @@ export class VpsTarget implements Target, ReleaseCycle, Restart, Exposure, Comma
     const target = this.box();
     const shown = await ssh(target, target.user, projectExposure(cell.slug));
     return [...session.said, shown].join("\n");
+  }
+
+  async readAppLogs(cell: CellUnderTest): Promise<string> {
+    const target = this.box();
+    return ssh(target, target.user, appLogs(cell.slug));
   }
 
   async rollback(cell: CellUnderTest): Promise<Deployment> {
