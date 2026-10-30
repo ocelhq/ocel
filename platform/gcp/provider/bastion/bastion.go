@@ -22,7 +22,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
-	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/postgres"
 	"github.com/ocelhq/ocel/platform/gcp/provider/resources/realtime"
@@ -266,7 +265,7 @@ func New(c *gcloud.Clients, services *run.Services, pushBinary func(ctx context.
 		deployAndRoute: services.DeployAndRoute,
 		pushBinary:     pushBinary,
 		tearDown:       services.TearDown,
-		prove:          ports.ProveIdentity,
+		prove:          c.Credentials.ProveIdentity,
 		open:           relay.OpenForward,
 		waited:         googleretry.Waited,
 	}

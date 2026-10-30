@@ -9,13 +9,12 @@ import (
 	"os/exec"
 	"strings"
 
-	"golang.org/x/oauth2/google"
-
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const (
@@ -34,8 +33,8 @@ func namedProject(named string) string {
 	return ""
 }
 
-func ambientProject(ctx context.Context) (string, error) {
-	if project := strings.TrimSpace(credentialProject(ctx)); project != "" {
+func ambientProject(ctx context.Context, credentials ports.Credentials) (string, error) {
+	if project := strings.TrimSpace(credentialProject(ctx, credentials)); project != "" {
 		return project, nil
 	}
 	project, err := gcloudProject(ctx)
@@ -56,8 +55,8 @@ func ambientProject(ctx context.Context) (string, error) {
 		"project", projectVariable, cloudSDKVariable)
 }
 
-func credentialProject(ctx context.Context) string {
-	found, err := google.FindDefaultCredentials(ctx, gcloud.CloudPlatformScope)
+func credentialProject(ctx context.Context, credentials ports.Credentials) string {
+	found, err := credentials.Find(ctx)
 	if err != nil {
 		return ""
 	}
@@ -110,14 +109,14 @@ func (p *Provider) ResolveClients(ctx context.Context) (*gcloud.Clients, error) 
 	}
 	project := p.Options.Project
 	if project == "" {
-		ambient, err := ambientProject(ctx)
+		ambient, err := ambientProject(ctx, p.GoogleCredentials)
 		if err != nil {
 			return nil, err
 		}
 		project = ambient
 	}
 	names := names.New(p.Namespace, project)
-	p.Clients = &gcloud.Clients{Names: names, Region: p.Options.Region, Endpoint: p.Emulator, TagEndpoint: p.TagEmulator, Records: p.KeyValues()}
+	p.Clients = &gcloud.Clients{Names: names, Region: p.Options.Region, Endpoint: p.Emulator, TagEndpoint: p.TagEmulator, Records: p.KeyValues(), Credentials: p.GoogleCredentials}
 	return p.Clients, nil
 }
 

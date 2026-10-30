@@ -15,7 +15,7 @@ func (p *Provider) edges() edges.Registry { return p.EdgeRegistry(p.albEngine) }
 
 func (p *Provider) albEngine() alb.Engine {
 	return alb.Engine{
-		Stacks:        albprogram.PulumiStacks{OpenClients: p.OpenClients, SkipChecks: p.SkipChecks},
+		Stacks:        albprogram.PulumiStacks{OpenClients: p.OpenClients, SkipChecks: p.SkipChecks, CredentialEnv: p.WebIdentityEnv()},
 		Images:        albpart.PluginImages{OpenClients: p.OpenClients},
 		GatePlugin:    payloads.GatePlugin(),
 		FrontPart:     albpart.Front(bootstrapGate{p}.openBootstrap),

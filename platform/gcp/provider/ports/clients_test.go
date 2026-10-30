@@ -34,7 +34,7 @@ func TestAnEmulatedRESTCallThatFailsIsOneSpanCarryingWhatItSentAndGotBack(t *tes
 	ctx, spans := tracingtest.Record(t)
 	server := httptest.NewServer(http.HandlerFunc(refuseTopic))
 	t.Cleanup(server.Close)
-	service, err := ports.NewRESTService(context.Background(), pubsub.NewService, server.URL, "")
+	service, err := ports.NewRESTService(context.Background(), ports.Credentials{}, pubsub.NewService, server.URL, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestAGoogleRESTCallIsOneSpanCarryingTheProjectItBills(t *testing.T) {
 	googletest.UseUserCredential(t)
 	googletest.ServeAsGoogle(t, answerTopic)
 	ctx, spans := tracingtest.Record(t)
-	service, err := ports.NewRESTService(context.Background(), pubsub.NewService, "", "acme-billing")
+	service, err := ports.NewRESTService(context.Background(), ports.Credentials{}, pubsub.NewService, "", "acme-billing")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestASecretManagerCallIsOneSpanThatRecordsNoBody(t *testing.T) {
 		_, _ = w.Write([]byte(`{"name":"projects/acme/secrets/key/versions/1","payload":{"data":"aHVudGVyMg=="}}`))
 	})
 	ctx, spans := tracingtest.Record(t)
-	service, err := ports.NewRESTService(context.Background(), secretmanager.NewService, "", "")
+	service, err := ports.NewRESTService(context.Background(), ports.Credentials{}, secretmanager.NewService, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestACloudStorageObjectReadIsASpanThatRecordsNoBody(t *testing.T) {
 		_, _ = w.Write([]byte("DATABASE_PASSWORD hunter2"))
 	})
 	ctx, spans := tracingtest.Record(t)
-	options, err := ports.NewStorageOptions(context.Background(), "", "")
+	options, err := ports.NewStorageOptions(context.Background(), ports.Credentials{}, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestGoogleRESTCallsMadeAtOnceKeepTheirConnectionsForTheNextOnes(t *testing.
 		arrived.Wait()
 		answerTopic(w, r)
 	})
-	service, err := ports.NewRESTService(context.Background(), pubsub.NewService, "", "")
+	service, err := ports.NewRESTService(context.Background(), ports.Credentials{}, pubsub.NewService, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

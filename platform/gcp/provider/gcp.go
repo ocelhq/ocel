@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
-	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -77,7 +76,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		EnsureImageRegistry:  p.EnsureImageRegistry,
 		OpenDirectImages:     p.OpenDirectImages,
 		CheckBucket:          s3store.Check,
-		EnvSource:            &provider.EnvSourceHooks{ProveIdentity: ports.ProveIdentity, EnsureSync: p.EnsureEnvSourceSync},
+		EnvSource:            &provider.EnvSourceHooks{ProveIdentity: p.GoogleCredentials.ProveIdentity, EnsureSync: p.EnsureEnvSourceSync},
 		BindingAccess:        &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
 		Cost:                 &provider.CostHooks{Inventory: p.InventoryDeploy, Estimate: control.EstimateCost},
 		Retirement:           &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},

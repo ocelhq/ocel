@@ -114,6 +114,6 @@ func variableStore(bindings *ports.Clients) variablestoreserver.FixedBackend {
 	return variablestoreserver.FixedBackend{
 		KeyValues:     ports.KeyValues{Clients: bindings},
 		Cipher:        ports.Cipher{Clients: bindings},
-		ProveIdentity: ports.ProveIdentity,
+		ProveIdentity: ports.Credentials{}.ProveIdentity,
 	}
 }

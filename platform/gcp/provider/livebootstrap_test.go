@@ -67,7 +67,7 @@ func servicesEnabled(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	service, err := ports.NewRESTService(ctx, serviceusage.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(ctx, ports.Credentials{}, serviceusage.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
@@ -307,7 +307,7 @@ func servicesDisabled(t *testing.T, api string) {
 	}
 
 	ctx := context.Background()
-	service, err := ports.NewRESTService(ctx, serviceusage.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(ctx, ports.Credentials{}, serviceusage.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
@@ -454,7 +454,7 @@ func storedPassphrase(t *testing.T, tier environment.Tier) []byte {
 	t.Helper()
 
 	ctx := context.Background()
-	service, err := ports.NewRESTService(ctx, secretmanager.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(ctx, ports.Credentials{}, secretmanager.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
@@ -587,7 +587,7 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 	bootstrap := bootstrapped(t, p, tier)
 
 	ctx := context.Background()
-	secrets, err := ports.NewRESTService(ctx, secretmanager.NewService, endpoint(), "")
+	secrets, err := ports.NewRESTService(ctx, ports.Credentials{}, secretmanager.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
@@ -700,7 +700,7 @@ func TestLiveASecretWithNoVersionInItIsNotPresentAndAReApplyMintsOne(t *testing.
 	bootstrap := bootstrapped(t, p, tier)
 
 	ctx := context.Background()
-	service, err := ports.NewRESTService(ctx, secretmanager.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(ctx, ports.Credentials{}, secretmanager.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
@@ -885,7 +885,7 @@ func TestLiveASharedRowNamesTheSiblingTierInEveryPlanItAppearsIn(t *testing.T) {
 
 func accounts(t *testing.T) *iam.Service {
 	t.Helper()
-	service, err := ports.NewRESTService(context.Background(), iam.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(context.Background(), ports.Credentials{}, iam.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the IAM API: %v", err)
 	}
@@ -930,7 +930,7 @@ func TestLiveRemovingATierBesideItsSiblingForgetsEveryRecordItKeptAndNoneOfTheSi
 func emulatorStorage(t *testing.T) *storage.Client {
 	t.Helper()
 	ctx := context.Background()
-	options, err := ports.NewStorageOptions(ctx, endpoint(), "")
+	options, err := ports.NewStorageOptions(ctx, ports.Credentials{}, endpoint(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,6 +3,7 @@ package albprogram
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -45,6 +46,24 @@ func TestEachProjectsBindingKeepsItsStateUnderAPrefixOfItsOwn(t *testing.T) {
 	if prefixes["shop"] == prefixes["blog"] || prefixes["shop"] == prefixes[""] {
 		t.Errorf("the stacks keep state at %v, want a prefix each: the state backend lists every stack under the prefix "+
 			"it is opened at, so one shared prefix makes every operation cost what the account stores", prefixes)
+	}
+}
+
+func TestTheEngineAuthenticatesWithTheCredentialItIsHandedBesideTheProjectAndRegion(t *testing.T) {
+	t.Parallel()
+
+	stacks := stacking(t)
+	stacks.CredentialEnv = map[string]string{"GOOGLE_APPLICATION_CREDENTIALS": "/run/ocel/google-external-account.json"}
+	clients := googletest.Clients("")
+	config, _ := stacks.config(clients, "ocel-prod-state-k3x9q2", albresources.Stack{Tier: environment.TierProduction}, "secret")
+
+	want := map[string]string{
+		"GOOGLE_PROJECT":                 clients.Project(),
+		"GOOGLE_REGION":                  clients.Region,
+		"GOOGLE_APPLICATION_CREDENTIALS": "/run/ocel/google-external-account.json",
+	}
+	if !maps.Equal(config.Backend.Env, want) {
+		t.Errorf("the engine's env = %v, want %v: the engine reads its credential from its own env, never the process's", config.Backend.Env, want)
 	}
 }
 

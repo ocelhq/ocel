@@ -1,6 +1,7 @@
 package control
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func TestAWebIdentityBecomesTheApplicationDefaultCredentialsExchangingTheTokenFileForTheServiceAccount(t *testing.T) {
+func TestAWebIdentityBecomesTheProvidersOwnCredentialsAndTheEnginesExternalAccountWithoutTouchingTheEnvironment(t *testing.T) {
 	t.Setenv(applicationCredentialsVariable, "")
 	dir := t.TempDir()
 	identity := &provider.WebIdentity{
@@ -19,13 +20,28 @@ func TestAWebIdentityBecomesTheApplicationDefaultCredentialsExchangingTheTokenFi
 		Principal:        "ocel-deploy-production@acme-prod.iam.gserviceaccount.com",
 	}
 
-	if err := useWebIdentity(identity); err != nil {
-		t.Fatalf("useWebIdentity() = %v", err)
+	p, err := New(context.Background(), provider.Settings{Options: provider.Options{"project": "acme-prod", "region": "europe-west1"}, WebIdentity: identity})
+	if err != nil {
+		t.Fatalf("New() = %v", err)
 	}
 
-	path := os.Getenv(applicationCredentialsVariable)
+	if named := os.Getenv(applicationCredentialsVariable); named != "" {
+		t.Errorf("%s = %q after New, want it untouched: a credential in the environment reaches every later session in this process", applicationCredentialsVariable, named)
+	}
+	found, err := p.GoogleCredentials.Find(context.Background())
+	if err != nil {
+		t.Fatalf("GoogleCredentials.Find() = %v", err)
+	}
+	var account struct {
+		Type     string `json:"type"`
+		Audience string `json:"audience"`
+	}
+	if err := json.Unmarshal(found.JSON, &account); err != nil || account.Type != "external_account" || account.Audience != identity.IdentityProvider {
+		t.Errorf("the provider's credentials = %s, want the external account exchanging the web identity", found.JSON)
+	}
+	path := p.WebIdentityEnv()[applicationCredentialsVariable]
 	if filepath.Dir(path) != dir {
-		t.Fatalf("%s = %q, want a file beside the token, which goes when the token does", applicationCredentialsVariable, path)
+		t.Fatalf("WebIdentityEnv()[%s] = %q, want a file beside the token, which goes when the token does", applicationCredentialsVariable, path)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -58,6 +74,16 @@ func TestAWebIdentityBecomesTheApplicationDefaultCredentialsExchangingTheTokenFi
 	}
 	if want := "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/ocel-deploy-production@acme-prod.iam.gserviceaccount.com:generateAccessToken"; written.ServiceAccountImpersonationURL != want {
 		t.Errorf("service_account_impersonation_url = %q, want %q", written.ServiceAccountImpersonationURL, want)
+	}
+}
+
+func TestAProviderHandedNoWebIdentityNamesNoCredentialToItsEngine(t *testing.T) {
+	p, err := New(context.Background(), provider.Settings{Options: provider.Options{"project": "acme-prod", "region": "europe-west1"}})
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+	if env := p.WebIdentityEnv(); env != nil {
+		t.Errorf("WebIdentityEnv() = %v, want none: the engine finds the credentials its environment names", env)
 	}
 }
 

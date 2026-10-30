@@ -67,7 +67,7 @@ func serveFirestore(t *testing.T, server firestorepb.FirestoreServer) string {
 func TestAFirestoreReadIsOneSpanNamingTheDocumentItReads(t *testing.T) {
 	ctx, spans := tracingtest.Record(t)
 	endpoint := serveFirestore(t, missingDocuments{})
-	client, err := firestore.NewClientWithDatabase(context.Background(), "acme", "records", ports.NewGRPCOptions(endpoint, "")...)
+	client, err := firestore.NewClientWithDatabase(context.Background(), "acme", "records", ports.NewGRPCOptions(ports.Credentials{}, endpoint, "")...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func (acceptedWrites) Commit(_ context.Context, asked *firestorepb.CommitRequest
 func TestAFirestoreWriteSpanNamesTheDocumentButNotTheValuesWritten(t *testing.T) {
 	ctx, spans := tracingtest.Record(t)
 	endpoint := serveFirestore(t, acceptedWrites{})
-	client, err := firestore.NewClientWithDatabase(context.Background(), "acme", "records", ports.NewGRPCOptions(endpoint, "")...)
+	client, err := firestore.NewClientWithDatabase(context.Background(), "acme", "records", ports.NewGRPCOptions(ports.Credentials{}, endpoint, "")...)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -75,7 +75,7 @@ func TestLiveARunIsKeptInTheDatabaseItsProjectKeepsItsRecordsInApartFromItsTiers
 		clients.OwnDatabase(scope.Tier, scope.Slug): false,
 		clients.RecordsDatabase(scope.Tier):         false,
 	} {
-		client, err := firestore.NewClientWithDatabase(ctx, clients.Project, database, ports.NewGRPCOptions(clients.Endpoint, "")...)
+		client, err := firestore.NewClientWithDatabase(ctx, clients.Project, database, ports.NewGRPCOptions(ports.Credentials{}, clients.Endpoint, "")...)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -1,12 +1,14 @@
 package control
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const applicationCredentialsVariable = "GOOGLE_APPLICATION_CREDENTIALS"
@@ -36,10 +38,7 @@ type credentialSource struct {
 	File string `json:"file"`
 }
 
-func useWebIdentity(identity *provider.WebIdentity) error {
-	if identity == nil {
-		return nil
-	}
+func (p *Provider) useWebIdentity(ctx context.Context, identity *provider.WebIdentity) error {
 	encoded, err := json.Marshal(externalAccount{
 		Type:                           "external_account",
 		Audience:                       identity.IdentityProvider,
@@ -51,9 +50,23 @@ func useWebIdentity(identity *provider.WebIdentity) error {
 	if err != nil {
 		return err
 	}
+	credentials, err := ports.NewExternalAccountCredentials(ctx, encoded)
+	if err != nil {
+		return fmt.Errorf("read the external account that exchanges the web identity token: %w", err)
+	}
 	path := filepath.Join(filepath.Dir(identity.TokenFile), "google-external-account.json")
 	if err := os.WriteFile(path, encoded, 0o600); err != nil {
 		return fmt.Errorf("write the external account that exchanges the web identity token: %w", err)
 	}
-	return os.Setenv(applicationCredentialsVariable, path)
+	p.GoogleCredentials = credentials
+	p.Tokens = credentials
+	p.externalAccountFile = path
+	return nil
+}
+
+func (p *Provider) WebIdentityEnv() map[string]string {
+	if p.externalAccountFile == "" {
+		return nil
+	}
+	return map[string]string{applicationCredentialsVariable: p.externalAccountFile}
 }
