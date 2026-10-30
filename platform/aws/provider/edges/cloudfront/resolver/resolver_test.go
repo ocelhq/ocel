@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -35,8 +36,9 @@ func minify(t *testing.T) []byte {
 	if !imported {
 		t.Fatalf("src/resolver.js does not start with %q, the import the resolver is minified around", cloudFrontImport)
 	}
-	result := api.Transform(body+"\n"+read("src/gate.js"), api.TransformOptions{
+	result := api.Transform(body+"\n"+read("src/gate.js")+"\nexport { handler };\n", api.TransformOptions{
 		Loader:            api.LoaderJS,
+		Format:            api.FormatESModule,
 		Target:            api.ES2017,
 		Charset:           api.CharsetASCII,
 		MinifyWhitespace:  true,
@@ -46,8 +48,20 @@ func minify(t *testing.T) []byte {
 	if len(result.Errors) > 0 {
 		t.Fatalf("the resolver does not minify: %s", result.Errors[0].Text)
 	}
-	return append([]byte(cloudFrontImport), result.Code...)
+	code := string(result.Code)
+	exported := handlerExport.FindStringSubmatch(code)
+	if exported == nil {
+		t.Fatalf("the minified resolver does not end by exporting handler: %.80q", code[max(0, len(code)-80):])
+	}
+	code = strings.TrimSuffix(code, exported[0])
+	declared := "async function " + exported[1] + "("
+	if strings.Count(code, declared) != 1 || strings.Contains(code, "handler") {
+		t.Fatalf("the minified resolver declares handler as %q, which cannot be renamed back unambiguously", exported[1])
+	}
+	return append([]byte(cloudFrontImport), strings.Replace(code, declared, "async function handler(", 1)...)
 }
+
+var handlerExport = regexp.MustCompile(`export\{(\w+) as handler\};?\n?$`)
 
 func TestTheResolverIsTheMinifiedResolverAndGate(t *testing.T) {
 	want := minify(t)
@@ -67,15 +81,13 @@ func TestTheResolverFitsTheCloudFrontFunctionCodeLimit(t *testing.T) {
 	}
 }
 
-func TestTheResolverKeepsTheNamesCloudFrontAndTheGateLookUp(t *testing.T) {
+func TestTheResolverKeepsTheNameCloudFrontCalls(t *testing.T) {
 	code := string(resolver.Code())
 	if !strings.HasPrefix(code, cloudFrontImport) {
 		t.Errorf("Code() starts %.40q, want the cloudfront import first", code)
 	}
-	for _, name := range []string{"async function handler(", "async function enforceGate(", "async function readKey("} {
-		if !strings.Contains(code, name) {
-			t.Errorf("Code() has no %q: minifying renamed what the runtime or the resolver looks up by name", name)
-		}
+	if !strings.Contains(code, "async function handler(") {
+		t.Errorf("Code() declares no handler: minifying renamed the function CloudFront calls by name")
 	}
 }
 
