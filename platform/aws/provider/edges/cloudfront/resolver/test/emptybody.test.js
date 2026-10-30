@@ -8,12 +8,18 @@ function load() {
   return new Function(`${source}\nreturn handler;`)();
 }
 
-function response(headers = {}, body) {
+function response(headers = {}, body, cookies = {}) {
   const wire = {};
   for (const [name, value] of Object.entries(headers)) wire[name] = { value };
   const answered = { statusCode: 200, statusDescription: "OK", headers: wire };
   if (body !== undefined) answered.body = body;
-  return { response: answered };
+  const jar = {};
+  for (const [name, value] of Object.entries(cookies)) jar[name] = { value };
+  return { request: { method: "GET", uri: "/", headers: {}, cookies: jar }, response: answered };
+}
+
+function header(answered, name) {
+  return answered.headers[name] === undefined ? undefined : answered.headers[name].value;
 }
 
 describe("the empty-body dropper", () => {
@@ -58,5 +64,27 @@ describe("the remapped-header restorer", () => {
 
     expect(answered.headers.connection).toBeUndefined();
     expect(answered.headers["x-amzn-remapped-connection"]).toBeUndefined();
+  });
+});
+
+describe("the cache-control a browser is handed", () => {
+  it("tells a browser to revalidate what the origin let a shared cache keep", () => {
+    for (const stored of ["s-maxage=31536000", "s-maxage=15, stale-while-revalidate=31535985"]) {
+      const answered = load()(response({ "cache-control": stored }));
+
+      expect(header(answered, "cache-control")).toBe("public, max-age=0, must-revalidate");
+    }
+  });
+
+  it("leaves a response no shared cache may keep exactly as the origin sent it", () => {
+    for (const personal of [
+      "private, no-cache, no-store, max-age=0, must-revalidate",
+      "private, s-maxage=60",
+      "public, max-age=31536000, immutable",
+    ]) {
+      const answered = load()(response({ "cache-control": personal }));
+
+      expect(header(answered, "cache-control")).toBe(personal);
+    }
   });
 });
