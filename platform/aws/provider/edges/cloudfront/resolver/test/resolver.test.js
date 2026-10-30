@@ -63,7 +63,16 @@ function request(uri, headers = {}, cookies = {}) {
   for (const [name, value] of Object.entries(headers)) wire[name] = { value };
   const jar = {};
   for (const [name, value] of Object.entries(cookies)) jar[name] = { value };
-  return { request: { method: "GET", uri, querystring: {}, headers: wire, cookies: jar } };
+  return {
+    request: {
+      method: "GET",
+      uri,
+      rawQueryString: () => undefined,
+      querystring: {},
+      headers: wire,
+      cookies: jar,
+    },
+  };
 }
 
 async function resolve(event, entries = { "shop.example.com": ROUTE }, options) {
@@ -301,34 +310,41 @@ describe("the resolver", () => {
 });
 
 describe("the query the resolver hands on", () => {
-  function withQuery(querystring) {
+  function withQuery(raw, parsed) {
     const event = request("/api/probes/echo");
-    for (const [name, value] of Object.entries(querystring)) {
+    for (const [name, value] of Object.entries(parsed)) {
       event.request.querystring[name] = { value };
     }
+    event.request.rawQueryString = () => raw;
     return event;
   }
 
-  it("escapes every % no two hex digits follow, so a function URL decodes the query rather than refusing it", async () => {
-    const { answered } = await resolve(withQuery({ a: "%%URL%%", b: "%zz", c: "100%" }));
+  it("escapes every % no two hex digits follow, in the order the viewer sent, so a function URL decodes the query rather than refusing it", async () => {
+    const event = withQuery("a=%%URL%%&b=%zz&c=100%", { b: "%zz", a: "%%URL%%", c: "100%" });
+
+    const { answered } = await resolve(event);
 
     expect(answered.querystring).toBe("a=%25%25URL%25%25&b=%25zz&c=100%25");
   });
 
   it("keeps every value of a repeated name", async () => {
-    const event = request("/api/probes/echo");
-    event.request.querystring.a = {
-      value: "%zz",
-      multiValue: [{ value: "%zz" }, { value: "%41" }],
-    };
-
-    const { answered } = await resolve(event);
+    const { answered } = await resolve(withQuery("a=%zz&a=%41", { a: "%zz" }));
 
     expect(answered.querystring).toBe("a=%25zz&a=%41");
   });
 
   it("leaves a query every escape of which decodes exactly as the viewer sent it", async () => {
-    const event = withQuery({ a: "caf%C3%A9", b: "100%25" });
+    const event = withQuery("a=caf%C3%A9&b=100%25", { a: "caf%C3%A9", b: "100%25" });
+    const sent = event.request.querystring;
+
+    const { answered } = await resolve(event);
+
+    expect(answered.querystring).toBe(sent);
+  });
+
+  it("leaves a request with no query untouched", async () => {
+    const event = request("/api/probes/echo");
+    event.request.rawQueryString = () => undefined;
     const sent = event.request.querystring;
 
     const { answered } = await resolve(event);

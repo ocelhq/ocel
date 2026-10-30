@@ -92,14 +92,9 @@ function assetOriginPath(prefix) {
   return path === '' ? '' : '/' + path;
 }
 
-function escapedQuery(querystring) {
-  var pairs = [];
-  var names = Object.keys(querystring);
-  for (let i = 0; i < names.length; i++) {
-    const values = valuesOf(querystring[names[i]]);
-    for (let j = 0; j < values.length; j++) pairs.push(names[i] + '=' + values[j]);
-  }
-  var query = pairs.join('&');
+function escapedQuery(request) {
+  var query = request.rawQueryString();
+  if (query === undefined) return null;
   var escaped = query.replace(UNDECODABLE_ESCAPE, '%25');
   return escaped === query ? null : escaped;
 }
@@ -162,10 +157,10 @@ async function handler(event) {
   if (!route || !route.origin || !route.release) return unknownHost();
 
   stripClientControl(request.headers);
-  var query = escapedQuery(request.querystring);
-  if (query !== null) request.querystring = query;
   var refused = await enforceGate(request, route, host);
   if (refused) return refused;
+  var query = escapedQuery(request);
+  if (query !== null) request.querystring = query;
   request.headers[FORWARDED_HOST_HEADER] = { value: host };
   request.headers[CACHE_KEY_HEADER] = {
     value: cacheKey(host, route.release, request.uri, request.headers, request.cookies),

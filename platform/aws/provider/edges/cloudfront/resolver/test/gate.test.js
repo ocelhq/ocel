@@ -109,6 +109,7 @@ function eventFor({ method, host, target, headers }) {
   const request = {
     method,
     uri,
+    rawQueryString: () => query,
     querystring: Object.fromEntries(
       Object.entries(querystring).map(([name, values]) => [name, entryOf(values)]),
     ),
