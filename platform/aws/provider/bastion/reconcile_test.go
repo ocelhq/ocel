@@ -296,3 +296,32 @@ func TestReconcileCreatesTheSecurityGroupWithADescriptionEC2Accepts(t *testing.T
 		}
 	}
 }
+
+func TestReconcileCreatesECSsServiceLinkedRoleBeforeTheClusterInAnAccountThatHasNone(t *testing.T) {
+	t.Parallel()
+
+	account := newAccount()
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
+	}
+
+	linked := slices.Index(account.calls, "CreateServiceLinkedRole ecs.amazonaws.com")
+	cluster := slices.Index(account.calls, "CreateCluster ocel-prod-bastion")
+	if linked < 0 || linked > cluster {
+		t.Errorf("calls = %v, want ECS's service-linked role created before the cluster: a fresh account has none, and RunTask refuses to start a task without it", account.calls)
+	}
+}
+
+func TestReconcileAcceptsECSsServiceLinkedRoleThatAlreadyExists(t *testing.T) {
+	t.Parallel()
+
+	account := newAccount()
+	account.linkedRoles["ecs.amazonaws.com"] = true
+
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() = %v, want the role IAM says is taken accepted as the one ECS needs", err)
+	}
+	if _, made := account.clusters["ocel-prod-bastion"]; !made {
+		t.Error("the cluster was not created")
+	}
+}

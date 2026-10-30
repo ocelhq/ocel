@@ -51,6 +51,7 @@ func (b Bastion) startTask(ctx context.Context, c Clients) (string, error) {
 			AssignPublicIp: ecstypes.AssignPublicIpEnabled,
 		}},
 	}
+	linkedRoleEnsured := false
 	for attempt := 0; ; attempt++ {
 		started, err := c.ECS.RunTask(ctx, input)
 		refused := err
@@ -63,8 +64,16 @@ func (b Bastion) startTask(ctx context.Context, c Clients) (string, error) {
 		if refused == nil {
 			refused = errors.New("ECS started no task")
 		}
-		if !strings.Contains(refused.Error(), roleNotAssumable) || attempt >= maxRoleAttempts {
+		reason := strings.ToLower(refused.Error())
+		linkedRoleMissing := strings.Contains(reason, linkedRoleUnassumable)
+		if !linkedRoleMissing && !strings.Contains(reason, roleNotAssumable) || attempt >= maxRoleAttempts {
 			return "", fmt.Errorf("start a task of %s in cluster %s: %w", b.TaskDefinition, b.Cluster, refused)
+		}
+		if linkedRoleMissing && !linkedRoleEnsured {
+			if err := c.ensureLinkedRole(ctx); err != nil {
+				return "", err
+			}
+			linkedRoleEnsured = true
 		}
 		if err := pause(ctx, attempt); err != nil {
 			return "", err

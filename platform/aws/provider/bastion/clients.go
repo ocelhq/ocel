@@ -32,6 +32,7 @@ type IAMAPI interface {
 	ListRolePolicies(ctx context.Context, in *iam.ListRolePoliciesInput, optFns ...func(*iam.Options)) (*iam.ListRolePoliciesOutput, error)
 	DeleteRolePolicy(ctx context.Context, in *iam.DeleteRolePolicyInput, optFns ...func(*iam.Options)) (*iam.DeleteRolePolicyOutput, error)
 	DeleteRole(ctx context.Context, in *iam.DeleteRoleInput, optFns ...func(*iam.Options)) (*iam.DeleteRoleOutput, error)
+	CreateServiceLinkedRole(ctx context.Context, in *iam.CreateServiceLinkedRoleInput, optFns ...func(*iam.Options)) (*iam.CreateServiceLinkedRoleOutput, error)
 }
 
 type EC2API interface {

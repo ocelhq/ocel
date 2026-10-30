@@ -72,11 +72,13 @@ type account struct {
 	roles        map[string]*role
 	groups       map[string]*securityGroup
 	tasks        map[string]*task
+	linkedRoles  map[string]bool
 
 	calls         []string
 	agentAfter    int
 	describeCalls int
 	runFails      []string
+	runErrors     []error
 	onDescribe    func(*task)
 	groupBusy     int
 	nextID        int
@@ -94,6 +96,7 @@ func newAccount() *account {
 		roles:        map[string]*role{},
 		groups:       map[string]*securityGroup{},
 		tasks:        map[string]*task{},
+		linkedRoles:  map[string]bool{},
 	}
 }
 
@@ -305,6 +308,11 @@ func (a *account) RunTask(_ context.Context, in *ecs.RunTaskInput, _ ...func(*ec
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.record("RunTask")
+	if len(a.runErrors) > 0 {
+		refused := a.runErrors[0]
+		a.runErrors = a.runErrors[1:]
+		return nil, refused
+	}
 	if len(a.runFails) > 0 {
 		reason := a.runFails[0]
 		a.runFails = a.runFails[1:]
@@ -435,6 +443,18 @@ func (a *account) CreateRole(_ context.Context, in *iam.CreateRoleInput, _ ...fu
 	}
 	a.roles[name] = created
 	return &iam.CreateRoleOutput{Role: &iamtypes.Role{RoleName: in.RoleName, Arn: aws.String(created.arn)}}, nil
+}
+
+func (a *account) CreateServiceLinkedRole(_ context.Context, in *iam.CreateServiceLinkedRoleInput, _ ...func(*iam.Options)) (*iam.CreateServiceLinkedRoleOutput, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	service := aws.ToString(in.AWSServiceName)
+	if a.linkedRoles[service] {
+		return nil, &iamtypes.InvalidInputException{Message: aws.String("Service role name AWSServiceRoleForECS has been taken in this account, please try a different suffix.")}
+	}
+	a.record("CreateServiceLinkedRole " + service)
+	a.linkedRoles[service] = true
+	return &iam.CreateServiceLinkedRoleOutput{}, nil
 }
 
 func (a *account) GetRolePolicy(_ context.Context, in *iam.GetRolePolicyInput, _ ...func(*iam.Options)) (*iam.GetRolePolicyOutput, error) {
