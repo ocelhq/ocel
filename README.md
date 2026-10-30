@@ -116,6 +116,13 @@ You can also use ocel cloud for development and hosting previews while keeping p
 - Zero-config deployments. `ocel login` and `ocel deploy` instantly.
 - Zero-setup required. On AWS/GCP, ocel needs to bootstrap for the first time running.
 
+### Why not ‘X’:
+
+- Coolify/Dokploy allow you self host, but they are UI first products, and exclusively VPS/docker focused. `ocel` supports more platforms, with flexibility of changing compute and is CLI first, with a UI
+- SST,Pulumi,Terraform are IaC tools. If all you need is to deploy your app somewhere, you shouldn’t have to write IaC code. Ocel doesn’t try to replace IaC, you can use with Ocel with IaC tools, keeping each where its most needed, Ocel for apps, and IaC for complex infra setups.
+- Encore also allows you to define infra as primitives in code, and deploy to AWS/GCP, but deployments are tightly coupled with their cloud offering. Ocel CLI is standalone and doesn’t need anything else to function. Ocel Cloud itself is built and deployed with Ocel on top of the hyperscalers.
+- Nitric (and Encore), have their own api frameworks you use, Ocel deploys your own existing apps and frameworks
+
 ## Learn more
 
 - [Documentation](https://ocel.dev/docs)
