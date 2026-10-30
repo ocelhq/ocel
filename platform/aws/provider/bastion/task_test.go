@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
+
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 )
 
@@ -100,6 +103,27 @@ func TestRunStartsAgainWhenECSCannotAssumeARoleIAMHasJustCreated(t *testing.T) {
 
 	if calls := account.called("RunTask"); len(calls) != 2 {
 		t.Errorf("RunTask was called %d times, want 2: one refused for the new role, one that started", len(calls))
+	}
+}
+
+func TestRunStartsAgainWhileECSCannotYetAssumeItsServiceLinkedRole(t *testing.T) {
+	t.Parallel()
+
+	account := newAccount()
+	clients, reconciled := readyBastion(t, account)
+	delete(account.linkedRoles, "ecs.amazonaws.com")
+	notYet := &ecstypes.InvalidParameterException{Message: aws.String("Unable to assume the service linked role. Please verify that the ECS service linked role exists.")}
+	account.runErrors = []error{notYet, notYet}
+
+	if _, err := reconciled.Run(context.Background(), clients); err != nil {
+		t.Fatalf("Run() = %v, want it to wait out IAM's propagation of ECS's service-linked role", err)
+	}
+
+	if calls := account.called("RunTask"); len(calls) != 3 {
+		t.Errorf("RunTask was called %d times, want 3: two refused while the role propagates, one that started", len(calls))
+	}
+	if !account.linkedRoles["ecs.amazonaws.com"] {
+		t.Error("Run() did not create ECS's service-linked role that RunTask said is missing")
 	}
 }
 

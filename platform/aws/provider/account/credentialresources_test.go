@@ -113,6 +113,32 @@ func TestEveryCredentialMayCreateElastiCachesLinkedRole(t *testing.T) {
 	}
 }
 
+func TestEveryCredentialMayCreateRDSsLinkedRole(t *testing.T) {
+	want := grant{
+		action:    "iam:CreateServiceLinkedRole",
+		resource:  "arn:aws:iam::*:role/aws-service-role/rds.amazonaws.com/*",
+		condition: conditionJSON(t, iam.LinkedRoleFor("rds.amazonaws.com")),
+	}
+	for purpose, document := range bothCredentials(t) {
+		if !grantsOf(t, document)[want] {
+			t.Errorf("the %s credential cannot create RDS's service-linked role, which the first postgres cluster in an account needs RDS to create", purpose)
+		}
+	}
+}
+
+func TestEveryCredentialMayCreateECSsLinkedRole(t *testing.T) {
+	want := grant{
+		action:    "iam:CreateServiceLinkedRole",
+		resource:  "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*",
+		condition: conditionJSON(t, iam.LinkedRoleFor("ecs.amazonaws.com")),
+	}
+	for purpose, document := range bothCredentials(t) {
+		if !grantsOf(t, document)[want] {
+			t.Errorf("the %s credential cannot create ECS's service-linked role, which the bastion's first task in an account needs", purpose)
+		}
+	}
+}
+
 func TestEveryCredentialReadsWritesAndDeletesTheKVTokensAndNoOtherParameterThatWay(t *testing.T) {
 	for purpose, document := range bothCredentials(t) {
 		tokens := iam.ParameterARNPrefix + defaultNamespace.KVTokenRoot() + "/" + naming.TierWord(tierOf(purpose)) + "/*"

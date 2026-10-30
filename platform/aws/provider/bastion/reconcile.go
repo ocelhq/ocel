@@ -53,6 +53,9 @@ func (c Clients) ensureCluster(ctx context.Context, namespace string, tier envir
 	if err != nil || found {
 		return err
 	}
+	if err := c.ensureLinkedRole(ctx); err != nil {
+		return err
+	}
 	if _, err := c.ECS.CreateCluster(ctx, &ecs.CreateClusterInput{ClusterName: aws.String(name), Tags: ecsTagsFor(namespace, tier)}); err != nil {
 		return fmt.Errorf("create cluster %s: %w", name, err)
 	}

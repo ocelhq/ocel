@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import type { Fetch } from "../../checks/context";
 import { awaitServing } from "./serving";
 
-function clock(timeoutMs: number) {
+function clock(timeoutMs: number, stableMs = 0) {
   let at = 0;
   return {
     timeoutMs,
     intervalMs: 5_000,
+    stableMs,
     now: () => at,
     sleep: async (ms: number) => {
       at += ms;
@@ -129,6 +130,28 @@ describe("awaitServing", () => {
     assert.deepEqual(served, {
       web: { host: "app.example.com", waitedMs: 25_000, attempts: 6, status: 200 },
     });
+  });
+
+  it("takes a 200 as serving only once 200s have answered unbroken for the stable window", async () => {
+    const served = await awaitServing(
+      answering([200, routed(404), 200, 200, 200]),
+      URLS,
+      clock(900_000, 10_000),
+    );
+    assert.deepEqual(served, {
+      web: { host: "app.example.com", waitedMs: 20_000, attempts: 5, status: 200 },
+    });
+  });
+
+  it("gives up at the deadline when edges still disagree about the hostname", async () => {
+    await assert.rejects(
+      awaitServing(answering([200, routed(404), 200, routed(404)]), URLS, clock(15_000, 10_000)),
+      (error: Error) => {
+        assert.match(error.message, /app\.example\.com/);
+        assert.match(error.message, /last status 404/);
+        return true;
+      },
+    );
   });
 
   it("waits for every app in the cell", async () => {
