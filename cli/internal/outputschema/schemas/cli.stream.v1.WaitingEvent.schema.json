@@ -77,7 +77,7 @@
       "additionalProperties": false,
       "properties": {
         "input": {
-          "$ref": "#/$defs/cloud.v1.JobInput.jsonschema.json"
+          "$ref": "#/$defs/runner.v1.JobInput.jsonschema.json"
         },
         "missing": {
           "$ref": "#/$defs/cli.stream.v1.MissingVariables.jsonschema.json"
@@ -90,7 +90,7 @@
       "title": "Waiting Event",
       "type": "object"
     },
-    "cloud.v1.Confirmation.jsonschema.json": {
+    "runner.v1.Confirmation.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
@@ -107,12 +107,12 @@
       "title": "Confirmation",
       "type": "object"
     },
-    "cloud.v1.JobInput.jsonschema.json": {
+    "runner.v1.JobInput.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
         "confirmation": {
-          "$ref": "#/$defs/cloud.v1.Confirmation.jsonschema.json"
+          "$ref": "#/$defs/runner.v1.Confirmation.jsonschema.json"
         },
         "id": {
           "default": "",
@@ -122,7 +122,7 @@
           "type": "string"
         },
         "variables": {
-          "$ref": "#/$defs/cloud.v1.VariablesNeeded.jsonschema.json"
+          "$ref": "#/$defs/runner.v1.VariablesNeeded.jsonschema.json"
         }
       },
       "title": "Job Input",
@@ -160,7 +160,7 @@
         }
       ]
     },
-    "cloud.v1.NeededGroup.jsonschema.json": {
+    "runner.v1.NeededGroup.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
@@ -178,7 +178,7 @@
       "title": "Needed Group",
       "type": "object"
     },
-    "cloud.v1.NeededVariable.jsonschema.json": {
+    "runner.v1.NeededVariable.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
@@ -214,13 +214,13 @@
       "title": "Needed Variable",
       "type": "object"
     },
-    "cloud.v1.VariablesNeeded.jsonschema.json": {
+    "runner.v1.VariablesNeeded.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
         "groups": {
           "items": {
-            "$ref": "#/$defs/cloud.v1.NeededGroup.jsonschema.json"
+            "$ref": "#/$defs/runner.v1.NeededGroup.jsonschema.json"
           },
           "type": "array"
         },
@@ -244,7 +244,7 @@
         },
         "variables": {
           "items": {
-            "$ref": "#/$defs/cloud.v1.NeededVariable.jsonschema.json"
+            "$ref": "#/$defs/runner.v1.NeededVariable.jsonschema.json"
           },
           "minItems": 1,
           "type": "array"

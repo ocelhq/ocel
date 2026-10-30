@@ -70,12 +70,17 @@ func readConsoleTrust(ctx context.Context, invocation commands.Invocation, p com
 	if granted, err := offer(ctx, policy, span, question); err != nil || !granted {
 		return nil, err
 	}
+	namespace, err := provider.NamespaceFromEnv()
+	if err != nil {
+		return nil, err
+	}
 	identity := p.Preflight.Response.GetIdentity()
 	prepared, err := session.client.PrepareTarget(ctx, session.session, &consolev1.PrepareTargetRequest{
 		Vendor:    taken.GetVendor(),
 		Account:   identity.GetAccount(),
 		Region:    identity.GetLocation(),
 		ProjectId: link.ProjectID,
+		Namespace: string(namespace),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("the console prepared no target for account %s: %w", identity.GetAccount(), err)

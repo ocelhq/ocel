@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/consolecredential"
 	"github.com/ocelhq/ocel/cli/internal/githubactions/githubactionstest"
+	"github.com/ocelhq/ocel/cli/internal/jobcontext"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
@@ -86,7 +87,11 @@ func pipeline(t *testing.T, targets *fakeTargets, tokens *githubactionstest.IDTo
 	env := githubactionstest.Env(githubactionstest.ServeIDTokens(t, tokens))
 	env[console.URLEnvVar] = serveTargets(t, targets)
 	env[console.ProjectIDEnvVar] = projectID
-	return consolecredential.Console{Getenv: func(name string) string { return env[name] }, Version: "1.2.3", RefreshFloor: 10 * time.Millisecond}
+	read, err := jobcontext.Read(func(name string) string { return env[name] })
+	if err != nil {
+		t.Fatal(err)
+	}
+	return consolecredential.Console{Context: read, Version: "1.2.3", RefreshFloor: 10 * time.Millisecond}
 }
 
 func production() consolecredential.Request {
@@ -188,16 +193,35 @@ func TestACredentialTheConsoleRefusesStopsWithTheConsolesReason(t *testing.T) {
 	}
 }
 
-func TestOnlyAGitHubActionsRunNamingAConsoleProjectAsksForACredential(t *testing.T) {
-	for name, env := range map[string]map[string]string{
-		"outside GitHub Actions":    {console.ProjectIDEnvVar: projectID},
-		"naming no project":         {"GITHUB_ACTIONS": "true"},
-		"in a run naming a project": {"GITHUB_ACTIONS": "true", console.ProjectIDEnvVar: projectID},
-	} {
-		requested := consolecredential.Console{Getenv: func(n string) string { return env[n] }}.IsRequested()
-		if want := name == "in a run naming a project"; requested != want {
-			t.Errorf("%s: IsRequested() = %v, want %v", name, requested, want)
-		}
+func TestOnlyARunWithAJobContextAsksForACredential(t *testing.T) {
+	if (consolecredential.Console{}).IsRequested() {
+		t.Error("IsRequested() = true with no job context")
+	}
+	if !(consolecredential.Console{Context: &jobcontext.Context{}}).IsRequested() {
+		t.Error("IsRequested() = false with a job context")
+	}
+}
+
+func TestAJobIsIssuedACredentialWithItsJobTokenAsTheBearer(t *testing.T) {
+	targets := &fakeTargets{lifetime: time.Hour}
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte("job-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	job := consolecredential.Console{Version: "1.2.3", Context: &jobcontext.Context{
+		ConsoleURL: serveTargets(t, targets), ProjectID: projectID, Credential: jobcontext.JobToken{File: tokenFile},
+		Job: &jobcontext.Job{ID: "job_1"},
+	}}
+	credential, err := job.Issue(context.Background(), production(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer credential.Close()
+	if sent := targets.issued(); len(sent) != 1 || sent[0].GetProjectId() != projectID || sent[0].GetVendor() != "aws" {
+		t.Errorf("IssueCredential got %v, want the job's project and the vendor", sent)
+	}
+	if targets.bearers[0] != "Bearer job-token" {
+		t.Errorf("Authorization = %q, want the job token", targets.bearers[0])
 	}
 }
 

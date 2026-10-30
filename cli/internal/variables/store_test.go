@@ -1,6 +1,7 @@
 package variables
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -37,4 +38,11 @@ func TestAWriteThatLostAVersionRaceIsAStaleValue(t *testing.T) {
 			t.Errorf("staleValueError(nil) = %v, want nil", err)
 		}
 	})
+}
+
+func TestAStoreForDefinitionsOnlyRevealsNothingAndAsksTheProviderNothing(t *testing.T) {
+	found, err := Store{DefinitionsOnly: true}.Reveal(context.Background(), []Coordinate{{Cell: Cell{Key: "LOG_LEVEL"}}})
+	if err != nil || len(found) != 0 {
+		t.Fatalf("Reveal() = %v, %v, want nothing revealed and no call made", found, err)
+	}
 }

@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 )
 
 const maxAnswerBytes = 64 << 10
@@ -35,30 +35,30 @@ func New(in io.Reader) *Answers {
 }
 
 func (a *Answers) Confirm(ctx context.Context, holder Holder, finding, question string) (bool, error) {
-	answer, err := a.ask(ctx, holder, &streamv1.WaitingEvent{Input: &cloudv1.JobInput{
-		Need: &cloudv1.JobInput_Confirmation{Confirmation: &cloudv1.Confirmation{Finding: finding, Question: question}},
+	answer, err := a.ask(ctx, holder, &streamv1.WaitingEvent{Input: &runnerv1.JobInput{
+		Need: &runnerv1.JobInput_Confirmation{Confirmation: &runnerv1.Confirmation{Finding: finding, Question: question}},
 	}})
 	if err != nil {
 		return false, err
 	}
 	confirmed, ok := answer.GetAnswer().(*streamv1.InputAnswer_Confirmed)
 	if !ok {
-		return false, fmt.Errorf("input %s asks a question, and Ocel Cloud answered it as if it asked for values", answer.GetInputId())
+		return false, fmt.Errorf("input %s asks a question, and the console answered it as if it asked for values", answer.GetInputId())
 	}
 	return confirmed.Confirmed, nil
 }
 
-func (a *Answers) Resolve(ctx context.Context, holder Holder, needed *cloudv1.VariablesNeeded, missing *streamv1.MissingVariables) (bool, error) {
+func (a *Answers) Resolve(ctx context.Context, holder Holder, needed *runnerv1.VariablesNeeded, missing *streamv1.MissingVariables) (bool, error) {
 	answer, err := a.ask(ctx, holder, &streamv1.WaitingEvent{
 		Missing: missing,
-		Input:   &cloudv1.JobInput{Need: &cloudv1.JobInput_Variables{Variables: needed}},
+		Input:   &runnerv1.JobInput{Need: &runnerv1.JobInput_Variables{Variables: needed}},
 	})
 	if err != nil {
 		return false, err
 	}
 	resolved, ok := answer.GetAnswer().(*streamv1.InputAnswer_Resolved)
 	if !ok {
-		return false, fmt.Errorf("input %s asks for values, and Ocel Cloud answered it as if it asked a question", answer.GetInputId())
+		return false, fmt.Errorf("input %s asks for values, and the console answered it as if it asked a question", answer.GetInputId())
 	}
 	return resolved.Resolved, nil
 }
@@ -78,7 +78,7 @@ func (a *Answers) ask(ctx context.Context, holder Holder, waiting *streamv1.Wait
 		resume("the input went unanswered")
 		return nil, err
 	}
-	resume("answered on Ocel Cloud")
+	resume("answered")
 	return answer, nil
 }
 
@@ -93,14 +93,14 @@ func (a *Answers) await(ctx context.Context, id string) (*streamv1.InputAnswer, 
 			return nil, ctx.Err()
 		case line, open := <-a.lines:
 			if !open {
-				return nil, fmt.Errorf("stdin ended before Ocel Cloud answered input %s", id)
+				return nil, fmt.Errorf("stdin ended before the console answered input %s", id)
 			}
 			answer := &streamv1.InputAnswer{}
 			if err := protojson.Unmarshal(line, answer); err != nil {
-				return nil, fmt.Errorf("read Ocel Cloud's answer to input %s from stdin: %w", id, err)
+				return nil, fmt.Errorf("read the console's answer to input %s from stdin: %w", id, err)
 			}
 			if err := protovalidate.Validate(answer); err != nil {
-				return nil, fmt.Errorf("read Ocel Cloud's answer to input %s from stdin: %w", id, err)
+				return nil, fmt.Errorf("read the console's answer to input %s from stdin: %w", id, err)
 			}
 			if answer.GetInputId() == id {
 				return answer, nil

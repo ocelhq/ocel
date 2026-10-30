@@ -133,19 +133,19 @@ func refuseOpened(t target, slug string, resp *contractv1.GetProtectionResponse)
 		t.name(), slug, describeTier(tier, slug), configKey(tier), deployFor(tier), configKey(tier))
 }
 
-func readProtection(ctx context.Context, invocation commands.Invocation, cfg *project.Project, command string, t target, reveal bool) (resp *contractv1.GetProtectionResponse, err error) {
+func readProtection(ctx context.Context, invocation commands.Invocation, cfg *project.Project, command string, t target) (resp *contractv1.GetProtectionResponse, err error) {
 	err = invocation.WithProvider(ctx, cfg, command, openOptions(t.tier()), func(ctx context.Context, p commands.ProviderRun) error {
 		spanCtx, span := p.Check.Child(ctx, cfg.Slug, progress.Reading.Title("the "+t.name()+" protection"))
-		resp, err = getProtection(spanCtx, p, cfg, t.tier(), reveal)
+		resp, err = getProtection(spanCtx, p, cfg, t.tier())
 		span.End(err)
 		return err
 	})
 	return resp, err
 }
 
-func getProtection(ctx context.Context, p commands.ProviderRun, cfg *project.Project, tier environmentv1.Tier, reveal bool) (resp *contractv1.GetProtectionResponse, err error) {
+func getProtection(ctx context.Context, p commands.ProviderRun, cfg *project.Project, tier environmentv1.Tier) (resp *contractv1.GetProtectionResponse, err error) {
 	err = p.Provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		resp, err = client.GetProtection(ctx, &contractv1.GetProtectionRequest{Tier: tier, Slug: cfg.Slug, RevealPassword: reveal, Edge: cfg.EdgeSelection()})
+		resp, err = client.GetProtection(ctx, &contractv1.GetProtectionRequest{Tier: tier, Slug: cfg.Slug, Edge: cfg.EdgeSelection()})
 		return err
 	})
 	return resp, err
@@ -167,7 +167,7 @@ func runStatus(ctx context.Context, invocation commands.Invocation, stdout io.Wr
 	err = invocation.WithProvider(ctx, cfg, "ocel protection", opened, func(ctx context.Context, p commands.ProviderRun) error {
 		for _, tier := range []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW} {
 			spanCtx, span := p.Check.Child(ctx, cfg.Slug, progress.Reading.Title("the "+readiness.TierName(tier)+" protection"))
-			resp, err := getProtection(spanCtx, p, cfg, tier, false)
+			resp, err := getProtection(spanCtx, p, cfg, tier)
 			span.End(err)
 			if err != nil {
 				return err
@@ -209,7 +209,7 @@ func runBypassList(ctx context.Context, invocation commands.Invocation, t target
 	if err := requireProtection(cfg, t); err != nil {
 		return err
 	}
-	resp, err := readProtection(ctx, invocation, cfg, "ocel protection bypass ls", t, false)
+	resp, err := readProtection(ctx, invocation, cfg, "ocel protection bypass ls", t)
 	if err != nil {
 		return err
 	}

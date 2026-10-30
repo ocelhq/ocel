@@ -75,8 +75,9 @@ func discoverVariables(ctx context.Context, cfg *project.Project, provider *prov
 
 func projectDeclarations(cfg *project.Project, provider *providerprocess.Provider, opts envOptions) *variables.Declarations {
 	return variables.NewDeclarations(variables.Store{
-		Provider: provider,
-		Project:  cfg,
-		Tier:     opts.tier(),
+		Provider:        provider,
+		Project:         cfg,
+		Tier:            opts.tier(),
+		DefinitionsOnly: !opts.reveal,
 	}, variables.ScopeOf(cfg, opts.tier(), ""))
 }

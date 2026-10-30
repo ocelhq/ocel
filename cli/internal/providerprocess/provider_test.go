@@ -13,16 +13,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/confirmation"
+
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 )
 
 type recording struct {
@@ -405,7 +407,7 @@ func TestInsideAJobAProvidersQuestionIsPutToOcelCloudAndItsAnswerTakenAsTheTermi
 			fake := newQuestionFake(t, "unknown-host-key")
 			stdin, write := io.Pipe()
 			answerFromTheJob(seen, write, confirmed)
-			p := startFake(t, ctx, "unknown-host-key", span, Questions{IsJSON: func() bool { return true }, Job: jobinput.New(stdin)}, fake.env()...)
+			p := startFake(t, ctx, "unknown-host-key", span, Questions{Respondent: confirmation.Job{Answers: jobinput.New(stdin)}}, fake.env()...)
 
 			_, err := Stream(ctx, p, "Bootstrap", &contractv1.BootstrapRequest{}, contractv1connect.ProviderServiceClient.Bootstrap)
 			switch {
@@ -414,7 +416,7 @@ func TestInsideAJobAProvidersQuestionIsPutToOcelCloudAndItsAnswerTakenAsTheTermi
 			case !confirmed && clierror.NewRunError(err).GetCode() != clierror.CodeConfirmationRequired:
 				t.Fatalf("Stream() error = %v, want %s once Ocel Cloud declined", err, clierror.CodeConfirmationRequired)
 			}
-			var asked *cloudv1.Confirmation
+			var asked *runnerv1.Confirmation
 			for _, event := range seen.received() {
 				if c := event.GetWaiting().GetInput().GetConfirmation(); c != nil {
 					asked = c

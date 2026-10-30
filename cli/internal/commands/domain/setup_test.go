@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/confirmation"
+
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
@@ -53,7 +55,8 @@ func TestTheDomainSetupShowsTheSnippetInTheConfigsOwnFormatAndWaitsForTheEdit(t 
 	} {
 		t.Run(tc.config, func(t *testing.T) {
 			var out bytes.Buffer
-			policy := consent.Policy{Interactive: true, In: strings.NewReader("n\n"), Out: &out}
+			answers := strings.NewReader("n\n")
+			policy := consent.Policy{Interactive: true, In: answers, Out: &out, Respondent: confirmation.OnTerminal(&out, answers)}
 			missing := readiness.NoHostnameError{Slug: "shop", ConfigPath: tc.config}
 			if err := NewSetup().Run(context.Background(), policy, setupSpan(t, nil), missing); !prerequisite.IsDeclined(err) {
 				t.Fatalf("Run err = %v, want the stop reported as a decline", err)
@@ -70,7 +73,8 @@ func TestTheDomainSetupShowsTheSnippetInTheConfigsOwnFormatAndWaitsForTheEdit(t 
 
 func TestADomainSetupStoppedAtTheSnippetIsADecline(t *testing.T) {
 	var out bytes.Buffer
-	policy := consent.Policy{Interactive: true, In: strings.NewReader("n\n"), Out: &out}
+	answers := strings.NewReader("n\n")
+	policy := consent.Policy{Interactive: true, In: answers, Out: &out, Respondent: confirmation.OnTerminal(&out, answers)}
 	err := NewSetup().Run(context.Background(), policy, setupSpan(t, nil), readiness.NoHostnameError{Slug: "shop", ConfigPath: "/code/shop/ocel.json"})
 	if !prerequisite.IsDeclined(err) {
 		t.Errorf("Run err = %v, want the stop reported as a decline", err)
@@ -85,7 +89,8 @@ func TestADomainSetupSaysWhichHostnameItReadOnceTheEditIsSaved(t *testing.T) {
 		}
 	}
 	var out bytes.Buffer
-	policy := consent.Policy{Interactive: true, In: &savingOnRead{save: save, answer: "\n"}, Out: &out}
+	answers := &savingOnRead{save: save, answer: "\n"}
+	policy := consent.Policy{Interactive: true, In: answers, Out: &out, Respondent: confirmation.OnTerminal(&out, answers)}
 	seen := &said{}
 
 	if err := NewSetup().Run(context.Background(), policy, setupSpan(t, seen), readiness.NoHostnameError{Slug: "shop", ConfigPath: config}); err != nil {

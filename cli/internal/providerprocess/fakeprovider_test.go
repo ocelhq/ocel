@@ -30,6 +30,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/provider/spanexport"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
@@ -114,7 +115,7 @@ func runFakeProvider() int {
 		}
 		return 0
 	case "serves":
-		if err := providerserver.Serve(providerserver.Config{Version: fakeProviderVersion(), New: fake.New}); err != nil {
+		if err := providerserver.Serve(providerserver.Config{Version: fakeProviderVersion(), ExportSpans: spanexport.Start, New: fake.New}); err != nil {
 			fmt.Fprintln(os.Stderr, "fake provider:", err)
 			return 1
 		}
@@ -135,7 +136,7 @@ func runFakeProvider() int {
 	}
 
 	if mode == "recorded-step" {
-		if _, _, err := providerserver.ExportSpans(context.Background(), "fake-provider"); err != nil {
+		if _, _, err := spanexport.Start(context.Background(), "fake-provider"); err != nil {
 			fmt.Fprintln(os.Stderr, "fake provider: export spans:", err)
 			return 1
 		}
@@ -211,7 +212,7 @@ func flushSpanOnExit() {
 	signal.Notify(stopping, syscall.SIGTERM, os.Interrupt)
 	<-stopping
 	time.Sleep(time.Second)
-	ctx, stop, err := providerserver.ExportSpans(context.Background(), "fake-provider")
+	ctx, stop, err := spanexport.Start(context.Background(), "fake-provider")
 	if err == nil {
 		_, span := otel.Tracer("fake").Start(ctx, "flushed on exit")
 		span.End()

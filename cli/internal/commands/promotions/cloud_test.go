@@ -36,7 +36,7 @@ func TestPromotionsAndRollbackRunOnOcelCloudThroughTheProviderItServes(t *testin
 		if !strings.Contains(stdout.String(), "promo-2") || len(project.Remote.Calls()) == 0 {
 			t.Fatalf("stdout = %q, want the promotions read from Ocel Cloud", stdout)
 		}
-		requireTokenScopes(t, project.Cloud, "cloud.apps.read")
+		requireTokenScopes(t, project.Cloud, "apps.read")
 	})
 
 	t.Run("promotions prune reclaims on Ocel Cloud", func(t *testing.T) {
@@ -52,7 +52,7 @@ func TestPromotionsAndRollbackRunOnOcelCloudThroughTheProviderItServes(t *testin
 		if err != nil || len(history) != 2 || history[1].PromotionID != "promo-2" {
 			t.Fatalf("history = %+v, err = %v, want promo-1 reclaimed", history, err)
 		}
-		requireTokenScopes(t, project.Cloud, "cloud.apps.read", "cloud.apps.write")
+		requireTokenScopes(t, project.Cloud, "apps.read", "apps.write")
 	})
 
 	t.Run("rollback moves Ocel Cloud's production back", func(t *testing.T) {
@@ -69,7 +69,7 @@ func TestPromotionsAndRollbackRunOnOcelCloudThroughTheProviderItServes(t *testin
 		if err != nil || active.Releases["web"] != "build-2~fp2" {
 			t.Fatalf("production serves %+v, err = %v, want promo-2's builds again", active, err)
 		}
-		requireTokenScopes(t, project.Cloud, "cloud.apps.read", "cloud.apps.write")
+		requireTokenScopes(t, project.Cloud, "apps.read", "apps.write")
 	})
 	t.Run("rollback reports a rollback deployment by the provider Ocel Cloud serves", func(t *testing.T) {
 		project, stdout := onOcelCloud(t)
@@ -83,7 +83,7 @@ func TestPromotionsAndRollbackRunOnOcelCloudThroughTheProviderItServes(t *testin
 		if err := runRollback(context.Background(), invocation, project.Root, rollbackOptions{yes: true}, stdout, &stderr, strings.NewReader("")); err != nil {
 			t.Fatalf("err = %v; stdout=%s stderr=%s", err, stdout, stderr.String())
 		}
-		reports := project.Cloud.ReportedDeployments()
+		reports := project.Cloud.Reports()
 		if len(reports) != 1 || stderr.Len() != 0 {
 			t.Fatalf("the console received %d reports, stderr=%q, want the rollback reported", len(reports), stderr.String())
 		}
@@ -94,7 +94,7 @@ func TestPromotionsAndRollbackRunOnOcelCloudThroughTheProviderItServes(t *testin
 	})
 }
 
-func requireTokenScopes(t *testing.T, cloud *clitest.FakeOcelCloud, want ...string) {
+func requireTokenScopes(t *testing.T, cloud *clitest.FakeConsole, want ...string) {
 	t.Helper()
 	if len(cloud.TokenScopes) == 0 || slices.ContainsFunc(cloud.TokenScopes, func(got []string) bool { return !slices.Equal(got, want) }) {
 		t.Fatalf("tokens issued with scopes %v, want each with exactly %v", cloud.TokenScopes, want)

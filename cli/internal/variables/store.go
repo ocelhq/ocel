@@ -15,9 +15,10 @@ import (
 )
 
 type Store struct {
-	Provider *providerprocess.Provider
-	Project  *project.Project
-	Tier     environmentv1.Tier
+	Provider        *providerprocess.Provider
+	Project         *project.Project
+	Tier            environmentv1.Tier
+	DefinitionsOnly bool
 }
 
 func (s Store) List(ctx context.Context) ([]ValueMetadata, error) {
@@ -60,6 +61,9 @@ func referenceOf(target *variablestorev1.Coordinate) *Reference {
 }
 
 func (s Store) Reveal(ctx context.Context, rows []Coordinate) (map[Coordinate]string, error) {
+	if s.DefinitionsOnly {
+		return map[Coordinate]string{}, nil
+	}
 	named := make([]*variablestorev1.Coordinate, 0, len(rows))
 	for _, row := range rows {
 		named = append(named, s.coordinate(row))

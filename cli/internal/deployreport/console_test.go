@@ -6,17 +6,21 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"buf.build/go/protovalidate"
 	"connectrpc.com/connect"
 	connectvalidate "connectrpc.com/validate"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/githubactions/githubactionstest"
+	"github.com/ocelhq/ocel/cli/internal/jobcontext"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
@@ -25,8 +29,11 @@ import (
 const consoleProjectID = "0199c3a2-5b7e-7c4d-8a1f-2e3d4c5b6a79"
 
 type fakeConsole struct {
+	consolev1connect.UnimplementedDeploymentServiceHandler
+
 	mu      sync.Mutex
 	reports []*consolev1.ReportRequest
+	starts  []*consolev1.StartRequest
 	events  []*consolev1.RecordEnvironmentEventRequest
 	auth    []string
 	answer  error
@@ -48,6 +55,25 @@ func (f *fakeConsole) Report(ctx context.Context, req *consolev1.ReportRequest) 
 		return nil, f.answer
 	}
 	return &consolev1.ReportResponse{}, nil
+}
+
+func (f *fakeConsole) Start(ctx context.Context, req *consolev1.StartRequest) (*consolev1.StartResponse, error) {
+	f.mu.Lock()
+	f.starts = append(f.starts, req)
+	f.mu.Unlock()
+	if f.hang != nil {
+		select {
+		case <-f.hang:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.answer != nil {
+		return nil, f.answer
+	}
+	return &consolev1.StartResponse{}, nil
 }
 
 func (f *fakeConsole) RecordEnvironmentEvent(_ context.Context, req *consolev1.RecordEnvironmentEventRequest) (*consolev1.RecordEnvironmentEventResponse, error) {
@@ -311,9 +337,17 @@ func TestAnUnlinkedTreeThatIsNotLoggedInMakesNoCallAndPrintsNothing(t *testing.T
 
 const pipelineProjectID = "0199c3a2-5b7e-7c4d-8a1f-000000000042"
 
+func readContext(env map[string]string) *jobcontext.Context {
+	read, err := jobcontext.Read(func(name string) string { return env[name] })
+	if err != nil {
+		panic(err)
+	}
+	return read
+}
+
 func trustedPipeline(env map[string]string) Console {
 	return Console{
-		Getenv: func(name string) string { return env[name] },
+		Context: readContext(env),
 		LoadCredentials: func() (console.Credentials, error) {
 			return console.Credentials{}, errors.New("a trusted pipeline must not read the saved login")
 		},
@@ -463,7 +497,7 @@ func TestAGitHubActionsRunNamingNoConsoleProjectReportsWithTheSavedLogin(t *test
 	env := pipelineEnv(apiURL, githubactionstest.ServeIDTokens(t, issuer))
 	delete(env, console.ProjectIDEnvVar)
 	reporting := signedIn(apiURL)
-	reporting.Getenv = func(name string) string { return env[name] }
+	reporting.Context = readContext(env)
 	var stderr bytes.Buffer
 
 	reporting.ReportDeployment(context.Background(), linkedTree(t, apiURL), productionDeployment(), &stderr)
@@ -481,12 +515,78 @@ func TestAProjectIDOutsideGitHubActionsReportsWithTheSavedLogin(t *testing.T) {
 	env := pipelineEnv(apiURL, githubactionstest.ServeIDTokens(t, issuer))
 	delete(env, "GITHUB_ACTIONS")
 	reporting := signedIn(apiURL)
-	reporting.Getenv = func(name string) string { return env[name] }
+	reporting.Context = readContext(env)
 	var stderr bytes.Buffer
 
 	reporting.ReportDeployment(context.Background(), linkedTree(t, apiURL), productionDeployment(), &stderr)
 
 	if len(fake.reports) != 1 || fake.reports[0].GetProjectId() != consoleProjectID || fake.auth[0] != "Bearer tok" || len(issuer.Audiences()) != 0 {
 		t.Errorf("reports %d, auth %q, token requests %d, stderr %q, want the linked project reported with the saved login", len(fake.reports), fake.auth, len(issuer.Audiences()), stderr.String())
+	}
+}
+
+func productionStart() *consolev1.DeploymentStart {
+	attempt := productionAttempt()
+	return attempt.Start()
+}
+
+func TestAnAttemptsStartIsARecordTheConsoleAccepts(t *testing.T) {
+	t.Parallel()
+	start := productionStart()
+	if err := protovalidate.Validate(start); err != nil {
+		t.Fatalf("the start is one the console refuses: %v", err)
+	}
+	if start.GetId() != traceID || start.GetTarget() != targetAccount || start.GetProvider().GetName() != "aws" {
+		t.Fatalf("start = %v, want the run's trace id, its target and its provider", start)
+	}
+}
+
+func TestALinkedTreeReportsTheStartOfItsDeploymentWithTheDeviceSession(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	apiURL := serveConsole(t, fake)
+	signedIn(apiURL).StartDeployment(context.Background(), linkedTree(t, apiURL), productionStart())
+
+	if len(fake.starts) != 1 || fake.starts[0].GetProjectId() != consoleProjectID || fake.auth[0] != "Bearer tok" {
+		t.Fatalf("starts %v, auth %q, want one start of the linked project", fake.starts, fake.auth)
+	}
+}
+
+func TestAJobReportsTheStartOfItsDeploymentWithItsJobToken(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{}
+	apiURL := serveConsole(t, fake)
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte("job-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	job := Console{Context: &jobcontext.Context{ConsoleURL: apiURL, ProjectID: pipelineProjectID, Credential: jobcontext.JobToken{File: tokenFile}}}
+	var stderr bytes.Buffer
+
+	job.StartDeployment(context.Background(), t.TempDir(), productionStart())
+	job.ReportDeployment(context.Background(), t.TempDir(), productionDeployment(), &stderr)
+
+	if len(fake.starts) != 1 || len(fake.reports) != 1 || fake.starts[0].GetProjectId() != pipelineProjectID || stderr.Len() != 0 {
+		t.Fatalf("starts %v, reports %d, stderr %q, want the job's start and report for its project", fake.starts, len(fake.reports), stderr.String())
+	}
+	for _, auth := range fake.auth {
+		if auth != "Bearer job-token" {
+			t.Fatalf("the console saw %q, want the job token", auth)
+		}
+	}
+}
+
+func TestAStartTheConsoleNeverAnswersStopsWhenTheRunIsInterrupted(t *testing.T) {
+	t.Parallel()
+	fake := &fakeConsole{hang: make(chan struct{})}
+	t.Cleanup(func() { close(fake.hang) })
+	apiURL := serveConsole(t, fake)
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+
+	began := time.Now()
+	signedIn(apiURL).StartDeployment(ctx, linkedTree(t, apiURL), productionStart())
+	if waited := time.Since(began); waited > 2*time.Second {
+		t.Fatalf("Start held the run %s after it was interrupted, want it to stop at once", waited)
 	}
 }

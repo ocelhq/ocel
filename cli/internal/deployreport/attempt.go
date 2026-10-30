@@ -55,6 +55,28 @@ func (a *Attempt) Report(finishedAt time.Time, apps []*consolev1.App, succeeded 
 	return nil
 }
 
+func (a *Attempt) Start() *consolev1.DeploymentStart {
+	if a == nil {
+		return nil
+	}
+	start := &consolev1.DeploymentStart{
+		Id:          a.TraceID,
+		Kind:        a.Kind,
+		Environment: a.Environment,
+		Provider:    &consolev1.Provider{Name: a.Provider},
+		Target:      a.Target,
+		StartedAt:   timestamppb.New(a.StartedAt),
+		CliVersion:  version.Version,
+		Trigger:     a.Trigger,
+		Ci:          a.CI,
+		Source:      a.Source,
+	}
+	if kind := a.Project.EdgeKind(); kind != "" {
+		start.Edge = &consolev1.Edge{Kind: string(kind)}
+	}
+	return start
+}
+
 func (a Attempt) deployment(finishedAt time.Time, apps []*consolev1.App) *consolev1.Deployment {
 	if finishedAt.Before(a.StartedAt) {
 		finishedAt = a.StartedAt

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/runner"
+
 	"buf.build/go/protovalidate"
 	"golang.org/x/tools/go/packages"
 
@@ -58,9 +60,17 @@ func TestEveryCodeOcelCloudReportsHasADocsPage(t *testing.T) {
 	}
 }
 
+func TestEveryCodeARunnerReportsHasADocsPage(t *testing.T) {
+	for _, code := range runner.Codes() {
+		if _, err := os.Stat(filepath.Join(errorPagesDir, code+".mdx")); err != nil {
+			t.Errorf("a runner's code %q has no docs page: %v", code, err)
+		}
+	}
+}
+
 func TestEveryDocsPageNamesAPublishedCode(t *testing.T) {
 	published := registeredCodes()
-	for _, code := range clierror.CloudCodes() {
+	for _, code := range append(clierror.CloudCodes(), runner.Codes()...) {
 		published[code] = true
 	}
 	entries, err := os.ReadDir(errorPagesDir)

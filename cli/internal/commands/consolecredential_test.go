@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/consolecredential"
 	"github.com/ocelhq/ocel/cli/internal/githubactions/githubactionstest"
+	"github.com/ocelhq/ocel/cli/internal/jobcontext"
 	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -59,8 +60,18 @@ func newConsoleCredentialRun(t *testing.T) consoleCredentialRun {
 
 func (r consoleCredentialRun) open(t *testing.T) (*contractv1.ConfigureRequest, func(), error) {
 	t.Helper()
+	read, err := jobcontext.Read(func(name string) string { return r.env[name] })
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r.openWith(t, read)
+}
+
+func (r consoleCredentialRun) openWith(t *testing.T, job *jobcontext.Context) (*contractv1.ConfigureRequest, func(), error) {
+	t.Helper()
 	invocation := clitest.NewInvocation()
-	invocation.ConsoleCredential = consolecredential.Console{Getenv: func(name string) string { return r.env[name] }, Version: "1.2.3"}
+	invocation.JobContext = job
+	invocation.ConsoleCredential = consolecredential.Console{Context: job, Version: "1.2.3"}
 	cfg, err := invocation.LoadProject(context.Background(), r.project.Root)
 	if err != nil {
 		t.Fatalf("LoadProject: %v", err)
@@ -113,6 +124,31 @@ func TestAPipelineDeploysWithTheCredentialTheConsoleIssuesForItsTier(t *testing.
 	closeProvider()
 	if _, err := os.Stat(identity.GetTokenFile()); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the token file outlived the provider: %v", err)
+	}
+}
+
+func TestAJobDeploysAProjectNamingAProviderWithTheCredentialItsJobTokenIsIssued(t *testing.T) {
+	run := newConsoleCredentialRun(t)
+	tokenFile := writeJobToken(t, "org:org_1:tier:production:project:p")
+	job := &jobcontext.Context{
+		ConsoleURL: run.console.URL, ProjectID: clitest.FixtureConsoleProjectID, Credential: jobcontext.JobToken{File: tokenFile},
+		Job: &jobcontext.Job{ID: "job_1", Slug: clitest.FixtureSlug, Tier: environmentv1.Tier_TIER_PRODUCTION},
+	}
+
+	configured, closeProvider, err := run.openWith(t, job)
+	defer closeProvider()
+	if err != nil {
+		t.Fatalf("OpenProvider: %v", err)
+	}
+	issued := run.console.IssuedCredentials()
+	if len(issued) != 1 || issued[0].GetVendor() != string(fake.Vendor) || issued[0].GetProjectId() != clitest.FixtureConsoleProjectID {
+		t.Fatalf("IssueCredential got %v, want one request for the job's project", issued)
+	}
+	if bearers := run.console.Bearers(); len(bearers) != 1 || !strings.HasPrefix(bearers[0], "Bearer e30.") {
+		t.Fatalf("the console saw %q, want the job token", bearers)
+	}
+	if configured.GetConfig().GetWebIdentity().GetPrincipal() != "deploy-production" {
+		t.Fatalf("the provider was configured with %v, want the console's credential", configured.GetConfig().GetWebIdentity())
 	}
 }
 
@@ -176,5 +212,37 @@ func TestAPipelineIsRefusedADeployIdentityAnOlderOcelMade(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "the production deploy identity predates this ocel; an admin runs `ocel bootstrap production`") {
 		t.Fatalf("OpenProvider err = %v, want the stale deploy identity refused", err)
+	}
+}
+
+func TestAJobDeploysUnderTheNamespaceTheConsolesTargetWasBootstrappedIn(t *testing.T) {
+	t.Setenv(provider.NamespaceEnvVar, "")
+	run := newConsoleCredentialRun(t)
+	run.console.Credential.Namespace = "team-a"
+
+	_, closeProvider, err := run.open(t)
+	defer closeProvider()
+
+	if err != nil {
+		t.Fatalf("OpenProvider: %v", err)
+	}
+	if spawned := run.project.Requests.SpawnedNamespaces(); len(spawned) != 1 || spawned[0] != "team-a" {
+		t.Errorf("the provider ran under namespaces %q, want the target's team-a", spawned)
+	}
+}
+
+func TestAJobNamingANamespaceOtherThanItsTargetsIsRefused(t *testing.T) {
+	run := newConsoleCredentialRun(t)
+	run.console.Credential.Namespace = "team-a"
+	t.Setenv(provider.NamespaceEnvVar, "team-b")
+
+	_, closeProvider, err := run.open(t)
+	defer closeProvider()
+
+	if err == nil || !strings.Contains(err.Error(), "team-a") || !strings.Contains(err.Error(), "team-b") {
+		t.Fatalf("OpenProvider err = %v, want a refusal naming both namespaces", err)
+	}
+	if spawned := run.project.Requests.SpawnedNamespaces(); len(spawned) != 0 {
+		t.Errorf("the provider ran under namespaces %q, want none started", spawned)
 	}
 }

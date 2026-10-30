@@ -8,8 +8,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/executables"
 	"github.com/ocelhq/ocel/cli/internal/run"
+	"github.com/ocelhq/ocel/pkg/runner"
 )
 
 func mustNewInvocation(t *testing.T, set *flags) commands.Invocation {
@@ -37,30 +37,32 @@ func TestEveryCommandLearnsWhetherTheConsoleOffersOcelCloud(t *testing.T) {
 	}
 }
 
-func TestInsideAnOcelCloudJobNoCommandReadsAConsoleLoginOrAsksForOcelCloud(t *testing.T) {
+func TestInsideAJobNoCommandReadsAConsoleLoginOrAsksForOcelCloudAndEveryOneReportsWithTheJobToken(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "job.json")
-	if err := os.WriteFile(path, []byte(`{"jobId": "job_1", "slug": "shop"}`), 0o600); err != nil {
+	context := `{"jobId": "job_1", "projectId": "0199c3a2-5b7e-7c4d-8a1f-2e3d4c5b6a79", "tier": "TIER_PRODUCTION", "slug": "shop", "consoleUrl": "https://console.example.com", "jobTokenFile": "/workspace/job/token"}`
+	if err := os.WriteFile(path, []byte(context), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(commands.CloudJobContextEnvVar, path)
-	t.Setenv(executables.OverrideEnvVar, t.TempDir())
+	t.Setenv(runner.ContextEnvVar, path)
 	invocation := mustNewInvocation(t, &flags{})
 
-	if invocation.BuilderJob == nil || invocation.BuilderJob.ID != "job_1" || invocation.BuilderJob.Slug != "shop" {
-		t.Fatalf("builder job = %+v, want job_1 for shop", invocation.BuilderJob)
+	if job := invocation.Job(); job == nil || job.ID != "job_1" || job.Slug != "shop" {
+		t.Fatalf("job = %+v, want job_1 for shop", job)
 	}
 	if invocation.Console.LoadCredentials != nil || invocation.CloudOffer != nil {
-		t.Fatal("a command inside an Ocel Cloud job would report to a console or resolve Ocel Cloud again")
+		t.Fatal("a command inside a job would read a console login or resolve Ocel Cloud again")
+	}
+	if invocation.Console.Context != invocation.JobContext || invocation.ConsoleCredential.Context != invocation.JobContext || invocation.Job().Input == nil {
+		t.Fatal("a command inside a job would report to the console or ask it for credentials without its job token, or answer no input")
 	}
 }
 
-func TestInsideAnOcelCloudJobWhoseContextCannotBeReadEveryCommandRefuses(t *testing.T) {
-	t.Setenv(commands.CloudJobContextEnvVar, filepath.Join(t.TempDir(), "missing.json"))
-	t.Setenv(executables.OverrideEnvVar, t.TempDir())
+func TestInsideAJobWhoseContextCannotBeReadEveryCommandRefuses(t *testing.T) {
+	t.Setenv(runner.ContextEnvVar, filepath.Join(t.TempDir(), "missing.json"))
 
 	_, stdout, _ := executeAndReportRoot(t, "--json", "deploy")
 
-	if code := requireOneFailureDocument(t, stdout)["code"]; code != clierror.CodeCloudJobContextInvalid {
-		t.Errorf("error code = %v, want %s", code, clierror.CodeCloudJobContextInvalid)
+	if code := requireOneFailureDocument(t, stdout)["code"]; code != clierror.CodeJobContextInvalid {
+		t.Errorf("error code = %v, want %s", code, clierror.CodeJobContextInvalid)
 	}
 }
