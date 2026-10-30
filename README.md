@@ -108,6 +108,7 @@ The console repo is also open source [here](https://github.com/ocelhq/console).
 ### Ocel Cloud
 
 Ocel offers a managed cloud, intended for small-software, apps that are only intended for few users, not scaling to millions.
+It is invite-only during the alpha: join the waitlist at [ocel.dev](https://ocel.dev/#cloud).
 You can also use ocel cloud for development and hosting previews while keeping production on your own infra. What you get with cloud:
 
 - Managed hosting
