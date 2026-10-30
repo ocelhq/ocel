@@ -26,6 +26,7 @@
     "fumadocs-mdx": "^15.4.0",
     "fumadocs-ui": "^16.15.7",
     "next": "16.3.4",
+    "ocel": "workspace:*",
     "posthog-js": "^1.435.6",
     "react": "catalog:",
     "react-dom": "catalog:",
