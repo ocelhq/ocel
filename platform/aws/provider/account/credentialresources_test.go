@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
-	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 )
 
 func TestEveryCredentialReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppScope(t *testing.T) {
@@ -204,7 +204,7 @@ func TestTheDeployCredentialCreatesTheAppRoleThroughTheDataAPIAndAnOperatorSigns
 		if want := defaultNamespace.Scope(tierOf(name)).AppClusterARN(); !slices.Equal(execute, []string{want}) {
 			t.Errorf("%s grants rds-data:ExecuteStatement on %v, want %s alone, the clusters of its tier in the app scope: the deploy creates each cluster's app role through the Data API", name, execute, want)
 		}
-		if want := []string{"arn:aws:rds-db:*:*:dbuser:*/" + postgres.AppRoleFor(environment.TierProduction), "arn:aws:rds-db:*:*:dbuser:*/" + postgres.AppRoleFor(environment.TierPreview)}; len(connect) != 1 || !slices.Contains(want, connect[0]) {
+		if want := []string{"arn:aws:rds-db:*:*:dbuser:*/" + signin.AppRoleFor(environment.TierProduction), "arn:aws:rds-db:*:*:dbuser:*/" + signin.AppRoleFor(environment.TierPreview)}; len(connect) != 1 || !slices.Contains(want, connect[0]) {
 			t.Errorf("%s grants rds-db:connect on %v, want %s alone: a port forward signs in as the app role, never as the master user", name, connect, want)
 		}
 	}

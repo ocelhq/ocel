@@ -10,6 +10,25 @@ const FormatVersion = "2010-09-09"
 
 const TemplateBodyBytes = 51200
 
+type TemplateSource struct {
+	Body string
+	URL  string
+}
+
+func (s TemplateSource) body() *string {
+	if s.URL != "" {
+		return nil
+	}
+	return &s.Body
+}
+
+func (s TemplateSource) url() *string {
+	if s.URL == "" {
+		return nil
+	}
+	return &s.URL
+}
+
 type Template struct {
 	Description string
 	Parameters  []Parameter

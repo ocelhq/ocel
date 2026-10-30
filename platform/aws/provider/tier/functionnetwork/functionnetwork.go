@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
@@ -16,25 +18,18 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/quotas"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
 
 const (
-	Slug = "ocel-function-network"
-
-	Part    = "function-network"
-	Summary = "a NAT gateway and elastic IP for each zone of the tier's network (one shared in preview) and the routes its private subnets take through them, " +
-		"which every serverless app in the tier that reaches a postgres or kv Ocel provisions runs its functions behind"
-
 	outputKeyPrivateSubnets   = "privateSubnets"
 	outputKeyFunctionSecurity = "functionSecurityGroup"
 	outputKeyClients          = "clientsSecurityGroup"
@@ -51,8 +46,8 @@ const (
 )
 
 var Shared = sharedstack.Stack{
-	Slug:        Slug,
-	Part:        Part,
+	Slug:        sharedparts.FunctionNetworkSlug,
+	Part:        sharedparts.FunctionNetworkPart,
 	Subject:     "function network",
 	Consumer:    "serverless app that reaches a VPC-only resource",
 	Ref:         StackRef,
@@ -98,7 +93,7 @@ func IsNeededForAny(grants []provider.Binding) bool {
 }
 
 func StackRef(tier environment.Tier) provider.StackRef {
-	return provider.StackRef{Project: Slug, Tier: tier, Name: naming.InfraStack(string(tier))}
+	return provider.StackRef{Project: sharedparts.FunctionNetworkSlug, Tier: tier, Name: naming.InfraStack(string(tier))}
 }
 
 func nameFor(namespace string, tier environment.Tier, parts ...string) string {
@@ -107,7 +102,7 @@ func nameFor(namespace string, tier environment.Tier, parts ...string) string {
 
 func projectTags(namespace string, tier environment.Tier) map[string]string {
 	tags := naming.OcelTags(namespace, tier)
-	tags["ocel:project"] = Slug
+	tags["ocel:project"] = sharedparts.FunctionNetworkSlug
 	return tags
 }
 
@@ -136,7 +131,7 @@ func (s *Stacks) Read(ctx context.Context, tier environment.Tier) (Network, bool
 	if err != nil {
 		return Network{}, false, err
 	}
-	_, present, err := stackrecords.Read(ctx, owner.KeyValues, tier, Slug, StackRef(tier).Name)
+	_, present, err := stackrecords.Read(ctx, owner.KeyValues, tier, sharedparts.FunctionNetworkSlug, StackRef(tier).Name)
 	if err != nil || !present {
 		return Network{}, false, err
 	}
@@ -217,7 +212,7 @@ func refuseFullAddresses(ctx context.Context, owner sharedstack.Owner, tier envi
 			others++
 		}
 	}
-	return component.RefuseFullQuota(ctx, owner.Quotas, component.ElasticIPQuota, owner.Region, others, natGateways(tier),
+	return quotas.RefuseFull(ctx, owner.Quotas, quotas.ElasticIP, owner.Region, others, sharedparts.FunctionNetworkNATGateways(tier),
 		"the "+string(tier)+" tier's function network, one elastic IP for each NAT gateway,")
 }
 
@@ -276,7 +271,7 @@ func (s *Stacks) Remove(ctx context.Context, tier environment.Tier, progress pro
 
 func (s *Stacks) provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackRef, patches component.Patches, progress progress.Log) (Network, error) {
 	tier := ref.Tier
-	if err := stackrecords.Write(ctx, owner.KeyValues, tier, Slug, ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, owner.KeyValues, tier, sharedparts.FunctionNetworkSlug, ref.Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
 		WrittenBy: owner.WrittenBy,
 	}); err != nil {
@@ -293,20 +288,13 @@ func (s *Stacks) provision(ctx context.Context, owner sharedstack.Owner, ref pro
 	return decode(outputs)
 }
 
-func natGateways(tier environment.Tier) int {
-	if tier == environment.TierProduction {
-		return network.Zones
-	}
-	return 1
-}
-
 func natName(namespace string, tier environment.Tier, n int) string {
 	return nameFor(namespace, tier, "nat", strconv.Itoa(n+1))
 }
 
 func listResources(namespace string, tier environment.Tier, network Network) []provider.PhysicalResource {
 	var resources []provider.PhysicalResource
-	for n := range natGateways(tier) {
+	for n := range sharedparts.FunctionNetworkNATGateways(tier) {
 		resources = append(resources,
 			provider.PhysicalResource{Kind: "AWS::EC2::NatGateway", ID: natName(namespace, tier, n)},
 			provider.PhysicalResource{Kind: "AWS::EC2::EIP", ID: natName(namespace, tier, n)})
@@ -314,43 +302,11 @@ func listResources(namespace string, tier environment.Tier, network Network) []p
 	return append(resources, provider.PhysicalResource{Kind: "AWS::EC2::SecurityGroup", ID: network.SecurityGroup})
 }
 
-func ReadPart(ctx context.Context, store records.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
-	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, store, tier, Part)
-	if err != nil || !present {
-		return provider.BootstrapPart{}, false, err
-	}
-	users, err := Shared.ListUsers(ctx, store, tier)
-	if err != nil {
-		return provider.BootstrapPart{}, false, err
-	}
-	return provider.BootstrapPart{
-		Name:      Part,
-		Summary:   Summary,
-		Current:   recorded.State == stackrecords.PartReady,
-		Resources: recorded.Resources,
-		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: Shape(tier)},
-
-		RetiresWithLastUser: true,
-	}, true, nil
-}
-
 func RefuseInUse(tier environment.Tier, users []string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
 		"%s still run serverless apps in the function network of the %s tier, and their functions hold network interfaces in its subnets.\n"+
 			"Remove the postgres and kv those apps use and deploy them, or destroy their environments: the last one to leave takes it down",
 		strings.Join(users, ", "), tier)
-}
-
-func Shape(tier environment.Tier) []pricing.Shaped {
-	var shaped []pricing.Shaped
-	for n := range natGateways(tier) {
-		name := Slug + "-" + strconv.Itoa(n+1)
-		shaped = append(shaped,
-			pricing.Shaped{Name: name, Type: component.TerraformNATGateway, Properties: map[string]any{}},
-			pricing.Shaped{Name: name, Type: component.TerraformElasticIP, Properties: map[string]any{}})
-	}
-	return shaped
 }
 
 func (s *Stacks) PlanRepatch(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
@@ -366,7 +322,7 @@ func (s *Stacks) PlanRepatch(ctx context.Context, tier environment.Tier) (*provi
 		Kind:   provider.StackGroupKind,
 		Name:   StackRef(tier).Name.String(),
 		Action: provider.ActionUpdate,
-		Part:   Part,
+		Part:   sharedparts.FunctionNetworkPart,
 		Reason: "the transforms that patch the NAT gateways of the " + string(tier) + " tier differ from the ones they carry, so this deploy provisions the function network again with them, for every project in the tier",
 		Slow:   true,
 	}, nil
@@ -377,8 +333,8 @@ func NewChangeGroup(tier environment.Tier) provider.ChangeGroup {
 		Kind:   provider.StackGroupKind,
 		Name:   StackRef(tier).Name.String(),
 		Action: provider.ActionCreate,
-		Part:   Part,
-		Reason: "the first serverless app in the " + string(tier) + " tier that reaches a VPC-only resource adds the " + Part + " part: " + Summary,
+		Part:   sharedparts.FunctionNetworkPart,
+		Reason: "the first serverless app in the " + string(tier) + " tier that reaches a VPC-only resource adds the " + sharedparts.FunctionNetworkPart + " part: " + sharedparts.FunctionNetworkSummary,
 		Slow:   true,
 	}
 }

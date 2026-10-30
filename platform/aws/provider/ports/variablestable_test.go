@@ -67,7 +67,7 @@ func TestAnEnvSourceRegistrationItsSyncStatusAndItsDigestKeyLiveBesideTheValues(
 		t.Fatalf("Registrations = %+v, %v", listed, err)
 	}
 	sync := &envsource.Sync{Store: variablestore.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}, Tier: environment.TierProduction}
-	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", map[variablestore.Cell]envsource.Value{{Key: "K"}: {Plaintext: []byte("v")}})); err != nil {
+	if _, err := sync.CopyProjectFrom(ctx, registration, "", envsource.NewFixed("exec", map[variablestore.Cell]envsource.Value{{Key: "K"}: {Plaintext: []byte("v")}})); err != nil {
 		t.Fatalf("CopyProjectFrom err = %v", err)
 	}
 

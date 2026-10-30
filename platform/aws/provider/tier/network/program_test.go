@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -60,7 +62,7 @@ func runNetwork(t *testing.T, namespace string, tier environment.Tier) *recorded
 	}
 	program := NewProgram(namespace, tier, "us-east-1", layout, []string{"use1-az1", "use1-az2"}, component.Patches{})
 	cloud := &recorded{}
-	if err := pulumi.RunErr(program.Run, pulumi.WithMocks(Slug, string(tier)+"--infra", cloud)); err != nil {
+	if err := pulumi.RunErr(program.Run, pulumi.WithMocks(sharedparts.NetworkSlug, string(tier)+"--infra", cloud)); err != nil {
 		t.Fatalf("run the network program: %v", err)
 	}
 	return cloud
@@ -167,7 +169,7 @@ func TestOnlyThePublicSubnetsRouteToTheInternetAndTheGatewayEndpointsServeThePub
 		if want := []string{"ocel-preview-network-private-1-id", "ocel-preview-network-private-2-id", "ocel-preview-network-public-id"}; !slices.Equal(served, want) {
 			t.Errorf("endpoint %s serves %v, want %v", name, served, want)
 		}
-		if endpoint["vpcEndpointType"].StringValue() != endpointType {
+		if endpoint["vpcEndpointType"].StringValue() != sharedparts.NetworkEndpointType {
 			t.Errorf("endpoint %s is a %s endpoint, want a free gateway endpoint", name, endpoint["vpcEndpointType"].StringValue())
 		}
 	}

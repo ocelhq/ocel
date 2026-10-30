@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	defaultRuntime = component.LambdaNodeRuntime
+	defaultRuntime = awsports.LambdaNodeRuntime
 
 	pythonRuntime = "python" + arch.PythonVersion
 
@@ -44,8 +44,6 @@ const (
 	nextBundleMemoryMB = 1769
 
 	execWrapper = "/opt/" + providedHandler
-
-	MaxBytes = 200 << 20
 
 	invokeModeStream = "RESPONSE_STREAM"
 
@@ -327,7 +325,7 @@ type Names struct {
 }
 
 func NamesFor(namespace, project string, stack naming.StackName, logicalName string) (Names, error) {
-	function, err := component.PhysicalName(namespace, Coordinate(project, stack, logicalName), component.MaxLambdaNameLen)
+	function, err := Coordinate(project, stack, logicalName).TaggedResourceName(namespace).Fit(component.MaxLambdaNameLen)
 	if err != nil {
 		return Names{}, err
 	}

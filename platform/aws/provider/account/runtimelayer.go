@@ -79,6 +79,18 @@ func runtimeLayerGroupName(ns Namespace, tier environment.Tier) string {
 	return ns.name(tier, "runtime")
 }
 
+func shippedRuntimeLayerDigests() (map[string]string, error) {
+	shipped := make(map[string]string, len(runtimeArches()))
+	for _, architecture := range runtimeArches() {
+		digest, err := payloads.RuntimeLayerSHA256(architecture)
+		if err != nil {
+			return nil, err
+		}
+		shipped[architecture] = digest
+	}
+	return shipped, nil
+}
+
 func shippedRuntimeLayers() (map[string]payloads.Payload, error) {
 	shipped := make(map[string]payloads.Payload, len(runtimeArches()))
 	for _, architecture := range runtimeArches() {
@@ -145,17 +157,17 @@ func recordRuntimeLayer(ctx context.Context, store records.Store, tier environme
 }
 
 func ReadRuntimeLayers(ctx context.Context, layers LayerAPI, ns Namespace, tier environment.Tier) (map[string]string, error) {
-	shipped, err := shippedRuntimeLayers()
+	shipped, err := shippedRuntimeLayerDigests()
 	if err != nil {
 		return nil, err
 	}
 	return readRuntimeLayers(ctx, layers, ns, tier, shipped)
 }
 
-func readRuntimeLayers(ctx context.Context, layers LayerAPI, ns Namespace, tier environment.Tier, shipped map[string]payloads.Payload) (map[string]string, error) {
+func readRuntimeLayers(ctx context.Context, layers LayerAPI, ns Namespace, tier environment.Tier, shipped map[string]string) (map[string]string, error) {
 	published := map[string]string{}
 	for _, architecture := range slices.Sorted(maps.Keys(shipped)) {
-		arn, err := latestLayerVersion(ctx, layers, runtimeLayerName(ns, tier, architecture, shipped[architecture].SHA256))
+		arn, err := latestLayerVersion(ctx, layers, runtimeLayerName(ns, tier, architecture, shipped[architecture]))
 		if err != nil {
 			return nil, err
 		}
@@ -167,14 +179,14 @@ func readRuntimeLayers(ctx context.Context, layers LayerAPI, ns Namespace, tier 
 }
 
 func ReadRuntimeLayersToPlan(ctx context.Context, layers LayerAPI, ns Namespace, tier environment.Tier) (map[string]string, error) {
-	shipped, err := shippedRuntimeLayers()
+	shipped, err := shippedRuntimeLayerDigests()
 	if err != nil {
 		return nil, err
 	}
 	return readRuntimeLayersToPlan(ctx, layers, ns, tier, shipped)
 }
 
-func readRuntimeLayersToPlan(ctx context.Context, layers LayerAPI, ns Namespace, tier environment.Tier, shipped map[string]payloads.Payload) (map[string]string, error) {
+func readRuntimeLayersToPlan(ctx context.Context, layers LayerAPI, ns Namespace, tier environment.Tier, shipped map[string]string) (map[string]string, error) {
 	published, err := readRuntimeLayers(ctx, layers, ns, tier, shipped)
 	if err != nil {
 		return nil, err
@@ -259,7 +271,7 @@ func isLayerNotFound(err error) bool {
 
 func planRuntimeLayers(ctx context.Context, layers LayerAPI, read Reading) provider.ChangeGroup {
 	group := provider.ChangeGroup{Kind: runtimeLayerGroupKind, Name: runtimeLayerGroupName(read.ns, read.tier)}
-	shipped, err := shippedRuntimeLayers()
+	shipped, err := shippedRuntimeLayerDigests()
 	if err != nil {
 		group.Action, group.Reason = provider.ActionKeep, err.Error()
 		return group
@@ -272,7 +284,7 @@ func planRuntimeLayers(ctx context.Context, layers LayerAPI, read Reading) provi
 	for _, architecture := range slices.Sorted(maps.Keys(shipped)) {
 		group.Changes = append(group.Changes, provider.Change{
 			Kind:   runtimeLayerType,
-			Name:   runtimeLayerName(read.ns, read.tier, architecture, shipped[architecture].SHA256),
+			Name:   runtimeLayerName(read.ns, read.tier, architecture, shipped[architecture]),
 			Action: provider.KeepOrCreate(published[architecture] != ""),
 		})
 	}
@@ -363,10 +375,10 @@ func DeleteRuntimeLayers(ctx context.Context, layers LayerTeardownAPI, store rec
 	return records.Forget(ctx, store, runtimeLayersKey(tier))
 }
 
-func ShapeRuntimeLayers() []pricing.Shaped {
-	shaped := make([]pricing.Shaped, 0, len(runtimeArches()))
+func InventoryRuntimeLayers() []pricing.Resource {
+	inventory := make([]pricing.Resource, 0, len(runtimeArches()))
 	for _, architecture := range runtimeArches() {
-		shaped = append(shaped, pricing.Shaped{Name: "RuntimeLayer" + runtimeArchTokens[architecture], Type: shapedTypes[runtimeLayerType].token, Properties: map[string]any{}})
+		inventory = append(inventory, pricing.Resource{Name: "RuntimeLayer" + runtimeArchTokens[architecture], Type: pricedTypes[runtimeLayerType].token, Properties: map[string]any{}})
 	}
-	return shaped
+	return inventory
 }

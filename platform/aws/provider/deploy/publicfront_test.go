@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -146,9 +148,9 @@ func TestTheContainersPartListsAndPricesThePublicFrontAForwardedContainerAppRais
 		t.Fatalf("Provision(behind the public front) = %v", err)
 	}
 
-	part, present, err := containers.ReadPart(ctx, cfg.KeyValues, "ocel", "us-east-1", environment.TierProduction)
+	part, present, err := sharedparts.ReadContainersPart(ctx, cfg.KeyValues, "ocel", "us-east-1", environment.TierProduction)
 	if err != nil || !present {
-		t.Fatalf("containers.ReadPart() = %v, %v, want the containers part", present, err)
+		t.Fatalf("sharedparts.ReadContainersPart() = %v, %v, want the containers part", present, err)
 	}
 	for _, want := range []provider.PhysicalResource{
 		{Kind: "AWS::ElasticLoadBalancingV2::LoadBalancer", ID: "ocel-prod-public", Location: "us-east-1"},
@@ -161,13 +163,13 @@ func TestTheContainersPartListsAndPricesThePublicFrontAForwardedContainerAppRais
 		}
 	}
 	var internal []bool
-	for _, shaped := range part.Shape.Resources {
-		if shaped.Type == "aws_lb" {
-			internal = append(internal, shaped.Properties["internal"].(bool))
+	for _, inventoried := range part.Inventory.Resources {
+		if inventoried.Type == "aws_lb" {
+			internal = append(internal, inventoried.Properties["internal"].(bool))
 		}
 	}
 	if !slices.Contains(internal, false) {
-		t.Errorf("shaped load balancers internal = %v, want the internet-facing one the edge forwards to", internal)
+		t.Errorf("inventoried load balancers internal = %v, want the internet-facing one the edge forwards to", internal)
 	}
 }
 

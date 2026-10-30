@@ -101,7 +101,7 @@ func (c Clients) functions() lambdapart.Clients {
 
 func Digest(spec Spec) string {
 	sum := sha256.Sum256([]byte(strings.Join([]string{
-		payloads.ImageOptimizer().SHA256, spec.Namespace, string(spec.Tier), spec.Region, spec.Boundary, spec.RolePath, spec.EdgeBucket, spec.EdgeBucketARN,
+		payloads.ImageOptimizerSHA256(), spec.Namespace, string(spec.Tier), spec.Region, spec.Boundary, spec.RolePath, spec.EdgeBucket, spec.EdgeBucketARN,
 	}, "\n")))
 	return hex.EncodeToString(sum[:])
 }
@@ -225,9 +225,9 @@ func Remove(ctx context.Context, c Clients, namespace string, tier environment.T
 	return lambdapart.RemoveRole(ctx, c.IAM, names.Role)
 }
 
-func Shape(namespace string, tier environment.Tier) []pricing.Shaped {
+func Inventory(namespace string, tier environment.Tier) []pricing.Resource {
 	names := NamesFor(namespace, tier)
-	return []pricing.Shaped{
+	return []pricing.Resource{
 		{Name: names.Function, Type: "aws_lambda_function", Properties: map[string]any{
 			"runtime": runtime, "memory_size": memoryMB, "timeout": timeoutSeconds, "architectures": []any{architecture},
 		}},

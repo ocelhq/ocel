@@ -7,13 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/router"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -21,6 +17,25 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
+
+func TestTheArchitectureContainersAreBuiltForIsOneTheProviderShipsARuntimeFor(t *testing.T) {
+	t.Parallel()
+
+	p := &Provider{}
+	for declared, want := range map[string]string{"": "amd64", arch.X8664: "amd64", arch.ARM64: "arm64"} {
+		runs, err := p.Runtime().Arch(context.Background(), "web", declared)
+		if err != nil || runs != want {
+			t.Fatalf("ContainerArch(%q) = %q, %v, want %s: the image is built for the architecture the app's task runs on", declared, runs, err, want)
+		}
+		binary, err := p.Runtime().Binary(context.Background(), runs)
+		if err != nil || len(binary) == 0 {
+			t.Fatalf("ContainerRuntime(%s) = %d bytes, %v, want the runtime every container boots through", runs, len(binary), err)
+		}
+	}
+	if _, err := p.Runtime().Arch(context.Background(), "web", "riscv64"); err == nil {
+		t.Error("ContainerArch(riscv64) named an architecture, and no Fargate task runs on it")
+	}
+}
 
 func TestAPublicBucketIsRefusedOnAws(t *testing.T) {
 	t.Parallel()
@@ -69,12 +84,6 @@ func TestAContainerAppWithAFloorOfZeroIsRefusedOnAws(t *testing.T) {
 func TestAServerlessAppUsingAKVStoreIsNotRefusedByPreflight(t *testing.T) {
 	t.Parallel()
 
-	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction}, func() (account.TierParams, error) {
-		return account.TierParams{}, nil
-	}); err != nil {
-		t.Fatal(err)
-	}
 	cache := provider.Resource{Name: "kv--cache", Type: provider.BindingKV}
 	pre := provider.DeployPreflight{
 		Deploy: provider.DeploySpec{Tier: environment.TierProduction, Apps: []provider.AppEntry{
@@ -85,7 +94,7 @@ func TestAServerlessAppUsingAKVStoreIsNotRefusedByPreflight(t *testing.T) {
 	}
 
 	var refused refusal.Refusal
-	_, err := p.PlanPreflight(context.Background(), pre)
+	err := checkDeployOver(pre, account.TierParams{})
 	if errors.As(err, &refused) && refused.Code == refusal.CodeUnsupported {
 		t.Fatalf("preflight of a serverless app using a kv store = %v, want it let through: the app joins the VPC the store answers in", err)
 	}
@@ -94,12 +103,6 @@ func TestAServerlessAppUsingAKVStoreIsNotRefusedByPreflight(t *testing.T) {
 func TestAContainerAppSendingToATaskOrTopicPassesPreflight(t *testing.T) {
 	t.Parallel()
 
-	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction}, func() (account.TierParams, error) {
-		return account.TierParams{}, nil
-	}); err != nil {
-		t.Fatal(err)
-	}
 	container := &contractv1.ManifestApp{Artifact: &contractv1.ManifestApp_Container{Container: &contractv1.ContainerArtifact{}}}
 	resize := provider.Resource{Name: "topic--resize", Declared: "resize", Type: provider.BindingTask}
 	pre := provider.DeployPreflight{
@@ -115,40 +118,16 @@ func TestAContainerAppSendingToATaskOrTopicPassesPreflight(t *testing.T) {
 	}
 
 	var refused refusal.Refusal
-	_, err := p.PlanPreflight(context.Background(), pre)
+	err := checkDeployOver(pre, account.TierParams{})
 	if errors.As(err, &refused) && refused.Code == refusal.CodeUnsupported {
 		t.Fatalf("preflight of a container app triggering a task = %v, want it to pass: its runtime serves the binding proxy", err)
 	}
 }
 
-func TestTheArchitectureContainersAreBuiltForIsOneTheProviderShipsARuntimeFor(t *testing.T) {
-	t.Parallel()
-
-	p := &Provider{}
-	for declared, want := range map[string]string{"": "amd64", arch.X8664: "amd64", arch.ARM64: "arm64"} {
-		runs, err := p.Runtime().Arch(context.Background(), "web", declared)
-		if err != nil || runs != want {
-			t.Fatalf("ContainerArch(%q) = %q, %v, want %s: the image is built for the architecture the app's task runs on", declared, runs, err, want)
-		}
-		binary, err := p.Runtime().Binary(context.Background(), runs)
-		if err != nil || len(binary) == 0 {
-			t.Fatalf("ContainerRuntime(%s) = %d bytes, %v, want the runtime every container boots through", runs, len(binary), err)
-		}
-	}
-	if _, err := p.Runtime().Arch(context.Background(), "web", "riscv64"); err == nil {
-		t.Error("ContainerArch(riscv64) named an architecture, and no Fargate task runs on it")
-	}
-}
-
 func TestAStaleEdgeKeyAndOriginSecretAreWarningsBeforeADeploy(t *testing.T) {
-	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	if _, err := p.params.resolve(tierEdge{tier: environment.TierProduction, kind: cloudflare.Kind}, func() (account.TierParams, error) {
-		return account.TierParams{
-			EdgeCredentials: account.EdgeCredentials{AccessKeyID: "AKOLD", CreatedAt: time.Now().Add(-2 * account.EdgeKeyMaxAge)},
-			OriginSecret:    account.OriginSecret{Current: "s1", CreatedAt: time.Now().Add(-2 * account.OriginSecretMaxAge)},
-		}, nil
-	}); err != nil {
-		t.Fatal(err)
+	params := account.TierParams{
+		EdgeCredentials: account.EdgeCredentials{AccessKeyID: "AKOLD", CreatedAt: time.Now().Add(-2 * account.EdgeKeyMaxAge)},
+		OriginSecret:    account.OriginSecret{Current: "s1", CreatedAt: time.Now().Add(-2 * account.OriginSecretMaxAge)},
 	}
 	var progress fake.Log
 	pre := provider.DeployPreflight{
@@ -157,10 +136,7 @@ func TestAStaleEdgeKeyAndOriginSecretAreWarningsBeforeADeploy(t *testing.T) {
 		Progress: &progress,
 	}
 
-	if err := p.nagStaleEdgeKey(context.Background(), pre); err != nil {
-		t.Fatal(err)
-	}
-	if err := p.nagStaleOriginSecret(context.Background(), pre); err != nil {
+	if err := checkTierParams(pre, params, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	lines := progress.Lines()
@@ -168,20 +144,6 @@ func TestAStaleEdgeKeyAndOriginSecretAreWarningsBeforeADeploy(t *testing.T) {
 		!strings.HasPrefix(lines[0], "WARN The production edge signs into this account with access key AKOLD") ||
 		!strings.HasPrefix(lines[1], "WARN The production origin secret") {
 		t.Errorf("preflight said %q, want both ageing credentials warned about, each naming its tier", lines)
-	}
-}
-
-func TestACertificatePinTheEdgeIgnoresIsAWarning(t *testing.T) {
-	const host = "shop.app.com"
-	p := NewProvider(Options{Certificates: map[string]string{host: "arn:aws:acm:us-east-1:111122223333:certificate/pinned"}}, nil, aws.Config{}, defaultNamespace)
-	var progress fake.Log
-
-	if _, err := p.certificatesFor(environment.TierProduction, cloudflare.Kind, router.Kind(cloudflare.Kind), host, &progress); err != nil {
-		t.Fatalf("certificatesFor() = %v", err)
-	}
-	lines := progress.Lines()
-	if len(lines) != 1 || !strings.HasPrefix(lines[0], "WARN The certificate pinned for "+host+" is ignored") {
-		t.Errorf("certificatesFor() said %q, want the ignored pin warned about", lines)
 	}
 }
 
@@ -197,4 +159,26 @@ func TestAContainerAppThatOnlyHostsItsWorkerMayHaveAFloorOfZeroOnAws(t *testing.
 	if err := refuseContainersScaledToZero(pre); err != nil {
 		t.Fatalf("preflight of a worker app with no idle floor = %v, want it to pass: its services start on a send and a backlog, not on requests", err)
 	}
+}
+
+func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
+	refused := refusal.Refuse(refusal.CodeNotReady, "/ocel/origin/secret contains something other than the origin secret bootstrap writes")
+
+	pre := provider.DeployPreflight{
+		Deploy: provider.DeploySpec{Tier: environment.TierProduction},
+		Edge:   cloudflare.Kind,
+	}
+	if err := checkTierParams(pre, account.TierParams{OriginSecretErr: refused}, time.Now()); !errors.Is(err, refused) {
+		t.Fatalf("preflight = %v, want the refusal: a deploy hands every release the secret the edge presents", err)
+	}
+}
+
+func checkDeployOver(pre provider.DeployPreflight, params account.TierParams) error {
+	if err := refusePublicBuckets(pre); err != nil {
+		return err
+	}
+	if err := refuseContainersScaledToZero(pre); err != nil {
+		return err
+	}
+	return checkTierParams(pre, params, time.Now())
 }

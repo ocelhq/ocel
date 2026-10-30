@@ -69,14 +69,14 @@ func NamesFor(namespace string, tier environment.Tier) Names {
 
 func Digest(spec Spec) string {
 	sum := sha256.Sum256([]byte(strings.Join([]string{
-		payloads.EnvSourceSync().SHA256, spec.Namespace, string(spec.Tier), spec.Region, spec.Boundary, spec.RolePath, spec.Table, spec.TableARN, spec.Key,
+		payloads.EnvSourceSyncSHA256(), spec.Namespace, string(spec.Tier), spec.Region, spec.Boundary, spec.RolePath, spec.Table, spec.TableARN, spec.Key,
 	}, "\n")))
 	return hex.EncodeToString(sum[:])
 }
 
-func Shape(namespace string, tier environment.Tier) []pricing.Shaped {
+func Inventory(namespace string, tier environment.Tier) []pricing.Resource {
 	names := NamesFor(namespace, tier)
-	return []pricing.Shaped{
+	return []pricing.Resource{
 		{Name: names.Function, Type: "aws_lambda_function", Properties: map[string]any{
 			"runtime": runtime, "memory_size": memoryMB, "timeout": timeoutSeconds, "architectures": []any{architecture},
 		}},

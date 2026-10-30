@@ -13,20 +13,15 @@ import (
 	rdsdatatypes "github.com/aws/aws-sdk-go-v2/service/rdsdata/types"
 	"github.com/pulumi/pulumi-go-provider/infer"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-
-	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 const (
-	appRolePrefix = "ocel_app_"
-	RoleToken     = "ocel:index:PostgresRole"
+	RoleToken = "ocel:index:PostgresRole"
 
 	resumeAttempts  = 10
 	resumeBaseDelay = 2 * time.Second
 	resumeMaxDelay  = 20 * time.Second
 )
-
-func AppRoleFor(tier environment.Tier) string { return appRolePrefix + string(tier) }
 
 type StatementsAPI interface {
 	ExecuteStatement(ctx context.Context, in *rdsdata.ExecuteStatementInput, optFns ...func(*rdsdata.Options)) (*rdsdata.ExecuteStatementOutput, error)

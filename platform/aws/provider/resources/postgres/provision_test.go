@@ -5,13 +5,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 )
 
 func TestPostgresRefusesAClusterWithNoManagedSecret(t *testing.T) {
@@ -263,8 +265,8 @@ func TestAClusterLetsItsAppRoleSignInByIAMAndTheDeployCreateItThroughTheDataAPI(
 		t.Error("enableHttpEndpoint = false, want true: the deploy creates the app role through the Data API, from outside the VPC")
 	}
 	role := rec.InputsOf(t, RoleToken, testCluster+"/app-role")
-	if role["role"].StringValue() != AppRoleFor(environment.TierProduction) || role["database"].StringValue() != postgresDatabaseName {
-		t.Errorf("app role inputs = %v, want %s on the %s database", role, AppRoleFor(environment.TierProduction), postgresDatabaseName)
+	if role["role"].StringValue() != signin.AppRoleFor(environment.TierProduction) || role["database"].StringValue() != postgresDatabaseName {
+		t.Errorf("app role inputs = %v, want %s on the %s database", role, signin.AppRoleFor(environment.TierProduction), postgresDatabaseName)
 	}
 	if got := role["secret"].StringValue(); got != "arn:aws:secretsmanager:eu-west-1:111122223333:secret:db-main" {
 		t.Errorf("app role secret = %q, want the cluster's managed master secret: only the deploy signs in as master", got)

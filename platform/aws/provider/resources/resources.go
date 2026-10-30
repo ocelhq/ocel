@@ -1,7 +1,6 @@
 package resources
 
 import (
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
@@ -28,5 +27,3 @@ func Registry(c Clients) component.Registry {
 		realtime.New(c.Artifacts, c.SigningKeys),
 	)
 }
-
-func Types() []provider.BindingType { return Registry(Clients{}).Types() }

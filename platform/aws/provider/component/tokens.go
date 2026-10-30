@@ -26,37 +26,3 @@ const (
 	TokenAppSyncAPI                  = "aws:appsync/api:Api"
 	TokenAppSyncChannelNamespace     = "aws:appsync/channelNamespace:ChannelNamespace"
 )
-
-const (
-	TerraformLambdaFunction              = "aws_lambda_function"
-	TerraformSecurityGroup               = "aws_security_group"
-	TerraformLambdaFunctionURL           = "aws_lambda_function_url"
-	TerraformLogGroup                    = "aws_cloudwatch_log_group"
-	TerraformAppSyncAPI                  = "aws_appsync_api"
-	TerraformS3Bucket                    = "aws_s3_bucket"
-	TerraformRDSCluster                  = "aws_rds_cluster"
-	TerraformRDSClusterInstance          = "aws_rds_cluster_instance"
-	TerraformSecret                      = "aws_secretsmanager_secret"
-	TerraformECSCluster                  = "aws_ecs_cluster"
-	TerraformECSTaskDefinition           = "aws_ecs_task_definition"
-	TerraformECSService                  = "aws_ecs_service"
-	TerraformLoadBalancer                = "aws_lb"
-	TerraformNATGateway                  = "aws_nat_gateway"
-	TerraformElasticIP                   = "aws_eip"
-	TerraformVPC                         = "aws_vpc"
-	TerraformSubnet                      = "aws_subnet"
-	TerraformInternetGateway             = "aws_internet_gateway"
-	TerraformVPCEndpoint                 = "aws_vpc_endpoint"
-	TerraformECRRepository               = "aws_ecr_repository"
-	TerraformElastiCacheReplicationGroup = "aws_elasticache_replication_group"
-	TerraformElastiCacheParameterGroup   = "aws_elasticache_parameter_group"
-	TerraformElastiCacheSubnetGroup      = "aws_elasticache_subnet_group"
-	TerraformSSMParameter                = "aws_ssm_parameter"
-	TerraformSQSQueue                    = "aws_sqs_queue"
-	TerraformSNSTopic                    = "aws_sns_topic"
-	TerraformEventSourceMapping          = "aws_lambda_event_source_mapping"
-	TerraformSchedulerSchedule           = "aws_scheduler_schedule"
-	TerraformMetricAlarm                 = "aws_cloudwatch_metric_alarm"
-	LambdaDefaultMemoryMB                = 128
-	LambdaDefaultEphemeralMB             = 512
-)
