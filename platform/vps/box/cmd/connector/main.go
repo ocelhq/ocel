@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
-	"github.com/ocelhq/ocel/pkg/connectorserver"
+	"github.com/ocelhq/ocel/pkg/endpoint"
+	"github.com/ocelhq/ocel/pkg/providerhost"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 	"github.com/ocelhq/ocel/platform/vps/box/recordstore"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
@@ -15,7 +18,7 @@ var version = "dev"
 
 func main() {
 	listen := flag.String("listen", "unix://"+boxapi.ConnectorSocket, "address to serve on, as unix://<path> or host:port")
-	config := flag.String("config", os.Getenv("OCEL_CONNECTOR_CONFIG"), "path to the connector config")
+	config := flag.String("config", os.Getenv("OCEL_CONNECTOR_CONFIG"), "path to the endpoint config")
 	printing := flag.Bool("print-public-key", false, "print the connector's public key, creating it if absent, and exit")
 	reporting := flag.Bool("version", false, "print the version of this connector and exit")
 	flag.Parse()
@@ -32,7 +35,7 @@ func run(listen, config string, printing, reporting bool) error {
 		return nil
 	}
 	if printing {
-		key, err := connectorserver.PublicKey(config)
+		key, err := endpoint.EnsurePublicKey(config)
 		if err != nil {
 			return err
 		}
@@ -40,7 +43,7 @@ func run(listen, config string, printing, reporting bool) error {
 		return nil
 	}
 
-	trust, err := connectorserver.ReadConfig(config)
+	trust, err := endpoint.ReadConfig(config)
 	if err != nil {
 		return err
 	}
@@ -48,15 +51,43 @@ func run(listen, config string, printing, reporting bool) error {
 		return fmt.Errorf("%s names no target ssh host key fingerprint\nReinstall the connector to write it", config)
 	}
 
-	return connectorserver.Serve(connectorserver.Spec{
+	served, err := readRoles(installedBoxFiles(), trust, os.Stderr)
+	if err != nil {
+		return err
+	}
+	if served.trust != nil {
+		trust.Credentials = served.trust
+	}
+	if served.runner != nil {
+		sweeping, stop := context.WithCancel(context.Background())
+		defer stop()
+		defer served.runner.Close()
+		go served.runner.SweepEvery(sweeping, sweepInterval)
+	}
+
+	control, err := providerhost.New(controlHost(installedControlBox()))
+	if err != nil {
+		return err
+	}
+	defer control.Close()
+	serving := append([]endpoint.Mount{variablesMount(boxapi.StateRoot)}, served.mounts()...)
+	serving = append(serving, control.Mounts()...)
+
+	return endpoint.Serve(endpoint.Spec{
 		Config:     trust,
 		Version:    version,
 		Vendor:     "vps",
 		Addr:       listen,
 		ConfigPath: config,
-		VariableStore: variablestoreserver.Backend{
-			KeyValues: recordstore.KeyValues{Root: boxapi.StateRoot},
-			Cipher:    newAgentCipher(),
-		},
+		Mounts:     serving,
+	})
+}
+
+const sweepInterval = time.Minute
+
+func variablesMount(root string) endpoint.Mount {
+	return endpoint.VariablesMount(variablestoreserver.FixedBackend{
+		KeyValues: recordstore.KeyValues{Root: root},
+		Cipher:    newAgentCipher(),
 	})
 }

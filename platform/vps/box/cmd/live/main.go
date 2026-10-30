@@ -45,6 +45,9 @@ func run(argv []string, errs *os.File) int {
 	if len(argv) > 0 && argv[0] == boxapi.PinCommand {
 		return pinCommand(argv[1:], os.Stdout, errs)
 	}
+	if len(argv) > 0 && argv[0] == boxapi.SignCommand {
+		return signCommand(argv[1:], os.Stdin, os.Stdout, errs)
+	}
 	if len(argv) > 0 && argv[0] == boxapi.RecordsCommand {
 		return recordsCommand(argv[1:], os.Stdin, os.Stdout, errs)
 	}
