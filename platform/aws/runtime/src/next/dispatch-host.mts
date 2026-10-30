@@ -56,12 +56,27 @@ function carryVary(response: Response): Response {
   return carried;
 }
 
+function overHttps(request: Request): Request {
+  const url = new URL(request.url);
+  if (url.protocol === "https:") return request;
+  url.protocol = "https:";
+  const init: RequestInit & { duplex?: "half" } = {
+    method: request.method,
+    headers: request.headers,
+    body: request.body,
+    redirect: request.redirect,
+    signal: request.signal,
+    ...(request.body === null ? {} : { duplex: "half" as const }),
+  };
+  return new Request(url, init);
+}
+
 export async function dispatchForAws(
   request: Request,
   host: DispatchHost,
   waitUntil: (promise: Promise<unknown>) => void,
 ): Promise<Response> {
-  const response = await dispatchRequest(request, host, waitUntil);
+  const response = await dispatchRequest(overHttps(request), host, waitUntil);
   return host.routerKind === cloudFrontRouterKind ? carryVary(response) : response;
 }
 

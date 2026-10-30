@@ -146,6 +146,24 @@ test("a response to any other edge keeps its Vary", async () => {
   expect(response.headers.get("x-ocel-vary")).toBeNull();
 });
 
+test("the app behind an origin dispatch is told https, which is all a function URL answers", async () => {
+  const heard: Request[] = [];
+  const capturing = (async (input: Request) => {
+    heard.push(new Request(input));
+    return new Response("sibling", { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await dispatchForAws(
+    new Request("http://app.example/sibling", { method: "POST", body: "form" }),
+    { ...host(), originFetch: capturing },
+    () => {},
+  );
+
+  expect(heard).toHaveLength(1);
+  expect(heard[0]!.headers.get("x-forwarded-proto")).toBe("https");
+  expect(await heard[0]!.text()).toBe("form");
+});
+
 test("only the loopback origin goes unsigned", () => {
   expect(isLoopback("http://127.0.0.1:8080/page")).toBe(true);
 
