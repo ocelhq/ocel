@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, Copy } from "@phosphor-icons/react";
 import { useState } from "react";
 
 export function CopyCommand({ command }: { command: string }) {
@@ -17,15 +18,22 @@ export function CopyCommand({ command }: { command: string }) {
     <button
       type="button"
       onClick={copy}
-      className="group flex w-full min-w-0 items-start justify-between gap-3 border-[1.5px] border-foreground bg-background px-3 py-2.5 text-left font-mono text-[13px] text-foreground transition-colors hover:bg-muted"
+      aria-label={copied ? "Copied" : `Copy ${command}`}
+      className="group flex w-full min-w-0 items-center justify-between gap-3 border-[1.5px] border-foreground bg-background px-3 py-2.5 text-left font-mono text-[13px] text-foreground transition-colors hover:bg-muted"
     >
       <span className="min-w-0 break-words">
         <span className="text-muted-foreground select-none">$ </span>
         {command}
       </span>
-      <span className="shrink-0 text-[11px] tracking-[0.14em] text-muted-foreground uppercase group-hover:text-foreground">
-        {copied ? "Copied" : "Copy"}
-      </span>
+      {copied ? (
+        <Check aria-hidden size={16} className="shrink-0 text-go" />
+      ) : (
+        <Copy
+          aria-hidden
+          size={16}
+          className="shrink-0 text-muted-foreground group-hover:text-foreground"
+        />
+      )}
     </button>
   );
 }
