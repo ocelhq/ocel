@@ -1,4 +1,4 @@
-package connectorserver
+package endpoint
 
 import (
 	"crypto/ed25519"
@@ -17,39 +17,39 @@ type Identity struct {
 
 func LoadOrCreateIdentity(path string) (Identity, error) {
 	if path == "" {
-		return Identity{}, errors.New("connectorserver: no key path, so this connector can have no identity")
+		return Identity{}, errors.New("endpoint: no key path, so this endpoint can have no identity")
 	}
 	read, err := os.ReadFile(path)
 	switch {
 	case err == nil:
 		seed, decoded := base64.StdEncoding.DecodeString(strings.TrimSpace(string(read)))
 		if decoded != nil {
-			return Identity{}, fmt.Errorf("connector key %s is not base64: %w", path, decoded)
+			return Identity{}, fmt.Errorf("endpoint key %s is not base64: %w", path, decoded)
 		}
 		if len(seed) != ed25519.SeedSize {
-			return Identity{}, fmt.Errorf("connector key %s is %d bytes, not %d", path, len(seed), ed25519.SeedSize)
+			return Identity{}, fmt.Errorf("endpoint key %s is %d bytes, not %d", path, len(seed), ed25519.SeedSize)
 		}
 		return Identity{private: ed25519.NewKeyFromSeed(seed)}, nil
 	case !errors.Is(err, os.ErrNotExist):
-		return Identity{}, fmt.Errorf("read connector key: %w", err)
+		return Identity{}, fmt.Errorf("read endpoint key: %w", err)
 	}
 
 	seed := make([]byte, ed25519.SeedSize)
 	if _, err := rand.Read(seed); err != nil {
-		return Identity{}, fmt.Errorf("draw a connector key: %w", err)
+		return Identity{}, fmt.Errorf("draw a endpoint key: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return Identity{}, fmt.Errorf("make the connector key directory: %w", err)
+		return Identity{}, fmt.Errorf("make the endpoint key directory: %w", err)
 	}
 	if err := os.WriteFile(path, []byte(base64.StdEncoding.EncodeToString(seed)+"\n"), 0o600); err != nil {
-		return Identity{}, fmt.Errorf("write connector key: %w", err)
+		return Identity{}, fmt.Errorf("write endpoint key: %w", err)
 	}
 	return Identity{private: ed25519.NewKeyFromSeed(seed)}, nil
 }
 
 func IdentityFromSeed(seed []byte) (Identity, error) {
 	if len(seed) != ed25519.SeedSize {
-		return Identity{}, fmt.Errorf("connector key is %d bytes, not %d", len(seed), ed25519.SeedSize)
+		return Identity{}, fmt.Errorf("endpoint key is %d bytes, not %d", len(seed), ed25519.SeedSize)
 	}
 	return Identity{private: ed25519.NewKeyFromSeed(seed)}, nil
 }

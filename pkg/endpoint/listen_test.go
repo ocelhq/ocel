@@ -1,4 +1,4 @@
-package connectorserver
+package endpoint
 
 import (
 	"encoding/base64"
@@ -13,7 +13,7 @@ import (
 func TestASocketListenerIsReachableByTheProxyAndNobodyWider(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "connector.sock")
+	path := filepath.Join(t.TempDir(), "endpoint.sock")
 	ln, err := listen("unix://" + path)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -36,7 +36,7 @@ func TestASocketListenerIsReachableByTheProxyAndNobodyWider(t *testing.T) {
 func TestASocketARunBeforeThisOneLeftIsCleared(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "connector.sock")
+	path := filepath.Join(t.TempDir(), "endpoint.sock")
 	stale, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatal(err)
@@ -68,10 +68,10 @@ func TestTheKeyIsMintedOnceAndThePublicHalfIsWhatIsPrinted(t *testing.T) {
 	config := filepath.Join(dir, "config.json")
 	written, err := json.Marshal(Config{
 		Console:        "https://ocel.app",
-		ConnectorID:    "con_1",
+		EndpointID:     "con_1",
 		OrganizationID: "org_1",
 		Target:         "vps/SHA256:AAAA/ocel",
-		Grants:         []string{CapabilityVariablesRead},
+		AllowedScopes:  []string{"variables.read"},
 		KeyPath:        key,
 	})
 	if err != nil {
@@ -81,14 +81,14 @@ func TestTheKeyIsMintedOnceAndThePublicHalfIsWhatIsPrinted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	first, err := PublicKey(config)
+	first, err := EnsurePublicKey(config)
 	if err != nil {
 		t.Fatalf("PublicKey: %v", err)
 	}
 	if _, err := base64.StdEncoding.DecodeString(strings.TrimSpace(first)); err != nil {
 		t.Errorf("PublicKey() = %q, which is no base64 key the console can verify against", first)
 	}
-	again, err := PublicKey(config)
+	again, err := EnsurePublicKey(config)
 	if err != nil {
 		t.Fatalf("second PublicKey: %v", err)
 	}

@@ -1,4 +1,4 @@
-package connectorserver
+package endpoint
 
 import (
 	"bytes"
@@ -21,18 +21,20 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwt"
 	"google.golang.org/protobuf/proto"
 
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 )
 
-const connectorID = "0199b5c4-0000-7000-8000-00000000cafe"
+const endpointID = "0199b5c4-0000-7000-8000-00000000cafe"
 
 func beating(t *testing.T, origin string) (heartbeat *beat, keyPath, configPath string) {
 	heartbeat, keyPath, configPath, _ = beatingInto(t, origin)
 	return heartbeat, keyPath, configPath
 }
 
-func beatingInto(t *testing.T, origin string) (heartbeat *beat, keyPath, configPath string, said *bytes.Buffer) {
+func beatingInto(t *testing.T, origin string) (heartbeat *beat, keyPath, configPath string, logged *bytes.Buffer) {
 	t.Helper()
 	root := t.TempDir()
 	keyPath = filepath.Join(root, "key")
@@ -44,34 +46,35 @@ func beatingInto(t *testing.T, origin string) (heartbeat *beat, keyPath, configP
 	if err != nil {
 		t.Fatal(err)
 	}
-	said = &bytes.Buffer{}
+	logged = &bytes.Buffer{}
 	return &beat{
-		connectorID:  connectorID,
-		version:      "0.0.0-alpha",
-		capabilities: []string{CapabilityVariablesRead},
-		identity:     identity,
-		keyPath:      keyPath,
-		configPath:   configPath,
-		client:       http.DefaultClient,
-		every:        time.Millisecond,
-		origin:       origin,
-		out:          said,
-	}, keyPath, configPath, said
+		endpointID: endpointID,
+		version:    "0.0.0-alpha",
+		scopes:     []scopev1.Scope{scopev1.Scope_SCOPE_VARIABLES_READ},
+		services:   []string{variablestorev1connect.VariableStoreServiceName},
+		identity:   identity,
+		keyPath:    keyPath,
+		configPath: configPath,
+		client:     http.DefaultClient,
+		every:      time.Millisecond,
+		origin:     origin,
+		out:        logged,
+	}, keyPath, configPath, logged
 }
 
 type heartbeats struct {
-	consolev1connect.UnimplementedConnectorServiceHandler
+	consolev1connect.UnimplementedEndpointServiceHandler
 	answer func(seen int) error
 
 	count atomic.Int64
 
 	mu        sync.Mutex
-	requests  []*consolev1.HeartbeatConnectorRequest
+	requests  []*consolev1.HeartbeatEndpointRequest
 	headers   []http.Header
 	procedure string
 }
 
-func (h *heartbeats) Heartbeat(_ context.Context, req *consolev1.HeartbeatConnectorRequest) (*consolev1.HeartbeatConnectorResponse, error) {
+func (h *heartbeats) Heartbeat(_ context.Context, req *consolev1.HeartbeatEndpointRequest) (*consolev1.HeartbeatEndpointResponse, error) {
 	seen := int(h.count.Add(1))
 	h.mu.Lock()
 	h.requests = append(h.requests, req)
@@ -79,7 +82,7 @@ func (h *heartbeats) Heartbeat(_ context.Context, req *consolev1.HeartbeatConnec
 	if err := h.answer(seen); err != nil {
 		return nil, err
 	}
-	return &consolev1.HeartbeatConnectorResponse{}, nil
+	return &consolev1.HeartbeatEndpointResponse{}, nil
 }
 
 func console(t *testing.T, answer func(seen int) error) (*httptest.Server, *heartbeats) {
@@ -90,7 +93,7 @@ func consoleBehind(t *testing.T, answer func(seen int) error, front func(http.Ha
 	t.Helper()
 	service := &heartbeats{answer: answer}
 	mux := http.NewServeMux()
-	path, handler := consolev1connect.NewConnectorServiceHandler(service)
+	path, handler := consolev1connect.NewEndpointServiceHandler(service)
 	mux.Handle(connectRoute+path, http.StripPrefix(connectRoute, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		service.mu.Lock()
 		service.headers = append(service.headers, r.Header.Clone())
@@ -129,13 +132,13 @@ func TestHeartbeatCallsTheConsoleWithATokenTheConnectorSigned(t *testing.T) {
 	server, service := console(t, accepted)
 
 	heartbeat, _, _ := beating(t, server.URL)
-	if err := heartbeat.once(context.Background()); err != nil {
+	if err := heartbeat.send(context.Background()); err != nil {
 		t.Fatalf("once: %v", err)
 	}
-	if service.procedure != consolev1connect.ConnectorServiceHeartbeatProcedure {
-		t.Fatalf("procedure = %q, want %q", service.procedure, consolev1connect.ConnectorServiceHeartbeatProcedure)
+	if service.procedure != consolev1connect.EndpointServiceHeartbeatProcedure {
+		t.Fatalf("procedure = %q, want %q", service.procedure, consolev1connect.EndpointServiceHeartbeatProcedure)
 	}
-	want := &consolev1.HeartbeatConnectorRequest{Id: connectorID, Version: "0.0.0-alpha", Capabilities: []string{CapabilityVariablesRead}}
+	want := &consolev1.HeartbeatEndpointRequest{Id: endpointID, Version: "0.0.0-alpha", Services: []string{variablestorev1connect.VariableStoreServiceName}, AllowedScopes: []scopev1.Scope{scopev1.Scope_SCOPE_VARIABLES_READ}}
 	if len(service.requests) != 1 || !proto.Equal(service.requests[0], want) {
 		t.Fatalf("the console read %v, want %v", service.requests, want)
 	}
@@ -150,8 +153,8 @@ func TestHeartbeatCallsTheConsoleWithATokenTheConnectorSigned(t *testing.T) {
 	}
 	token, err := jwt.ParseString(raw,
 		jwt.WithKey(jwa.EdDSA(), ed25519.PublicKey(public)),
-		jwt.WithIssuer(connectorID),
-		jwt.WithSubject(connectorID),
+		jwt.WithIssuer(endpointID),
+		jwt.WithSubject(endpointID),
 		jwt.WithAudience(server.URL),
 	)
 	if err != nil {
@@ -168,11 +171,11 @@ func TestHeartbeatNamesTheConnectorAndItsVersionAsItsUserAgent(t *testing.T) {
 	server, service := console(t, accepted)
 
 	heartbeat, _, _ := beating(t, server.URL)
-	if err := heartbeat.once(context.Background()); err != nil {
+	if err := heartbeat.send(context.Background()); err != nil {
 		t.Fatalf("once: %v", err)
 	}
-	if got := service.headers[0].Get("User-Agent"); got != "ocel-connector/0.0.0-alpha" {
-		t.Errorf("user agent = %q, want ocel-connector/0.0.0-alpha", got)
+	if got := service.headers[0].Get("User-Agent"); got != "ocel-endpoint/0.0.0-alpha" {
+		t.Errorf("user agent = %q, want ocel-endpoint/0.0.0-alpha", got)
 	}
 }
 
@@ -180,7 +183,7 @@ func TestHeartbeatReturnsTheRefusalTheConsoleGave(t *testing.T) {
 	server, _ := console(t, refused(connect.CodeNotFound))
 
 	heartbeat, _, _ := beating(t, server.URL)
-	err := heartbeat.once(context.Background())
+	err := heartbeat.send(context.Background())
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("once = %v, want the console's not-found refusal", err)
 	}
@@ -194,7 +197,7 @@ func TestOneHeartbeatIsSentForAHostThatIsWokenOnASchedule(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec := Spec{
-		Config:   Config{Console: server.URL, ConnectorID: connectorID, OrganizationID: "org-1", Grants: []string{CapabilityVariablesRead}},
+		Config:   Config{Console: server.URL, EndpointID: endpointID, OrganizationID: "org-1", AllowedScopes: []string{"variables.read"}},
 		Version:  "0.0.0-alpha",
 		Identity: identity,
 	}
@@ -218,13 +221,13 @@ func TestHeartbeatWipesAfterANotFoundThatFollowsASuccess(t *testing.T) {
 	})
 
 	heartbeat, keyPath, configPath := beating(t, server.URL)
-	retired := make(chan struct{})
+	unregistered := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	heartbeat.run(ctx, retired)
+	heartbeat.run(ctx, unregistered)
 
 	select {
-	case <-retired:
+	case <-unregistered:
 	default:
 		t.Fatal("the connector did not retire")
 	}
@@ -243,14 +246,14 @@ func TestHeartbeatKeepsTheKeyWhenTheNotFoundComesFirst(t *testing.T) {
 	server, service := console(t, refused(connect.CodeNotFound))
 
 	heartbeat, keyPath, configPath := beating(t, server.URL)
-	retired := make(chan struct{})
+	unregistered := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
 	defer cancel()
-	heartbeat.run(ctx, retired)
+	heartbeat.run(ctx, unregistered)
 
 	select {
-	case <-retired:
-		t.Fatal("a not-found before any success retired the connector")
+	case <-unregistered:
+		t.Fatal("a not-found before any success unregistered the connector")
 	default:
 	}
 	if _, err := os.Stat(keyPath); err != nil {
@@ -274,10 +277,10 @@ func TestHeartbeatKeepsGoingThroughOtherRefusals(t *testing.T) {
 			server, service := console(t, refused(code))
 
 			heartbeat, keyPath, _ := beating(t, server.URL)
-			retired := make(chan struct{})
+			unregistered := make(chan struct{})
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
 			defer cancel()
-			heartbeat.run(ctx, retired)
+			heartbeat.run(ctx, unregistered)
 
 			if service.count.Load() < 2 {
 				t.Fatalf("the connector stopped beating after %d", service.count.Load())
@@ -299,13 +302,13 @@ func TestHeartbeatKeepsGoingUntilAnUnreachableConsoleAnswers(t *testing.T) {
 		return nil
 	}, droppingFirst(3))
 
-	heartbeat, keyPath, _, said := beatingInto(t, server.URL)
-	retired := make(chan struct{})
-	heartbeat.run(ctx, retired)
+	heartbeat, keyPath, _, logged := beatingInto(t, server.URL)
+	unregistered := make(chan struct{})
+	heartbeat.run(ctx, unregistered)
 
 	select {
-	case <-retired:
-		t.Fatal("an unreachable console retired the connector")
+	case <-unregistered:
+		t.Fatal("an unreachable console unregistered the connector")
 	default:
 	}
 	if _, err := os.Stat(keyPath); err != nil {
@@ -314,11 +317,11 @@ func TestHeartbeatKeepsGoingUntilAnUnreachableConsoleAnswers(t *testing.T) {
 	if service.count.Load() < 2 {
 		t.Fatalf("the console answered %d beats after it came up, want the connector to keep beating until it did", service.count.Load())
 	}
-	if got := strings.Count(said.String(), "did not reach"); got != 1 {
-		t.Errorf("the connector said %q, want one line that the heartbeat did not reach the console", said.String())
+	if got := strings.Count(logged.String(), "did not reach"); got != 1 {
+		t.Errorf("the connector logged %q, want one line that the heartbeat did not reach the console", logged.String())
 	}
-	if strings.Contains(said.String(), "refused") {
-		t.Errorf("the connector said %q, but a console it never reached refused nothing", said.String())
+	if strings.Contains(logged.String(), "refused") {
+		t.Errorf("the connector logged %q, but a console it never reached refused nothing", logged.String())
 	}
 }
 
@@ -332,14 +335,14 @@ func TestHeartbeatSaysOnceThatTheConsoleRefusedIt(t *testing.T) {
 		return connect.NewError(connect.CodeUnauthenticated, errors.New("refused"))
 	})
 
-	heartbeat, _, _, said := beatingInto(t, server.URL)
+	heartbeat, _, _, logged := beatingInto(t, server.URL)
 	heartbeat.run(ctx, make(chan struct{}))
 
-	if got := strings.Count(said.String(), "was refused"); got != 1 {
-		t.Errorf("the connector said %q, want one line that the console refused the heartbeat", said.String())
+	if got := strings.Count(logged.String(), "was refused"); got != 1 {
+		t.Errorf("the connector logged %q, want one line that the console refused the heartbeat", logged.String())
 	}
-	if strings.Contains(said.String(), "did not reach") {
-		t.Errorf("the connector said %q, but the console answered", said.String())
+	if strings.Contains(logged.String(), "did not reach") {
+		t.Errorf("the connector logged %q, but the console answered", logged.String())
 	}
 }
 
@@ -351,11 +354,11 @@ func TestHeartbeatSaysNothingWhenItIsStoppedMidCall(t *testing.T) {
 		return nil
 	})
 
-	heartbeat, _, _, said := beatingInto(t, server.URL)
+	heartbeat, _, _, logged := beatingInto(t, server.URL)
 	heartbeat.run(ctx, make(chan struct{}))
 
-	if said.Len() != 0 {
-		t.Errorf("the connector said %q when it was stopped, want nothing", said.String())
+	if logged.Len() != 0 {
+		t.Errorf("the connector logged %q when it was stopped, want nothing", logged.String())
 	}
 }
 
@@ -379,9 +382,9 @@ func TestOnlyARefusalTheConsoleAnsweredCountsAsOne(t *testing.T) {
 
 func heartbeatRequested(t *testing.T, spec Spec) *http.Response {
 	t.Helper()
-	mux, err := Mux(spec)
+	mux, err := New(spec)
 	if err != nil {
-		t.Fatalf("Mux: %v", err)
+		t.Fatalf("New: %v", err)
 	}
 	served := httptest.NewServer(mux)
 	t.Cleanup(served.Close)
@@ -400,9 +403,10 @@ func scheduledSpec(t *testing.T, origin string, verify func(*http.Request) error
 		t.Fatal(err)
 	}
 	return Spec{
-		Config:          Config{Console: origin, ConnectorID: connectorID, OrganizationID: "org-1", Grants: []string{CapabilityVariablesRead}},
+		Config:          Config{Console: origin, EndpointID: endpointID, OrganizationID: "org-1", AllowedScopes: []string{"variables.read"}},
 		Version:         "0.0.0-alpha",
 		Identity:        identity,
+		Mounts:          []Mount{variablesOnFakes()},
 		VerifyHeartbeat: verify,
 	}
 }
@@ -444,8 +448,8 @@ func TestAConnectorWithNoHeartbeatCheckServesNoHeartbeatRoute(t *testing.T) {
 	server, service := console(t, accepted)
 
 	response := heartbeatRequested(t, scheduledSpec(t, server.URL, nil))
-	if response.StatusCode != http.StatusNotFound {
-		t.Errorf("a connector with no heartbeat check answered %d on %s, want 404: an unchecked route lets anyone make it beat", response.StatusCode, HeartbeatPath)
+	if response.StatusCode == http.StatusNoContent {
+		t.Errorf("an endpoint with no heartbeat check answered %d on %s: an unchecked route lets anyone make it beat", response.StatusCode, HeartbeatPath)
 	}
 	if service.count.Load() != 0 {
 		t.Errorf("the console read %d beats", service.count.Load())
