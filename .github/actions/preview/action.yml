@@ -1,9 +1,8 @@
 name: preview
 description: >-
   Deploys this pull request's preview of Ocel's own app into the account Ocel
-  deploys itself into; the CLI reports it to the console, which says so on the
-  pull request. The job checks out the head branch first, and names OCEL_CONFIG,
-  OCEL_CONSOLE_PROJECT_ID and OCEL_CONSOLE_URL in its environment.
+  deploys itself into. The job checks out the head branch first, and names
+  OCEL_CONFIG in its environment.
 
 inputs:
   source:
@@ -65,6 +64,6 @@ runs:
       with:
         name: preview-result
         path: |
-          .ocel/deploy-report.json
+          www/.ocel/deploy-report.json
           ${{ runner.temp }}/preview.log
         if-no-files-found: warn

@@ -13,7 +13,6 @@ on:
       - "proto/**"
       - "platform/**"
       - "scripts/**"
-      - "ocel.aws.json"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -35,9 +34,7 @@ jobs:
       group: preview-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     env:
-      OCEL_CONFIG: ocel.aws.json
-      OCEL_CONSOLE_PROJECT_ID: ${{ vars.OCEL_CONSOLE_PROJECT_ID }}
-      OCEL_CONSOLE_URL: ${{ vars.OCEL_CONSOLE_URL }}
+      OCEL_CONFIG: www/ocel.json
     steps:
       - name: Checkout the branch the preview is named after
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - "www/**"
-      - "ocel.aws.json"
       - "packages/ocel/**"
       - ".github/workflows/deploy.yml"
       - ".github/actions/ocel-binary/**"
@@ -31,9 +30,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  OCEL_CONFIG: ocel.aws.json
-  OCEL_CONSOLE_PROJECT_ID: ${{ vars.OCEL_CONSOLE_PROJECT_ID }}
-  OCEL_CONSOLE_URL: ${{ vars.OCEL_CONSOLE_URL }}
+  OCEL_CONFIG: www/ocel.json
 
 jobs:
   deploy:
@@ -73,5 +70,5 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deploy-report
-          path: .ocel/deploy-report.json
+          path: www/.ocel/deploy-report.json
           if-no-files-found: warn

@@ -89,7 +89,6 @@ preview:
   - "proto/**"
   - "platform/**"
   - "scripts/**"
-  - "ocel.aws.json"
   - "package.json"
   - "pnpm-lock.yaml"
   - "pnpm-workspace.yaml"

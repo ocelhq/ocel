@@ -5,7 +5,6 @@ on:
     types: [closed]
     paths:
       - "www/**"
-      - "ocel.aws.json"
       - "cli/**"
       - "packages/**"
       - "frameworks/**"
@@ -43,9 +42,7 @@ jobs:
       group: preview-${{ github.event.pull_request.number }}
       cancel-in-progress: false
     env:
-      OCEL_CONFIG: ocel.aws.json
-      OCEL_CONSOLE_PROJECT_ID: ${{ vars.OCEL_CONSOLE_PROJECT_ID }}
-      OCEL_CONSOLE_URL: ${{ vars.OCEL_CONSOLE_URL }}
+      OCEL_CONFIG: www/ocel.json
       REF: ${{ github.event.pull_request.head.ref }}
     steps:
       - name: Checkout the default branch, the head and a stacked base may already be gone
@@ -112,7 +109,7 @@ jobs:
       id-token: write
       actions: read
     env:
-      OCEL_CONFIG: ocel.aws.json
+      OCEL_CONFIG: www/ocel.json
       OCEL_TARGET: aws
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}

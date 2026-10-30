@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 env:
-  OCEL_CONFIG: ocel.aws.json
+  OCEL_CONFIG: www/ocel.json
 
 jobs:
   ec2:
