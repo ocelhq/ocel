@@ -1,4 +1,4 @@
-import { waitlistEvent } from "@/lib/waitlist";
+import { resendContact, waitlistEvent } from "@/lib/waitlist";
 
 // The console's sign-in page posts here too.
 const allowedOrigins = new Set(["https://app.ocelhq.com"]);
@@ -12,6 +12,26 @@ function cors(request: Request): Record<string, string> {
     "access-control-allow-headers": "content-type",
     vary: "origin",
   };
+}
+
+// PostHog is the record of who joined; Resend is who we can email. An email already on the
+// list is answered with an error by Resend and is still on the list, so the visitor isn't told.
+async function subscribe(email: string) {
+  const key = process.env.RESEND_API_KEY;
+  const segment = process.env.RESEND_SEGMENT_ID;
+  if (!key || !segment) return;
+  const res = await fetch("https://api.resend.com/contacts", {
+    method: "POST",
+    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+    body: JSON.stringify(resendContact(email, segment)),
+  }).catch(() => null);
+  if (!res?.ok) {
+    console.error(
+      "waitlist: Resend refused a contact",
+      res?.status,
+      await res?.text().catch(() => ""),
+    );
+  }
 }
 
 export function OPTIONS(request: Request) {
@@ -33,11 +53,14 @@ export async function POST(request: Request) {
       { status: 400, headers },
     );
   }
-  const sent = await fetch(new URL("/i/v0/e/", host), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(event),
-  }).catch(() => null);
+  const [sent] = await Promise.all([
+    fetch(new URL("/i/v0/e/", host), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(event),
+    }).catch(() => null),
+    subscribe(event.distinct_id),
+  ]);
   if (!sent?.ok) {
     return Response.json({ error: "That didn't go through. Try again." }, { status: 502, headers });
   }

@@ -96,6 +96,10 @@ export function EarlyAccess({
         aria-hidden="true"
         className="absolute -left-[9999px] h-px w-px opacity-0"
       />
+      <p className="m-0 text-[13px] leading-relaxed text-muted-foreground">
+        We'll email you when your invite is ready, and now and then about releases. Unsubscribe
+        anytime.
+      </p>
       {state.kind === "error" ? (
         <p className="m-0 text-[13px] text-destructive" role="alert">
           {state.message}
