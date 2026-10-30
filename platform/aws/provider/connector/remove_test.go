@@ -86,18 +86,18 @@ func TestRemovingAConnectorThatIsNotInstalledSaysThereIsNothingToRemove(t *testi
 	}
 }
 
-func TestAConnectorBundleThatReplacesAResourceWarnsAndNamesIt(t *testing.T) {
+func TestAConnectorUpgradeThatReplacesItsUrlAndPermissionsIsWrittenAndSaysSo(t *testing.T) {
 	t.Parallel()
 
 	var progress fake.Log
-	_ = reviewing(defaultNamespace, &progress)(StackName(defaultNamespace), []cfntypes.ResourceChange{{
-		LogicalResourceId: aws.String("CodeBucket"),
-		ResourceType:      aws.String("AWS::S3::Bucket"),
-		Action:            cfntypes.ChangeActionModify,
-		Replacement:       cfntypes.ReplacementTrue,
-	}})
-	want := []string{"WARN Stack " + StackName(defaultNamespace) + " would replace CodeBucket (AWS::S3::Bucket) rather than update it in place"}
-	if got := progress.Lines(); !slices.Equal(got, want) {
-		t.Errorf("reviewing() said %q, want %q", got, want)
+	err := reviewing(&progress)(StackName(defaultNamespace), []cfntypes.ResourceChange{
+		{LogicalResourceId: aws.String("ConnectorUrl"), ResourceType: aws.String("AWS::Lambda::Url"), Action: cfntypes.ChangeActionModify, Replacement: cfntypes.ReplacementConditional},
+		{LogicalResourceId: aws.String("ConnectorHeartbeatInvokes"), ResourceType: aws.String("AWS::Lambda::Permission"), Action: cfntypes.ChangeActionModify, Replacement: cfntypes.ReplacementTrue},
+	})
+	if err != nil {
+		t.Fatalf("reviewing() = %v, want an upgrade that replaces the function's url and permissions written: neither holds state, and connector add asks nothing", err)
+	}
+	if want := []string{"INFO Replacing ConnectorHeartbeatInvokes, which holds nothing but what this install writes again"}; !slices.Equal(progress.Lines(), want) {
+		t.Errorf("reviewing() said %q, want %q", progress.Lines(), want)
 	}
 }

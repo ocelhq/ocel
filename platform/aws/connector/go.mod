@@ -15,6 +15,7 @@ require (
 	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/aws/provider v0.0.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -26,15 +27,24 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.31 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.51 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.31 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.6.30 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.38 // indirect
+	github.com/aws/aws-sdk-go-v2/service/acm v1.42.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/apigateway v1.41.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/apigatewayv2 v1.37.6 // indirect
+	github.com/aws/aws-sdk-go-v2/service/applicationautoscaling v1.51.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.67.6 // indirect
+	github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore v1.15.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.89.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/dynamodbstreams v1.35.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.338.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.64.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.65.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.62.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/iam v1.55.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.24 // indirect
@@ -42,14 +52,19 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.32 // indirect
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.99.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.41.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/route53 v1.42.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/scheduler v1.25.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.43.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/servicequotas v1.43.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.5.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.51.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.33.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.38.0 // indirect
 	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/cloudflare/cloudflare-go/v4 v4.6.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
@@ -66,6 +81,10 @@ require (
 	github.com/google/go-containerregistry v0.21.7 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/pgx/v5 v5.11.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.4 // indirect
 	github.com/lestrrat-go/dsig v1.4.0 // indirect
@@ -78,12 +97,18 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
+	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0 // indirect
+	github.com/ocelhq/ocel/platform/s3 v0.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/stoewer/go-strcase v1.3.1 // indirect
+	github.com/tidwall/gjson v1.14.4 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/valyala/fastjson v1.6.10 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 // indirect
@@ -99,7 +124,6 @@ require (
 	golang.org/x/text v0.41.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 )
 
 replace github.com/ocelhq/ocel/platform/aws/provider => ../provider
