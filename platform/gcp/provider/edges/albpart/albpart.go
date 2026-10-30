@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
@@ -26,7 +27,7 @@ const (
 	PartName = "alb"
 	Summary  = "a global external Application Load Balancer every project behind the alb edge is served through: one address, one certificate map, one URL map, " +
 		"and the gate as a Service Extensions plugin kept as a generic artifact in a repository of its own. " +
-		"It costs " + alb.BaselineCost + " idle, so the deploy or destroy that removes the last project behind it takes it down"
+		"It costs " + albresources.BaselineCost + " idle, so the deploy or destroy that removes the last project behind it takes it down"
 
 	consumersKey  = "consumers"
 	leaseKey      = "lease"
@@ -42,7 +43,7 @@ type Lease struct {
 }
 
 func Consumers(tier environment.Tier) records.Key {
-	return stackrecords.EdgeStacksPartition(tier).Key(string(alb.Kind), consumersKey)
+	return stackrecords.EdgeStacksPartition(tier).Key(string(albresources.Kind), consumersKey)
 }
 
 func ConsumerAt(tier environment.Tier, slug string) records.Key {
@@ -51,20 +52,20 @@ func ConsumerAt(tier environment.Tier, slug string) records.Key {
 }
 
 func LeaseAt(tier environment.Tier) records.Key {
-	return stackrecords.EdgeStacksPartition(tier).Key(string(alb.Kind), leaseKey)
+	return stackrecords.EdgeStacksPartition(tier).Key(string(albresources.Kind), leaseKey)
 }
 
 var Part = bootstrap.RemovablePart{Part: provider.Part{Name: PartName, Summary: Summary}, Deployed: NewPart}
 
 func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
 	var resources []provider.PhysicalResource
-	for _, shaped := range alb.ShapeLoadBalancer(string(b.Clients.Namespace()), tier) {
-		resources = append(resources, provider.PhysicalResource{Kind: shaped.Type, ID: shaped.Name})
+	for _, resource := range alb.InventoryLoadBalancer(string(b.Clients.Namespace()), tier) {
+		resources = append(resources, provider.PhysicalResource{Kind: resource.Type, ID: resource.Name})
 	}
 	resources = append(resources, provider.PhysicalResource{Kind: string(bootstrap.KindRepository), ID: b.Clients.Repository(tier) + PluginRepository})
-	var shape []pricing.Shaped
-	if shaped, err := alb.Shape(string(b.Clients.Namespace()), pricing.EdgeSite{Tier: tier, Region: b.Clients.Region}); err == nil {
-		shape = shaped.Shared
+	var shared []pricing.Resource
+	if inventory, err := alb.Inventory(string(b.Clients.Namespace()), pricing.EdgeSite{Tier: tier, Region: b.Clients.Region}); err == nil {
+		shared = inventory.Shared
 	}
 	return bootstrap.Part{
 		Name:      PartName,
@@ -72,7 +73,7 @@ func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
 		APIs:      bootstrap.ALBAPIs,
 		Retires:   true,
 		Resources: resources,
-		Shape:     shape,
+		Inventory: shared,
 		Make:      func(ctx context.Context) error { return makeLoadBalancer(ctx, b, tier) },
 		Claim:     func(ctx context.Context, project string) error { return Claim(ctx, b, tier, project) },
 		Users:     func(ctx context.Context) ([]string, error) { return ListUsers(ctx, b, tier) },
@@ -86,9 +87,9 @@ func NewPart(b bootstrap.Engine, tier environment.Tier) bootstrap.Part {
 func openEdge(b bootstrap.Engine) (edge.Edge, error) {
 	if b.Edges == nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the %s part is the %s edge's load balancer, and this bootstrap was opened with no edge registry to open it through", PartName, alb.Kind)
+			"the %s part is the %s edge's load balancer, and this bootstrap was opened with no edge registry to open it through", PartName, albresources.Kind)
 	}
-	return b.Edges.Open(alb.Kind, nil)
+	return b.Edges.Open(albresources.Kind, nil)
 }
 
 func makeLoadBalancer(ctx context.Context, b bootstrap.Engine, tier environment.Tier) error {
@@ -120,14 +121,14 @@ func refuseInUse(ctx context.Context, b bootstrap.Engine, tier environment.Tier,
 	return refusal.Refuse(refusal.CodeInvalid,
 		"%s is still served by the %s load balancer of tier %s, and the load balancer owns the certificate map those hostnames are entries in, "+
 			"which Google will not delete while it contains any.\nRelease them with `ocel domain remove` in the projects that bound them, then run `%s` again",
-		strings.Join(bound, ", "), alb.Kind, tier, removal.Retry)
+		strings.Join(bound, ", "), albresources.Kind, tier, removal.Retry)
 }
 
 func ListUsers(ctx context.Context, b bootstrap.Engine, tier environment.Tier) ([]string, error) {
 	consumers := Consumers(tier)
 	entries, err := b.Records.List(ctx, consumers.Partition, consumers.Path...)
 	if err != nil {
-		return nil, fmt.Errorf("read which projects the %s load balancer of tier %s serves: %w", alb.Kind, tier, err)
+		return nil, fmt.Errorf("read which projects the %s load balancer of tier %s serves: %w", albresources.Kind, tier, err)
 	}
 	users := []string{}
 	for _, entry := range entries {
@@ -149,7 +150,7 @@ func ReadLease(ctx context.Context, store records.Store, tier environment.Tier) 
 		return entry, lease, nil
 	}
 	if err := json.Unmarshal(entry.Value, &lease); err != nil {
-		return records.Entry{}, Lease{}, fmt.Errorf("read the %s load balancer lease %s: %w", alb.Kind, entry.Key, err)
+		return records.Entry{}, Lease{}, fmt.Errorf("read the %s load balancer lease %s: %w", albresources.Kind, entry.Key, err)
 	}
 	return entry, lease, nil
 }
@@ -157,7 +158,7 @@ func ReadLease(ctx context.Context, store records.Store, tier environment.Tier) 
 func WriteLease(ctx context.Context, store records.Store, entry records.Entry, lease Lease) (records.Revision, error) {
 	encoded, err := json.Marshal(lease)
 	if err != nil {
-		return "", fmt.Errorf("encode the %s load balancer lease: %w", alb.Kind, err)
+		return "", fmt.Errorf("encode the %s load balancer lease: %w", albresources.Kind, err)
 	}
 	entry.Value = encoded
 	return store.Write(ctx, entry)
@@ -177,7 +178,7 @@ func Claim(ctx context.Context, b bootstrap.Engine, tier environment.Tier, user 
 		if lease.isRetiring(time.Now()) {
 			refused := refusal.Refuse(refusal.CodeBusy,
 				"the %s load balancer of tier %s is being taken down by the run that removed the last project behind it; deploy again once it has gone and this deploy adds a fresh one",
-				alb.Kind, tier)
+				albresources.Kind, tier)
 			if !wrote {
 				return refused
 			}
@@ -198,7 +199,7 @@ func Claim(ctx context.Context, b bootstrap.Engine, tier environment.Tier, user 
 			case err == nil:
 				wrote = true
 			case !errors.Is(err, records.ErrStale):
-				return fmt.Errorf("record %s as a user of the %s load balancer of tier %s: %w", user, alb.Kind, tier, err)
+				return fmt.Errorf("record %s as a user of the %s load balancer of tier %s: %w", user, albresources.Kind, tier, err)
 			}
 		}
 		_, err = WriteLease(ctx, b.Records, leased, Lease{})
@@ -206,11 +207,11 @@ func Claim(ctx context.Context, b bootstrap.Engine, tier environment.Tier, user 
 			return nil
 		}
 		if !errors.Is(err, records.ErrStale) {
-			return fmt.Errorf("claim the %s load balancer of tier %s for %s: %w", alb.Kind, tier, user, err)
+			return fmt.Errorf("claim the %s load balancer of tier %s for %s: %w", albresources.Kind, tier, user, err)
 		}
 	}
 	return refusal.Refuse(refusal.CodeBusy,
-		"the %s load balancer of tier %s changed hands %d times while %s was claiming it; deploy again", alb.Kind, tier, leaseAttempts, user)
+		"the %s load balancer of tier %s changed hands %d times while %s was claiming it; deploy again", albresources.Kind, tier, leaseAttempts, user)
 }
 
 func Release(ctx context.Context, b bootstrap.Engine, tier environment.Tier, user string, leaving bool, progress progress.Log) error {
@@ -255,9 +256,9 @@ func Release(ctx context.Context, b bootstrap.Engine, tier environment.Tier, use
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("mark the %s load balancer of tier %s as going down: %w", alb.Kind, tier, err)
+		return fmt.Errorf("mark the %s load balancer of tier %s as going down: %w", albresources.Kind, tier, err)
 	}
-	gcloud.EnsureProgress(progress).Say("Taking down the " + string(alb.Kind) + " load balancer of tier " + string(tier) + ": " + user + " was the last user it served")
+	gcloud.EnsureProgress(progress).Say("Taking down the " + string(albresources.Kind) + " load balancer of tier " + string(tier) + ": " + user + " was the last user it served")
 	if err := retireLoadBalancer(ctx, b, tier, revision, nil); err != nil {
 		settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
 		defer cancel()
@@ -271,13 +272,13 @@ func restoreUser(ctx context.Context, b bootstrap.Engine, tier environment.Tier,
 		return []byte("{}"), len(recorded.Value) == 0, nil
 	})
 	if err != nil {
-		return fmt.Errorf("record %s again as a user of the %s load balancer of tier %s it could not take down: %w", user, alb.Kind, tier, err)
+		return fmt.Errorf("record %s again as a user of the %s load balancer of tier %s it could not take down: %w", user, albresources.Kind, tier, err)
 	}
 	return nil
 }
 
 func sayKept(progress progress.Log, tier environment.Tier, bound []string) {
-	gcloud.EnsureProgress(progress).Say("Kept the " + string(alb.Kind) + " load balancer of tier " + string(tier) + ": it still serves " + strings.Join(bound, ", "))
+	gcloud.EnsureProgress(progress).Say("Kept the " + string(albresources.Kind) + " load balancer of tier " + string(tier) + ": it still serves " + strings.Join(bound, ", "))
 }
 
 func retireLoadBalancer(ctx context.Context, b bootstrap.Engine, tier environment.Tier, retiring records.Revision, users []string) error {
@@ -321,7 +322,7 @@ func keepRecorded(ctx context.Context, b bootstrap.Engine, tier environment.Tier
 		})
 	}
 	if err != nil {
-		return fmt.Errorf("record the %s load balancer of tier %s again after its teardown failed: %w", alb.Kind, tier, err)
+		return fmt.Errorf("record the %s load balancer of tier %s again after its teardown failed: %w", albresources.Kind, tier, err)
 	}
 	return nil
 }
@@ -331,7 +332,7 @@ func liftLease(ctx context.Context, b bootstrap.Engine, tier environment.Tier, r
 		return recorded.Revision == retiring, nil
 	})
 	if err != nil {
-		return fmt.Errorf("lift the lease taking the %s load balancer of tier %s down: %w", alb.Kind, tier, err)
+		return fmt.Errorf("lift the lease taking the %s load balancer of tier %s down: %w", albresources.Kind, tier, err)
 	}
 	return nil
 }
@@ -344,15 +345,15 @@ func removeLoadBalancer(ctx context.Context, b bootstrap.Engine, tier environmen
 	if lease.isRetiring(time.Now()) {
 		return refusal.Refuse(refusal.CodeBusy,
 			"the %s load balancer of tier %s is being taken down by the run that removed the last project behind it; remove this bootstrap again once it has gone",
-			alb.Kind, tier)
+			albresources.Kind, tier)
 	}
 	revision, err := WriteLease(ctx, b.Records, leased, Lease{Retiring: true, RetiringSince: time.Now().UTC()})
 	if errors.Is(err, records.ErrStale) {
 		return refusal.Refuse(refusal.CodeBusy,
-			"a deploy claimed the %s load balancer of tier %s while this bootstrap was being removed; remove it again", alb.Kind, tier)
+			"a deploy claimed the %s load balancer of tier %s while this bootstrap was being removed; remove it again", albresources.Kind, tier)
 	}
 	if err != nil {
-		return fmt.Errorf("mark the %s load balancer of tier %s as going down: %w", alb.Kind, tier, err)
+		return fmt.Errorf("mark the %s load balancer of tier %s as going down: %w", albresources.Kind, tier, err)
 	}
 	users, err := ListUsers(ctx, b, tier)
 	if err != nil {
@@ -363,8 +364,8 @@ func removeLoadBalancer(ctx context.Context, b bootstrap.Engine, tier environmen
 	return retireLoadBalancer(ctx, b, tier, revision, users)
 }
 
-func Front(openBootstrap func(context.Context) (bootstrap.Engine, error)) *alb.FrontPart {
-	return &alb.FrontPart{
+func Front(openBootstrap func(context.Context) (bootstrap.Engine, error)) alb.FrontPart {
+	return alb.FrontPart{
 		Claim: func(ctx context.Context, tier environment.Tier, user string) error {
 			b, err := openBootstrap(ctx)
 			if err != nil {

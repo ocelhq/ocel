@@ -10,10 +10,11 @@ import (
 	"sync"
 	"testing"
 
+	"google.golang.org/api/compute/v1"
+
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
-	"google.golang.org/api/compute/v1"
 )
 
 type urlMapServer struct {

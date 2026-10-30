@@ -7,16 +7,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
-type StaticRoutes struct {
-	Backend    string   `json:"backend"`
-	Objects    string   `json:"objects"`
-	Immutable  []string `json:"immutable"`
-	Revalidate []string `json:"revalidate,omitempty"`
-}
-
-func staticRoutesOf(record router.ReleaseRecord, balancer LoadBalancer) (*StaticRoutes, error) {
+func staticRoutesOf(record router.ReleaseRecord, balancer LoadBalancer) (*albresources.StaticRoutes, error) {
 	if balancer.AssetsBackend == "" || !hasUploadedStaticFiles(record) ||
 		record.Static == nil || len(record.Static.ImmutablePrefixes) == 0 {
 		return nil, nil
@@ -25,7 +19,7 @@ func staticRoutesOf(record router.ReleaseRecord, balancer LoadBalancer) (*Static
 	if err != nil {
 		return nil, err
 	}
-	return &StaticRoutes{
+	return &albresources.StaticRoutes{
 		Backend:    balancer.AssetsBackend,
 		Objects:    naming.PathSeparator + storage.StoragePrefix(naming.ObjectAssets),
 		Immutable:  record.Static.ImmutablePrefixes,
@@ -49,11 +43,11 @@ func encodeStaticRoutes(record router.ReleaseRecord, balancer LoadBalancer) (str
 	return string(encoded), nil
 }
 
-func (h Host) decodeStaticRoutes() (*StaticRoutes, error) {
+func (h Host) decodeStaticRoutes() (*albresources.StaticRoutes, error) {
 	if h.StaticRoutes == "" {
 		return nil, nil
 	}
-	var routes StaticRoutes
+	var routes albresources.StaticRoutes
 	if err := json.Unmarshal([]byte(h.StaticRoutes), &routes); err != nil {
 		return nil, fmt.Errorf("decode the static routes recorded for a host of %s: %w", h.App, err)
 	}

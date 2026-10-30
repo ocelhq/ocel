@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 const ownedListingModule = `
@@ -29,8 +30,8 @@ func TestTheFieldsTheALBRefusesAsOcelsOwnAreTheOnesTheTransformsPackageRefuses(t
 	root := transformtest.Root(t, map[string]string{"owned.transform.ts": ownedListingModule})
 	pass := transform.NodePass{Root: root, Modules: []string{"./owned.transform.ts"}, External: []string{"@pulumi/*"}}
 	req := transform.Request{Provider: "gcp", EnvTier: string(environment.TierProduction), Resources: []transform.Resource{
-		{Type: TransformKindEdge, Name: "web", App: "web"},
-		{Type: TransformKindLoadBalancer, Name: string(environment.TierProduction)},
+		{Type: albresources.TransformKindEdge, Name: "web", App: "web"},
+		{Type: albresources.TransformKindLoadBalancer, Name: string(environment.TierProduction)},
 	}}
 
 	results, err := pass.Evaluate(t.Context(), req)

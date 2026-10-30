@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 type notices struct {
@@ -33,14 +34,14 @@ func (e *Edge) removeGate(ctx context.Context, tier environment.Tier) error {
 		return err
 	}
 	if attached {
-		if err := e.deps.Stacks.Destroy(ctx, e.gateTarget(tier), progress.Discard()); err != nil {
+		if err := e.deps.Engine.Stacks.Destroy(ctx, e.gateStack(tier), progress.Discard()); err != nil {
 			return err
 		}
 	}
 	if err := e.forgetGates(ctx, tier); err != nil {
 		return err
 	}
-	return e.deps.Images.Delete(ctx, tier)
+	return e.deps.Engine.Images.Delete(ctx, tier)
 }
 
 func (s *stack) listRoutedHosts() []string {
@@ -64,7 +65,7 @@ func (s *stack) syncGate(ctx context.Context, spec edge.StackSpec) error {
 		if !attached {
 			return refusal.Refuse(refusal.CodeNotReady,
 				"%s has a %s gate recorded, and the %s load balancer of this project's %s tier runs no gate plugin: run `ocel bootstrap` for the %s tier to attach it, then deploy again",
-				spec.Slug, tier, Kind, tier, tier)
+				spec.Slug, tier, albresources.Kind, tier, tier)
 		}
 	}
 	routed := s.listRoutedHosts()

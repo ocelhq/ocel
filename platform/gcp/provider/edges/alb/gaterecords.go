@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 const (
@@ -26,9 +27,9 @@ type gateRecord struct {
 }
 
 type gatePublication struct {
-	Main      gateVersion   `json:"main"`
-	Before    []gateVersion `json:"before,omitempty"`
-	Confirmed bool          `json:"confirmed,omitempty"`
+	Main      albresources.GateVersion   `json:"main"`
+	Before    []albresources.GateVersion `json:"before,omitempty"`
+	Confirmed bool                       `json:"confirmed,omitempty"`
 }
 
 func gatePartition(tier environment.Tier) records.Partition {
@@ -36,11 +37,11 @@ func gatePartition(tier environment.Tier) records.Partition {
 }
 
 func gateRecordKey(tier environment.Tier, slug string) records.Key {
-	return gatePartition(tier).Key(string(Kind), gateRecordsSegment, slug)
+	return gatePartition(tier).Key(string(albresources.Kind), gateRecordsSegment, slug)
 }
 
 func gatePublicationKey(tier environment.Tier) records.Key {
-	return gatePartition(tier).Key(string(Kind), gatePublicationName)
+	return gatePartition(tier).Key(string(albresources.Kind), gatePublicationName)
 }
 
 func gateRecordData(tier environment.Tier, slug string) seal.AssociatedData {
@@ -54,11 +55,11 @@ func gatePublicationData(tier environment.Tier) seal.AssociatedData {
 func (e *Edge) sealRecord(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, record any) (json.RawMessage, error) {
 	plaintext, err := json.Marshal(record)
 	if err != nil {
-		return nil, fmt.Errorf("encode what the %s edge keeps about the %s gate: %w", Kind, tier, err)
+		return nil, fmt.Errorf("encode what the %s edge keeps about the %s gate: %w", albresources.Kind, tier, err)
 	}
 	sealed, err := e.deps.Cipher.Seal(ctx, tier, bound, plaintext)
 	if err != nil {
-		return nil, fmt.Errorf("seal what the %s edge keeps about the %s gate: %w", Kind, tier, err)
+		return nil, fmt.Errorf("seal what the %s edge keeps about the %s gate: %w", albresources.Kind, tier, err)
 	}
 	return json.Marshal(sealed)
 }
@@ -66,14 +67,14 @@ func (e *Edge) sealRecord(ctx context.Context, tier environment.Tier, bound seal
 func (e *Edge) openRecord(ctx context.Context, tier environment.Tier, bound seal.AssociatedData, stored json.RawMessage, into any) error {
 	var sealed []byte
 	if err := json.Unmarshal(stored, &sealed); err != nil {
-		return fmt.Errorf("read what the %s edge keeps about the %s gate: %w", Kind, tier, err)
+		return fmt.Errorf("read what the %s edge keeps about the %s gate: %w", albresources.Kind, tier, err)
 	}
 	plaintext, err := e.deps.Cipher.Open(ctx, tier, bound, sealed)
 	if err != nil {
-		return fmt.Errorf("open what the %s edge keeps about the %s gate: %w", Kind, tier, err)
+		return fmt.Errorf("open what the %s edge keeps about the %s gate: %w", albresources.Kind, tier, err)
 	}
 	if err := json.Unmarshal(plaintext, into); err != nil {
-		return fmt.Errorf("read what the %s edge keeps about the %s gate: %w", Kind, tier, err)
+		return fmt.Errorf("read what the %s edge keeps about the %s gate: %w", albresources.Kind, tier, err)
 	}
 	return nil
 }
@@ -86,7 +87,7 @@ func (e *Edge) readGateRecord(ctx context.Context, tier environment.Tier, slug s
 func (e *Edge) readGateRecordEntry(ctx context.Context, tier environment.Tier, slug string) (records.Entry, gateRecord, bool, error) {
 	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, gateRecordKey(tier, slug))
 	if err != nil {
-		return records.Entry{}, gateRecord{}, false, fmt.Errorf("read the %s gate of %s on the %s edge: %w", tier, slug, Kind, err)
+		return records.Entry{}, gateRecord{}, false, fmt.Errorf("read the %s gate of %s on the %s edge: %w", tier, slug, albresources.Kind, err)
 	}
 	if len(entry.Value) == 0 {
 		return entry, gateRecord{}, false, nil
@@ -121,10 +122,10 @@ func (e *Edge) changeGateRecord(ctx context.Context, tier environment.Tier, slug
 			return true, nil
 		}
 		if !errors.Is(err, records.ErrStale) {
-			return false, fmt.Errorf("record the %s gate of %s on the %s edge: %w", tier, slug, Kind, err)
+			return false, fmt.Errorf("record the %s gate of %s on the %s edge: %w", tier, slug, albresources.Kind, err)
 		}
 	}
-	return false, fmt.Errorf("record the %s gate of %s on the %s edge: it was rewritten between every read of it and the write that followed", tier, slug, Kind)
+	return false, fmt.Errorf("record the %s gate of %s on the %s edge: it was rewritten between every read of it and the write that followed", tier, slug, albresources.Kind)
 }
 
 func sameGateRecord(a, b gateRecord) bool {
@@ -134,9 +135,9 @@ func sameGateRecord(a, b gateRecord) bool {
 }
 
 func (e *Edge) listGateEntries(ctx context.Context, tier environment.Tier) ([]records.Entry, error) {
-	entries, err := e.deps.KeyValues.List(ctx, gatePartition(tier), string(Kind), gateRecordsSegment)
+	entries, err := e.deps.KeyValues.List(ctx, gatePartition(tier), string(albresources.Kind), gateRecordsSegment)
 	if err != nil {
-		return nil, fmt.Errorf("list the %s gates the %s edge runs: %w", tier, Kind, err)
+		return nil, fmt.Errorf("list the %s gates the %s edge runs: %w", tier, albresources.Kind, err)
 	}
 	return entries, nil
 }
@@ -170,7 +171,7 @@ func (e *Edge) readGatePublication(ctx context.Context, tier environment.Tier) (
 func (e *Edge) readGatePublicationEntry(ctx context.Context, tier environment.Tier) (records.Entry, gatePublication, bool, error) {
 	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, gatePublicationKey(tier))
 	if err != nil {
-		return records.Entry{}, gatePublication{}, false, fmt.Errorf("read what the gate plugin of the %s edge's %s load balancer runs: %w", Kind, tier, err)
+		return records.Entry{}, gatePublication{}, false, fmt.Errorf("read what the gate plugin of the %s edge's %s load balancer runs: %w", albresources.Kind, tier, err)
 	}
 	if len(entry.Value) == 0 {
 		return entry, gatePublication{}, false, nil
@@ -191,7 +192,7 @@ func (e *Edge) writeGatePublication(ctx context.Context, tier environment.Tier, 
 		if errors.Is(err, records.ErrStale) {
 			return records.Entry{}, err
 		}
-		return records.Entry{}, fmt.Errorf("record what the gate plugin of the %s edge's %s load balancer runs: %w", Kind, tier, err)
+		return records.Entry{}, fmt.Errorf("record what the gate plugin of the %s edge's %s load balancer runs: %w", albresources.Kind, tier, err)
 	}
 	return entry, nil
 }
@@ -203,7 +204,7 @@ func (e *Edge) forgetGates(ctx context.Context, tier environment.Tier) error {
 	}
 	for _, entry := range entries {
 		if err := records.Forget(ctx, e.deps.KeyValues, entry.Key); err != nil {
-			return fmt.Errorf("forget the %s gate %s on the %s edge: %w", tier, entry.Key, Kind, err)
+			return fmt.Errorf("forget the %s gate %s on the %s edge: %w", tier, entry.Key, albresources.Kind, err)
 		}
 	}
 	return records.Forget(ctx, e.deps.KeyValues, gatePublicationKey(tier))

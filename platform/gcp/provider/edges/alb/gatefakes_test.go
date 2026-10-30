@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albprogram"
 )
 
 var gatePluginBytes = []byte("\x00asm-the-gate")
@@ -148,7 +149,7 @@ func eventsMentioning(events []string, part string) []string {
 	return found
 }
 
-func pluginConfigIsSecret(program Program) (bool, error) {
+func pluginConfigIsSecret(program albprogram.Program) (bool, error) {
 	var secret bool
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
 		return program.Run(ctx, "acme-prod")

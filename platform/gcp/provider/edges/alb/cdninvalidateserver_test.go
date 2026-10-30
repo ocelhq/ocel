@@ -7,8 +7,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"google.golang.org/api/compute/v1"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
 type invalidateServer struct {

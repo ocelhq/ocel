@@ -13,12 +13,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 const frontPatchesKey = "transforms"
 
 func frontPatchesAt(tier environment.Tier) records.Key {
-	return stackrecords.EdgeStacksPartition(tier).Key(string(Kind), frontPatchesKey)
+	return stackrecords.EdgeStacksPartition(tier).Key(string(albresources.Kind), frontPatchesKey)
 }
 
 type frontRecord struct {
@@ -27,22 +28,19 @@ type frontRecord struct {
 }
 
 func (e *Edge) evaluateFront(ctx context.Context, tier environment.Tier) (recordedPatches, error) {
-	if e.deps.EvaluateFront == nil {
-		return recordedPatches{}, nil
-	}
-	result, err := e.deps.EvaluateFront(ctx, tier)
+	result, err := e.deps.Engine.EvaluateFront(ctx, tier)
 	return patchesOf(result), err
 }
 
 func (e *Edge) readRecordedFront(ctx context.Context, tier environment.Tier) (records.Entry, frontRecord, error) {
 	entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, frontPatchesAt(tier))
 	if err != nil {
-		return records.Entry{}, frontRecord{}, fmt.Errorf("read the transforms recorded for the %s load balancer of tier %s: %w", Kind, tier, err)
+		return records.Entry{}, frontRecord{}, fmt.Errorf("read the transforms recorded for the %s load balancer of tier %s: %w", albresources.Kind, tier, err)
 	}
 	var recorded frontRecord
 	if len(entry.Value) > 0 {
 		if err := json.Unmarshal(entry.Value, &recorded); err != nil {
-			return records.Entry{}, frontRecord{}, fmt.Errorf("decode the transforms recorded for the %s load balancer of tier %s: %w", Kind, tier, err)
+			return records.Entry{}, frontRecord{}, fmt.Errorf("decode the transforms recorded for the %s load balancer of tier %s: %w", albresources.Kind, tier, err)
 		}
 	}
 	return entry, recorded, nil
@@ -76,7 +74,7 @@ func (e *Edge) recordFront(ctx context.Context, tier environment.Tier, applied f
 	}
 	encoded, err := json.Marshal(applied)
 	if err != nil {
-		return fmt.Errorf("encode the transforms recorded for the %s load balancer of tier %s: %w", Kind, tier, err)
+		return fmt.Errorf("encode the transforms recorded for the %s load balancer of tier %s: %w", albresources.Kind, tier, err)
 	}
 	entry.Value = encoded
 	_, err = e.deps.KeyValues.Write(ctx, entry)
@@ -85,17 +83,17 @@ func (e *Edge) recordFront(ctx context.Context, tier environment.Tier, applied f
 			return err
 		}
 		return refusal.Refuse(refusal.CodeBusy,
-			"another deploy patched the %s load balancer of tier %s while this one did: deploy again once it has finished", Kind, tier)
+			"another deploy patched the %s load balancer of tier %s while this one did: deploy again once it has finished", albresources.Kind, tier)
 	}
 	if err != nil {
-		return fmt.Errorf("record the transforms recorded for the %s load balancer of tier %s: %w", Kind, tier, err)
+		return fmt.Errorf("record the transforms recorded for the %s load balancer of tier %s: %w", albresources.Kind, tier, err)
 	}
 	return nil
 }
 
 func (e *Edge) forgetFront(ctx context.Context, tier environment.Tier) error {
 	if err := records.Forget(ctx, e.deps.KeyValues, frontPatchesAt(tier)); err != nil {
-		return fmt.Errorf("forget the transforms recorded for the %s load balancer of tier %s: %w", Kind, tier, err)
+		return fmt.Errorf("forget the transforms recorded for the %s load balancer of tier %s: %w", albresources.Kind, tier, err)
 	}
 	return nil
 }
@@ -108,7 +106,7 @@ func (e *Edge) repatchFront(ctx context.Context, tier environment.Tier, project 
 	if wanted.equal(recorded.recordedPatches) {
 		return LoadBalancer{}, false, e.recordFront(ctx, tier, wanted)
 	}
-	progress.Say(fmt.Sprintf("Applying the transforms that patch the %s load balancer of the %s tier: they differ from the ones it was provisioned with", Kind, tier))
+	progress.Say(fmt.Sprintf("Applying the transforms that patch the %s load balancer of the %s tier: they differ from the ones it was provisioned with", albresources.Kind, tier))
 	balancer, err := e.raise(ctx, tier, project, progress)
 	return balancer, true, err
 }
@@ -124,9 +122,9 @@ func (e *Edge) PlanFrontRepatch(ctx context.Context, tier environment.Tier, proj
 	}
 	return &provider.ChangeGroup{
 		Kind:   provider.StackGroupKind,
-		Name:   LoadBalancerStack(tier),
+		Name:   albresources.LoadBalancerStack(tier),
 		Action: provider.ActionUpdate,
-		Reason: fmt.Sprintf("the transforms that patch the %s load balancer of the %s tier differ from the ones it records, so this deploy provisions it again with them, for every project in the tier", Kind, tier),
+		Reason: fmt.Sprintf("the transforms that patch the %s load balancer of the %s tier differ from the ones it records, so this deploy provisions it again with them, for every project in the tier", albresources.Kind, tier),
 		Slow:   true,
 	}, nil
 }

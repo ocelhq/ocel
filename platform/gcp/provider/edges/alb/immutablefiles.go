@@ -6,10 +6,11 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
-type immutableSwitch struct{ live, next StaticRoutes }
+type immutableSwitch struct{ live, next albresources.StaticRoutes }
 
 func (s *stack) shareImmutableFiles(ctx context.Context, move router.PointerMove) error {
 	switches, err := s.listImmutableSwitches(move)

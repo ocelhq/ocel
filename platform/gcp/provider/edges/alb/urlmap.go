@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -23,7 +24,7 @@ type URLMaps struct {
 
 func matcherFor(hostname string) string { return "host-" + naming.Sanitize(hostname) }
 
-func (p *URLMaps) Route(ctx context.Context, urlMap, hostname, backend string, routes *StaticRoutes) error {
+func (p *URLMaps) Route(ctx context.Context, urlMap, hostname, backend string, routes *albresources.StaticRoutes) error {
 	if urlMap == "" || hostname == "" || backend == "" {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"route %q through url map %q onto backend %q: a host rule names all three", hostname, urlMap, backend)

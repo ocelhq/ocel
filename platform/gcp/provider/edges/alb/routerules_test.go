@@ -3,12 +3,14 @@ package alb
 import (
 	"context"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 const shopBackend = "ocel-alb-shop-production-shop"
 
-func shopRoutes() *StaticRoutes {
-	return &StaticRoutes{
+func shopRoutes() *albresources.StaticRoutes {
+	return &albresources.StaticRoutes{
 		Backend:   "ocel-alb-production-assets",
 		Objects:   "/assets/shop/prod/web/r00000001/",
 		Immutable: []string{"/_next/static/"},

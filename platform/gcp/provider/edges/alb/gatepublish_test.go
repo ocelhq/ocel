@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/seal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 type recordOpens struct {
@@ -60,12 +61,12 @@ func TestPublishingAgainAfterAFailedRolloutRollsTheGateOutAndOnlyThenConfirmsIt(
 	balancer, w := gatedEdge(t)
 	state := reconcileGated(t, balancer, "shop", nil).State()
 	publish := balancer.Hooks().PublishGate
-	w.failUps(GateStack(environment.TierPreview), errors.New("the rollout failed"))
+	w.failUps(albresources.GateStack(environment.TierPreview), errors.New("the rollout failed"))
 
 	if err := publish(ctx, edge.GatePublication{State: state, Gate: &shopGate}); err == nil {
 		t.Fatal("PublishGate = nil, want the failed rollout")
 	}
-	if config := w.gateConfig(GateStack(environment.TierPreview)); strings.Contains(config, shopGate.Key) {
+	if config := w.gateConfig(albresources.GateStack(environment.TierPreview)); strings.Contains(config, shopGate.Key) {
 		t.Fatalf("the plugin runs %q after a failed rollout, want the old config", config)
 	}
 
@@ -73,7 +74,7 @@ func TestPublishingAgainAfterAFailedRolloutRollsTheGateOutAndOnlyThenConfirmsIt(
 		t.Fatalf("PublishGate (retry) = %v", err)
 	}
 
-	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
+	if config := w.gateConfig(albresources.GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
 		t.Errorf("the plugin runs %q after the retry, want the gate the failed rollout never carried", config)
 	}
 	if recorded, found, err := balancer.readGatePublication(ctx, environment.TierPreview); err != nil || !found || !recorded.Confirmed {

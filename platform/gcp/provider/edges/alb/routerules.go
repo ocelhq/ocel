@@ -7,10 +7,11 @@ import (
 	"google.golang.org/api/compute/v1"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
-func routeRulesOf(clients *gcloud.Clients, dynamic string, routes *StaticRoutes) []*compute.HttpRouteRule {
+func routeRulesOf(clients *gcloud.Clients, dynamic string, routes *albresources.StaticRoutes) []*compute.HttpRouteRule {
 	if routes == nil {
 		return nil
 	}

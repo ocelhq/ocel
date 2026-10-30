@@ -6,12 +6,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albprogram"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 func TestEveryResponseTheLoadBalancerSendsNamesItAsTheRouter(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(loadBalancerSpec{Namespace: "ocel", Names: loadBalancerNames("ocel", environment.TierProduction)}))
+	seen, err := declared(albprogram.LoadBalancer(albresources.LoadBalancerSpec{Namespace: "ocel", Names: albresources.LoadBalancerNames("ocel", environment.TierProduction)}))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}
@@ -19,17 +21,17 @@ func TestEveryResponseTheLoadBalancerSendsNamesItAsTheRouter(t *testing.T) {
 	added, _ := action["responseHeadersToAdds"].([]any)
 	for _, header := range added {
 		fields, _ := header.(map[string]any)
-		if fields["headerName"] == router.HeaderRouter && fields["headerValue"] == string(Kind) && fields["replace"] == true {
+		if fields["headerName"] == router.HeaderRouter && fields["headerValue"] == string(albresources.Kind) && fields["replace"] == true {
 			return
 		}
 	}
-	t.Errorf("the url map adds %v to its responses, want %s: %s, the marker a liveness probe reads to know which router answers a hostname, so no hostname behind this load balancer is ever cut over", added, router.HeaderRouter, Kind)
+	t.Errorf("the url map adds %v to its responses, want %s: %s, the marker a liveness probe reads to know which router answers a hostname, so no hostname behind this load balancer is ever cut over", added, router.HeaderRouter, albresources.Kind)
 }
 
 func TestTheGatePluginNamesTheRouterTheURLMapNames(t *testing.T) {
 	t.Parallel()
 
-	if router.Kind(gateplugin.RouterKind) != router.Kind(Kind) {
-		t.Errorf("the gate plugin answers as %q and the url map as %q: a protected hostname answers the liveness probe through the plugin, so it reads as served by another front", gateplugin.RouterKind, Kind)
+	if router.Kind(gateplugin.RouterKind) != router.Kind(albresources.Kind) {
+		t.Errorf("the gate plugin answers as %q and the url map as %q: a protected hostname answers the liveness probe through the plugin, so it reads as served by another front", gateplugin.RouterKind, albresources.Kind)
 	}
 }
