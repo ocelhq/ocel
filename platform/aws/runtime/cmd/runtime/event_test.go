@@ -555,6 +555,34 @@ func TestTheAppHearsTheClientAddressAnEdgeHoldingTheOriginSecretCarriedAppendedT
 	}
 }
 
+func TestTheAppIsToldHTTPSWhenNoHopNamedTheScheme(t *testing.T) {
+	ev, err := parseEvent([]byte(`{"rawPath": "/", "headers": {}, "requestContext": {"http": {"method": "GET"}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
+	if err != nil {
+		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+	if got := req.Header.Get("X-Forwarded-Proto"); got != "https" {
+		t.Errorf("X-Forwarded-Proto = %q, want https: a function URL and API Gateway answer HTTPS alone", got)
+	}
+}
+
+func TestTheAppHearsTheSchemeAHopNamed(t *testing.T) {
+	ev, err := parseEvent([]byte(`{"rawPath": "/", "headers": {"x-forwarded-proto": "http"}, "requestContext": {"http": {"method": "GET"}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := buildLoopbackRequest(t.Context(), 4321, ev, false)
+	if err != nil {
+		t.Fatalf("buildLoopbackRequest: %v", err)
+	}
+	if got := req.Header.Get("X-Forwarded-Proto"); got != "http" {
+		t.Errorf("X-Forwarded-Proto = %q, want the scheme the hop in front named", got)
+	}
+}
+
 func TestTheAppIgnoresAClientAddressOnACallNoSigningEdgeMade(t *testing.T) {
 	ev, err := parseEvent([]byte(`{
 		"rawPath": "/",

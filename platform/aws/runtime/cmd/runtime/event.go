@@ -108,6 +108,9 @@ func (ev *httpEvent) header(guarded bool) http.Header {
 		h.Set("X-Forwarded-For", client)
 	}
 	h.Del(edge.HeaderClientAddress)
+	if h.Get("X-Forwarded-Proto") == "" {
+		h.Set("X-Forwarded-Proto", "https")
+	}
 	return h
 }
 
