@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
@@ -42,23 +43,49 @@ type API interface {
 
 const listPageCeiling = 20
 
+const (
+	routesStoreReadyPoll   = time.Second
+	routesStoreReadyWithin = 2 * time.Minute
+
+	keyValueStoreReady        = "READY"
+	keyValueStoreProvisioning = "PROVISIONING"
+)
+
 func ensureRoutesStore(ctx context.Context, c API, name string) (string, error) {
-	created, err := c.CreateKeyValueStore(ctx, &cloudfront.CreateKeyValueStoreInput{
+	_, err := c.CreateKeyValueStore(ctx, &cloudfront.CreateKeyValueStoreInput{
 		Name:    aws.String(name),
 		Comment: aws.String("Ocel: one entry per hostname naming the release that answers on it. Written at promote, read by the resolver on every request."),
 	})
-	if err == nil {
-		return aws.ToString(created.KeyValueStore.ARN), nil
-	}
 	var exists *cftypes.EntityAlreadyExists
-	if !errors.As(err, &exists) {
+	if err != nil && !errors.As(err, &exists) {
 		return "", fmt.Errorf("create key value store %s: %w", name, err)
 	}
-	described, err := c.DescribeKeyValueStore(ctx, &cloudfront.DescribeKeyValueStoreInput{Name: aws.String(name)})
-	if err != nil {
-		return "", fmt.Errorf("read key value store %s: %w", name, err)
+	return routesStoreOnceReady(ctx, c, name)
+}
+
+func routesStoreOnceReady(ctx context.Context, c API, name string) (string, error) {
+	deadline := time.Now().Add(routesStoreReadyWithin)
+	for {
+		described, err := c.DescribeKeyValueStore(ctx, &cloudfront.DescribeKeyValueStoreInput{Name: aws.String(name)})
+		if err != nil {
+			return "", fmt.Errorf("read key value store %s: %w", name, err)
+		}
+		switch status := aws.ToString(described.KeyValueStore.Status); status {
+		case keyValueStoreReady:
+			return aws.ToString(described.KeyValueStore.ARN), nil
+		case keyValueStoreProvisioning:
+		default:
+			return "", fmt.Errorf("key value store %s is %s, not %s", name, status, keyValueStoreReady)
+		}
+		if time.Now().After(deadline) {
+			return "", fmt.Errorf("key value store %s was still provisioning after %s", name, routesStoreReadyWithin)
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(routesStoreReadyPoll):
+		}
 	}
-	return aws.ToString(described.KeyValueStore.ARN), nil
 }
 
 func ensureFunction(ctx context.Context, c API, name string, config *cftypes.FunctionConfig, code []byte) (string, error) {

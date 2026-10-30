@@ -28,22 +28,25 @@ type function struct {
 }
 
 type fakeCloudFront struct {
-	stores    map[string]string
-	functions map[string]*function
-	caches    map[string]*cftypes.CachePolicyConfig
-	headers   map[string]*cftypes.ResponseHeadersPolicyConfig
-	access    map[string]*cftypes.OriginAccessControlConfig
-	calls     []string
-	next      int
+	stores            map[string]string
+	provisioningReads int
+	provisioning      map[string]int
+	functions         map[string]*function
+	caches            map[string]*cftypes.CachePolicyConfig
+	headers           map[string]*cftypes.ResponseHeadersPolicyConfig
+	access            map[string]*cftypes.OriginAccessControlConfig
+	calls             []string
+	next              int
 }
 
 func newAccount() *fakeCloudFront {
 	return &fakeCloudFront{
-		stores:    map[string]string{},
-		functions: map[string]*function{},
-		caches:    map[string]*cftypes.CachePolicyConfig{},
-		headers:   map[string]*cftypes.ResponseHeadersPolicyConfig{},
-		access:    map[string]*cftypes.OriginAccessControlConfig{},
+		stores:       map[string]string{},
+		provisioning: map[string]int{},
+		functions:    map[string]*function{},
+		caches:       map[string]*cftypes.CachePolicyConfig{},
+		headers:      map[string]*cftypes.ResponseHeadersPolicyConfig{},
+		access:       map[string]*cftypes.OriginAccessControlConfig{},
 	}
 }
 
@@ -61,15 +64,28 @@ func (a *fakeCloudFront) CreateKeyValueStore(_ context.Context, in *cloudfront.C
 		return nil, &cftypes.EntityAlreadyExists{Message: aws.String("exists")}
 	}
 	a.stores[name] = "arn:aws:cloudfront::" + accountID + ":key-value-store/" + a.id("kvs-")
-	return &cloudfront.CreateKeyValueStoreOutput{KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(a.stores[name])}}, nil
+	a.provisioning[name] = a.provisioningReads
+	return &cloudfront.CreateKeyValueStoreOutput{KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(a.stores[name]), Status: aws.String(a.statusOf(name))}}, nil
+}
+
+func (a *fakeCloudFront) statusOf(name string) string {
+	if a.provisioning[name] > 0 {
+		return "PROVISIONING"
+	}
+	return "READY"
 }
 
 func (a *fakeCloudFront) DescribeKeyValueStore(_ context.Context, in *cloudfront.DescribeKeyValueStoreInput, _ ...func(*cloudfront.Options)) (*cloudfront.DescribeKeyValueStoreOutput, error) {
-	arn, ok := a.stores[aws.ToString(in.Name)]
+	name := aws.ToString(in.Name)
+	arn, ok := a.stores[name]
 	if !ok {
 		return nil, &cftypes.EntityNotFound{Message: aws.String("no store")}
 	}
-	return &cloudfront.DescribeKeyValueStoreOutput{KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(arn)}, ETag: aws.String("e")}, nil
+	status := a.statusOf(name)
+	if a.provisioning[name] > 0 {
+		a.provisioning[name]--
+	}
+	return &cloudfront.DescribeKeyValueStoreOutput{KeyValueStore: &cftypes.KeyValueStore{ARN: aws.String(arn), Status: aws.String(status)}, ETag: aws.String("e")}, nil
 }
 
 func (a *fakeCloudFront) DeleteKeyValueStore(_ context.Context, in *cloudfront.DeleteKeyValueStoreInput, _ ...func(*cloudfront.Options)) (*cloudfront.DeleteKeyValueStoreOutput, error) {
@@ -86,6 +102,15 @@ func etagOf(fn *function) *string { return aws.String(fmt.Sprintf("etag-%d", fn.
 
 func (a *fakeCloudFront) CreateFunction(_ context.Context, in *cloudfront.CreateFunctionInput, _ ...func(*cloudfront.Options)) (*cloudfront.CreateFunctionOutput, error) {
 	a.record("CreateFunction " + aws.ToString(in.Name))
+	if stores := in.FunctionConfig.KeyValueStoreAssociations; stores != nil {
+		for _, item := range stores.Items {
+			for name, arn := range a.stores {
+				if arn == aws.ToString(item.KeyValueStoreARN) && a.provisioning[name] > 0 {
+					return nil, &cftypes.InvalidArgument{Message: aws.String("The parameter KeyValueStoreAssociationArn is invalid; " + arn + " cannot be associated before the resource is provisioned.")}
+				}
+			}
+		}
+	}
 	fn := &function{config: in.FunctionConfig, code: in.FunctionCode, etag: 1}
 	a.functions[aws.ToString(in.Name)] = fn
 	return &cloudfront.CreateFunctionOutput{ETag: etagOf(fn)}, nil
@@ -280,6 +305,21 @@ func TestEnsureMakesEverythingADistributionSharesAndRecordsHowToFindIt(t *testin
 		if access.OriginAccessControlOriginType != cftypes.OriginAccessControlOriginTypesS3 || access.SigningBehavior != cftypes.OriginAccessControlSigningBehaviorsAlways {
 			t.Errorf("asset access = %+v, want every read of the asset bucket signed", access)
 		}
+	}
+}
+
+func TestEnsureOnAFreshAccountWaitsForTheRoutesStoreBeforeTheResolverReadsIt(t *testing.T) {
+	t.Parallel()
+	a := newAccount()
+	a.provisioningReads = 1
+	names := cloudfrontpart.NamesFor(account.Namespace("ocel"), environment.TierProduction)
+
+	resources, err := cloudfrontpart.Ensure(context.Background(), a, spec(environment.TierProduction), nil)
+	if err != nil {
+		t.Fatalf("Ensure() = %v, want the resolver made once its routes store is provisioned", err)
+	}
+	if set := cloudfrontpart.SetOf(names, resources); set.RoutesStore != a.stores[names.RoutesStore] {
+		t.Errorf("routes store = %q, want the one made under %s", set.RoutesStore, names.RoutesStore)
 	}
 }
 
