@@ -39,7 +39,7 @@ func statusProject(t *testing.T) (clitest.FakeProject, commands.Invocation) {
 		Name:      "containers",
 		UsedBy:    []string{"api"},
 		Resources: []provider.PhysicalResource{{Kind: "Fake::Cluster", ID: "ocel-containers-production", Location: "nowhere-1", ConsoleURL: "https://console.fake.invalid/clusters/ocel-containers-production"}},
-		Shape: &provider.PartShape{Vendor: string(fake.Vendor), Resources: []pricing.Shaped{
+		Inventory: &provider.PartInventory{Vendor: string(fake.Vendor), Resources: []pricing.Resource{
 			{Name: "containers", Type: fake.TypeContainer, Properties: map[string]any{}},
 		}},
 	})

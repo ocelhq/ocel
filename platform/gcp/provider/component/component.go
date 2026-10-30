@@ -22,7 +22,7 @@ type Component struct {
 	Hooks      resources.ResourceHooks
 	Parts      []Part
 	Preflight  func(resource provider.Resource) error
-	Shape      func(shape Shape, declared []provider.Resource) error
+	Inventory  func(inventory Inventory, declared []provider.Resource) error
 	Grants     func(ctx context.Context, app App) ([]grants.Grant, error)
 	Egress     bool
 	Accounts   []bootstrap.Account
@@ -37,19 +37,19 @@ type Transform struct {
 }
 
 type Part struct {
-	Name  string
-	Shape func(names names.Names, tier environment.Tier, region string) []pricing.Shaped
+	Name      string
+	Inventory func(names names.Names, tier environment.Tier, region string) []pricing.Resource
 }
 
 func NewPart(part bootstrap.ResourcePart) Part {
-	return Part{Name: part.Name, Shape: part.Shape}
+	return Part{Name: part.Name, Inventory: part.Inventory}
 }
 
-type Shape struct {
+type Inventory struct {
 	Tree        *pricing.Tree
 	Vendor      string
 	Names       names.Names
-	Request     provider.ShapeRequest
+	Request     provider.InventoryRequest
 	Region      string
 	Shared      string
 	Environment string
@@ -145,12 +145,12 @@ func (r Registry) Preflight(declared []provider.Resource) ([]string, error) {
 	return parts, nil
 }
 
-func (r Registry) Shape(shape Shape, declared []provider.Resource, used []Part) error {
-	var shaped []string
+func (r Registry) Inventory(inventory Inventory, declared []provider.Resource, used []Part) error {
+	var added []string
 	for _, part := range used {
-		if !slices.Contains(shaped, part.Name) {
-			shaped = append(shaped, part.Name)
-			shape.Tree.AddShaped(shape.Shared, shape.Vendor, shape.Region, part.Shape(shape.Names, shape.Request.Deploy.Tier, shape.Region))
+		if !slices.Contains(added, part.Name) {
+			added = append(added, part.Name)
+			inventory.Tree.AddResources(inventory.Shared, inventory.Vendor, inventory.Region, part.Inventory(inventory.Names, inventory.Request.Deploy.Tier, inventory.Region))
 		}
 	}
 	for _, each := range r {
@@ -163,17 +163,17 @@ func (r Registry) Shape(shape Shape, declared []provider.Resource, used []Part) 
 		if len(own) == 0 {
 			continue
 		}
-		if each.Shape != nil {
-			if err := each.Shape(shape, own); err != nil {
+		if each.Inventory != nil {
+			if err := each.Inventory(inventory, own); err != nil {
 				return err
 			}
 		}
 		for _, part := range each.Parts {
-			if slices.Contains(shaped, part.Name) {
+			if slices.Contains(added, part.Name) {
 				continue
 			}
-			shaped = append(shaped, part.Name)
-			shape.Tree.AddShaped(shape.Shared, shape.Vendor, shape.Region, part.Shape(shape.Names, shape.Request.Deploy.Tier, shape.Region))
+			added = append(added, part.Name)
+			inventory.Tree.AddResources(inventory.Shared, inventory.Vendor, inventory.Region, part.Inventory(inventory.Names, inventory.Request.Deploy.Tier, inventory.Region))
 		}
 	}
 	return nil

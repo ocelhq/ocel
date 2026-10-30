@@ -22,7 +22,7 @@ var declaredTypes = map[provider.BindingType]string{
 	provider.BindingBucket:   TypeBucket,
 }
 
-func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
+func (p *Provider) InventoryDeploy(_ context.Context, req provider.InventoryRequest) (*costv1.ResourceSet, error) {
 	project := "project:" + req.Deploy.Slug
 	environment := "environment:" + req.Deploy.Env
 	set := &costv1.ResourceSet{
@@ -33,14 +33,14 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	}
 	for _, resource := range req.Resources {
 		if typ, declared := declaredTypes[resource.Type]; declared && resource.Binding == "" {
-			set.Resources = append(set.Resources, p.shaped(environment, typ, resource.Name))
+			set.Resources = append(set.Resources, p.item(environment, typ, resource.Name))
 		}
 	}
 	for _, app := range req.Deploy.Apps {
 		scope := environment + "/app:" + app.App
 		set.Scopes = append(set.Scopes, &costv1.Scope{Id: scope, Parent: environment, Kind: "app", Name: app.App})
 		if app.Compute() == provider.ComputeContainer {
-			set.Resources = append(set.Resources, p.shaped(scope, TypeContainer, app.App))
+			set.Resources = append(set.Resources, p.item(scope, TypeContainer, app.App))
 			continue
 		}
 		functions := req.Functions[app.App]
@@ -48,13 +48,13 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 			functions = []provider.FunctionSpec{{Name: app.App}}
 		}
 		for _, fn := range functions {
-			set.Resources = append(set.Resources, p.shaped(scope, TypeFunction, fn.Name))
+			set.Resources = append(set.Resources, p.item(scope, TypeFunction, fn.Name))
 		}
 	}
 	return set, nil
 }
 
-func (p *Provider) shaped(scope, typ, name string) *costv1.Resource {
+func (p *Provider) item(scope, typ, name string) *costv1.Resource {
 	properties, _ := structpb.NewStruct(map[string]any{"name": name})
 	return &costv1.Resource{
 		Id:         scope + "/" + typ + ":" + name,

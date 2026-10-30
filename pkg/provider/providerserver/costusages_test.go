@@ -13,18 +13,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 )
 
-type shapeRecording struct {
+type inventoryRecording struct {
 	provider.Provider
 	mu       sync.Mutex
-	requests []provider.ShapeRequest
+	requests []provider.InventoryRequest
 }
 
-func (s *shapeRecording) Hooks() provider.Hooks {
+func (s *inventoryRecording) Hooks() provider.Hooks {
 	hooks := s.Provider.Hooks()
-	inner := hooks.Cost.Shape
+	inner := hooks.Cost.Inventory
 	hooks.Cost = &provider.CostHooks{
 		Estimate: hooks.Cost.Estimate,
-		Shape: func(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
+		Inventory: func(ctx context.Context, req provider.InventoryRequest) (*costv1.ResourceSet, error) {
 			s.mu.Lock()
 			s.requests = append(s.requests, req)
 			s.mu.Unlock()
@@ -48,18 +48,18 @@ func usedBy(usages []provider.AppUsage, app string) []string {
 	return names
 }
 
-func TestShapeOfAnEphemeralPreviewNamesWhatEachAppUses(t *testing.T) {
-	recording := &shapeRecording{Provider: fake.NewProvider(fake.Options{Region: "nowhere"})}
+func TestInventoryOfAnEphemeralPreviewNamesWhatEachAppUses(t *testing.T) {
+	recording := &inventoryRecording{Provider: fake.NewProvider(fake.Options{Region: "nowhere"})}
 	client, _ := costServed(t, recording)
-	req := shapeRequest()
+	req := inventoryRequest()
 	req.Environment = &environmentv1.Environment{
 		Tier:      environmentv1.Tier_TIER_PREVIEW,
 		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 		Identity:  "preview",
 	}
 
-	if _, err := client.Shape(context.Background(), req); err != nil {
-		t.Fatalf("Shape() error = %v", err)
+	if _, err := client.Inventory(context.Background(), req); err != nil {
+		t.Fatalf("Inventory() error = %v", err)
 	}
 
 	if got := usedBy(recording.requests[0].Usages, "web"); len(got) == 0 {
@@ -67,18 +67,18 @@ func TestShapeOfAnEphemeralPreviewNamesWhatEachAppUses(t *testing.T) {
 	}
 }
 
-func TestShapeHandsTheProviderWhichResourcesEachAppUses(t *testing.T) {
-	recording := &shapeRecording{Provider: fake.NewProvider(fake.Options{Region: "nowhere"})}
+func TestInventoryHandsTheProviderWhichResourcesEachAppUses(t *testing.T) {
+	recording := &inventoryRecording{Provider: fake.NewProvider(fake.Options{Region: "nowhere"})}
 	client, _ := costServed(t, recording)
-	req := shapeRequest()
+	req := inventoryRequest()
 	req.Manifest = twoAppRequest().GetManifest()
 
-	if _, err := client.Shape(context.Background(), req); err != nil {
-		t.Fatalf("Shape() error = %v", err)
+	if _, err := client.Inventory(context.Background(), req); err != nil {
+		t.Fatalf("Inventory() error = %v", err)
 	}
 
 	if len(recording.requests) != 1 {
-		t.Fatalf("the provider was asked to shape %d times, want once", len(recording.requests))
+		t.Fatalf("the provider was asked to inventory %d times, want once", len(recording.requests))
 	}
 	usages := recording.requests[0].Usages
 	if got, want := usedBy(usages, "admin"), []string{"orders", "uploads"}; !slices.Equal(got, want) {

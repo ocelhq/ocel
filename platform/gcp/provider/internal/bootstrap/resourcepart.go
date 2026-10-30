@@ -96,14 +96,14 @@ func (p ResourcePart) Items(names names.Names, tier environment.Tier) []Resource
 	return p.items(names, tier)
 }
 
-func (p ResourcePart) Shape(names names.Names, tier environment.Tier, region string) []pricing.Shaped {
-	var shaped []pricing.Shaped
+func (p ResourcePart) Inventory(names names.Names, tier environment.Tier, region string) []pricing.Resource {
+	var inventory []pricing.Resource
 	for _, item := range p.items(names, tier) {
-		if each, priced := item.Shape(region); priced {
-			shaped = append(shaped, each)
+		if each, priced := item.Priced(region); priced {
+			inventory = append(inventory, each)
 		}
 	}
-	return shaped
+	return inventory
 }
 
 func (p ResourcePart) Removable() RemovablePart {
@@ -120,16 +120,16 @@ func (p ResourcePart) provisionedItems(b Engine, tier environment.Tier) []Resour
 func (p ResourcePart) For(b Engine, tier environment.Tier) Part {
 	items := p.provisionedItems(b, tier)
 	part := Part{
-		Name:     p.Name,
-		Summary:  p.Summary,
-		APIs:     p.APIs,
-		Retires:  p.Retires,
-		Shape:    p.Shape(b.Clients.Names, tier, b.Clients.Region),
-		Removals: plannedRemovals(items),
-		Make:     func(ctx context.Context) error { return b.makeItems(ctx, tier, items, false) },
-		Replace:  func(ctx context.Context) error { return b.makeItems(ctx, tier, items, true) },
-		Remove:   func(ctx context.Context) error { return b.removeItems(ctx, tier, items) },
-		Users:    func(ctx context.Context) ([]string, error) { return p.listUsers(ctx, b, tier) },
+		Name:      p.Name,
+		Summary:   p.Summary,
+		APIs:      p.APIs,
+		Retires:   p.Retires,
+		Inventory: p.Inventory(b.Clients.Names, tier, b.Clients.Region),
+		Removals:  plannedRemovals(items),
+		Make:      func(ctx context.Context) error { return b.makeItems(ctx, tier, items, false) },
+		Replace:   func(ctx context.Context) error { return b.makeItems(ctx, tier, items, true) },
+		Remove:    func(ctx context.Context) error { return b.removeItems(ctx, tier, items) },
+		Users:     func(ctx context.Context) ([]string, error) { return p.listUsers(ctx, b, tier) },
 		RefuseInUse: func(ctx context.Context, removal PartRemoval) error {
 			return p.refuseInUse(ctx, b, tier, removal)
 		},

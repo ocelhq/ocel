@@ -10,24 +10,24 @@ import (
 	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 )
 
-var shapes = map[edge.Kind]func(account.Namespace, pricing.EdgeSite) (pricing.EdgeShape, error){
-	cloudflare.Kind: func(_ account.Namespace, site pricing.EdgeSite) (pricing.EdgeShape, error) {
-		return cloudflare.Shape(site)
+var inventories = map[edge.Kind]func(account.Namespace, pricing.EdgeSite) (pricing.EdgeInventory, error){
+	cloudflare.Kind: func(_ account.Namespace, site pricing.EdgeSite) (pricing.EdgeInventory, error) {
+		return cloudflare.Inventory(site)
 	},
-	cloudfront.Kind: func(_ account.Namespace, site pricing.EdgeSite) (pricing.EdgeShape, error) {
-		return cloudfront.Shape(site)
+	cloudfront.Kind: func(_ account.Namespace, site pricing.EdgeSite) (pricing.EdgeInventory, error) {
+		return cloudfront.Inventory(site)
 	},
-	apigateway.Kind: func(_ account.Namespace, site pricing.EdgeSite) (pricing.EdgeShape, error) {
-		return apigateway.Shape(site)
+	apigateway.Kind: func(_ account.Namespace, site pricing.EdgeSite) (pricing.EdgeInventory, error) {
+		return apigateway.Inventory(site)
 	},
 }
 
-func Shape(kind edge.Kind, ns account.Namespace, site pricing.EdgeSite) (pricing.EdgeShape, error) {
-	shape, shaped := shapes[kind]
-	if !shaped {
-		return pricing.EdgeShape{}, nil
+func Inventory(kind edge.Kind, ns account.Namespace, site pricing.EdgeSite) (pricing.EdgeInventory, error) {
+	inventory, known := inventories[kind]
+	if !known {
+		return pricing.EdgeInventory{}, nil
 	}
-	return shape(ns, site)
+	return inventory(ns, site)
 }
 
 var Rates = []pricing.EdgeRates{cloudflarecost.Rates}

@@ -97,8 +97,8 @@ func sharedDatabasePart(b bootstrap.Engine, tier environment.Tier, layouts []Lay
 				strings.Join(users, ", "), SharedDatabasePartName, tier, removal.Retry)
 		},
 	}
-	if shaped, priced := (bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: database}).Shape(b.Clients.Region); priced {
-		part.Shape = []pricing.Shaped{shaped}
+	if entry, priced := (bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: database}).Priced(b.Clients.Region); priced {
+		part.Inventory = []pricing.Resource{entry}
 	}
 	return part
 }

@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*costv1.ResourceSet, error) {
+func (h *handlers) Inventory(ctx context.Context, req *contractv1.InventoryRequest) (*costv1.ResourceSet, error) {
 	p, readiness, err := h.readiness(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
@@ -41,13 +41,13 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	set, err := cost.Shape(ctx, provider.ShapeRequest{
+	set, err := cost.Inventory(ctx, provider.InventoryRequest{
 		Deploy:     spec,
 		Edge:       readiness.Edge,
 		Parts:      parts,
 		Resources:  resources,
-		Functions:  shapedFunctions(req.GetManifest()),
-		Usages:     shapedUsages(spec, req.GetManifest(), resources),
+		Functions:  inventoryFunctions(req.GetManifest()),
+		Usages:     inventoryUsages(spec, req.GetManifest(), resources),
 		Transforms: h.session.transforms(),
 		Uses:       uses,
 	})
@@ -60,7 +60,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 
 const (
 	scanBuildID     = "00000000000000000000000000000000"
-	scanPromotionID = "shape"
+	scanPromotionID = "inventory"
 )
 
 func unshipped(manifest *contractv1.Manifest) *contractv1.Manifest {
@@ -73,7 +73,7 @@ func unshipped(manifest *contractv1.Manifest) *contractv1.Manifest {
 	return manifest
 }
 
-func shapedFunctions(manifest *contractv1.Manifest) map[string][]provider.FunctionSpec {
+func inventoryFunctions(manifest *contractv1.Manifest) map[string][]provider.FunctionSpec {
 	specs := make(map[string][]provider.FunctionSpec, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
 		for _, fn := range provider.ListFunctions(app) {
@@ -83,7 +83,7 @@ func shapedFunctions(manifest *contractv1.Manifest) map[string][]provider.Functi
 	return specs
 }
 
-func shapedUsages(spec provider.DeploySpec, manifest *contractv1.Manifest, resources []provider.Resource) []provider.AppUsage {
+func inventoryUsages(spec provider.DeploySpec, manifest *contractv1.Manifest, resources []provider.Resource) []provider.AppUsage {
 	usages := make([]provider.AppUsage, 0, len(spec.Apps))
 	for _, entry := range spec.Apps {
 		used := boundNamesUsedBy(manifest, resources, entry.App)

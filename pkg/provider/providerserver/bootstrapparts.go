@@ -112,12 +112,12 @@ func idleCosts(ctx context.Context, parts []provider.BootstrapPart, price estima
 	tree := &pricing.Tree{}
 	scopes := map[string]string{}
 	for _, part := range parts {
-		if part.Shape == nil {
+		if part.Inventory == nil {
 			continue
 		}
 		scope := tree.Scope("", partScope, part.Name)
 		scopes[scope] = part.Name
-		tree.AddShaped(scope, part.Shape.Vendor, part.Shape.Region, part.Shape.Resources)
+		tree.AddResources(scope, part.Inventory.Vendor, part.Inventory.Region, part.Inventory.Resources)
 	}
 	if len(scopes) == 0 || price == nil {
 		return nil, "", nil

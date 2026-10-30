@@ -84,7 +84,7 @@ func describeBastionPart(ctx context.Context, b bootstrap.Engine, tier environme
 			{Kind: string(bootstrap.KindService), ID: b.Clients.Bastion(tier)},
 			{Kind: string(bootstrap.KindServiceAccount), ID: b.Clients.BastionAccount(tier)},
 		},
-		Shape: &provider.PartShape{Vendor: string(gcloud.Vendor), Region: b.Clients.Region, Resources: []pricing.Shaped{{
+		Inventory: &provider.PartInventory{Vendor: string(gcloud.Vendor), Region: b.Clients.Region, Resources: []pricing.Resource{{
 			Name:       b.Clients.Bastion(tier),
 			Type:       cost.CloudRunServiceType,
 			Properties: run.PricedProperties(true, 0, run.RevisionMemory, run.IngressInternal),

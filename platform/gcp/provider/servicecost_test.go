@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 )
 
-func shapedService(t *testing.T, pass transform.Pass) *costv1.Resource {
+func inventoriedService(t *testing.T, pass transform.Pass) *costv1.Resource {
 	t.Helper()
 	p := pushing(t, "")
 	p.transforms = pass
@@ -21,24 +21,24 @@ func shapedService(t *testing.T, pass transform.Pass) *costv1.Resource {
 		Name: "web", Framework: &contractv1.Framework{Name: "node"},
 		Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}},
 	}}
-	set, err := p.ShapeCost(context.Background(), provider.ShapeRequest{
+	set, err := p.InventoryDeploy(context.Background(), provider.InventoryRequest{
 		Deploy:    provider.DeploySpec{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []provider.AppEntry{web}},
 		Functions: map[string][]provider.FunctionSpec{"web": {{Name: "fn--web--entry"}}},
 	})
 	if err != nil {
-		t.Fatalf("ShapeCost() = %v", err)
+		t.Fatalf("InventoryDeploy() = %v", err)
 	}
 	for _, resource := range set.GetResources() {
 		if resource.GetType() == "google_cloud_run_v2_service" && strings.HasSuffix(resource.GetScope(), "app:web") {
 			return resource
 		}
 	}
-	t.Fatalf("ShapeCost() shaped %v, want the function's Cloud Run service", set.GetResources())
+	t.Fatalf("InventoryDeploy() inventoried %v, want the function's Cloud Run service", set.GetResources())
 	return nil
 }
 
 func TestAServiceIsPricedAtTheResourcesScalingAndBillingItsPatchSets(t *testing.T) {
-	shaped := shapedService(t, servicePatched(map[string]any{"template": map[string]any{
+	inventoried := inventoriedService(t, servicePatched(map[string]any{"template": map[string]any{
 		"containers": []any{map[string]any{"resources": map[string]any{
 			"limits":  map[string]any{"cpu": "2", "memory": "4Gi"},
 			"cpuIdle": false,
@@ -46,7 +46,7 @@ func TestAServiceIsPricedAtTheResourcesScalingAndBillingItsPatchSets(t *testing.
 		"scaling": map[string]any{"minInstanceCount": 1, "maxInstanceCount": 5},
 	}}))
 
-	template := shaped.GetProperties().AsMap()["template"].(map[string]any)
+	template := inventoried.GetProperties().AsMap()["template"].(map[string]any)
 	resources := template["containers"].([]any)[0].(map[string]any)["resources"].(map[string]any)
 	limits := resources["limits"].(map[string]any)
 	scaling := template["scaling"].(map[string]any)
@@ -59,19 +59,19 @@ func TestAServiceIsPricedAtTheResourcesScalingAndBillingItsPatchSets(t *testing.
 }
 
 func TestAServiceWhoseCPUABindingFillsIsPricedAsUnknown(t *testing.T) {
-	shaped := shapedService(t, servicePatched(map[string]any{"template": map[string]any{
+	inventoried := inventoriedService(t, servicePatched(map[string]any{"template": map[string]any{
 		"containers": []any{map[string]any{"resources": map[string]any{
 			"limits": map[string]any{"cpu": map[string]any{"$ocelOutput": map[string]any{"type": "custom", "name": "sizes", "property": "cpu"}}},
 		}}},
 	}}))
 
-	if !slices.Contains(shaped.GetUnknown(), "template.containers.0.resources.limits.cpu") {
-		t.Errorf("the service is priced with unknown %v, want its CPU unknown until the deploy reads the record", shaped.GetUnknown())
+	if !slices.Contains(inventoried.GetUnknown(), "template.containers.0.resources.limits.cpu") {
+		t.Errorf("the service is priced with unknown %v, want its CPU unknown until the deploy reads the record", inventoried.GetUnknown())
 	}
 }
 
 func TestAContainerABindingFillsAnyOfIsPricedAsUnknownWholeAndItsScalingAsPatched(t *testing.T) {
-	shaped := shapedService(t, servicePatched(map[string]any{"template": map[string]any{
+	inventoried := inventoriedService(t, servicePatched(map[string]any{"template": map[string]any{
 		"containers": []any{map[string]any{"resources": map[string]any{
 			"limits": map[string]any{
 				"cpu":    map[string]any{"$ocelOutput": map[string]any{"type": "custom", "name": "sizes", "property": "cpu"}},
@@ -86,17 +86,17 @@ func TestAContainerABindingFillsAnyOfIsPricedAsUnknownWholeAndItsScalingAsPatche
 		"template.containers.0.resources.limits.cpu",
 		"template.containers.0.resources.limits.memory",
 	}
-	if !slices.Equal(shaped.GetUnknown(), want) {
-		t.Errorf("the service is priced with unknown %v, want %v: the containers are decoded whole at the deploy", shaped.GetUnknown(), want)
+	if !slices.Equal(inventoried.GetUnknown(), want) {
+		t.Errorf("the service is priced with unknown %v, want %v: the containers are decoded whole at the deploy", inventoried.GetUnknown(), want)
 	}
-	scaling := shaped.GetProperties().AsMap()["template"].(map[string]any)["scaling"].(map[string]any)
+	scaling := inventoried.GetProperties().AsMap()["template"].(map[string]any)["scaling"].(map[string]any)
 	if scaling["min_instance_count"] != float64(1) || scaling["max_instance_count"] != float64(5) {
 		t.Errorf("the service is priced with scaling %v, want the 1 to 5 instances its patch sets", scaling)
 	}
 }
 
 func TestScalingABindingFillsOneBoundOfIsPricedAsUnknownWhole(t *testing.T) {
-	shaped := shapedService(t, servicePatched(map[string]any{"template": map[string]any{
+	inventoried := inventoriedService(t, servicePatched(map[string]any{"template": map[string]any{
 		"scaling": map[string]any{
 			"minInstanceCount": map[string]any{"$ocelOutput": map[string]any{"type": "custom", "name": "sizes", "property": "min"}},
 			"maxInstanceCount": 5,
@@ -104,8 +104,8 @@ func TestScalingABindingFillsOneBoundOfIsPricedAsUnknownWhole(t *testing.T) {
 	}}))
 
 	want := []string{"template.scaling.max_instance_count", "template.scaling.min_instance_count"}
-	if !slices.Equal(shaped.GetUnknown(), want) {
-		t.Errorf("the service is priced with unknown %v, want %v: scaling is decoded whole at the deploy", shaped.GetUnknown(), want)
+	if !slices.Equal(inventoried.GetUnknown(), want) {
+		t.Errorf("the service is priced with unknown %v, want %v: scaling is decoded whole at the deploy", inventoried.GetUnknown(), want)
 	}
 }
 
@@ -135,12 +135,12 @@ func TestTwoAppsWithAFunctionOfTheSameNameArePricedAtTheirOwnPatches(t *testing.
 			Artifact: &contractv1.ManifestApp_Serverless{Serverless: &contractv1.ServerlessArtifact{}},
 		}}
 	}
-	set, err := p.ShapeCost(context.Background(), provider.ShapeRequest{
+	set, err := p.InventoryDeploy(context.Background(), provider.InventoryRequest{
 		Deploy:    provider.DeploySpec{Slug: "shop", Tier: environment.TierProduction, Env: "prod", Apps: []provider.AppEntry{serverless("web"), serverless("admin")}},
 		Functions: map[string][]provider.FunctionSpec{"web": {{Name: "entry"}}, "admin": {{Name: "entry"}}},
 	})
 	if err != nil {
-		t.Fatalf("ShapeCost() = %v", err)
+		t.Fatalf("InventoryDeploy() = %v", err)
 	}
 
 	cpus := map[string]any{}
