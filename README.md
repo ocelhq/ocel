@@ -30,7 +30,7 @@ curl -fsSL https://ocel.dev/install.sh | sh
 # or: npm install -g @ocel/cli
 ```
 
-An `ocel.config.{ts,json,yaml}` is how you configure it:
+An `ocel.config.ts` / `ocel.{json,yaml}` is how you configure it:
 
 ```ts
 import { defineConfig } from "ocel/config";
@@ -75,7 +75,7 @@ export const db = postgres("main");
 
 ```ts
 // src/server.ts
-import { db } from "../resources";
+import { db } from "../infra";
 
 // Use directly in your app
 const { rows } = await db.query("select * from documents");
