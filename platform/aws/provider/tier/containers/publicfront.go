@@ -173,10 +173,11 @@ func (w *work) runLiveness(ctx *pulumi.Context, balancer string, listener *lb.Li
 		return err
 	}
 	invoke, err := lambda.NewPermission(ctx, component.NameOf(liveness).Part(invokeWord), &lambda.PermissionArgs{
-		Action:    pulumi.String("lambda:InvokeFunction"),
-		Function:  function.Name,
-		Principal: pulumi.String(balancerPrincipal),
-		SourceArn: group.Arn,
+		Action:      pulumi.String("lambda:InvokeFunction"),
+		Function:    function.Name,
+		Principal:   pulumi.String(balancerPrincipal),
+		SourceArn:   group.Arn,
+		StatementId: pulumi.String(invokeWord),
 	})
 	if err != nil {
 		return err

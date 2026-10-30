@@ -188,6 +188,23 @@ func TestASiblingKeepsItsSignedURLAndLearnsNoSecret(t *testing.T) {
 	}
 }
 
+func TestEachPublicPermissionOfTheEntryCarriesAStatementIDLambdaAccepts(t *testing.T) {
+	t.Parallel()
+
+	stack := testStack(t, "prod", "web")
+	rec := registerRoutedGuarded(t, cloudfront.Kind, stack)
+
+	for _, want := range functionurl.Public() {
+		permission := rec.inputs(lambdaPermissionToken, publicPermissionID(stack, "fn--web--entry", want))
+		if len(permission) == 0 {
+			t.Fatalf("the unsigned entry URL has no %s permission", want.Action)
+		}
+		if id, ok := componenttest.LambdaAcceptsStatementID(permission); !ok {
+			t.Errorf("%s statementId = %q, which Lambda refuses; left unset, Pulumi derives it from the resource name and its '/'", want.Action, id)
+		}
+	}
+}
+
 func TestEveryFunctionURLBehindCloudflareStaysSigned(t *testing.T) {
 	t.Parallel()
 

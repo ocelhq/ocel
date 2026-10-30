@@ -152,10 +152,11 @@ func registerRealtime(ctx *pulumi.Context, stack component.Stack, args realtimeA
 	}
 
 	if _, err := lambda.NewPermission(ctx, authorizerName.Part(authorizerInvokePermission), &lambda.PermissionArgs{
-		Action:    pulumi.String("lambda:InvokeFunction"),
-		Function:  authorizer.Name,
-		Principal: pulumi.String(appSyncPrincipal),
-		SourceArn: api.ApiArn,
+		Action:      pulumi.String("lambda:InvokeFunction"),
+		Function:    authorizer.Name,
+		Principal:   pulumi.String(appSyncPrincipal),
+		SourceArn:   api.ApiArn,
+		StatementId: pulumi.String(authorizerInvokePermission),
 	}); err != nil {
 		return err
 	}

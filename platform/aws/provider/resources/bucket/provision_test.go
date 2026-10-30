@@ -355,3 +355,16 @@ func TestABucketWithNoBoundaryIsRefusedRatherThanMintedUncapped(t *testing.T) {
 		t.Fatalf("register with no boundary = %v, want a refusal naming the boundary", err)
 	}
 }
+
+func TestTheUploadCompletersInvokePermissionCarriesAStatementIDLambdaAccepts(t *testing.T) {
+	t.Parallel()
+
+	rec := componenttest.Record(t, func(ctx *pulumi.Context) error {
+		return register(ctx, testStack("shop"), "bucket--uploads", translate(&provider.BucketSpec{}), testSessions("shop"), testUploadCompleter())
+	})
+
+	permission := rec.InputsOf(t, component.TokenLambdaPermission, testBucket+"-completer/"+completerInvokePermission)
+	if id, ok := componenttest.LambdaAcceptsStatementID(permission); !ok {
+		t.Errorf("statementId = %q, which Lambda refuses; left unset, Pulumi derives it from the resource name and its '/'", id)
+	}
+}
