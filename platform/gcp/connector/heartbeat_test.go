@@ -13,7 +13,7 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/lestrrat-go/jwx/v3/jwt"
 
-	"github.com/ocelhq/ocel/pkg/connectorserver"
+	"github.com/ocelhq/ocel/pkg/endpoint"
 )
 
 const (
@@ -104,7 +104,7 @@ func signed(t *testing.T, signer jwk.Key, claims idToken) string {
 }
 
 func heartbeatRequest(token string) *http.Request {
-	request := httptest.NewRequest(http.MethodPost, "https://"+connectorHost+connectorserver.HeartbeatPath, nil)
+	request := httptest.NewRequest(http.MethodPost, "https://"+connectorHost+endpoint.HeartbeatPath, nil)
 	if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -114,7 +114,7 @@ func heartbeatRequest(token string) *http.Request {
 func TestAHeartbeatRequestCarryingCloudSchedulersTokenForTheConnectorsOwnAccountIsAdmitted(t *testing.T) {
 	t.Parallel()
 	google := googleServing(t)
-	caller := scheduledCaller{keys: connectorserver.NewKeyring(google.certs), account: connectorAccount}
+	caller := scheduledCaller{keys: endpoint.NewKeyring(google.certs), account: connectorAccount}
 
 	if err := caller.verify(heartbeatRequest(signed(t, google.signer, scheduled()))); err != nil {
 		t.Errorf("verify() = %v, want the token Cloud Scheduler mints as the connector's account admitted", err)
@@ -137,7 +137,7 @@ func TestAHeartbeatRequestWithoutCloudSchedulersTokenIsRefused(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			caller := scheduledCaller{keys: connectorserver.NewKeyring(google.certs), account: connectorAccount}
+			caller := scheduledCaller{keys: endpoint.NewKeyring(google.certs), account: connectorAccount}
 			if err := caller.verify(heartbeatRequest(token)); err == nil {
 				t.Error("verify() = nil, and a stranger may not make the connector beat on their schedule")
 			}
