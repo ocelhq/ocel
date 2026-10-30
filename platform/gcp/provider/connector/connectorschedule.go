@@ -6,7 +6,7 @@ import (
 
 	"google.golang.org/api/cloudscheduler/v1"
 
-	"github.com/ocelhq/ocel/pkg/connectorserver"
+	"github.com/ocelhq/ocel/pkg/endpoint"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
@@ -20,7 +20,7 @@ func buildConnectorSchedule(c *gcloud.Clients, url string) *cloudscheduler.Job {
 		Schedule:    connectorBeatSchedule,
 		TimeZone:    gcloud.ScheduleTimeZone,
 		HttpTarget: &cloudscheduler.HttpTarget{
-			Uri:        url + connectorserver.HeartbeatPath,
+			Uri:        url + endpoint.HeartbeatPath,
 			HttpMethod: http.MethodPost,
 			OidcToken: &cloudscheduler.OidcToken{
 				ServiceAccountEmail: c.ConnectorAccountEmail(),

@@ -12,8 +12,9 @@ import (
 
 	runv2 "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/connectorserver"
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/scope"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -197,7 +198,7 @@ func TestTheConnectorsPublicKeyIsReadOffTheServiceItRunsAs(t *testing.T) {
 func TestTheConnectorConfigNamesWhereItsKeyIsMounted(t *testing.T) {
 	t.Parallel()
 
-	written, err := keyPathed([]byte(`{"console":"https://console.example.com","connectorId":"conn-1"}`), connectorKeyPath)
+	written, err := keyPathed([]byte(`{"console":"https://console.example.com","endpointId":"conn-1"}`), connectorKeyPath)
 	if err != nil {
 		t.Fatalf("keyPathed: %v", err)
 	}
@@ -205,7 +206,7 @@ func TestTheConnectorConfigNamesWhereItsKeyIsMounted(t *testing.T) {
 	if err := json.Unmarshal(written, &read); err != nil {
 		t.Fatal(err)
 	}
-	if read["keyPath"] != connectorKeyPath || read["console"] != "https://console.example.com" || read["connectorId"] != "conn-1" {
+	if read["keyPath"] != connectorKeyPath || read["console"] != "https://console.example.com" || read["endpointId"] != "conn-1" {
 		t.Errorf("the config written is %v, want keyPath added and the rest kept", read)
 	}
 	if _, err := keyPathed([]byte(`[]`), connectorKeyPath); err == nil {
@@ -217,21 +218,21 @@ func TestTheConnectorHasOnlyTheKeyRolesItsGrantsCallFor(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		grants []string
-		roles  []string
+		allowed []scopev1.Scope
+		roles   []string
 	}{
-		"read alone":           {grants: []string{connectorserver.CapabilityVariablesRead}},
-		"read and write":       {grants: []string{connectorserver.CapabilityVariablesRead, connectorserver.CapabilityVariablesWrite}, roles: []string{connectorSealingRole}},
-		"read and reveal":      {grants: []string{connectorserver.CapabilityVariablesRead, connectorserver.CapabilityVariablesReveal}, roles: []string{connectorOpeningRole}},
-		"every grant there is": {grants: []string{connectorserver.CapabilityVariablesRead, connectorserver.CapabilityVariablesWrite, connectorserver.CapabilityVariablesReveal}, roles: []string{connectorSealingRole, connectorOpeningRole}},
+		"read alone":           {allowed: []scopev1.Scope{scopev1.Scope_SCOPE_VARIABLES_READ}},
+		"read and write":       {allowed: []scopev1.Scope{scopev1.Scope_SCOPE_VARIABLES_READ, scopev1.Scope_SCOPE_VARIABLES_WRITE}, roles: []string{connectorSealingRole}},
+		"read and reveal":      {allowed: []scopev1.Scope{scopev1.Scope_SCOPE_VARIABLES_READ, scopev1.Scope_SCOPE_VARIABLES_REVEAL}, roles: []string{connectorOpeningRole}},
+		"every grant there is": {allowed: scope.ListUserScopes(), roles: []string{connectorSealingRole, connectorOpeningRole}},
 		"no grant at all":      {},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := keyRolesFor(tc.grants); !slices.Equal(got, tc.roles) {
+			if got := keyRolesFor(tc.allowed); !slices.Equal(got, tc.roles) {
 				t.Errorf("keyRolesFor(%v) = %v, want %v: a read never opens a sealed value, a write seals one, a reveal opens one",
-					tc.grants, got, tc.roles)
+					tc.allowed, got, tc.roles)
 			}
 		})
 	}
