@@ -48,6 +48,8 @@ type Facts struct {
 	MaxFunctionBytes         int64
 
 	WebIdentity *WebIdentityFacts
+
+	ConnectorRunsJobs bool
 }
 
 type EdgeProgramRequest struct {
