@@ -45,6 +45,8 @@ const (
 	KindAssetAccess   = "AWS::CloudFront::OriginAccessControl"
 )
 
+var removedHeaders = []string{CacheTagHeader}
+
 type Spec struct {
 	Namespace account.Namespace
 	Tier      environment.Tier
@@ -123,7 +125,7 @@ func Digest(spec Spec) string {
 	sum := sha256.Sum256([]byte(strings.Join([]string{
 		string(spec.Tier), names.RoutesStore, names.Resolver, names.EmptyBody, names.CachePolicy, names.HeadersPolicy, names.AssetAccess,
 		string(resolver.Code()), string(resolver.EmptyBodyCode()), resolver.GateDigest(),
-		cacheKeyHeader, rscQueryParameter, strconv.FormatInt(cacheMaxTTL, 10), router.HeaderRouter, CacheTagHeader, edge.HeaderEmptyBody,
+		cacheKeyHeader, rscQueryParameter, strconv.FormatInt(cacheMaxTTL, 10), router.HeaderRouter, strings.Join(removedHeaders, ","), edge.HeaderEmptyBody,
 	}, "\n")))
 	return hex.EncodeToString(sum[:])
 }
@@ -199,7 +201,10 @@ func headersPolicyConfig(names Names, tier environment.Tier) *cftypes.ResponseHe
 	if tier == environment.TierPreview {
 		custom = append(custom, cftypes.ResponseHeadersPolicyCustomHeader{Header: aws.String(previewRobotsHeader), Value: aws.String(previewRobotsValue), Override: aws.Bool(true)})
 	}
-	removed := []cftypes.ResponseHeadersPolicyRemoveHeader{{Header: aws.String(CacheTagHeader)}, {Header: aws.String(edge.HeaderEmptyBody)}}
+	removed := make([]cftypes.ResponseHeadersPolicyRemoveHeader, 0, len(removedHeaders))
+	for _, header := range removedHeaders {
+		removed = append(removed, cftypes.ResponseHeadersPolicyRemoveHeader{Header: aws.String(header)})
+	}
 	return &cftypes.ResponseHeadersPolicyConfig{
 		Name:                aws.String(names.HeadersPolicy),
 		Comment:             aws.String(fmt.Sprintf("Ocel: names the %q router on each response it served, so a probe knows which router answered, and drops cache tags.", Kind)),
