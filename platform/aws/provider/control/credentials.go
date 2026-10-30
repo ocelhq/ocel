@@ -23,23 +23,15 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
-	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
-	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
-	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
+	"github.com/ocelhq/ocel/platform/aws/provider/credential"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
-	"github.com/ocelhq/ocel/platform/aws/provider/resources"
 	tiercloudfront "github.com/ocelhq/ocel/platform/aws/provider/tier/cloudfront"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/taginvalidator"
 )
 
 const credentialHeading = "AWS credentials"
@@ -85,7 +77,7 @@ func (c Credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	}
 	arn := aws.ToString(out.Arn)
 	return provider.Principal{
-		Vendor:   groupVendor,
+		Vendor:   Vendor,
 		Account:  aws.ToString(out.Account),
 		Name:     principalOf(arn),
 		Location: c.Region,
@@ -106,31 +98,33 @@ func (c Credentials) Permissions(purpose edge.CredentialPurpose, tier environmen
 }
 
 func deployStatements(s iam.Scope) []iam.Statement {
-	statements := slices.Concat(
+	return slices.Concat(
 		account.AccessCredential(s),
 		account.RuntimeLayerCredential(s),
-		component.NetworkCredential(s),
-		function.Credential(s),
-		container.Credential(s),
-		worker.Credential(s),
+		credential.AppNetwork(s),
+		credential.Function(s),
+		credential.Container(s),
+		credential.Worker(s),
 		bastion.Credential(s),
 		registry.Credential(s),
 		certs.Credential(s),
-		functionnetwork.Credential(s),
-		network.Credential(s),
-		containers.Credential(s),
+		credential.FunctionNetwork(s),
+		credential.Network(s),
+		credential.Containers(s),
 		envsourcesync.Credential(s),
-		taginvalidator.Credential(s),
+		credential.TagInvalidator(s),
 		tiercloudfront.Credential(s),
 		notfoundapi.Credential(s),
 		cloudfront.Credential(s),
 		apigateway.Credential(s),
 		alb.Credential(s),
+		credential.Postgres(s),
+		credential.Bucket(s),
+		credential.KV(s),
+		credential.Task(s),
+		credential.Topic(s),
+		credential.Realtime(s),
 	)
-	for _, declaring := range resources.Registry(resources.Clients{}).Components() {
-		statements = append(statements, declaring.Credential(s)...)
-	}
-	return statements
 }
 
 func bootstrapStatements(s iam.Scope) []iam.Statement {

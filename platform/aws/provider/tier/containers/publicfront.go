@@ -153,7 +153,7 @@ func (w *work) runLiveness(ctx *pulumi.Context, balancer string, listener *lb.Li
 	function, err := lambda.NewFunction(ctx, liveness, &lambda.FunctionArgs{
 		Name:        pulumi.String(liveness),
 		Description: pulumi.String("Ocel: answers the liveness probe on the public load balancer of the " + string(w.tier) + " tier"),
-		Runtime:     pulumi.String(component.LambdaNodeRuntime),
+		Runtime:     pulumi.String(awsports.LambdaNodeRuntime),
 		Handler:     pulumi.String("index.handler"),
 		Role:        role.Arn,
 		Code: pulumi.NewAssetArchive(map[string]any{

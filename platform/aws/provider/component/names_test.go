@@ -1,12 +1,10 @@
 package component
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 )
 
@@ -25,38 +23,6 @@ func TestAnAppsExecutionRoleIsNamedForItsReleaseUnderTheAppFence(t *testing.T) {
 	if got, want := string(Describe(coord, "execution role for this app's functions")),
 		"shop / prod / web - execution role for this app's functions - release r3f8a1c90"; got != want {
 		t.Errorf("description = %q, want %q", got, want)
-	}
-}
-
-func TestAResourceOutsideAnyReleaseEndsInTheHashOfItsCoordinate(t *testing.T) {
-	t.Parallel()
-
-	worker := naming.Coordinate{Project: "shop", Env: "prod", App: "web", Kind: naming.KindWorker, Name: "mailer"}
-
-	got, err := PhysicalName("ocel", worker, MaxLambdaNameLen)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := "ocel-app-shop-prod-web-mailer-" + worker.HashTag("ocel"); got != want {
-		t.Errorf("PhysicalName = %q, want %q", got, want)
-	}
-}
-
-func TestANameThatCannotFitIsRefusedNamingTheResourceAndTheLimit(t *testing.T) {
-	t.Parallel()
-
-	at := naming.Coordinate{Project: "shop", Env: "prod", App: "web", Kind: naming.KindWorker, Name: strings.Repeat("m", 60)}
-
-	_, err := PhysicalName("ocel", at, MaxLambdaNameLen)
-	if err == nil {
-		t.Fatal("a worker whose declared name alone overruns Lambda's limit was named rather than refused")
-	}
-	if !strings.Contains(err.Error(), at.Name) || !strings.Contains(err.Error(), "64") {
-		t.Errorf("refusal %q, want it to name the worker and Lambda's 64 characters", err)
-	}
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Errorf("err = %v, want an invalid-input refusal", err)
 	}
 }
 

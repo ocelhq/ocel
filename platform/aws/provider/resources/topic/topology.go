@@ -19,9 +19,7 @@ import (
 )
 
 const (
-	workerCeiling          = 15 * time.Minute
-	containerWorkerCeiling = 12 * time.Hour
-	workerSettleMargin     = 30 * time.Second
+	workerSettleMargin = 30 * time.Second
 
 	eventSourceVisibilityFactor = 6
 	snsServicePrincipal         = "sns.amazonaws.com"
@@ -30,11 +28,6 @@ const (
 	queuePolicyPart             = "policy"
 	subscriptionPart            = "subscription"
 )
-
-var WorkerCeilings = []provider.WorkerCeiling{
-	{Compute: provider.ComputeServerless, MaxDuration: workerCeiling},
-	{Compute: provider.ComputeContainer, MaxDuration: containerWorkerCeiling},
-}
 
 type Queue struct {
 	Topic      string
@@ -97,15 +90,15 @@ func WorkerTimeout(topics []Topic, worker string) time.Duration {
 			}
 			maxDuration := queue.Consumer.MaxDuration
 			if maxDuration <= 0 {
-				return workerCeiling
+				return queues.ServerlessWorkerCeiling
 			}
 			longest = max(longest, maxDuration)
 		}
 	}
 	if longest == 0 {
-		return workerCeiling
+		return queues.ServerlessWorkerCeiling
 	}
-	return min(longest+workerSettleMargin, workerCeiling)
+	return min(longest+workerSettleMargin, queues.ServerlessWorkerCeiling)
 }
 
 func VisibilitySeconds(topics []Topic, queue Queue) int {

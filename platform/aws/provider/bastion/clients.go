@@ -50,5 +50,49 @@ type Clients struct {
 }
 
 func NewClients(cfg aws.Config) Clients {
-	return Clients{ECS: ecs.NewFromConfig(cfg), IAM: iam.NewFromConfig(cfg), EC2: ec2.NewFromConfig(cfg)}
+	return Clients{ECS: ecs.NewFromConfig(cfg), IAM: iam.NewFromConfig(cfg), EC2: newEC2Client(ec2.NewFromConfig(cfg))}
+}
+
+type ec2Client struct {
+	describeSecurityGroups       func(ctx context.Context, in *ec2.DescribeSecurityGroupsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error)
+	createSecurityGroup          func(ctx context.Context, in *ec2.CreateSecurityGroupInput, optFns ...func(*ec2.Options)) (*ec2.CreateSecurityGroupOutput, error)
+	authorizeSecurityGroupEgress func(ctx context.Context, in *ec2.AuthorizeSecurityGroupEgressInput, optFns ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupEgressOutput, error)
+	revokeSecurityGroupEgress    func(ctx context.Context, in *ec2.RevokeSecurityGroupEgressInput, optFns ...func(*ec2.Options)) (*ec2.RevokeSecurityGroupEgressOutput, error)
+	revokeSecurityGroupIngress   func(ctx context.Context, in *ec2.RevokeSecurityGroupIngressInput, optFns ...func(*ec2.Options)) (*ec2.RevokeSecurityGroupIngressOutput, error)
+	deleteSecurityGroup          func(ctx context.Context, in *ec2.DeleteSecurityGroupInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSecurityGroupOutput, error)
+}
+
+func newEC2Client(client *ec2.Client) ec2Client {
+	return ec2Client{
+		describeSecurityGroups:       client.DescribeSecurityGroups,
+		createSecurityGroup:          client.CreateSecurityGroup,
+		authorizeSecurityGroupEgress: client.AuthorizeSecurityGroupEgress,
+		revokeSecurityGroupEgress:    client.RevokeSecurityGroupEgress,
+		revokeSecurityGroupIngress:   client.RevokeSecurityGroupIngress,
+		deleteSecurityGroup:          client.DeleteSecurityGroup,
+	}
+}
+
+func (c ec2Client) DescribeSecurityGroups(ctx context.Context, in *ec2.DescribeSecurityGroupsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error) {
+	return c.describeSecurityGroups(ctx, in, optFns...)
+}
+
+func (c ec2Client) CreateSecurityGroup(ctx context.Context, in *ec2.CreateSecurityGroupInput, optFns ...func(*ec2.Options)) (*ec2.CreateSecurityGroupOutput, error) {
+	return c.createSecurityGroup(ctx, in, optFns...)
+}
+
+func (c ec2Client) AuthorizeSecurityGroupEgress(ctx context.Context, in *ec2.AuthorizeSecurityGroupEgressInput, optFns ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupEgressOutput, error) {
+	return c.authorizeSecurityGroupEgress(ctx, in, optFns...)
+}
+
+func (c ec2Client) RevokeSecurityGroupEgress(ctx context.Context, in *ec2.RevokeSecurityGroupEgressInput, optFns ...func(*ec2.Options)) (*ec2.RevokeSecurityGroupEgressOutput, error) {
+	return c.revokeSecurityGroupEgress(ctx, in, optFns...)
+}
+
+func (c ec2Client) RevokeSecurityGroupIngress(ctx context.Context, in *ec2.RevokeSecurityGroupIngressInput, optFns ...func(*ec2.Options)) (*ec2.RevokeSecurityGroupIngressOutput, error) {
+	return c.revokeSecurityGroupIngress(ctx, in, optFns...)
+}
+
+func (c ec2Client) DeleteSecurityGroup(ctx context.Context, in *ec2.DeleteSecurityGroupInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSecurityGroupOutput, error) {
+	return c.deleteSecurityGroup(ctx, in, optFns...)
 }

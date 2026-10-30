@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -63,7 +65,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	if torn := engine.torn(); len(torn) != 0 {
 		t.Errorf("a claimed priority tore down %v, want nothing: the deploy recovers rather than abandons", torn)
 	}
-	if _, present, err := stackrecords.Read(context.Background(), cfg.KeyValues, environment.TierProduction, containers.Slug, containers.StackRef(environment.TierProduction).Name); err != nil || !present {
+	if _, present, err := stackrecords.Read(context.Background(), cfg.KeyValues, environment.TierProduction, awsports.ContainersSlug, containers.StackRef(environment.TierProduction).Name); err != nil || !present {
 		t.Errorf("the shared container infrastructure is not recorded (present %v, err %v) after the deploy that recovered", present, err)
 	}
 }

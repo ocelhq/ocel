@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/credential"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 )
 
@@ -14,13 +15,13 @@ func New() component.Component {
 		Types:      []provider.BindingType{provider.BindingTask},
 		Declare:    declare,
 		Collect:    topic.Collect,
-		Credential: credential,
-		Shape: func(cost component.CostTree, scope string, at component.Stack, declared []provider.Resource) error {
+		Credential: credential.Task,
+		Inventory: func(cost component.CostTree, scope string, at component.Stack, declared []provider.Resource) error {
 			topics, err := topic.Of(topic.NamesAt(at), declared)
 			if err != nil {
 				return err
 			}
-			topic.Shape(cost, scope, topics)
+			topic.Inventory(cost, scope, topics)
 			return nil
 		},
 	}

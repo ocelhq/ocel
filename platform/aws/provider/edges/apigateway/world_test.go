@@ -105,5 +105,6 @@ func removePointer(ctx context.Context, stack edge.EdgeStack, removal router.Poi
 	if err := openRouter(stack).RemovePointer(ctx, removal, progress); err != nil {
 		return router.PruneResult{}, err
 	}
-	return openRouter(stack).Ledger.RemovePointer(ctx, removal.Pointer)
+	removed, _, err := openRouter(stack).Ledger.RemovePointer(ctx, removal.Pointer)
+	return removed, err
 }

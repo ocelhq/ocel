@@ -1,0 +1,98 @@
+package control
+
+import (
+	"context"
+	"strconv"
+
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/logevents"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+)
+
+type logs struct{ *Provider }
+
+func (p logs) Read(ctx context.Context, q provider.LogQuery, emit func([]provider.LogEntry) error, notice func(provider.LogNotice) error) error {
+	if len(q.Targets) == 0 || !q.Tail && q.Limit < 1 {
+		return nil
+	}
+	cloudwatch, functions := cloudwatchlogs.NewFromConfig(p.Config), lambda.NewFromConfig(p.Config)
+	query := logevents.Query{
+		Sources:        logSourcesOf(q.Targets),
+		ContainerGroup: awsports.ContainerLogGroupName(string(p.Namespace), q.Tier),
+		Since:          q.Since,
+		Until:          q.Until,
+		Limit:          q.Limit,
+		Contains:       q.Contains,
+	}
+	emitEvents := func(events []logevents.Event) error {
+		entries := make([]provider.LogEntry, 0, len(events))
+		for _, event := range events {
+			target, labelled := targetOfLabel(q.Targets, event.Label)
+			if !labelled {
+				continue
+			}
+			entries = append(entries, provider.LogEntry{
+				ID:       event.ID,
+				Time:     event.Time,
+				App:      target.App,
+				Source:   target.Source,
+				Release:  target.Release,
+				Instance: event.Instance,
+				Message:  event.Text,
+				Failure:  event.Failure,
+			})
+		}
+		if len(entries) == 0 {
+			return nil
+		}
+		return emit(entries)
+	}
+	if q.Tail && p.Options.Logs.LiveTail {
+		account, err := p.ReadAccountID(ctx)
+		if err != nil {
+			return err
+		}
+		return logevents.LiveTail(ctx, cloudwatch, functions, account, query, emitEvents, func(n logevents.Notice) error {
+			return notice(logNoticeOf(n))
+		})
+	}
+	if q.Tail {
+		return logevents.Tail(ctx, cloudwatch, functions, query, 0, emitEvents)
+	}
+	events, err := logevents.Read(ctx, cloudwatch, functions, query)
+	if err != nil {
+		return err
+	}
+	return emitEvents(events)
+}
+
+func logNoticeOf(n logevents.Notice) provider.LogNotice {
+	if n.Kind == logevents.NoticeSampled {
+		return provider.LogNotice{Kind: provider.LogSampled, Message: n.Message}
+	}
+	return provider.LogNotice{Kind: provider.LogReconnected, Message: n.Message}
+}
+
+func logSourcesOf(targets []provider.LogTarget) []logevents.Source {
+	sources := make([]logevents.Source, len(targets))
+	for i, target := range targets {
+		sources[i].Label = strconv.Itoa(i)
+		if target.Function != nil {
+			sources[i].Function = target.Physical()
+		} else {
+			sources[i].Container = target.Physical()
+		}
+	}
+	return sources
+}
+
+func targetOfLabel(targets []provider.LogTarget, label string) (provider.LogTarget, bool) {
+	index, err := strconv.Atoi(label)
+	if err != nil || index < 0 || index >= len(targets) {
+		return provider.LogTarget{}, false
+	}
+	return targets[index], true
+}

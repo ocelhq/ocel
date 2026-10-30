@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -35,7 +37,7 @@ const (
 
 func ResourceNames(namespace string, tier environment.Tier) map[string][]ocelpulumi.ResourceRef {
 	names := map[string][]ocelpulumi.ResourceRef{}
-	for n := range natGateways(tier) {
+	for n := range sharedparts.FunctionNetworkNATGateways(tier) {
 		names["natAddress"] = append(names["natAddress"], ocelpulumi.ResourceRef{Token: tokenElasticIP, Name: component.NameOf(natName(namespace, tier, n)).Part(eipPart)})
 		names["natGateway"] = append(names["natGateway"], ocelpulumi.ResourceRef{Token: tokenNATGateway, Name: natName(namespace, tier, n)})
 	}
@@ -44,9 +46,9 @@ func ResourceNames(namespace string, tier environment.Tier) map[string][]ocelpul
 
 func (w *work) run(ctx *pulumi.Context) error {
 	placed := w.network
-	if len(placed.Public) < natGateways(w.tier) || len(placed.PrivateRoutes) == 0 {
+	if len(placed.Public) < sharedparts.FunctionNetworkNATGateways(w.tier) || len(placed.PrivateRoutes) == 0 {
 		return fmt.Errorf("the %s tier's network has %d public subnets and %d private route tables, and its function network needs %d and at least one",
-			w.tier, len(placed.Public), len(placed.PrivateRoutes), natGateways(w.tier))
+			w.tier, len(placed.Public), len(placed.PrivateRoutes), sharedparts.FunctionNetworkNATGateways(w.tier))
 	}
 	if err := w.patches.Apply(ctx); err != nil {
 		return err
@@ -61,8 +63,8 @@ func (w *work) run(ctx *pulumi.Context) error {
 		return tags
 	}
 
-	gateways := make([]*ec2.NatGateway, 0, natGateways(tier))
-	for n := range natGateways(tier) {
+	gateways := make([]*ec2.NatGateway, 0, sharedparts.FunctionNetworkNATGateways(tier))
+	for n := range sharedparts.FunctionNetworkNATGateways(tier) {
 		nat := natName(w.namespace, tier, n)
 		address, err := ec2.NewEip(ctx, component.NameOf(nat).Part(eipPart), &ec2.EipArgs{
 			Domain: pulumi.String("vpc"),
@@ -127,19 +129,19 @@ func decode(outputs auto.OutputMap) (Network, error) {
 	}
 	var decoded Network
 	var err error
-	if decoded.SecurityGroup, err = component.RequireStringField(fields, Slug, outputKeyFunctionSecurity); err != nil {
+	if decoded.SecurityGroup, err = component.RequireStringField(fields, sharedparts.FunctionNetworkSlug, outputKeyFunctionSecurity); err != nil {
 		return Network{}, err
 	}
-	if decoded.Clients, err = component.RequireStringField(fields, Slug, outputKeyClients); err != nil {
+	if decoded.Clients, err = component.RequireStringField(fields, sharedparts.FunctionNetworkSlug, outputKeyClients); err != nil {
 		return Network{}, err
 	}
 	decoded.patchDigest, _ = fields[outputKeyPatchDigest].(string)
-	encoded, err := component.RequireStringField(fields, Slug, outputKeyPrivateSubnets)
+	encoded, err := component.RequireStringField(fields, sharedparts.FunctionNetworkSlug, outputKeyPrivateSubnets)
 	if err != nil {
 		return Network{}, err
 	}
 	if err := json.Unmarshal([]byte(encoded), &decoded.Subnets); err != nil || len(decoded.Subnets) == 0 {
-		return Network{}, fmt.Errorf("output %q for %s names no subnets to attach a function to", outputKeyPrivateSubnets, Slug)
+		return Network{}, fmt.Errorf("output %q for %s names no subnets to attach a function to", outputKeyPrivateSubnets, sharedparts.FunctionNetworkSlug)
 	}
 	return decoded, nil
 }

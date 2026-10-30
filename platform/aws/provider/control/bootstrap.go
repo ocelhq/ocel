@@ -24,8 +24,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
-const groupVendor provider.Vendor = "aws"
-
 type SSMAPI interface {
 	account.SSMAPI
 }
@@ -167,7 +165,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	plan := provider.Plan{Groups: bootstrapplan.PrefixWithVendor(groupVendor, append(groups, params))}
+	plan := provider.Plan{Groups: bootstrapplan.PrefixWithVendor(Vendor, append(groups, params))}
 	fronts, err := b.edgeGroups(ctx, req)
 	if err != nil {
 		return provider.Plan{}, err

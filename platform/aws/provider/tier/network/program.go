@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -18,9 +20,8 @@ import (
 const (
 	outputKeyNetwork = "network"
 
-	anyIPv4      = "0.0.0.0/0"
-	endpointType = "Gateway"
-	deleteWait   = "40m"
+	anyIPv4    = "0.0.0.0/0"
+	deleteWait = "40m"
 
 	publicWord   = "public"
 	privateWord  = "private"
@@ -31,8 +32,6 @@ const (
 	internetPart    = "internet"
 	associationPart = "routes"
 )
-
-var endpointServices = []string{"s3", "dynamodb"}
 
 type work struct {
 	namespace string
@@ -63,8 +62,8 @@ func (w *work) name(words ...string) string {
 }
 
 func (w *work) run(ctx *pulumi.Context) error {
-	if len(w.zones) != Zones {
-		return fmt.Errorf("the network spreads across %d zones, and this run names %d", Zones, len(w.zones))
+	if len(w.zones) != sharedparts.NetworkZones {
+		return fmt.Errorf("the network spreads across %d zones, and this run names %d", sharedparts.NetworkZones, len(w.zones))
 	}
 	if err := w.patches.Apply(ctx); err != nil {
 		return err
@@ -140,12 +139,12 @@ func (w *work) run(ctx *pulumi.Context) error {
 	}
 
 	reached := append(pulumi.StringArray{public.ID()}, privateRoutes...)
-	for _, service := range endpointServices {
+	for _, service := range sharedparts.NetworkEndpointServices {
 		endpoint := w.name(service)
 		if _, err := ec2.NewVpcEndpoint(ctx, endpoint, &ec2.VpcEndpointArgs{
 			VpcId:           vpc.ID(),
 			ServiceName:     pulumi.String("com.amazonaws." + w.region + "." + service),
-			VpcEndpointType: pulumi.String(endpointType),
+			VpcEndpointType: pulumi.String(sharedparts.NetworkEndpointType),
 			RouteTableIds:   reached,
 			Tags:            w.tagsFor(endpoint),
 		}); err != nil {
@@ -194,10 +193,10 @@ func ResourceNames(namespace string, tier environment.Tier) map[string][]ocelpul
 		"publicRouteTable":   {{Token: tokenRouteTable, Name: name(publicWord)}},
 		"isolatedRouteTable": {{Token: tokenRouteTable, Name: name(isolatedWord)}},
 	}
-	for _, service := range endpointServices {
+	for _, service := range sharedparts.NetworkEndpointServices {
 		names[service+"Endpoint"] = []ocelpulumi.ResourceRef{{Token: tokenVPCEndpoint, Name: name(service)}}
 	}
-	for i := range Zones {
+	for i := range sharedparts.NetworkZones {
 		n := strconv.Itoa(i + 1)
 		for _, role := range []string{publicWord, privateWord, isolatedWord} {
 			names[role+"Subnet"] = append(names[role+"Subnet"], ocelpulumi.ResourceRef{Token: tokenSubnet, Name: name(role, n)})
@@ -233,16 +232,16 @@ func decode(outputs auto.OutputMap) (Network, error) {
 	for key, value := range outputs {
 		fields[key] = value.Value
 	}
-	encoded, err := component.RequireStringField(fields, Slug, outputKeyNetwork)
+	encoded, err := component.RequireStringField(fields, sharedparts.NetworkSlug, outputKeyNetwork)
 	if err != nil {
 		return Network{}, err
 	}
 	var network Network
 	if err := json.Unmarshal([]byte(encoded), &network); err != nil {
-		return Network{}, fmt.Errorf("output %q of %s: %w", outputKeyNetwork, Slug, err)
+		return Network{}, fmt.Errorf("output %q of %s: %w", outputKeyNetwork, sharedparts.NetworkSlug, err)
 	}
-	if network.VPC == "" || len(network.Public) != Zones || len(network.Private) != Zones || len(network.Isolated) != Zones || network.Clients == "" {
-		return Network{}, fmt.Errorf("output %q of %s names no VPC, clients group or %d subnets of each kind", outputKeyNetwork, Slug, Zones)
+	if network.VPC == "" || len(network.Public) != sharedparts.NetworkZones || len(network.Private) != sharedparts.NetworkZones || len(network.Isolated) != sharedparts.NetworkZones || network.Clients == "" {
+		return Network{}, fmt.Errorf("output %q of %s names no VPC, clients group or %d subnets of each kind", outputKeyNetwork, sharedparts.NetworkSlug, sharedparts.NetworkZones)
 	}
 	return network, nil
 }
@@ -270,7 +269,7 @@ func createdBy(namespace string, tier environment.Tier) []provider.Change {
 		created(tokenRouteTable, name(isolatedWord)),
 		created(component.TokenEC2SecurityGroup, component.SecurityGroupName(name(clientsWord))),
 	}
-	for i := range Zones {
+	for i := range sharedparts.NetworkZones {
 		n := strconv.Itoa(i + 1)
 		for _, role := range []string{publicWord, privateWord, isolatedWord} {
 			changes = append(changes,
@@ -279,7 +278,7 @@ func createdBy(namespace string, tier environment.Tier) []provider.Change {
 		}
 		changes = append(changes, created(tokenRouteTable, name(privateWord, n)))
 	}
-	for _, service := range endpointServices {
+	for _, service := range sharedparts.NetworkEndpointServices {
 		changes = append(changes, created(tokenVPCEndpoint, name(service)))
 	}
 	return changes

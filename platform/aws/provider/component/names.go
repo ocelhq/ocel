@@ -4,8 +4,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const (
@@ -49,16 +50,8 @@ func AppRoleCoordinate(project string, stack naming.StackName) naming.Coordinate
 	}
 }
 
-func PhysicalName(namespace string, at naming.Coordinate, limit int, childSuffixes ...string) (string, error) {
-	tag := at.Release.String()
-	if at.Release.IsZero() {
-		tag = at.HashTag(namespace)
-	}
-	return at.AppResourceName(namespace, tag).Fit(limit, childSuffixes...)
-}
-
 func RoleName(namespace string, at naming.Coordinate) (Name, error) {
-	physical, err := PhysicalName(namespace, at, MaxRoleNameLen)
+	physical, err := at.TaggedResourceName(namespace).Fit(MaxRoleNameLen)
 	return NameOf(physical), err
 }
 

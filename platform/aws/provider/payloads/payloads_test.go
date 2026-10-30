@@ -119,3 +119,26 @@ func TestTheNextContainerRuntimeBootsTheNextRuntimeOverHTTP(t *testing.T) {
 		t.Error("the Next container runtime reads no PORT, so it serves nothing the container runtime forwards to")
 	}
 }
+
+func TestADigestReadWithoutItsPayloadIsTheDigestOfThePayload(t *testing.T) {
+	t.Parallel()
+
+	for name, digests := range map[string][2]string{
+		"env source sync": {EnvSourceSyncSHA256(), EnvSourceSync().SHA256},
+		"image optimizer": {ImageOptimizerSHA256(), ImageOptimizer().SHA256},
+		"tag invalidator": {TagInvalidatorSHA256(), TagInvalidator().SHA256},
+	} {
+		if digests[0] != digests[1] {
+			t.Errorf("the %s digest = %q, want %q, the digest of the payload it names", name, digests[0], digests[1])
+		}
+	}
+	for _, architecture := range []string{arch.X8664, arch.ARM64} {
+		digest, err := RuntimeLayerSHA256(architecture)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if layer := runtimeLayerFor(architecture)(); digest != layer.SHA256 {
+			t.Errorf("the %s runtime layer digest = %q, want %q", architecture, digest, layer.SHA256)
+		}
+	}
+}

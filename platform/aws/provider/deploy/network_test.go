@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -124,7 +127,7 @@ func TestTheFirstConsumerOfATiersNetworkProvisionsItAndTheLastToLeaveTakesItDown
 	if ups, _ := engine.networkRuns(); ups != 1 {
 		t.Fatalf("two claims ran the network %d times, want it provisioned once", ups)
 	}
-	part, present, err := network.ReadPart(ctx, store, "us-east-1", environment.TierProduction)
+	part, present, err := sharedparts.ReadNetworkPart(ctx, store, "us-east-1", environment.TierProduction)
 	if err != nil || !present || !part.Current || !part.RetiresWithLastUser || len(part.UsedBy) != 2 || len(part.Resources) == 0 {
 		t.Fatalf("ReadPart() = %+v, %v, %v, want a current part used by both consumers that retires with the last", part, present, err)
 	}
@@ -141,7 +144,7 @@ func TestTheFirstConsumerOfATiersNetworkProvisionsItAndTheLastToLeaveTakesItDown
 	if _, downs := engine.networkRuns(); downs != 1 {
 		t.Fatalf("the last consumer leaving tore the network down %d times, want once", downs)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, network.Part); err != nil || present {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, sharedparts.NetworkPart); err != nil || present {
 		t.Errorf("network part present %v (%v) after its last consumer left, want it forgotten", present, err)
 	}
 }
@@ -242,7 +245,7 @@ func TestANetworkWhoseBlockOverlapsAVPCInTheRegionIsRefusedBeforeAnythingIsProvi
 	if ups, _ := engine.networkRuns(); ups != 0 {
 		t.Errorf("ran the network %d times, want nothing provisioned", ups)
 	}
-	if _, present, _ := stackrecords.ReadBootstrapPart(context.Background(), store, environment.TierProduction, network.Part); present {
+	if _, present, _ := stackrecords.ReadBootstrapPart(context.Background(), store, environment.TierProduction, sharedparts.NetworkPart); present {
 		t.Error("the network part is recorded though nothing was provisioned")
 	}
 }
@@ -260,8 +263,8 @@ func TestTheContainerInfraRunsInTheTiersNetworkAndLetsGoOfItWhenItGoes(t *testin
 	if ups, _ := engine.networkRuns(); ups != 1 {
 		t.Fatalf("the first container deploy raised the network %d times, want once: the cluster's load balancer sits in its public subnets", ups)
 	}
-	users, err := network.Shared.ListUsers(ctx, cfg.KeyValues, environment.TierProduction)
-	if err != nil || len(users) != 1 || users[0] != containers.Slug {
+	users, err := sharedparts.ListUsers(ctx, cfg.KeyValues, environment.TierProduction, network.Shared.Slug, network.Shared.Subject)
+	if err != nil || len(users) != 1 || users[0] != awsports.ContainersSlug {
 		t.Fatalf("the network is used by %v (%v), want the containers part alone: a container app holds the containers part, not the network", users, err)
 	}
 
@@ -271,7 +274,7 @@ func TestTheContainerInfraRunsInTheTiersNetworkAndLetsGoOfItWhenItGoes(t *testin
 	if _, downs := engine.networkRuns(); downs != 1 {
 		t.Fatalf("the last container app leaving tore the network down %d times, want once, after the containers part it held", downs)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, environment.TierProduction, network.Part); err != nil || present {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, cfg.KeyValues, environment.TierProduction, sharedparts.NetworkPart); err != nil || present {
 		t.Errorf("network part present %v (%v) after the containers part went, want it forgotten", present, err)
 	}
 }
@@ -323,7 +326,7 @@ func TestThePlanOfTheFirstDatabaseInATierShowsTheNetworkItRaises(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
-	if len(plan.Groups) == 0 || plan.Groups[0].Part != network.Part || plan.Groups[0].Action != provider.ActionCreate {
+	if len(plan.Groups) == 0 || plan.Groups[0].Part != sharedparts.NetworkPart || plan.Groups[0].Action != provider.ActionCreate {
 		t.Fatalf("plan groups = %+v, want the network part created first", plan.Groups)
 	}
 	if ups, _ := engine.networkRuns(); ups != 0 {
@@ -398,7 +401,7 @@ func TestThePlanOfADatabaseWhoseTransformsPatchTheNetworkOtherwiseThanItCarriesS
 		t.Fatalf("Plan() = %v", err)
 	}
 	if !slices.ContainsFunc(plan.Groups, func(group provider.ChangeGroup) bool {
-		return group.Part == network.Part && group.Action == provider.ActionUpdate
+		return group.Part == sharedparts.NetworkPart && group.Action == provider.ActionUpdate
 	}) {
 		t.Errorf("plan groups = %+v, want the network provisioned again: the deploy repatches it for every project in the tier", plan.Groups)
 	}
@@ -437,14 +440,14 @@ func TestTheFunctionNetworkLetsGoOfTheTiersNetworkWhenItsLastAppLeaves(t *testin
 	if _, err := stacks.Provision(ctx, web, progress.Discard()); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	users, err := network.Shared.ListUsers(ctx, store, environment.TierProduction)
-	if err != nil || !slices.Contains(users, functionnetwork.Slug) {
+	users, err := sharedparts.ListUsers(ctx, store, environment.TierProduction, network.Shared.Slug, network.Shared.Subject)
+	if err != nil || !slices.Contains(users, sharedparts.FunctionNetworkSlug) {
 		t.Fatalf("the network is used by %v (%v), want the function network among them", users, err)
 	}
 	if err := stacks.Destroy(ctx, provider.StackDestroy{Ref: web.Ref}, progress.Discard()); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
-	if users, err := network.Shared.ListUsers(ctx, store, environment.TierProduction); err != nil || slices.Contains(users, functionnetwork.Slug) {
+	if users, err := sharedparts.ListUsers(ctx, store, environment.TierProduction, network.Shared.Slug, network.Shared.Subject); err != nil || slices.Contains(users, sharedparts.FunctionNetworkSlug) {
 		t.Errorf("the network is used by %v (%v) after the function network went, want it let go of", users, err)
 	}
 }
@@ -459,7 +462,7 @@ func (a addressesHeld) DescribeAddresses(context.Context, *awsec2.DescribeAddres
 	addresses := make([]ec2types.Address, a.held)
 	for range a.own {
 		addresses = append(addresses, ec2types.Address{Tags: []ec2types.Tag{
-			{Key: aws.String("ocel:project"), Value: aws.String(functionnetwork.Slug)},
+			{Key: aws.String("ocel:project"), Value: aws.String(sharedparts.FunctionNetworkSlug)},
 			{Key: aws.String(naming.ManagedByTagKey), Value: aws.String(testNamespace)},
 			{Key: aws.String(naming.EnvTierTagKey), Value: aws.String(string(environment.TierProduction))},
 		}})
@@ -502,7 +505,7 @@ func TestThePlanOfTheFirstContainerAppInATierShowsTheNetworkBeforeTheContainerIn
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
-	if len(plan.Groups) < 2 || plan.Groups[0].Part != network.Part || plan.Groups[1].Name != containers.StackRef(environment.TierProduction).Name.String() {
+	if len(plan.Groups) < 2 || plan.Groups[0].Part != sharedparts.NetworkPart || plan.Groups[1].Name != containers.StackRef(environment.TierProduction).Name.String() {
 		t.Fatalf("plan groups = %+v, want the network part and then the container infrastructure it runs in", plan.Groups)
 	}
 }
@@ -646,7 +649,7 @@ func TestThePlanOfTheFirstContainerAppShowsTheNetworkProvisionedAgainWhenItsTran
 		t.Fatalf("Plan() = %v", err)
 	}
 	if !slices.ContainsFunc(plan.Groups, func(group provider.ChangeGroup) bool {
-		return group.Part == network.Part && group.Action == provider.ActionUpdate
+		return group.Part == sharedparts.NetworkPart && group.Action == provider.ActionUpdate
 	}) {
 		t.Errorf("plan groups = %+v, want the network provisioned again: raising the container infrastructure claims it with this project's patches", plan.Groups)
 	}
@@ -659,7 +662,7 @@ func TestThePlanOfTheFirstContainerAppShowsTheNetworkProvisionedAgainWhenItsTran
 		t.Fatalf("Plan() once the container infrastructure stands = %v", err)
 	}
 	if !slices.ContainsFunc(plan.Groups, func(group provider.ChangeGroup) bool {
-		return group.Part == network.Part && group.Action == provider.ActionUpdate
+		return group.Part == sharedparts.NetworkPart && group.Action == provider.ActionUpdate
 	}) {
 		t.Errorf("plan groups = %+v, want the network provisioned again: a container deploy claims it with this project's patches", plan.Groups)
 	}

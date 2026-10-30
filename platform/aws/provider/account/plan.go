@@ -227,7 +227,7 @@ func renderGroup(target spec, part string, in partInputs) (partStack, bool, erro
 
 func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, tier environment.Tier, group provider.ChangeGroup, stack partStack, writer provider.WrittenBy) provider.ChangeGroup {
 	tags := stampTags(ns, tier, Stamp{Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
-	id, changes, err := cfn.Plan(ctx, stacks, ns.ChangeSetNameFor, group.Name, stack.body, stack.params,
+	id, changes, err := cfn.Plan(ctx, stacks, ns.ChangeSetNameFor, group.Name, cfn.TemplateSource{Body: stack.body}, stack.params,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}, tags)
 	if err != nil {
 		group.Reason = provider.WithDetailUnavailable(group.Reason)

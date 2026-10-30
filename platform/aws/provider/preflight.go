@@ -4,23 +4,22 @@ import (
 	"context"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
+	"github.com/ocelhq/ocel/platform/aws/provider/control"
 )
 
 func (p *Provider) PlanPreflight(ctx context.Context, pre provider.DeployPreflight) (provider.Plan, error) {
 	if err := p.checkDeploy(ctx, pre); err != nil {
 		return provider.Plan{}, err
 	}
-	if err := p.resolveRuntimeLayers(ctx, pre, func(account.APIs, account.Deployed) (map[string]string, error) {
-		return account.ReadRuntimeLayersToPlan(ctx, lambda.NewFromConfig(p.aws), p.namespace, pre.Deploy.Tier)
+	if err := control.ResolveRuntimeLayers(ctx, p.Provider, pre, func(account.APIs, account.Deployed) (map[string]string, error) {
+		return account.ReadRuntimeLayersToPlan(ctx, lambda.NewFromConfig(p.Config), p.Namespace, pre.Deploy.Tier)
 	}); err != nil {
 		return provider.Plan{}, err
 	}
@@ -35,8 +34,8 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	if err := p.checkDeploy(ctx, pre); err != nil {
 		return err
 	}
-	if err := p.resolveRuntimeLayers(ctx, pre, func(apis account.APIs, deployed account.Deployed) (map[string]string, error) {
-		return account.EnsureRuntimeLayers(ctx, apis, p.namespace, pre.Deploy.Tier,
+	if err := control.ResolveRuntimeLayers(ctx, p.Provider, pre, func(apis account.APIs, deployed account.Deployed) (map[string]string, error) {
+		return account.EnsureRuntimeLayers(ctx, apis, p.Namespace, pre.Deploy.Tier,
 			account.RuntimeLayerRequest{ArtifactBucket: deployed.Buckets[naming.StorageArtifacts], StateTable: deployed.StateTable}, pre.Progress)
 	}); err != nil {
 		return err
@@ -47,29 +46,13 @@ func (p *Provider) ApplyPreflight(ctx context.Context, pre provider.DeployPrefli
 	return p.stacks.Preflight(ctx, pre)
 }
 
-func (p *Provider) checkDeploy(ctx context.Context, pre provider.DeployPreflight) error {
-	if err := refusePublicBuckets(pre); err != nil {
-		return err
-	}
-	if err := refuseContainersScaledToZero(pre); err != nil {
-		return err
-	}
-	if err := p.nagStaleEdgeKey(ctx, pre); err != nil {
-		return err
-	}
-	if err := p.refuseUnreadableOriginSecret(ctx, pre); err != nil {
-		return err
-	}
-	return p.nagStaleOriginSecret(ctx, pre)
-}
-
 func (p *Provider) ensureDeployParts(ctx context.Context, pre provider.DeployPreflight) error {
 	tier := pre.Deploy.Tier
-	deployed, err := p.bootstrapped(ctx, tier)
+	deployed, err := p.ReadDeployed(ctx, tier)
 	if err != nil || !deployed.Present {
 		return err
 	}
-	records := p.partRecords()
+	records := p.PartRecords()
 	used := p.tierParts(records).AddedFor(pre.Uses, pre.Edge)
 	var say func(string)
 	if pre.Progress != nil {
@@ -83,60 +66,45 @@ func (p *Provider) ensureDeployParts(ctx context.Context, pre provider.DeployPre
 	return stackrecords.RecordPartsUsed(ctx, records.KeyValues, tier, pre.Deploy.Slug, used.Names())
 }
 
-func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre provider.DeployPreflight) error {
-	if pre.Edge == "" || pre.Progress == nil {
-		return nil
+func (p *Provider) checkDeploy(ctx context.Context, pre provider.DeployPreflight) error {
+	if err := refusePublicBuckets(pre); err != nil {
+		return err
 	}
-	params, err := p.tierParams(ctx, pre.Deploy.Tier, pre.Edge)
+	if err := refuseContainersScaledToZero(pre); err != nil {
+		return err
+	}
+	params, err := p.ReadTierParams(ctx, pre.Deploy.Tier, pre.Edge)
 	if err != nil {
 		return err
 	}
-	if params.EdgeCredentialsErr != nil {
-		return nil
+	return checkTierParams(pre, params, time.Now())
+}
+
+func checkTierParams(pre provider.DeployPreflight, params account.TierParams, now time.Time) error {
+	nagStaleEdgeKey(pre, params, now)
+	if params.OriginSecretErr != nil {
+		return params.OriginSecretErr
 	}
-	if notice := account.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), pre.Deploy.Tier); notice != "" {
-		pre.Progress.Warn(notice)
-	}
+	nagStaleOriginSecret(pre, params, now)
 	return nil
 }
 
-func (p *Provider) refuseUnreadableOriginSecret(ctx context.Context, pre provider.DeployPreflight) error {
-	params, err := p.tierParams(ctx, pre.Deploy.Tier, pre.Edge)
-	if err != nil {
-		return err
+func nagStaleEdgeKey(pre provider.DeployPreflight, params account.TierParams, now time.Time) {
+	if pre.Edge == "" || pre.Progress == nil || params.EdgeCredentialsErr != nil {
+		return
 	}
-	return params.OriginSecretErr
+	if notice := account.StaleEdgeKeyNotice(params.EdgeCredentials, now, pre.Deploy.Tier); notice != "" {
+		pre.Progress.Warn(notice)
+	}
 }
 
-func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre provider.DeployPreflight) error {
+func nagStaleOriginSecret(pre provider.DeployPreflight, params account.TierParams, now time.Time) {
 	if pre.Progress == nil {
-		return nil
+		return
 	}
-	params, err := p.tierParams(ctx, pre.Deploy.Tier, pre.Edge)
-	if err != nil {
-		return err
-	}
-	if notice := account.StaleOriginSecretNotice(params.OriginSecret, time.Now(), pre.Deploy.Tier); notice != "" {
+	if notice := account.StaleOriginSecretNotice(params.OriginSecret, now, pre.Deploy.Tier); notice != "" {
 		pre.Progress.Warn(notice)
 	}
-	return nil
-}
-
-func (p *Provider) resolveRuntimeLayers(ctx context.Context, pre provider.DeployPreflight, resolve func(account.APIs, account.Deployed) (map[string]string, error)) error {
-	tier := pre.Deploy.Tier
-	deployed, err := p.bootstrapped(ctx, tier)
-	if err != nil || !deployed.Present {
-		return err
-	}
-	p.layers.forget()
-	_, err = p.layers.resolve(tier, func() (map[string]string, error) {
-		return resolve(account.APIs{
-			Layers:  lambda.NewFromConfig(p.aws),
-			Store:   s3.NewFromConfig(p.aws),
-			Records: account.DynamoRecords(dynamodb.NewFromConfig(p.aws)),
-		}, deployed)
-	})
-	return err
 }
 
 func refusePublicBuckets(pre provider.DeployPreflight) error {

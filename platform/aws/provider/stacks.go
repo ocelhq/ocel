@@ -19,12 +19,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/edge"
-	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
@@ -34,26 +31,26 @@ import (
 )
 
 func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Config, error) {
-	deployed, err := p.bootstrapped(ctx, scope.Tier)
+	deployed, err := p.ReadDeployed(ctx, scope.Tier)
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	if err := p.requireBootstrapped(deployed, scope.Tier); err != nil {
+	if err := deployed.RefuseUnbootstrapped(scope.Tier); err != nil {
 		return deploy.Config{}, err
 	}
-	params, err := p.tierParams(ctx, scope.Tier, scope.Edge)
+	params, err := p.ReadTierParams(ctx, scope.Tier, scope.Edge)
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	accountID, err := p.accountID(ctx)
+	accountID, err := p.ReadAccountID(ctx)
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	layers, err := p.runtimeLayers(ctx, scope.Tier)
+	layers, err := p.ReadRuntimeLayers(ctx, scope.Tier)
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	optimizer, err := imageoptimizer.ReadURL(ctx, p.partRecords(), scope.Tier)
+	optimizer, err := imageoptimizer.ReadURL(ctx, p.PartRecords(), scope.Tier)
 	if err != nil {
 		return deploy.Config{}, err
 	}
@@ -69,53 +66,53 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	}
 
 	cfg := deploy.Config{
-		Namespace:      string(p.namespace),
-		Region:         p.aws.Region,
+		Namespace:      string(p.Namespace),
+		Region:         p.Config.Region,
 		BackendURL:     stateBackendURL(deployed.Buckets[naming.StorageState], scope.Slug),
 		Passphrase:     params.Passphrase,
 		PulumiProject:  naming.PulumiProject(scope.Slug),
-		Parameters:     ssm.NewFromConfig(p.aws),
-		KVTokenRoot:    p.namespace.KVTokenRoot(),
-		Clusters:       rds.NewFromConfig(p.aws),
-		SigningKeys:    secretsmanager.NewFromConfig(p.aws),
-		SigningKeyRoot: p.namespace.SigningKeyRoot(),
+		Parameters:     ssm.NewFromConfig(p.Config),
+		KVTokenRoot:    p.Namespace.KVTokenRoot(),
+		Clusters:       rds.NewFromConfig(p.Config),
+		SigningKeys:    secretsmanager.NewFromConfig(p.Config),
+		SigningKeyRoot: p.Namespace.SigningKeyRoot(),
 
-		Tags:      &tagclock.Table{Dynamo: dynamodb.NewFromConfig(p.aws), Table: deployed.StateTable},
+		Tags:      &tagclock.Table{Dynamo: dynamodb.NewFromConfig(p.Config), Table: deployed.StateTable},
 		KeyValues: p.KeyValues(),
-		WrittenBy: p.writtenBy,
-		Rules:     elasticloadbalancingv2.NewFromConfig(p.aws),
-		Network:   ec2.NewFromConfig(p.aws),
-		Quotas:    servicequotas.NewFromConfig(p.aws),
+		WrittenBy: p.WrittenBy,
+		Rules:     elasticloadbalancingv2.NewFromConfig(p.Config),
+		Network:   ec2.NewFromConfig(p.Config),
+		Quotas:    servicequotas.NewFromConfig(p.Config),
 
 		AccountID: accountID,
 
-		VPCOrigins: cloudfront.NewFromConfig(p.aws, func(o *cloudfront.Options) { o.Region = certs.CloudFrontRegion }),
+		VPCOrigins: cloudfront.NewFromConfig(p.Config, func(o *cloudfront.Options) { o.Region = certs.CloudFrontRegion }),
 
 		Tier:                scope.Tier,
 		Slug:                scope.Slug,
 		Edge:                front,
 		Env:                 scope.Env,
 		StateTable:          deployed.StateTable,
-		StateTableARN:       tableARN(p.aws.Region, accountID, deployed.StateTable),
+		StateTableARN:       tableARN(p.Config.Region, accountID, deployed.StateTable),
 		VariablesTable:      deployed.VariablesTable,
-		VariablesTableARN:   tableARN(p.aws.Region, accountID, deployed.VariablesTable),
+		VariablesTableARN:   tableARN(p.Config.Region, accountID, deployed.VariablesTable),
 		VariablesKeyARN:     deployed.VariablesKeyARN,
 		AppBoundaryARN:      deployed.AppBoundaryARN,
-		AppRolePath:         p.namespace.AppRolePathFor(scope.Tier),
+		AppRolePath:         p.Namespace.AppRolePathFor(scope.Tier),
 		VariablesReferenced: referenced,
 
 		RuntimeLayers: layers,
-		BytecodeCache: p.options.Bytecode.Cache,
-		BytecodeEmbed: p.options.Bytecode.Embed,
+		BytecodeCache: p.Options.Bytecode.Cache,
+		BytecodeEmbed: p.Options.Bytecode.Embed,
 
 		ArtifactRoot:      scope.OutputRoot,
 		Buckets:           deployed.Buckets,
 		ImageOptimizerURL: optimizer,
 
-		Objects:     s3.NewFromConfig(p.aws),
-		Getter:      s3.NewFromConfig(p.aws),
-		Invoker:     lambda.NewFromConfig(p.aws),
-		CodeUpdater: lambda.NewFromConfig(p.aws),
+		Objects:     s3.NewFromConfig(p.Config),
+		Getter:      s3.NewFromConfig(p.Config),
+		Invoker:     lambda.NewFromConfig(p.Config),
+		CodeUpdater: lambda.NewFromConfig(p.Config),
 
 		StoreScriptName:          params.ReleasesStore.ScriptName,
 		StoreEndpoint:            params.ReleasesStore.Endpoint,
@@ -138,32 +135,6 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		cfg.EdgeCredentialsErr = params.EdgeCredentialsErr
 	}
 	return cfg, nil
-}
-
-func (p *Provider) requireBootstrapped(deployed account.Deployed, tier environment.Tier) error {
-	command := provider.BootstrapCommand(tier)
-	if !deployed.Present {
-		return refusal.Refuse(refusal.CodeNotReady, "the %s tier has no Ocel bootstrap; run `%s`", tier, command)
-	}
-	for _, class := range account.BootstrapStorageClasses {
-		if deployed.Buckets[class] == "" {
-			return refusal.Refuse(refusal.CodeNotReady,
-				"account bootstrap is present but its %s bucket is missing (a partial rollback?); re-run `%s`", class, command)
-		}
-	}
-	for _, missing := range []struct {
-		value string
-		what  string
-	}{
-		{deployed.StateTable, "state table"},
-		{deployed.VariablesTable, "variable store"},
-	} {
-		if missing.value == "" {
-			return refusal.Refuse(refusal.CodeNotReady,
-				"account bootstrap is present but its %s is missing (a partial rollback?); re-run `%s`", missing.what, command)
-		}
-	}
-	return nil
 }
 
 func (p *Provider) transformPass() transform.Pass {

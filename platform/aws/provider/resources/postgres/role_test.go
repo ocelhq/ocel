@@ -13,6 +13,7 @@ import (
 	"github.com/pulumi/pulumi-go-provider/infer"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 )
 
 type recordedStatements struct {
@@ -39,7 +40,7 @@ var testRoleArgs = roleArgs{
 	Secret:   "arn:aws:secretsmanager:us-east-1:111122223333:secret:rds!cluster-abc",
 	Database: "ocel",
 	Master:   "ocel",
-	Role:     AppRoleFor(environment.TierProduction),
+	Role:     signin.AppRoleFor(environment.TierProduction),
 }
 
 func TestTheAppRoleOwnsTheDatabaseAndAuthenticatesByIAMAndTheMasterMayActAsIt(t *testing.T) {

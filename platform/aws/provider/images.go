@@ -11,8 +11,8 @@ import (
 )
 
 func (p *Provider) OpenRegistryImages(_ context.Context, target provider.RegistryTarget) (provider.ImageStore, error) {
-	if !registry.Owns(target, string(p.namespace)) {
+	if !registry.Owns(target, string(p.Namespace)) {
 		return images.RegistryStore(target), nil
 	}
-	return registry.Images(target, ecr.NewFromConfig(p.aws), string(p.namespace)), nil
+	return registry.Images(target, ecr.NewFromConfig(p.Config), string(p.Namespace)), nil
 }

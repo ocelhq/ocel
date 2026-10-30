@@ -28,7 +28,7 @@ type Names struct {
 }
 
 func NamesFor(at component.Stack, logicalName, family string) (Names, error) {
-	group, err := component.PhysicalName(at.Namespace, component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindKV), maxReplicationGroupIDLen)
+	group, err := component.ResourceCoordinate(at.Project, at.Env, logicalName, naming.KindKV).TaggedResourceName(at.Namespace).Fit(maxReplicationGroupIDLen)
 	if err != nil {
 		return Names{}, err
 	}

@@ -1,17 +1,17 @@
 package component
 
 import (
-	"github.com/ocelhq/ocel/pkg/naming"
 	cloudwatch "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const (
 	LambdaLogGroupPrefix   = "/aws/lambda/"
 	LambdaLogFormat        = "Text"
 	LambdaLogRetentionDays = 14
-	LambdaNodeRuntime      = "nodejs24.x"
 )
 
 func LambdaLogGroupName(function Name) Name {

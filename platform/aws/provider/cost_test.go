@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
@@ -34,7 +35,7 @@ var update = flag.Bool("update", false, "rewrite the golden files")
 
 func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	config := providerserver.Config{
 		Version: "test",
 		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
@@ -103,17 +104,17 @@ func typeCounts(set *costv1.ResourceSet) map[string]int {
 	return counts
 }
 
-func TestShapeDescribesAProductionDeployBehindCloudFront(t *testing.T) {
+func TestInventoryDescribesAProductionDeployBehindCloudFront(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_production_cloudfront", set)
+	golden(t, "inventory_production_cloudfront", set)
 
 	counts := typeCounts(set)
 	if counts["aws_cloudfront_distribution"] != 1 || counts["aws_lb"] != 1 || counts["aws_rds_cluster"] != 1 || counts["aws_kms_key"] != 1 || counts["aws_data_transfer"] != 0 {
@@ -129,17 +130,17 @@ func TestShapeDescribesAProductionDeployBehindCloudFront(t *testing.T) {
 	}
 }
 
-func TestShapeOfAPreviewHasItsOwnTierAndWildcard(t *testing.T) {
+func TestInventoryOfAPreviewHasItsOwnTierAndWildcard(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_preview_cloudfront", set)
+	golden(t, "inventory_preview_cloudfront", set)
 
 	if typeCounts(set)["aws_cloudfront_distribution"] != 2 {
 		t.Errorf("a preview tier fronts every preview through one wildcard distribution beside the project's own")
@@ -153,10 +154,10 @@ func TestShapeOfAPreviewHasItsOwnTierAndWildcard(t *testing.T) {
 	}
 }
 
-func TestShapeOfAnEphemeralPreviewPricesTheDatabaseAndBucketItProvisions(t *testing.T) {
+func TestInventoryOfAnEphemeralPreviewPricesTheDatabaseAndBucketItProvisions(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest: shopManifest(),
 		Environment: &environmentv1.Environment{
 			Tier:      environmentv1.Tier_TIER_PREVIEW,
@@ -165,7 +166,7 @@ func TestShapeOfAnEphemeralPreviewPricesTheDatabaseAndBucketItProvisions(t *test
 		},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 
 	var priced []string
@@ -182,7 +183,7 @@ func TestShapeOfAnEphemeralPreviewPricesTheDatabaseAndBucketItProvisions(t *test
 	}
 }
 
-func TestShapeOfAnEphemeralPreviewPricesTheContainerWorkersAndSchedulesItDeclares(t *testing.T) {
+func TestInventoryOfAnEphemeralPreviewPricesTheContainerWorkersAndSchedulesItDeclares(t *testing.T) {
 	client, _ := costServed(t)
 
 	manifest := shopManifest()
@@ -195,7 +196,7 @@ func TestShapeOfAnEphemeralPreviewPricesTheContainerWorkersAndSchedulesItDeclare
 			Consumers: []*contractv1.ManifestConsumer{{Name: "nightly-report", Worker: "media", Exclusive: true}},
 		}},
 	})
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest: manifest,
 		Environment: &environmentv1.Environment{
 			Tier:      environmentv1.Tier_TIER_PREVIEW,
@@ -204,7 +205,7 @@ func TestShapeOfAnEphemeralPreviewPricesTheContainerWorkersAndSchedulesItDeclare
 		},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 
 	priced := map[string]bool{}
@@ -218,20 +219,20 @@ func TestShapeOfAnEphemeralPreviewPricesTheContainerWorkersAndSchedulesItDeclare
 	}
 }
 
-func TestShapeBehindAPIGatewayProvisionsARestAPIPerDeploy(t *testing.T) {
+func TestInventoryBehindAPIGatewayProvisionsARestAPIPerDeploy(t *testing.T) {
 	client, _ := costServed(t)
 
 	manifest := shopManifest()
 	manifest.Apps = manifest.Apps[:1]
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    manifest,
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		Edge:        &contractv1.EdgeSelection{Kind: string(apigateway.Kind)},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_production_apigateway", set)
+	golden(t, "inventory_production_apigateway", set)
 
 	counts := typeCounts(set)
 	if counts["aws_api_gateway_rest_api"] != 1 || counts["aws_cloudfront_distribution"] != 0 || counts["aws_lb"] != 0 || counts["aws_data_transfer"] != 1 {
@@ -239,16 +240,16 @@ func TestShapeBehindAPIGatewayProvisionsARestAPIPerDeploy(t *testing.T) {
 	}
 }
 
-func TestShapeBehindCloudflarePricesTheInternetFacingLoadBalancerItsContainerAppIsForwardedTo(t *testing.T) {
+func TestInventoryBehindCloudflarePricesTheInternetFacingLoadBalancerItsContainerAppIsForwardedTo(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		Edge:        &contractv1.EdgeSelection{Kind: string(cloudflare.Kind)},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 
 	var internal []bool
@@ -262,8 +263,8 @@ func TestShapeBehindCloudflarePricesTheInternetFacingLoadBalancerItsContainerApp
 	}
 }
 
-func TestShapeWithABroughtVariablesKeyProvisionsNoKey(t *testing.T) {
-	p := aws.NewProvider(aws.Options{Region: "us-east-1", VariablesKey: "arn:aws:kms:us-east-1:1:key/k"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+func TestInventoryWithABroughtVariablesKeyProvisionsNoKey(t *testing.T) {
+	p := aws.NewProvider(control.Options{Region: "us-east-1", VariablesKey: "arn:aws:kms:us-east-1:1:key/k"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	config := providerserver.Config{
 		Version: "test",
 		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
@@ -275,12 +276,12 @@ func TestShapeWithABroughtVariablesKeyProvisionsNoKey(t *testing.T) {
 		t.Fatalf("Configure() error = %v", err)
 	}
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	if typeCounts(set)["aws_kms_key"] != 0 {
 		t.Errorf("counts = %v, want no KMS key when the account brought one", typeCounts(set))

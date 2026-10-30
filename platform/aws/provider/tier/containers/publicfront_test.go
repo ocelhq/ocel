@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )
 
 func publicInfraWork() *work {
@@ -90,8 +91,8 @@ func TestThePublicFrontsLivenessAnswerRunsTheRuntimeAppFunctionsRun(t *testing.T
 	}
 
 	function := recordedNamed(t, rec, "aws:lambda/function:Function", "::ocel-prod-public-liveness")
-	if got := function["runtime"].StringValue(); got != component.LambdaNodeRuntime {
-		t.Errorf("the liveness function runs %s, want %s, the runtime app functions run", got, component.LambdaNodeRuntime)
+	if got := function["runtime"].StringValue(); got != awsports.LambdaNodeRuntime {
+		t.Errorf("the liveness function runs %s, want %s, the runtime app functions run", got, awsports.LambdaNodeRuntime)
 	}
 }
 

@@ -18,9 +18,9 @@ import (
 
 func NewPart(records tier.Records, ns account.Namespace, front edge.Kind, open func(context.Context) (API, error)) tier.Part {
 	return tier.Recorded(records, tier.RecordedSpec{
-		Name:    Part,
-		Summary: Summary,
-		Shape:   func(tier environment.Tier) []pricing.Shaped { return Shape(ns, tier) },
+		Name:      Part,
+		Summary:   Summary,
+		Inventory: func(tier environment.Tier) []pricing.Resource { return Inventory(ns, tier) },
 		Work: func(_ context.Context, tier environment.Tier) (tier.Work, error) {
 			return Work(open, Spec{Namespace: ns, Tier: tier}), nil
 		},
@@ -54,5 +54,5 @@ func OpenAPI(ctx context.Context) (API, error) {
 	if err != nil {
 		return nil, err
 	}
-	return cloudfront.NewFromConfig(global), nil
+	return newCloudFrontCalls(cloudfront.NewFromConfig(global)), nil
 }

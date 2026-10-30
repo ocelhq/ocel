@@ -7,26 +7,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
-	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedstack"
 )
 
 const (
-	Slug = "ocel-network"
-
-	Part    = "network"
-	Summary = "the VPC every container app, VPC-attached function, database, cache and bastion of the tier runs in: a public, a private and an isolated subnet in each of two zones, " +
-		"an internet gateway, S3 and DynamoDB gateway endpoints, and the security group whatever reaches a database or cache joins"
-
 	kindVPC             = "AWS::EC2::VPC"
 	kindInternetGateway = "AWS::EC2::InternetGateway"
 	kindSubnet          = "AWS::EC2::Subnet"
@@ -40,8 +34,8 @@ const (
 )
 
 var Shared = sharedstack.Stack{
-	Slug:     Slug,
-	Part:     Part,
+	Slug:     sharedparts.NetworkSlug,
+	Part:     sharedparts.NetworkPart,
 	Subject:  "network",
 	Consumer: "part or database that runs in it",
 	Ref:      StackRef,
@@ -71,7 +65,7 @@ var Pending = Network{
 }
 
 func StackRef(tier environment.Tier) provider.StackRef {
-	return provider.StackRef{Project: Slug, Tier: tier, Name: naming.InfraStack(string(tier))}
+	return provider.StackRef{Project: sharedparts.NetworkSlug, Tier: tier, Name: naming.InfraStack(string(tier))}
 }
 
 func nameFor(namespace string, tier environment.Tier, words ...string) string {
@@ -80,7 +74,7 @@ func nameFor(namespace string, tier environment.Tier, words ...string) string {
 
 func projectTags(namespace string, tier environment.Tier) map[string]string {
 	tags := naming.OcelTags(namespace, tier)
-	tags[projectTagKey] = Slug
+	tags[projectTagKey] = sharedparts.NetworkSlug
 	return tags
 }
 
@@ -118,7 +112,7 @@ func (s *Stacks) Read(ctx context.Context, tier environment.Tier) (Network, bool
 }
 
 func read(ctx context.Context, owner sharedstack.Owner, tier environment.Tier) (Network, bool, error) {
-	_, present, err := stackrecords.Read(ctx, owner.KeyValues, tier, Slug, StackRef(tier).Name)
+	_, present, err := stackrecords.Read(ctx, owner.KeyValues, tier, sharedparts.NetworkSlug, StackRef(tier).Name)
 	if err != nil || !present {
 		return Network{}, false, err
 	}
@@ -253,7 +247,7 @@ func (s *Stacks) PlanRepatch(ctx context.Context, tier environment.Tier) (*provi
 		Kind:   provider.StackGroupKind,
 		Name:   StackRef(tier).Name.String(),
 		Action: provider.ActionUpdate,
-		Part:   Part,
+		Part:   sharedparts.NetworkPart,
 		Reason: "the transforms that patch the network of the " + string(tier) + " tier differ from the ones it carries, so this deploy provisions it again with them, for every project in the tier",
 		Slow:   true,
 	}, nil
@@ -266,12 +260,12 @@ func refuseNewBlock(tier environment.Tier, current Network, patched string) erro
 	return refusal.Refuse(refusal.CodeInvalid,
 		"the %s tier's network was created with %s, and a transform's `vpc.cidrBlock` now asks for %s; a VPC's block cannot change without replacing the VPC and everything in it. "+
 			"Set it back to %s, or remove everything in the tier's network and `%s --remove %s` first",
-		tier, current.CIDR, patched, current.CIDR, provider.BootstrapCommand(tier), Part)
+		tier, current.CIDR, patched, current.CIDR, provider.BootstrapCommand(tier), sharedparts.NetworkPart)
 }
 
 func provision(ctx context.Context, owner sharedstack.Owner, ref provider.StackRef, program component.Program, progress progress.Log) (Network, error) {
 	tier := ref.Tier
-	if err := stackrecords.Write(ctx, owner.KeyValues, tier, Slug, ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, owner.KeyValues, tier, sharedparts.NetworkSlug, ref.Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,
 		WrittenBy: owner.WrittenBy,
 	}); err != nil {
@@ -330,31 +324,10 @@ func listResources(namespace string, tier environment.Tier, network Network) []p
 	for _, routes := range network.PrivateRoutes {
 		resources = append(resources, provider.PhysicalResource{Kind: kindRouteTable, ID: routes})
 	}
-	for _, service := range endpointServices {
+	for _, service := range sharedparts.NetworkEndpointServices {
 		resources = append(resources, provider.PhysicalResource{Kind: kindVPCEndpoint, ID: nameFor(namespace, tier, service)})
 	}
 	return append(resources, provider.PhysicalResource{Kind: kindSecurityGroup, ID: network.Clients})
-}
-
-func ReadPart(ctx context.Context, store records.Store, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
-	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, store, tier, Part)
-	if err != nil || !present {
-		return provider.BootstrapPart{}, false, err
-	}
-	users, err := Shared.ListUsers(ctx, store, tier)
-	if err != nil {
-		return provider.BootstrapPart{}, false, err
-	}
-	return provider.BootstrapPart{
-		Name:      Part,
-		Summary:   Summary,
-		Current:   recorded.State == stackrecords.PartReady,
-		Resources: recorded.Resources,
-		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: Shape(tier)},
-
-		RetiresWithLastUser: true,
-	}, true, nil
 }
 
 func (s *Stacks) RefuseInUse(tier environment.Tier, users []string) error {
@@ -393,30 +366,13 @@ func plural(n int, one, many string) string {
 	return many
 }
 
-func Shape(tier environment.Tier) []pricing.Shaped {
-	name := Slug + "-" + string(tier)
-	shaped := []pricing.Shaped{
-		{Name: name, Type: component.TerraformVPC, Properties: map[string]any{}},
-		{Name: name, Type: component.TerraformInternetGateway, Properties: map[string]any{}},
-	}
-	for _, role := range []string{publicWord, privateWord, isolatedWord} {
-		for n := range Zones {
-			shaped = append(shaped, pricing.Shaped{Name: naming.Join(naming.WordSeparator, name, role, fmt.Sprint(n+1)), Type: component.TerraformSubnet, Properties: map[string]any{}})
-		}
-	}
-	for _, service := range endpointServices {
-		shaped = append(shaped, pricing.Shaped{Name: naming.Join(naming.WordSeparator, name, service), Type: component.TerraformVPCEndpoint, Properties: map[string]any{"vpc_endpoint_type": endpointType}})
-	}
-	return shaped
-}
-
 func newChangeGroup(namespace string, tier environment.Tier) provider.ChangeGroup {
 	return provider.ChangeGroup{
 		Kind:    provider.StackGroupKind,
 		Name:    StackRef(tier).Name.String(),
 		Action:  provider.ActionCreate,
-		Part:    Part,
-		Reason:  "the first container app, VPC-attached function, database or cache in the " + string(tier) + " tier adds the " + Part + " part: " + Summary,
+		Part:    sharedparts.NetworkPart,
+		Reason:  "the first container app, VPC-attached function, database or cache in the " + string(tier) + " tier adds the " + sharedparts.NetworkPart + " part: " + sharedparts.NetworkSummary,
 		Changes: createdBy(namespace, tier),
 	}
 }

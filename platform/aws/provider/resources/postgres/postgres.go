@@ -12,6 +12,7 @@ import (
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/credential"
 )
 
 const transformKind = "postgres"
@@ -31,7 +32,7 @@ func New(clusters ClustersAPI) component.Component {
 		WidestGrants: func(at component.Stack, _ provider.Resource) []*variablestorev1.Grant {
 			return grants(widestDBUserARN(at.Tier()))
 		},
-		Credential: credential,
+		Credential: credential.Postgres,
 		Teardown: &component.Teardown{
 			Plan: markProtectedClusters,
 			Before: func(ctx context.Context, ref provider.StackRef, outputs func(context.Context) (auto.OutputMap, error), progress progress.Log) error {
@@ -42,7 +43,7 @@ func New(clusters ClustersAPI) component.Component {
 			names, err := NamesFor(at, declared.Name)
 			return component.Transformable{Kind: transformKind, Names: names.Surfaces()}, err
 		},
-		Shape: shape,
+		Inventory: inventory,
 	}
 }
 

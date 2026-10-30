@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"testing"
 
@@ -14,12 +15,14 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
-	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
+	"github.com/ocelhq/ocel/platform/aws/provider/control"
+	"github.com/ocelhq/ocel/platform/aws/provider/credential"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
@@ -150,8 +153,8 @@ func grants(statements []iam.Statement, action string) bool {
 func TestEveryResourceAComponentDeclaresIsOneTheDeployCredentialMayCreate(t *testing.T) {
 	scope := account.Namespace(provider.DefaultNamespace).Scope(environment.TierProduction)
 	granting := map[string][]iam.Statement{
-		functionCredential: function.Credential(scope),
-		networkCredential:  component.NetworkCredential(scope),
+		functionCredential: credential.Function(scope),
+		networkCredential:  credential.AppNetwork(scope),
 		topicCredential:    topic.New().Credential(scope),
 	}
 	registry := Registry(Clients{
@@ -201,4 +204,52 @@ func TestEveryResourceAComponentDeclaresIsOneTheDeployCredentialMayCreate(t *tes
 			t.Errorf("%s is listed with the action that creates it, and no component declares it any more", token)
 		}
 	}
+}
+
+func TestTheDeployCredentialGrantsWhatEveryComponentNeeds(t *testing.T) {
+	t.Parallel()
+
+	ns := account.Namespace(provider.DefaultNamespace)
+	policies, err := control.CredentialPolicies(ns, edge.PurposeDeploy, environment.TierProduction, "")
+	if err != nil {
+		t.Fatalf("deploy credential policies: %v", err)
+	}
+	granted := map[string]bool{}
+	for _, policy := range policies {
+		var document struct{ Statement []json.RawMessage }
+		encoded, err := json.Marshal(policy.PolicyDocument)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(encoded, &document); err != nil {
+			t.Fatal(err)
+		}
+		for _, statement := range document.Statement {
+			granted[normalizedJSON(t, statement)] = true
+		}
+	}
+	for _, declaring := range Registry(Clients{}).Components() {
+		for _, statement := range iam.Statements(declaring.Credential(ns.Scope(environment.TierProduction))) {
+			encoded, err := json.Marshal(statement)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !granted[normalizedJSON(t, encoded)] {
+				t.Errorf("the %v component needs %s, and the deploy credential does not grant it", declaring.Types, encoded)
+			}
+		}
+	}
+}
+
+func normalizedJSON(t *testing.T, raw []byte) string {
+	t.Helper()
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(encoded)
 }

@@ -12,13 +12,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 )
 
 var nextContainerNeeds = []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming, edge.NeedRevalidation}
 
 func TestANextContainerBehindCloudFrontServingPrerendersDeploysWithNoWaiver(t *testing.T) {
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 
 	verdict, err := conformance.CheckContainerNeeds(t, p, cloudfront.Kind, nextContainerNeeds)
 	if err != nil {
@@ -30,7 +31,7 @@ func TestANextContainerBehindCloudFrontServingPrerendersDeploysWithNoWaiver(t *t
 }
 
 func TestANextContainerBehindCloudFrontStillNeedsAWaiverForTheEdgeRuntime(t *testing.T) {
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 
 	_, err := conformance.CheckContainerNeeds(t, p, cloudfront.Kind, []edge.Need{edge.NeedEdgeRuntime})
 	if unsupported := (*providerserver.UnsupportedNeedError)(nil); !errors.As(err, &unsupported) {
@@ -40,7 +41,7 @@ func TestANextContainerBehindCloudFrontStillNeedsAWaiverForTheEdgeRuntime(t *tes
 
 func TestANextContainerForwardedPastCloudflareNeedsAWaiverForTheEdgeCache(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 
 	_, err := conformance.CheckContainerNeeds(t, p, "cloudflare", nextContainerNeeds)
 	if unsupported := (*providerserver.UnsupportedNeedError)(nil); !errors.As(err, &unsupported) || unsupported.Need != edge.NeedEdgeCache {
@@ -53,7 +54,7 @@ func TestANextContainerForwardedPastCloudflareNeedsAWaiverForTheEdgeCache(t *tes
 
 func TestNoFrontOnAWSDispatchesANextContainer(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 
 	for _, front := range []edge.Kind{"cloudflare", cloudfront.Kind} {
 		if dispatched := conformance.ListDispatchedComputes(t, p, front); slices.Contains(dispatched, provider.ComputeContainer) {

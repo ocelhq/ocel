@@ -10,10 +10,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	awsresources "github.com/ocelhq/ocel/platform/aws/provider/resources"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
@@ -91,13 +92,13 @@ func (e *mockedEngine) stacks() []string {
 var _ pulumi.Engine = (*mockedEngine)(nil)
 
 func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, log progress.Log) (auto.OutputMap, error) {
-	if setup.Ref.Project == network.Slug {
+	if setup.Ref.Project == sharedparts.NetworkSlug {
 		declared := recordDeclared(standInCloud{})
-		if err := sdk.RunErr(setup.Program, sdk.WithMocks(network.Slug, setup.Stack, declared)); err != nil {
+		if err := sdk.RunErr(setup.Program, sdk.WithMocks(sharedparts.NetworkSlug, setup.Stack, declared)); err != nil {
 			return nil, err
 		}
 		if e.state != nil {
-			e.state.apply(network.Slug+"/"+setup.Stack, declared.declared, log)
+			e.state.apply(sharedparts.NetworkSlug+"/"+setup.Stack, declared.declared, log)
 		}
 		e.mu.Lock()
 		e.networkUps++
@@ -135,7 +136,7 @@ func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, log pro
 }
 
 func (e *mockedEngine) outputsOf(setup pulumi.WorkspaceSpec) auto.OutputMap {
-	if setup.Ref.Project != network.Slug {
+	if setup.Ref.Project != sharedparts.NetworkSlug {
 		return e.outputs
 	}
 	if _, set := e.outputs["network"]; set {
@@ -206,10 +207,10 @@ func (p *previewing) Call(args sdk.MockCallArgs) (resource.PropertyMap, error) {
 func (e *mockedEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ progress.Log) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if setup.Ref.Project == network.Slug {
+	if setup.Ref.Project == sharedparts.NetworkSlug {
 		e.networkDowns++
 		if e.state != nil {
-			e.state.forget(network.Slug + "/" + setup.Stack)
+			e.state.forget(sharedparts.NetworkSlug + "/" + setup.Stack)
 		}
 		return nil
 	}
@@ -425,7 +426,7 @@ func TestStacksRunTheConformancePortTier(t *testing.T) {
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: shipped, state: newEngineState()}
 	cfg := conformingConfig(&fakeArtifactStore{})
 	cfg.KeyValues = fake.NewKeyValues()
-	conformance.RunStacks(t, provider.Facts{Bindings: awsresources.Types(), StoresArtifacts: true}, stacksWith(cfg, engine), shipped, cfg.KeyValues)
+	conformance.RunStacks(t, provider.Facts{Bindings: awsresources.Registry(awsresources.Clients{}).Types(), StoresArtifacts: true}, stacksWith(cfg, engine), shipped, cfg.KeyValues)
 }
 
 func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *testing.T) {

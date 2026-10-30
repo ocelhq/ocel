@@ -1,10 +1,11 @@
 package postgres
 
 import (
-	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/provider"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 )

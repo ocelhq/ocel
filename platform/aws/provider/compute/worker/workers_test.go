@@ -6,17 +6,19 @@ import (
 	"strings"
 	"testing"
 
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/resources"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFailures(t *testing.T) {
@@ -35,7 +37,7 @@ func TestAWorkerIsAFunctionWithNoURLThatEachOfItsQueuesInvokesWithPartialBatchFa
 		stack:    StackName("prod", "web"),
 		topics:   topics,
 		workers:  []provider.WorkerSpec{{Name: "worker"}, {Name: "capped", Concurrency: 2}},
-		args:     function.Args{Runtime: component.LambdaNodeRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024, Tags: map[string]string{"ocel:managed-by": "ocel"}},
+		args:     function.Args{Runtime: awsports.LambdaNodeRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024, Tags: map[string]string{"ocel:managed-by": "ocel"}},
 		artifact: function.Artifact{Bucket: "artifacts", Key: "web.zip"},
 		env:      map[string]string{"APP_VAR": "1"},
 		role:     function.ExecutionRole{Namespace: "ocel", Boundary: componenttest.BoundaryARN},
@@ -152,7 +154,7 @@ func TestTheSchedulerRoleCarriesTheManagedByTagTheCredentialCreatesAndPassesRole
 		stack:   StackName("prod", "web"),
 		topics:  mustTopics(t, []provider.Resource{taskResource("heartbeat", provider.ConsumerSpec{Worker: "worker"}, cronEveryMinute)}),
 		workers: []provider.WorkerSpec{{Name: "worker"}},
-		args:    function.Args{Runtime: component.LambdaNodeRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024, Tags: map[string]string{"ocel:managed-by": "ocel"}},
+		args:    function.Args{Runtime: awsports.LambdaNodeRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024, Tags: map[string]string{"ocel:managed-by": "ocel"}},
 		role:    function.ExecutionRole{Namespace: "ocel", Boundary: componenttest.BoundaryARN, Tags: map[string]string{"ocel:managed-by": "ocel"}},
 		region:  "us-east-1",
 		account: mockAccount,
@@ -184,7 +186,7 @@ func TestTheWorkersProgramExportsEachWorkersLambdaNameForTheStackToDecode(t *tes
 		project: "shop",
 		stack:   StackName("prod", "web"),
 		workers: []provider.WorkerSpec{{Name: "media"}, {Name: "ledger"}},
-		args:    function.Args{Runtime: component.LambdaNodeRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024},
+		args:    function.Args{Runtime: awsports.LambdaNodeRuntime, Handler: "index.mjs", Arch: "arm64", MemorySizeMB: 1024},
 		role:    function.ExecutionRole{Namespace: "ocel", Boundary: componenttest.BoundaryARN},
 		region:  "us-east-1",
 		account: mockAccount,

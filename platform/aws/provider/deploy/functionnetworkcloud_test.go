@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -32,7 +34,7 @@ func seedTierNetwork(t *testing.T, store records.Store, holder string) {
 	t.Helper()
 	ctx := context.Background()
 	tier := environment.TierProduction
-	if err := stackrecords.Write(ctx, store, tier, network.Slug, network.StackRef(tier).Name, stackrecords.Stack{Kind: provider.StackInfra, WrittenBy: "1.0.0"}); err != nil {
+	if err := stackrecords.Write(ctx, store, tier, sharedparts.NetworkSlug, network.StackRef(tier).Name, stackrecords.Stack{Kind: provider.StackInfra, WrittenBy: "1.0.0"}); err != nil {
 		t.Fatal(err)
 	}
 	held := network.Shared.ConsumerAt(provider.StackRef{Project: holder, Tier: tier, Name: naming.InfraStack("prod")})

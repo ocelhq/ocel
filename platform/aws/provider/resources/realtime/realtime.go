@@ -12,6 +12,7 @@ import (
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/credential"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -37,11 +38,11 @@ func New(artifacts component.Artifacts, keys Keys) component.Component {
 		WidestGrants: func(_ component.Stack, declared provider.Resource) []*variablestorev1.Grant {
 			return realtimeGrants(widestEventAPIARN, declared.Declared)
 		},
-		Credential: credential,
+		Credential: credential.Realtime,
 		Sweep: func(ctx context.Context, at component.Stack, kept []provider.Resource) error {
 			return sweep(ctx, at, kept, keys)
 		},
-		Shape: shape,
+		Inventory: inventory,
 	}
 }
 
