@@ -56,14 +56,14 @@ export function SiteBar() {
           </a>
           <ThemeToggle />
           <a
-            href="https://app.ocelhq.com"
+            href="/#cloud"
             className={cn(
               cell,
               "gap-2 border-x-[1.5px] border-foreground bg-foreground px-3 text-[14px] font-medium whitespace-nowrap text-background transition-opacity hover:opacity-85 sm:px-4",
             )}
           >
             <span>
-              <span className="hidden sm:inline">Deploy on </span>Ocel Cloud
+              Ocel Cloud<span className="hidden sm:inline"> waitlist</span>
             </span>
             <svg
               viewBox="0 0 12 12"

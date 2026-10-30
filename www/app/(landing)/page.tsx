@@ -4,12 +4,11 @@ import { Clip } from "@/components/landing/clip";
 import { clips } from "@/components/landing/clips";
 import { CopyCommand } from "@/components/landing/copy-command";
 import { DeployDiagram } from "@/components/landing/deploy-diagram";
-import { Frame } from "@/components/landing/frame";
+import { EarlyAccess } from "@/components/landing/early-access";
 import { languages, primitives, shikiLang } from "@/components/landing/primitives";
 import { PrimitivesGrid, type RenderedPrimitive } from "@/components/landing/primitives-grid";
 import { type RenderedTarget, TargetConfig } from "@/components/landing/target-config";
 import { targets } from "@/components/landing/targets";
-import { type Line, Transcript } from "@/components/landing/transcript";
 import { SiteBar } from "@/components/site-bar";
 import { cn } from "@/lib/utils";
 
@@ -17,23 +16,6 @@ const install = "curl -fsSL https://ocel.dev/install.sh | sh";
 const repo = "https://github.com/ocelhq/ocel";
 const consoleRepo = "https://github.com/ocelhq/console";
 const consoleUrl = "https://app.ocelhq.com";
-
-const cloudOutput: Line[] = [
-  [
-    ["prompt", "$ "],
-    ["cmd", "ocel login"],
-  ],
-  [
-    ["prompt", "$ "],
-    ["cmd", "ocel deploy"],
-  ],
-  [],
-  [["url", "https://notes.ocel.app"]],
-  [
-    ["ok", "✓ "],
-    ["cmd", "Deployed notes on Ocel Cloud"],
-  ],
-];
 
 async function highlight(code: string, lang: string) {
   const html = await codeToHtml(code, { lang, theme: "vitesse-dark" });
@@ -125,32 +107,6 @@ function Underlined({ href, children }: { href: string; children: ReactNode }) {
       className="w-fit border-b-[1.5px] border-electric font-mono text-[13px] text-foreground"
     >
       {children}
-    </a>
-  );
-}
-
-function CloudButton({ className }: { className?: string }) {
-  return (
-    <a
-      href={consoleUrl}
-      className={cn(
-        "group inline-flex items-center justify-center gap-2.5 border-[1.5px] border-foreground bg-foreground px-5 py-3 text-[15px] font-semibold whitespace-nowrap text-background transition-opacity hover:opacity-85",
-        className,
-      )}
-    >
-      Deploy on Ocel Cloud
-      <svg
-        viewBox="0 0 12 12"
-        aria-hidden="true"
-        className="size-3 transition-transform group-hover:translate-x-0.5"
-      >
-        <path
-          d="M1 6h9M6.5 2.5 10 6l-3.5 3.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-        />
-      </svg>
     </a>
   );
 }
@@ -278,29 +234,26 @@ export default async function Home() {
           >
             One dashboard for every target.
           </Heading>
-          <Clip clip={clips.console} />
-          <div className="mt-8 flex flex-wrap gap-x-8 gap-y-3 border-t border-border pt-6">
+          <div className="flex flex-wrap gap-x-8 gap-y-3 border-t border-border pt-6">
             <Underlined href={consoleUrl}>Sign in at app.ocelhq.com</Underlined>
             <Underlined href={consoleRepo}>Self-host it: github.com/ocelhq/console</Underlined>
           </div>
         </Sheet>
 
-        <Sheet tone="fog">
+        <Sheet id="cloud" tone="fog">
           <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-10 lg:grid-cols-12">
-            <div className="lg:col-span-6">
+            <div className="lg:col-span-5">
               <h2 className="m-0 max-w-[14ch] text-[clamp(2.25rem,5vw,3.75rem)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance text-foreground">
-                Start on Ocel Cloud.
+                Ocel Cloud, by invite.
               </h2>
               <p className="m-0 mt-5 max-w-[46ch] text-[17px] leading-[1.6] text-pretty text-muted-foreground">
-                Log in, deploy, get a URL. No cloud account of yours, no keys, no provider config.
-                When you want your own account, add a provider line; the code stays the same.
+                Log in, deploy, get a URL, with no cloud account of yours. It's in alpha, so we let
+                people in a few at a time. Your own AWS, Google Cloud or VPS needs no invite.
               </p>
-              <CloudButton className="mt-8" />
+              <EarlyAccess source="landing" className="mt-8 max-w-[28rem]" />
             </div>
-            <div className="lg:col-span-6">
-              <Frame kind="terminal" title="~/notes">
-                <Transcript lines={cloudOutput} />
-              </Frame>
+            <div className="min-w-0 lg:col-span-7">
+              <Clip clip={clips.console} />
             </div>
           </div>
         </Sheet>

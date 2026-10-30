@@ -3,7 +3,7 @@
 import { type FormEvent, useId, useState } from "react";
 import { cn } from "@/lib/utils";
 
-const endpoint = process.env.NEXT_PUBLIC_EARLY_ACCESS_URL ?? "https://ocelhq.com/api/early-access";
+const endpoint = "/api/waitlist";
 
 type State =
   | { kind: "idle" }
@@ -44,7 +44,7 @@ export function EarlyAccess({
     } catch {
       setState({
         kind: "error",
-        message: "Couldn't reach ocelhq.com. Check your connection and try again.",
+        message: "Couldn't reach ocel.dev. Check your connection and try again.",
       });
     }
   }
@@ -85,7 +85,7 @@ export function EarlyAccess({
           disabled={state.kind === "sending"}
           className="shrink-0 bg-foreground px-4 text-[14px] font-semibold text-background transition-opacity hover:opacity-85 disabled:opacity-60"
         >
-          {state.kind === "sending" ? "Sending…" : "Request access"}
+          {state.kind === "sending" ? "Sending…" : "Join the waitlist"}
         </button>
       </div>
       <input
