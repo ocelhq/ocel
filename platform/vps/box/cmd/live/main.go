@@ -69,6 +69,12 @@ func run(argv []string, errs *os.File) int {
 		fmt.Fprintln(errs, "ocel-live: "+err.Error())
 		return 1
 	}
+	links, err := os.MkdirTemp("", "ocel-queues-")
+	if err != nil {
+		fmt.Fprintln(errs, "ocel-live: make the directory queue sockets are linked from: "+err.Error())
+		return 1
+	}
+	defer os.RemoveAll(links)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	engines := &queues.Engines{
@@ -77,6 +83,7 @@ func run(argv []string, errs *os.File) int {
 		Cipher:    sealkey.Cipher{Root: *tierRoot},
 		Addresses: inspect,
 		Mounts:    inspect,
+		Links:     links,
 		Open:      queues.OpenPgmq,
 	}
 	go engines.Run(ctx)
