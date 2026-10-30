@@ -1,6 +1,6 @@
 {
   "name": "@ocel/sst",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": false,
   "type": "module",
   "description": "Publishes SST-defined resources as ocel bindings and SST outputs as ocel variables",
