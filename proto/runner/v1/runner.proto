@@ -1,0 +1,548 @@
+syntax = "proto3";
+package runner.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/runner/v1;runnerv1";
+
+import "buf/validate/validate.proto";
+import "common/environment/v1/environment.proto";
+import "common/scope/v1/scope.proto";
+import "google/protobuf/timestamp.proto";
+
+enum JobCommand {
+  JOB_COMMAND_UNSPECIFIED = 0;
+  JOB_COMMAND_BUILD = 1 [(common.scope.v1.least_role) = ROLE_MEMBER];
+  JOB_COMMAND_DEPLOY = 2 [(common.scope.v1.least_role) = ROLE_MEMBER];
+  JOB_COMMAND_PREVIEW_UP = 3 [(common.scope.v1.least_role) = ROLE_MEMBER];
+  JOB_COMMAND_PREVIEW_RM = 4 [(common.scope.v1.least_role) = ROLE_MEMBER];
+  JOB_COMMAND_PROJECTS_DESTROY = 5 [(common.scope.v1.least_role) = ROLE_ADMIN];
+}
+
+enum JobState {
+  JOB_STATE_UNSPECIFIED = 0;
+  JOB_STATE_QUEUED = 1;
+  JOB_STATE_RUNNING = 2;
+  JOB_STATE_INPUT_REQUIRED = 3;
+  JOB_STATE_SUCCEEDED = 4;
+  JOB_STATE_FAILED = 5;
+  JOB_STATE_CANCELED = 6;
+}
+
+enum JobPhase {
+  JOB_PHASE_UNSPECIFIED = 0;
+  JOB_PHASE_CHECK = 1;
+  JOB_PHASE_BUILD = 2;
+  JOB_PHASE_PLAN = 3;
+  JOB_PHASE_PROVISION = 4;
+  JOB_PHASE_DEPLOY = 5;
+  JOB_PHASE_PROMOTE = 6;
+  JOB_PHASE_DESTROY = 7;
+}
+
+enum JobEventLevel {
+  JOB_EVENT_LEVEL_UNSPECIFIED = 0;
+  JOB_EVENT_LEVEL_DEBUG = 1;
+  JOB_EVENT_LEVEL_INFO = 2;
+  JOB_EVENT_LEVEL_WARN = 3;
+  JOB_EVENT_LEVEL_ERROR = 4;
+}
+
+message GitContext {
+  string commit = 1 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {pattern: "^[0-9a-f]{7,64}$"}
+  }];
+
+  string branch = 2 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[^\\x00-\\x1f\\x7f]*$"
+  }];
+
+  bool dirty = 3;
+
+  uint32 pull_request = 4;
+}
+
+message GitSource {
+  string clone_url = 1 [
+    (buf.validate.field).string = {min_len: 1, max_len: 2048, uri: true},
+    (buf.validate.field).cel = {
+      id: "git_source.clone_url_https"
+      message: "a clone URL is an https URL"
+      expression: "this.startsWith('https://')"
+    }
+  ];
+
+  string commit = 2 [(buf.validate.field).string.pattern = "^[0-9a-f]{40}([0-9a-f]{24})?$"];
+
+  string token = 3 [
+    debug_redact = true,
+    (buf.validate.field).string = {min_len: 1, max_len: 4096}
+  ];
+}
+
+message JobContext {
+  string job_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  string project_id = 2 [(buf.validate.field).string.uuid = true];
+
+  common.environment.v1.Tier tier = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string deployment_id = 4 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {pattern: "^[0-9a-f]{32}$"}
+  }];
+
+  string slug = 5 [(buf.validate.field).string = {
+    max_len: 63
+    pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+  }];
+
+  GitContext git = 6;
+
+  string preview_label = 7 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {
+      max_len: 63
+      pattern: "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    }
+  }];
+
+  string console_url = 8 [
+    (buf.validate.field).string = {min_len: 1, max_len: 2048, uri: true}
+  ];
+
+  string job_token_file = 9 [(buf.validate.field).string = {min_len: 1, max_len: 4096}];
+}
+
+message PreviewTarget {
+  string name = 1 [(buf.validate.field).string = {
+    max_len: 63
+    pattern: "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+  }];
+
+  bool persistent = 2;
+
+  string label = 3 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {
+      max_len: 63
+      pattern: "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    }
+  }];
+}
+
+message JobRequest {
+  option (buf.validate.message).cel = {
+    id: "job_request.preview_only_for_preview_commands"
+    message: "a preview target is given for a preview up or preview rm job, and only for one"
+    expression: "has(this.preview) == (this.command == 3 || this.command == 4)"
+  };
+  option (buf.validate.message).cel = {
+    id: "job_request.tier_values_only_for_build"
+    message: "only a build job is told whether it reads its tier's values"
+    expression: "!this.tier_values || this.command == 1"
+  };
+  option (buf.validate.message).cel = {
+    id: "job_request.tag_only_for_deploy"
+    message: "a tag is given only for a deploy job"
+    expression: "this.tag == '' || this.command == 2"
+  };
+
+  JobCommand command = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  oneof source {
+    option (buf.validate.oneof).required = true;
+
+    string source_id = 2 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
+
+    GitSource git_source = 3;
+  }
+
+  GitContext git = 4;
+
+  string tag = 5 [(buf.validate.field).string = {pattern: "^[A-Za-z0-9._-]*$", max_len: 64}];
+
+  PreviewTarget preview = 6;
+
+  string project_path = 7 [
+    (buf.validate.field).string.max_len = 4096,
+    (buf.validate.field).cel = {
+      id: "job_request.project_path"
+      message: "a project path is empty for the source root, or relative and slash-separated: every segment must be non-empty and neither \".\" nor \"..\", and the path may contain no backslash and no control character"
+      expression: "this == '' || (this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]'))"
+    }
+  ];
+
+  bool tier_values = 8;
+
+  string config_file = 9 [
+    (buf.validate.field).string.max_len = 4096,
+    (buf.validate.field).cel = {
+      id: "job_request.config_file"
+      message: "a config file is empty for the project's default config, or a path relative to the project directory and slash-separated: every segment must be non-empty and neither \".\" nor \"..\", and the path may contain no backslash and no control character"
+      expression: "this == '' || (this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]'))"
+    }
+  ];
+}
+
+message StartJobRequest {
+  JobRequest job = 1 [(buf.validate.field).required = true];
+}
+
+message StartJobResponse {
+  Job job = 1;
+}
+
+message GetJobRequest {
+  string job_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+}
+
+message GetJobResponse {
+  Job job = 1;
+}
+
+message CancelJobRequest {
+  string job_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+}
+
+message CancelJobResponse {
+  Job job = 1;
+}
+
+message ListJobEventsRequest {
+  string job_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  uint64 after_seq = 2;
+
+  uint32 limit = 3 [(buf.validate.field).uint32.lte = 1000];
+}
+
+message ListJobEventsResponse {
+  repeated JobEvent events = 1;
+
+  bool more = 2;
+
+  Job job = 3;
+}
+
+message Job {
+  string id = 1;
+
+  string project_id = 2;
+
+  common.environment.v1.Tier tier = 3;
+
+  JobCommand command = 4;
+
+  JobState state = 5;
+
+  JobPhase phase = 6;
+
+  string step = 7;
+
+  google.protobuf.Timestamp created_at = 8;
+
+  google.protobuf.Timestamp started_at = 9;
+
+  google.protobuf.Timestamp ended_at = 10;
+
+  JobError error = 11;
+
+  JobResult result = 12;
+
+  JobInput input = 13;
+
+  string deployment_id = 14;
+}
+
+message JobInput {
+  string id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  oneof need {
+    option (buf.validate.oneof).required = true;
+
+    VariablesNeeded variables = 2;
+
+    Confirmation confirmation = 3;
+  }
+}
+
+message VariablesNeeded {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  repeated NeededVariable variables = 2 [(buf.validate.field).repeated.min_items = 1];
+
+  repeated NeededGroup groups = 3;
+}
+
+message NeededVariable {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#\\x00-\\x1f\\x7f]+)*$"];
+
+  bool secret = 3;
+
+  string description = 4;
+
+  string reason = 5;
+
+  string group = 6 [(buf.validate.field).string.pattern = "^[^#\\x00-\\x1f\\x7f]*$"];
+}
+
+message NeededGroup {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  string description = 2;
+}
+
+message Confirmation {
+  string finding = 1;
+
+  string question = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message AnswerConfirmationRequest {
+  string job_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  string input_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  bool confirmed = 3;
+}
+
+message AnswerConfirmationResponse {
+  Job job = 1;
+}
+
+message SupplyVariablesRequest {
+  string job_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  string input_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  VariableValues variables = 3 [(buf.validate.field).required = true];
+}
+
+message SupplyVariablesResponse {
+  Job job = 1;
+}
+
+message VariableValues {
+  repeated VariableValue values = 1 [(buf.validate.field).repeated.min_items = 1];
+}
+
+message VariableValue {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  string folder = 2 [(buf.validate.field).string.pattern = "^(/[^/#\\x00-\\x1f\\x7f]+)*$"];
+
+  string value = 3 [debug_redact = true];
+}
+
+message JobError {
+  string code = 1;
+
+  string message = 2;
+}
+
+message JobResult {
+  repeated string urls = 1;
+
+  repeated AppBuild builds = 2;
+}
+
+message AppBuild {
+  string app = 1;
+
+  string build_id = 2;
+}
+
+message JobEvent {
+  uint64 seq = 1;
+
+  google.protobuf.Timestamp time = 2;
+
+  JobEventLevel level = 3;
+
+  JobPhase phase = 4;
+
+  string message = 5;
+}
+
+message ListMissingBlobsRequest {
+  repeated string digests = 1 [(buf.validate.field).repeated = {
+    max_items: 20000
+    unique: true
+    items: {string: {pattern: "^[0-9a-f]{64}$"}}
+  }];
+}
+
+message Upload {
+  option (buf.validate.message).cel = {
+    id: "upload.fields_only_for_post"
+    message: "only a POST policy has form fields"
+    expression: "this.method == 'POST' || this.fields.size() == 0"
+  };
+
+  string digest = 1 [(buf.validate.field).string = {pattern: "^[0-9a-f]{64}$"}];
+
+  string url = 2 [
+    (buf.validate.field).string = {min_len: 1, max_len: 8192, uri: true},
+    (buf.validate.field).cel = {
+      id: "upload.url_scheme"
+      message: "an upload target is an https or http URL"
+      expression: "this.startsWith('https://') || this.startsWith('http://')"
+    }
+  ];
+
+  string method = 3 [(buf.validate.field).string = {in: ["PUT", "POST"]}];
+
+  map<string, string> headers = 4;
+
+  map<string, string> fields = 5;
+}
+
+message ListMissingBlobsResponse {
+  option (buf.validate.message).cel = {
+    id: "list_missing_blobs_response.unique_digests"
+    message: "each digest is named once"
+    expression: "this.uploads.map(u, u.digest).unique()"
+  };
+
+  repeated Upload uploads = 1 [(buf.validate.field).repeated.max_items = 20000];
+}
+
+message SourceFile {
+  option (buf.validate.message).cel = {
+    id: "source_file.digest_or_symlink"
+    message: "a file is either a regular file with a digest or a symlink with a target"
+    expression: "(this.digest == '') != (this.symlink_target == '')"
+  };
+  option (buf.validate.message).cel = {
+    id: "source_file.symlink_is_bare"
+    message: "a symlink has no size and is not executable"
+    expression: "this.symlink_target == '' || (this.size == 0u && !this.executable)"
+  };
+
+  string path = 1 [
+    (buf.validate.field).string = {min_len: 1, max_len: 4096},
+    (buf.validate.field).cel = {
+      id: "source_file.path"
+      message: "a path is relative and slash-separated: every segment must be non-empty and neither \".\" nor \"..\", and the path may contain no backslash and no control character"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]')"
+    }
+  ];
+
+  string digest = 2 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {pattern: "^[0-9a-f]{64}$"}
+  }];
+
+  uint64 size = 3;
+
+  bool executable = 4;
+
+  string symlink_target = 5 [
+    (buf.validate.field).string.max_len = 4096,
+    (buf.validate.field).cel = {
+      id: "source_file.symlink_target"
+      message: "a symlink target is relative to the symlink and may contain no backslash and no control character"
+      expression: "!this.startsWith('/') && !this.contains('\\\\') && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]')"
+    }
+  ];
+}
+
+message SourceManifest {
+  option (buf.validate.message).cel = {
+    id: "source_manifest.unique_paths"
+    message: "each path is listed once"
+    expression: "this.files.map(f, f.path).unique()"
+  };
+
+  repeated SourceFile files = 1 [(buf.validate.field).repeated = {min_items: 1, max_items: 200000}];
+}
+
+message CommitSourceRequest {
+  SourceManifest manifest = 1 [(buf.validate.field).required = true];
+}
+
+message CommitSourceResponse {
+  string source_id = 1;
+}
+
+service RunnerService {
+  rpc ListMissingBlobs(ListMissingBlobsRequest) returns (ListMissingBlobsResponse) {
+    option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+  }
+
+  rpc CommitSource(CommitSourceRequest) returns (CommitSourceResponse) {
+    option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+  }
+
+  rpc StartJob(StartJobRequest) returns (StartJobResponse) {
+    option (common.scope.v1.required) = SCOPE_JOB;
+  }
+
+  rpc GetJob(GetJobRequest) returns (GetJobResponse) {
+    option (common.scope.v1.required) = SCOPE_APPS_READ;
+  }
+
+  rpc ListJobEvents(ListJobEventsRequest) returns (ListJobEventsResponse) {
+    option (common.scope.v1.required) = SCOPE_APPS_READ;
+  }
+
+  rpc AnswerConfirmation(AnswerConfirmationRequest) returns (AnswerConfirmationResponse) {
+    option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+  }
+
+  rpc SupplyVariables(SupplyVariablesRequest) returns (SupplyVariablesResponse) {
+    option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
+  }
+
+  rpc CancelJob(CancelJobRequest) returns (CancelJobResponse) {
+    option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+  }
+}

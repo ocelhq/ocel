@@ -389,7 +389,67 @@ message RecordEnvironmentEventRequest {
 message RecordEnvironmentEventResponse {
 }
 
+message DeploymentStart {
+  option (buf.validate.message).cel = {
+    id: "deployment_start.environment_tier"
+    message: "the environment names its tier"
+    expression: "this.environment.tier != common.environment.v1.Tier.TIER_UNSPECIFIED"
+  };
+  option (buf.validate.message).cel = {
+    id: "deployment_start.preview_up_in_preview"
+    message: "a preview up deploys to the preview tier"
+    expression: "this.kind != console.v1.DeploymentKind.DEPLOYMENT_KIND_PREVIEW_UP || this.environment.tier == common.environment.v1.Tier.TIER_PREVIEW"
+  };
+
+  string id = 1 [
+    (buf.validate.field).string.pattern = "^[0-9a-f]{32}$",
+    (buf.validate.field).cel = {
+      id: "deployment_start.id_is_a_trace_id"
+      message: "an all zero id is not a valid trace id"
+      expression: "this != '00000000000000000000000000000000'"
+    }
+  ];
+
+  DeploymentKind kind = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  common.environment.v1.Environment environment = 3 [(buf.validate.field).required = true];
+
+  Provider provider = 4 [(buf.validate.field).required = true];
+
+  string target = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+    pattern: "^[^/\\s]+(?:/[^/\\s]+)+$"
+  }];
+
+  google.protobuf.Timestamp started_at = 6 [(buf.validate.field).required = true];
+
+  string cli_version = 7 [(buf.validate.field).string.max_len = 64];
+
+  Edge edge = 8;
+
+  Source source = 9;
+
+  CI ci = 10;
+
+  Trigger trigger = 11 [(buf.validate.field).required = true];
+}
+
+message StartRequest {
+  string project_id = 1 [(buf.validate.field).string.uuid = true];
+
+  DeploymentStart deployment = 2 [(buf.validate.field).required = true];
+}
+
+message StartResponse {
+}
+
 service DeploymentService {
+  rpc Start(StartRequest) returns (StartResponse);
+
   rpc Report(ReportRequest) returns (ReportResponse);
 
   rpc RecordEnvironmentEvent(RecordEnvironmentEventRequest) returns (RecordEnvironmentEventResponse);

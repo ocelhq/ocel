@@ -82,6 +82,7 @@ type PrepareTargetRequest struct {
 	Account       string                 `protobuf:"bytes,2,opt,name=account,proto3" json:"account,omitempty"`
 	Region        string                 `protobuf:"bytes,3,opt,name=region,proto3" json:"region,omitempty"`
 	ProjectId     string                 `protobuf:"bytes,4,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Namespace     string                 `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -140,6 +141,13 @@ func (x *PrepareTargetRequest) GetRegion() string {
 func (x *PrepareTargetRequest) GetProjectId() string {
 	if x != nil {
 		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *PrepareTargetRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -489,6 +497,7 @@ type IssueCredentialResponse struct {
 	Region        string                 `protobuf:"bytes,5,opt,name=region,proto3" json:"region,omitempty"`
 	SessionName   string                 `protobuf:"bytes,6,opt,name=session_name,json=sessionName,proto3" json:"session_name,omitempty"`
 	Identity      *TierIdentity          `protobuf:"bytes,7,opt,name=identity,proto3" json:"identity,omitempty"`
+	Namespace     string                 `protobuf:"bytes,8,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -572,21 +581,30 @@ func (x *IssueCredentialResponse) GetIdentity() *TierIdentity {
 	return nil
 }
 
+func (x *IssueCredentialResponse) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 var File_console_v1_target_proto protoreflect.FileDescriptor
 
 const file_console_v1_target_proto_rawDesc = "" +
 	"\n" +
 	"\x17console/v1/target.proto\x12\n" +
-	"console.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x7f\n" +
+	"console.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x80\x01\n" +
 	"\fTierIdentity\x12>\n" +
-	"\x11identity_provider\x18\x01 \x01(\tB\x11\xbaH\x0er\f\x10\x01\x18\x80\x102\x05^\\S+$R\x10identityProvider\x12/\n" +
-	"\tprincipal\x18\x02 \x01(\tB\x11\xbaH\x0er\f\x10\x01\x18\x80\x102\x05^\\S+$R\tprincipal\"\xde\x01\n" +
+	"\x11identity_provider\x18\x01 \x01(\tB\x11\xbaH\x0er\f\x10\x01\x18\x80\x102\x05^\\S+$R\x10identityProvider\x120\n" +
+	"\tprincipal\x18\x02 \x01(\tB\x12\xbaH\x0f\xd8\x01\x01r\n" +
+	"\x18\x80\x102\x05^\\S+$R\tprincipal\"\xa8\x02\n" +
 	"\x14PrepareTargetRequest\x122\n" +
 	"\x06vendor\x18\x01 \x01(\tB\x1a\xbaH\x17r\x15\x10\x01\x18@2\x0f^[a-z0-9._:-]+$R\x06vendor\x125\n" +
-	"\aaccount\x18\x02 \x01(\tB\x1b\xbaH\x18r\x16\x10\x01\x18\x80\x012\x0f^[a-z0-9._:-]+$R\aaccount\x12/\n" +
-	"\x06region\x18\x03 \x01(\tB\x17\xbaH\x14r\x12\x10\x01\x18@2\f^[a-z0-9-]+$R\x06region\x12*\n" +
+	"\aaccount\x18\x02 \x01(\tB\x1b\xbaH\x18r\x16\x10\x01\x18\x80\x012\x0f^[a-z0-9._:-]+$R\aaccount\x120\n" +
+	"\x06region\x18\x03 \x01(\tB\x18\xbaH\x15\xd8\x01\x01r\x10\x18@2\f^[a-z0-9-]+$R\x06region\x12*\n" +
 	"\n" +
-	"project_id\x18\x04 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\tprojectId\"\x91\x01\n" +
+	"project_id\x18\x04 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\tprojectId\x12G\n" +
+	"\tnamespace\x18\x05 \x01(\tB)\xbaH&\xd8\x01\x01r!\x18,2\x1d^[a-z][a-z0-9]*(-[a-z0-9]+)*$R\tnamespace\"\x91\x01\n" +
 	"\x15PrepareTargetResponse\x12\x1b\n" +
 	"\ttarget_id\x18\x01 \x01(\tR\btargetId\x12'\n" +
 	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12\x16\n" +
@@ -614,7 +632,7 @@ const file_console_v1_target_proto_rawDesc = "" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04tier\x122\n" +
 	"\x06vendor\x18\x03 \x01(\tB\x1a\xbaH\x17r\x15\x10\x01\x18@2\x0f^[a-z0-9._:-]+$R\x06vendor\x12*\n" +
 	"\vcli_version\x18\x05 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18@R\n" +
-	"cliVersion\"\x97\x02\n" +
+	"cliVersion\"\xb5\x02\n" +
 	"\x17IssueCredentialResponse\x12\x19\n" +
 	"\x05token\x18\x01 \x01(\tB\x03\x80\x01\x01R\x05token\x129\n" +
 	"\n" +
@@ -623,7 +641,8 @@ const file_console_v1_target_proto_rawDesc = "" +
 	"\aaccount\x18\x04 \x01(\tR\aaccount\x12\x16\n" +
 	"\x06region\x18\x05 \x01(\tR\x06region\x12!\n" +
 	"\fsession_name\x18\x06 \x01(\tR\vsessionName\x124\n" +
-	"\bidentity\x18\a \x01(\v2\x18.console.v1.TierIdentityR\bidentity2\xed\x02\n" +
+	"\bidentity\x18\a \x01(\v2\x18.console.v1.TierIdentityR\bidentity\x12\x1c\n" +
+	"\tnamespace\x18\b \x01(\tR\tnamespace2\xed\x02\n" +
 	"\rTargetService\x12N\n" +
 	"\aPrepare\x12 .console.v1.PrepareTargetRequest\x1a!.console.v1.PrepareTargetResponse\x12W\n" +
 	"\n" +

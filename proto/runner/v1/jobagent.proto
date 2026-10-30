@@ -1,0 +1,111 @@
+syntax = "proto3";
+package runner.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/runner/v1;runnerv1";
+
+import "buf/validate/validate.proto";
+import "common/environment/v1/environment.proto";
+import "common/scope/v1/scope.proto";
+import "runner/v1/runner.proto";
+
+message SourceBlob {
+  string digest = 1 [(buf.validate.field).string = {pattern: "^[0-9a-f]{64}$"}];
+
+  string url = 2 [
+    (buf.validate.field).string = {min_len: 1, max_len: 8192, uri: true},
+    (buf.validate.field).cel = {
+      id: "source_blob.url_scheme"
+      message: "a blob is fetched from an https or http URL"
+      expression: "this.startsWith('https://') || this.startsWith('http://')"
+    }
+  ];
+}
+
+message SourceArchive {
+  SourceManifest manifest = 1 [(buf.validate.field).required = true];
+
+  repeated SourceBlob blobs = 2;
+}
+
+message GetSpecRequest {
+}
+
+message GetSpecResponse {
+  option (buf.validate.message).cel = {
+    id: "get_spec.archive_for_uploaded_source"
+    message: "an uploaded source comes with its archive, and only an uploaded source does"
+    expression: "has(this.archive) == (this.job.source_id != '')"
+  };
+
+  string job_id = 1;
+
+  string project_id = 2;
+
+  common.environment.v1.Tier tier = 3;
+
+  string deployment_id = 4;
+
+  string slug = 5;
+
+  string console_url = 6;
+
+  JobRequest job = 7 [(buf.validate.field).required = true];
+
+  SourceArchive archive = 8;
+}
+
+message AppendOutputRequest {
+  repeated string lines = 1;
+
+  repeated string stderr = 2;
+
+  int64 offset = 3 [(buf.validate.field).int64.gte = 0];
+
+  int64 stderr_offset = 4 [(buf.validate.field).int64.gte = 0];
+}
+
+message AppendOutputResponse {
+  bool cancel = 1;
+}
+
+message AwaitAnswerRequest {
+  int32 taken = 1 [(buf.validate.field).int32.gte = 0];
+}
+
+message AwaitAnswerResponse {
+  string line = 1;
+}
+
+message FinishRequest {
+  int32 exit_code = 1;
+
+  string error = 2;
+
+  string error_code = 3 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {pattern: "^[a-z]+(\\.[a-z_]+)+$"}
+  }];
+
+  repeated AppBuild builds = 4;
+}
+
+message FinishResponse {
+}
+
+service JobAgentService {
+  rpc GetSpec(GetSpecRequest) returns (GetSpecResponse) {
+    option (common.scope.v1.required) = SCOPE_JOB;
+  }
+
+  rpc AppendOutput(AppendOutputRequest) returns (AppendOutputResponse) {
+    option (common.scope.v1.required) = SCOPE_JOB;
+  }
+
+  rpc AwaitAnswer(AwaitAnswerRequest) returns (AwaitAnswerResponse) {
+    option (common.scope.v1.required) = SCOPE_JOB;
+  }
+
+  rpc Finish(FinishRequest) returns (FinishResponse) {
+    option (common.scope.v1.required) = SCOPE_JOB;
+  }
+}

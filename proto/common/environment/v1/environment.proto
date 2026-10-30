@@ -4,6 +4,7 @@ package common.environment.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/common/environment/v1;environmentv1";
 
 import "buf/validate/validate.proto";
+import "common/scope/v1/scope.proto";
 
 enum Tier {
   TIER_UNSPECIFIED = 0;
@@ -18,7 +19,7 @@ enum Lifecycle {
 }
 
 message Environment {
-  Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+  Tier tier = 1 [(buf.validate.field).enum.defined_only = true, (common.scope.v1.project_tier) = true];
 
   Lifecycle lifecycle = 2 [(buf.validate.field).enum.defined_only = true];
 
