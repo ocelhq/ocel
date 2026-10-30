@@ -1,4 +1,4 @@
-package connectorserver
+package endpoint
 
 import (
 	"crypto/ed25519"
