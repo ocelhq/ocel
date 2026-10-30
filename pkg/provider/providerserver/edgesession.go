@@ -179,6 +179,9 @@ func dnsFor(p provider.Provider, front edge.Edge, sel *contractv1.EdgeSelection)
 var errUnnamedProject = refusal.Refuse(refusal.CodeInvalid, "this call names no project, and what it changes belongs to one")
 
 func (h *handlers) openEdgeSession(ctx context.Context, tier environment.Tier, slug string, sel *contractv1.EdgeSelection) (*edgeSession, error) {
+	if err := h.session.refuseOtherTier(tier); err != nil {
+		return nil, err
+	}
 	vendor, err := h.session.use()
 	if err != nil {
 		return nil, err

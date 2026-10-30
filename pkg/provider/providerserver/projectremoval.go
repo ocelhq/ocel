@@ -486,7 +486,7 @@ func (r *projectRemoval) unbind(ctx context.Context, runProgress progress.Log) e
 			}
 		}
 		runProgress.Say(fmt.Sprintf("Removing the %s routing pointer", pointer))
-		if _, err := r.removePointer(ctx, removal, runProgress); err != nil {
+		if _, _, err := r.removePointer(ctx, removal, runProgress); err != nil {
 			errs = append(errs, fmt.Errorf("remove pointer %q before the origin it points at is destroyed: %w", pointer, err))
 		}
 	}
@@ -654,6 +654,9 @@ func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress prog
 		return err
 	}
 	if err := records.Forget(ctx, r.provider.KeyValues(), stackrecords.PartsUsedKey(r.tier, r.slug)); err != nil {
+		return err
+	}
+	if err := forgetDeployedSettings(ctx, r.provider.KeyValues(), r.slug, r.tier); err != nil {
 		return err
 	}
 	return records.Forget(ctx, r.provider.KeyValues(), stackrecords.ProjectKey(r.tier, r.slug))

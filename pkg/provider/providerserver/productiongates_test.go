@@ -174,12 +174,12 @@ func TestAProductionPublicationReachesOnlyTheProductionEdgeStack(t *testing.T) {
 	}
 	before := len(relayEdge(vendor).Publications())
 
-	status := getProtectionIn(t, client, environmentv1.Tier_TIER_PRODUCTION, false)
+	status := getProtectionIn(t, client, environmentv1.Tier_TIER_PRODUCTION)
 
 	if !status.GetRecorded() || !status.GetEnabled() || len(status.GetEdges()) != 1 || status.GetEdges()[0].GetKind() != string(fake.KindRelay) {
 		t.Errorf("the production status is recorded %t, enabled %t, held by %d edges, want a recorded, enabled gate held by the relay edge", status.GetRecorded(), status.GetEnabled(), len(status.GetEdges()))
 	}
-	if preview := getProtection(t, client, false); preview.GetRecorded() {
+	if preview := getProtection(t, client); preview.GetRecorded() {
 		t.Errorf("the preview status is recorded, want none: only production deployed")
 	}
 	if after := len(relayEdge(vendor).Publications()); after != before {

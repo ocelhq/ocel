@@ -1,4 +1,4 @@
-package providerserver
+package spanexport
 
 import (
 	"context"
@@ -54,7 +54,7 @@ func TestAProcessHandedACollectorExportsItsSpansThereAsItsServiceWithItsToken(t 
 	t.Setenv(tracing.CollectorTokenEnvVar, "run-token")
 	keepGlobalTracerProvider(t)
 
-	_, shutdown, err := ExportSpans(context.Background(), "ocel-provider-test")
+	_, shutdown, err := Start(context.Background(), "ocel-provider-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestAProcessHandedNoCollectorExportsNothingEvenWithTheUsersOTLPEndpointSet(
 	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", server.URL+"/v1/traces")
 	keepGlobalTracerProvider(t)
 
-	_, shutdown, err := ExportSpans(context.Background(), "ocel-provider-test")
+	_, shutdown, err := Start(context.Background(), "ocel-provider-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestAProcessHandedACollectorLeavesNoneOfItInTheEnvironmentItsChildrenInheri
 	t.Setenv(tracing.TraceParentEnvVar, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
 	keepGlobalTracerProvider(t)
 
-	_, shutdown, err := ExportSpans(context.Background(), "ocel-provider-test")
+	_, shutdown, err := Start(context.Background(), "ocel-provider-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,17 +112,17 @@ func TestAProcessHandedACollectorLeavesNoneOfItInTheEnvironmentItsChildrenInheri
 
 	for _, name := range []string{tracing.CollectorURLEnvVar, tracing.CollectorTokenEnvVar, tracing.TraceParentEnvVar} {
 		if value, set := os.LookupEnv(name); set {
-			t.Errorf("%s = %q after ExportSpans, want it unset", name, value)
+			t.Errorf("%s = %q after Start, want it unset", name, value)
 		}
 	}
 }
 
-func TestAProcessHandedAParentContinuesThatTraceFromTheContextExportSpansReturns(t *testing.T) {
+func TestAProcessHandedAParentContinuesThatTraceFromTheContextStartReturns(t *testing.T) {
 	t.Setenv(tracing.CollectorURLEnvVar, "")
 	t.Setenv(tracing.TraceParentEnvVar, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
 	keepGlobalTracerProvider(t)
 
-	ctx, shutdown, err := ExportSpans(context.Background(), "ocel-provider-test")
+	ctx, shutdown, err := Start(context.Background(), "ocel-provider-test")
 	if err != nil {
 		t.Fatal(err)
 	}
