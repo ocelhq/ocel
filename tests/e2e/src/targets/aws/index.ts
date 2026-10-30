@@ -34,6 +34,7 @@ const FUNCTION_URL_BODY_BYTES = 4_500_000;
 
 const SERVING_TIMEOUT_MS = 900_000;
 const SERVING_INTERVAL_MS = 5_000;
+const SERVING_STABLE_MS = 30_000;
 
 const FAILOVER_TIMEOUT_MS = 1_200_000;
 const FAILOVER_INTERVAL_MS = 15_000;
@@ -280,6 +281,7 @@ export class AwsTarget implements Target, ReleaseCycle, Restart, Exposure {
     const served = await awaitServing(deployed.fetch, urls, {
       timeoutMs: SERVING_TIMEOUT_MS,
       intervalMs: SERVING_INTERVAL_MS,
+      stableMs: SERVING_STABLE_MS,
       now: () => Date.now(),
       sleep: (ms) => pause(ms),
     });

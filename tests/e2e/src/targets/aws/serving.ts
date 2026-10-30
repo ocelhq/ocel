@@ -13,6 +13,7 @@ export type ServingReport = {
 export type ServingWait = {
   timeoutMs: number;
   intervalMs: number;
+  stableMs: number;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
 };
@@ -36,7 +37,7 @@ function described(error: unknown): string {
 export async function awaitServing(
   request: Fetch,
   urls: Map<string, string>,
-  { timeoutMs, intervalMs, now, sleep }: ServingWait,
+  { timeoutMs, intervalMs, stableMs, now, sleep }: ServingWait,
 ): Promise<Record<string, ServingReport>> {
   const began = now();
   const deadline = began + timeoutMs;
@@ -49,16 +50,24 @@ export async function awaitServing(
     let routed = 0;
     let routedSince = began;
     let routedStatus = 0;
+    let servedSince: number | undefined;
     while (true) {
       attempts += 1;
       try {
         const response = await request(`${baseUrl}/health`);
         if (response.ok) {
-          served[app] = { host, waitedMs: now() - began, attempts, status: response.status };
-          break;
+          servedSince ??= now();
+          if (now() - servedSince >= stableMs) {
+            served[app] = { host, waitedMs: now() - began, attempts, status: response.status };
+            break;
+          }
+        } else {
+          servedSince = undefined;
         }
         last = `last status ${response.status}`;
-        if (response.headers.get(ROUTER_HEADER)) {
+        if (response.ok) {
+          routed = 0;
+        } else if (response.headers.get(ROUTER_HEADER)) {
           if (routed === 0) {
             routedSince = now();
           }
@@ -68,6 +77,7 @@ export async function awaitServing(
           routed = 0;
         }
       } catch (refused) {
+        servedSince = undefined;
         last = described(refused);
         routed = 0;
       }
