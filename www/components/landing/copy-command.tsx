@@ -19,7 +19,7 @@ export function CopyCommand({ command }: { command: string }) {
       type="button"
       onClick={copy}
       aria-label={copied ? "Copied" : `Copy ${command}`}
-      className="group flex w-full min-w-0 items-center justify-between gap-3 border-[1.5px] border-foreground bg-background px-3 py-2.5 text-left font-mono text-[13px] text-foreground transition-colors hover:bg-muted"
+      className="group flex w-full min-w-0 items-center justify-between gap-3 border-[1.5px] border-rule bg-background px-3 py-2.5 text-left font-mono text-[13px] text-foreground transition-colors hover:bg-muted"
     >
       <span className="min-w-0 break-words">
         <span className="text-muted-foreground select-none">$ </span>

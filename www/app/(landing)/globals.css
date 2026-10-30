@@ -11,6 +11,7 @@
   --font-mono: var(--font-mono);
   --font-heading: var(--font-sans);
   --font-display: var(--font-display);
+  --color-rule: var(--rule);
 }
 
 :root,
@@ -20,6 +21,12 @@
   --body: var(--muted-foreground);
   --steel: var(--dim);
   --paper: var(--background);
+  /* Full Ink on paper; on the dark screen a full-Ink line glares louder than what it frames. */
+  --rule: var(--foreground);
+}
+
+.dark {
+  --rule: color-mix(in oklab, var(--foreground) 34%, var(--background));
 }
 
 .paper-grid {

@@ -67,7 +67,7 @@ export function PrimitivesGrid({ primitives }: { primitives: RenderedPrimitive[]
 
   return (
     <div>
-      <fieldset className="m-0 mb-6 flex w-fit min-w-0 border-[1.5px] border-foreground p-0">
+      <fieldset className="m-0 mb-6 flex w-fit min-w-0 border-[1.5px] border-rule p-0">
         <legend className="sr-only">Language</legend>
         {languages.map((option) => (
           <label
@@ -99,7 +99,7 @@ export function PrimitivesGrid({ primitives }: { primitives: RenderedPrimitive[]
           return (
             <article
               key={primitive.name}
-              className="flex min-w-0 flex-col border-[1.5px] border-foreground bg-background"
+              className="flex min-w-0 flex-col border-[1.5px] border-rule bg-background"
             >
               <header className="flex items-center gap-4 border-b border-border px-5 py-4">
                 <Glyph

@@ -16,7 +16,7 @@ export function TargetConfig({ targets }: { targets: RenderedTarget[] }) {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <div>
-        <fieldset className="m-0 grid min-w-0 grid-cols-2 border-[1.5px] border-b-0 border-foreground p-0 sm:flex">
+        <fieldset className="m-0 grid min-w-0 grid-cols-2 border-[1.5px] border-b-0 border-rule p-0 sm:flex">
           <legend className="sr-only">Target</legend>
           {targets.map((option) => (
             <label
