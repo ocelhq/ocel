@@ -7,7 +7,11 @@ let ioredis: { module: Ioredis } | { error: unknown } | undefined;
 
 function loadIoredis(): { module: Ioredis } | { error: unknown } {
   try {
-    return { module: createRequire(import.meta.url)("ioredis") as Ioredis };
+    const module: Ioredis =
+      typeof require === "function"
+        ? require("ioredis")
+        : createRequire(import.meta.url)("ioredis");
+    return { module };
   } catch (error) {
     return { error };
   }

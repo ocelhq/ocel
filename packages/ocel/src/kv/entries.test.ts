@@ -7,9 +7,9 @@ vi.mock("../runtime/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 
-vi.mock("node:module", async () => {
+vi.mock("./ioredis", async () => {
   const { ValkeyMock } = await import("../testing/valkey-mock.js");
-  return { createRequire: () => () => ({ Redis: ValkeyMock }) };
+  return { newRedis: (options: object) => new ValkeyMock(options) };
 });
 
 const { kv, InvalidKVValueError } = await import("./index.js");
