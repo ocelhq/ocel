@@ -124,6 +124,7 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, release appStack, r
 		RouteTable:              routeTable,
 		Static:                  facts.Static,
 		App:                     entry.App,
+		Environment:             r.spec.Env,
 		Framework:               entry.Manifest.GetFramework().GetName(),
 		Release:                 r.spec.Releases[entry.App],
 		BuildID:                 entry.Release.BuildID(),

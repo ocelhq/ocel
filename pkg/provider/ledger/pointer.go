@@ -16,6 +16,7 @@ type Pointer struct {
 	Sequence        int64               `json:"sequence"`
 	Promotions      []RecordedPromotion `json:"promotions"`
 	PendingRemovals []RecordedPromotion `json:"pendingRemovals,omitempty"`
+	PendingReclaims []RecordedPromotion `json:"pendingReclaims,omitempty"`
 }
 
 func (p Pointer) ListDeploymentRemovals() []router.PointerRemoval {
@@ -88,7 +89,25 @@ func (p Pointer) Retain(keep int) (Pointer, []RecordedPromotion) {
 			kept.PendingRemovals = append(kept.PendingRemovals, recorded)
 		}
 	}
-	return kept, dropped
+	kept.PendingReclaims = nil
+	return kept, appendUnlisted(dropped, p.PendingReclaims)
+}
+
+func (p Pointer) RecordPendingReclaims(dropped []RecordedPromotion) Pointer {
+	next := p
+	next.PendingReclaims = appendUnlisted(slices.Clone(p.PendingReclaims), slices.DeleteFunc(slices.Clone(dropped), func(recorded RecordedPromotion) bool {
+		return p.findPromotion(recorded.PromotionID) >= 0
+	}))
+	return next
+}
+
+func appendUnlisted(listed, more []RecordedPromotion) []RecordedPromotion {
+	for _, recorded := range more {
+		if !slices.ContainsFunc(listed, func(have RecordedPromotion) bool { return have.PromotionID == recorded.PromotionID }) {
+			listed = append(listed, recorded)
+		}
+	}
+	return listed
 }
 
 func (p Pointer) ForgetPendingRemovals(withdrawn []string) Pointer {

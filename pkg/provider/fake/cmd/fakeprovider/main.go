@@ -6,12 +6,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/provider/spanexport"
 )
 
 var version = "dev"
 
 func main() {
-	if err := providerserver.Serve(providerserver.Config{Version: version, New: fake.New}); err != nil {
+	if err := providerserver.Serve(providerserver.Config{Version: version, ExportSpans: spanexport.Start, New: fake.New}); err != nil {
 		fmt.Fprintln(os.Stderr, "ocel fake provider:", err)
 		os.Exit(1)
 	}

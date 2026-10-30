@@ -20,11 +20,18 @@ import (
 type connectorHost struct {
 	*fake.Provider
 
-	install provider.ConnectorInstall
-	removed bool
+	install  provider.ConnectorInstall
+	removed  bool
+	runsJobs bool
 }
 
 func (h *connectorHost) Connector() provider.Connector { return h }
+
+func (h *connectorHost) Facts() provider.Facts {
+	facts := h.Provider.Facts()
+	facts.ConnectorRunsJobs = h.runsJobs
+	return facts
+}
 
 func (h *connectorHost) Target(context.Context) (provider.ConnectorTarget, error) {
 	return provider.ConnectorTarget{
@@ -238,5 +245,51 @@ func TestAComputeOutsideTheVocabularyIsRefusedBeforeTheProviderSeesIt(t *testing
 	}
 	if host.install.Version != "" {
 		t.Error("the provider was handed an install naming a compute the wire does not admit")
+	}
+}
+
+func TestARunnerTheCallerAsksForReachesAProviderWhoseConnectorRunsJobs(t *testing.T) {
+	host := &connectorHost{Provider: fake.NewProvider(fake.Options{}), runsJobs: true}
+	client := connectorServing(t, host)
+
+	stream, err := client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
+		Binary: []byte("#!/bin/sh\n"), Version: "0.4.1", ConfigJson: []byte(`{"console":"https://ocel.app"}`),
+		Runner: &contractv1.ConnectorRunner{Cpus: "2", Memory: "4g", Image: "registry.example.com/ocel-job:dev"},
+	})
+	if result := finalResult(t, stream, err); !result.GetSuccess() {
+		t.Fatalf("result error = %q, want a success", result.GetError())
+	}
+	want := provider.ConnectorRunner{CPUs: "2", Memory: "4g", Image: "registry.example.com/ocel-job:dev"}
+	if host.install.Runner == nil || *host.install.Runner != want {
+		t.Errorf("the provider was handed runner %+v, want %+v", host.install.Runner, want)
+	}
+}
+
+func TestARunnerIsRefusedForAConnectorThatRunsNoJobs(t *testing.T) {
+	host := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
+	client := connectorServing(t, host)
+
+	err := closed(client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
+		Binary: []byte("#!/bin/sh\n"), Version: "0.4.1", ConfigJson: []byte(`{"console":"https://ocel.app"}`),
+		Runner: &contractv1.ConnectorRunner{},
+	}))
+	if connect.CodeOf(err) != connect.CodeUnimplemented {
+		t.Fatalf("InstallConnector() = %v, want the runner refused as unimplemented", err)
+	}
+	if host.install.Version != "" {
+		t.Error("the provider was handed an install it cannot run jobs for")
+	}
+}
+
+func TestARunnerCapOutsideDockersSpellingIsRefusedBeforeTheProviderSeesIt(t *testing.T) {
+	host := &connectorHost{Provider: fake.NewProvider(fake.Options{}), runsJobs: true}
+	client := connectorServing(t, host)
+
+	err := closed(client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
+		Binary: []byte("#!/bin/sh\n"), Version: "0.4.1", ConfigJson: []byte(`{"console":"https://ocel.app"}`),
+		Runner: &contractv1.ConnectorRunner{Memory: "four gigs"},
+	}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("InstallConnector() = %v, want invalid argument", err)
 	}
 }

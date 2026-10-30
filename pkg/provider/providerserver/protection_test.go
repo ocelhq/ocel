@@ -119,25 +119,34 @@ func revokeBypass(id string) *contractv1.ChangeProtectionRequest {
 	return &contractv1.ChangeProtectionRequest{Change: &contractv1.ChangeProtectionRequest_RevokeBypassSecret{RevokeBypassSecret: &contractv1.RevokeBypassSecret{Id: id}}}
 }
 
-func getProtection(t *testing.T, client contractv1connect.ProviderServiceClient, reveal bool) *contractv1.GetProtectionResponse {
+func getProtection(t *testing.T, client contractv1connect.ProviderServiceClient) *contractv1.GetProtectionResponse {
 	t.Helper()
-	return getProtectionIn(t, client, environmentv1.Tier_TIER_PREVIEW, reveal)
+	return getProtectionIn(t, client, environmentv1.Tier_TIER_PREVIEW)
 }
 
-func getProtectionIn(t *testing.T, client contractv1connect.ProviderServiceClient, tier environmentv1.Tier, reveal bool) *contractv1.GetProtectionResponse {
+func getProtectionIn(t *testing.T, client contractv1connect.ProviderServiceClient, tier environmentv1.Tier) *contractv1.GetProtectionResponse {
 	t.Helper()
-	resp, err := client.GetProtection(context.Background(), &contractv1.GetProtectionRequest{Tier: tier, Slug: "shop", RevealPassword: reveal, Edge: &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}})
+	resp, err := client.GetProtection(context.Background(), &contractv1.GetProtectionRequest{Tier: tier, Slug: "shop", Edge: &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}})
 	if err != nil {
 		t.Fatalf("GetProtection() = %v", err)
 	}
 	return resp
 }
 
-func getProtectionThrough(t *testing.T, client contractv1connect.ProviderServiceClient, kind edge.Kind, reveal bool) *contractv1.GetProtectionResponse {
+func getProtectionThrough(t *testing.T, client contractv1connect.ProviderServiceClient, kind edge.Kind) *contractv1.GetProtectionResponse {
 	t.Helper()
-	resp, err := client.GetProtection(context.Background(), &contractv1.GetProtectionRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "shop", RevealPassword: reveal, Edge: &contractv1.EdgeSelection{Kind: string(kind)}})
+	resp, err := client.GetProtection(context.Background(), &contractv1.GetProtectionRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "shop", Edge: &contractv1.EdgeSelection{Kind: string(kind)}})
 	if err != nil {
 		t.Fatalf("GetProtection() = %v", err)
+	}
+	return resp
+}
+
+func revealProtectionPassword(t *testing.T, client contractv1connect.ProviderServiceClient) *contractv1.RevealProtectionPasswordResponse {
+	t.Helper()
+	resp, err := client.RevealProtectionPassword(context.Background(), &contractv1.RevealProtectionPasswordRequest{Tier: environmentv1.Tier_TIER_PREVIEW, Slug: "shop"})
+	if err != nil {
+		t.Fatalf("RevealProtectionPassword() = %v", err)
 	}
 	return resp
 }
@@ -145,29 +154,47 @@ func getProtectionThrough(t *testing.T, client contractv1connect.ProviderService
 func TestAProjectWithNoRecordedGateReportsNoneAndRevealsNothing(t *testing.T) {
 	client, _ := contractServed(t, "1.0.0")
 
-	resp := getProtection(t, client, true)
+	resp := getProtection(t, client)
+	revealed := revealProtectionPassword(t, client)
 
-	if resp.GetRecorded() || resp.GetPassword() != "" || len(resp.GetBypassSecretIds()) != 0 || len(resp.GetEdges()) != 0 {
-		t.Errorf("GetProtection() = recorded %t, password revealed %t, bypass ids %v, edges %v, want an empty answer: nothing is recorded for shop",
-			resp.GetRecorded(), resp.GetPassword() != "", resp.GetBypassSecretIds(), resp.GetEdges())
+	if resp.GetRecorded() || len(resp.GetBypassSecretIds()) != 0 || len(resp.GetEdges()) != 0 {
+		t.Errorf("GetProtection() = recorded %t, bypass ids %v, edges %v, want an empty answer: nothing is recorded for shop",
+			resp.GetRecorded(), resp.GetBypassSecretIds(), resp.GetEdges())
+	}
+	if revealed.GetRecorded() || revealed.GetPassword() != "" {
+		t.Errorf("RevealProtectionPassword() = recorded %t, password revealed %t, want nothing: no password is recorded for shop",
+			revealed.GetRecorded(), revealed.GetPassword() != "")
 	}
 }
 
-func TestTheStatusOfAProtectedPreviewNamesItsEdgeAndHidesThePasswordUnlessAskedFor(t *testing.T) {
+func TestTheStatusOfAProtectedPreviewNamesItsEdgeAndNeverCarriesThePassword(t *testing.T) {
 	client, vendor := protectedPreview(t)
 	record, _ := recordedGateOf(t, vendor, "shop")
 
-	hidden := getProtection(t, client, false)
-	revealed := getProtection(t, client, true)
+	status := getProtection(t, client)
 
-	if !hidden.GetRecorded() || hidden.GetPassword() != "" {
-		t.Errorf("status = recorded %t, password revealed %t, want the gate recorded and the password left out", hidden.GetRecorded(), hidden.GetPassword() != "")
+	wire, err := proto.Marshal(status)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if revealed.GetPassword() != record.Password {
-		t.Errorf("revealed password = %q, want the recorded one", revealed.GetPassword())
+	if !status.GetRecorded() || strings.Contains(string(wire), record.Password) {
+		t.Errorf("status = recorded %t, password on the wire %t, want the gate recorded and the password left out",
+			status.GetRecorded(), strings.Contains(string(wire), record.Password))
 	}
-	if edges := revealed.GetEdges(); len(edges) != 1 || edges[0].GetKind() != string(fake.KindRelay) || !edges[0].GetPublished() {
+	if edges := status.GetEdges(); len(edges) != 1 || edges[0].GetKind() != string(fake.KindRelay) || !edges[0].GetPublished() {
 		t.Errorf("edges = %v, want the relay edge, live: the deploy that created the gate wrote it there", edges)
+	}
+}
+
+func TestRevealingTheProtectionPasswordReturnsTheRecordedOne(t *testing.T) {
+	client, vendor := protectedPreview(t)
+	record, _ := recordedGateOf(t, vendor, "shop")
+
+	revealed := revealProtectionPassword(t, client)
+
+	if !revealed.GetRecorded() || revealed.GetPassword() != record.Password {
+		t.Errorf("RevealProtectionPassword() = recorded %t, the recorded password %t, want it recorded and revealed",
+			revealed.GetRecorded(), revealed.GetPassword() == record.Password)
 	}
 }
 
@@ -270,7 +297,7 @@ func TestCreatingABypassSecretAddsItWithoutRotatingTheKey(t *testing.T) {
 	if after.Gate.Key != before.Gate.Key {
 		t.Error("creating a bypass secret rotated the key, and that ends every session for nothing")
 	}
-	if listed := getProtection(t, client, false).GetBypassSecretIds(); len(listed) != 1 || listed[0] != id {
+	if listed := getProtection(t, client).GetBypassSecretIds(); len(listed) != 1 || listed[0] != id {
 		t.Errorf("status lists %v, want %q", listed, id)
 	}
 }
@@ -394,7 +421,7 @@ func TestAnEdgeThatRefusesThePublicationFailsItAndLeavesTheChangeRecordedAndPend
 	if edges := result.GetProtection().GetEdges(); len(edges) != 1 || edges[0].GetPublished() || !strings.Contains(edges[0].GetError(), "unreachable") {
 		t.Errorf("edges = %v, want the relay edge, not published, with the reason", edges)
 	}
-	if edges := getProtection(t, client, false).GetEdges(); len(edges) != 1 || edges[0].GetPublished() {
+	if edges := getProtection(t, client).GetEdges(); len(edges) != 1 || edges[0].GetPublished() {
 		t.Errorf("status edges = %v, want the relay edge pending", edges)
 	}
 }
@@ -500,13 +527,13 @@ func TestPublishingThroughAnEdgeThatRunsNoGateFailsSayingThePreviewsAnswerAnyone
 	if edges := result.GetProtection().GetEdges(); len(edges) != 1 || !strings.Contains(edges[0].GetError(), "runs no gate") {
 		t.Errorf("edges = %v, want the relay edge, saying it runs no gate rather than that no preview deployed", edges)
 	}
-	if edges := getProtection(t, client, false).GetEdges(); len(edges) != 1 || edges[0].GetPublished() || !strings.Contains(edges[0].GetError(), "runs no gate") {
+	if edges := getProtection(t, client).GetEdges(); len(edges) != 1 || edges[0].GetPublished() || !strings.Contains(edges[0].GetError(), "runs no gate") {
 		t.Errorf("status edges = %v, want the relay edge, saying it runs no gate", edges)
 	}
 }
 
 func TestEveryResponseCarryingThePreviewPasswordMarksItDebugRedactSoRedactvetRefusesToPrintTheResponse(t *testing.T) {
-	for _, message := range []proto.Message{&contractv1.GetProtectionResponse{}, &contractv1.ChangeProtectionResponse{}} {
+	for _, message := range []proto.Message{&contractv1.RevealProtectionPasswordResponse{}, &contractv1.ChangeProtectionResponse{}} {
 		descriptor := message.ProtoReflect().Descriptor()
 		field := descriptor.Fields().ByName("password")
 		if options, _ := field.Options().(*descriptorpb.FieldOptions); !options.GetDebugRedact() {
@@ -531,7 +558,7 @@ func TestTheStatusOfAProtectedProjectNamesEveryPreviewFunctionThatIgnoresTheGate
 	client, vendor := protectedOriginGatedPreview(t)
 	previewIgnoringTheGate(t, vendor, "pr-3")
 
-	edges := getProtectionThrough(t, client, fake.KindDirect, false).GetEdges()
+	edges := getProtectionThrough(t, client, fake.KindDirect).GetEdges()
 
 	if len(edges) != 1 || edges[0].GetPublished() {
 		t.Fatalf("status edges = %v, want the edge not live: function api of preview pr-3 answers anyone", edges)

@@ -9,6 +9,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func (h *handlers) connector() (provider.Connector, error) {
@@ -53,12 +54,17 @@ func (h *handlers) InstallConnector(ctx context.Context, req *contractv1.Install
 		sender.refusing(connect.CodeUnimplemented)
 		var at provider.ConnectorAddress
 		root := RootSpan(SpanConnector, SpanConnector, connectorInstallTitle(req), progressv1.Phase_PHASE_PROVISION)
-		err := inSpan(ctx, sender, root, func(ctx context.Context, _ *eventStream, progress progress.Log) error {
+		runner, err := connectorRunnerOf(h, req.GetRunner())
+		if err != nil {
+			return nil, err
+		}
+		err = inSpan(ctx, sender, root, func(ctx context.Context, _ *eventStream, progress progress.Log) error {
 			at, err = connector.Install(ctx, provider.ConnectorInstall{
 				Binary:  req.GetBinary(),
 				Version: req.GetVersion(),
 				Config:  req.GetConfigJson(),
 				Compute: provider.Compute(req.GetCompute()),
+				Runner:  runner,
 			}, progress)
 			return err
 		})
@@ -103,4 +109,19 @@ func connectorResult(at provider.ConnectorAddress) *progressv1.OperationEvent {
 			},
 		}},
 	}
+}
+
+func connectorRunnerOf(h *handlers, sent *contractv1.ConnectorRunner) (*provider.ConnectorRunner, error) {
+	if sent == nil {
+		return nil, nil
+	}
+	p, err := h.session.use()
+	if err != nil {
+		return nil, err
+	}
+	if !p.Facts().ConnectorRunsJobs {
+		return nil, provider.RefusalError(refusal.Refuse(refusal.CodeUnsupported,
+			"the %s connector runs no jobs: add it without --runner", p.Facts().Vendor))
+	}
+	return &provider.ConnectorRunner{CPUs: sent.GetCpus(), Memory: sent.GetMemory(), Image: sent.GetImage()}, nil
 }

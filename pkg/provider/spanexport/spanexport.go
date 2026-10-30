@@ -1,4 +1,4 @@
-package providerserver
+package spanexport
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 
 const spanExportInterval = 250 * time.Millisecond
 
-func ExportSpans(ctx context.Context, service string) (context.Context, func(context.Context) error, error) {
+func Start(ctx context.Context, service string) (context.Context, func(context.Context) error, error) {
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	handed := tracing.Collector{URL: os.Getenv(tracing.CollectorURLEnvVar), Token: os.Getenv(tracing.CollectorTokenEnvVar)}
 	ctx = continueHandedTrace(ctx)

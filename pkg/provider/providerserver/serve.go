@@ -18,8 +18,10 @@ import (
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
 
+	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/processenv"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
@@ -33,11 +35,20 @@ type Config struct {
 	Version string
 
 	New func(ctx context.Context, settings provider.Settings) (provider.Provider, error)
+
+	ExportSpans func(ctx context.Context, service string) (context.Context, func(context.Context) error, error)
+
+	Slug            string
+	ServesSlugAlone bool
+	Tier            environment.Tier
 }
 
 func Serve(config Config) error {
 	if config.New == nil {
 		return errors.New("providerserver: Config.New is required")
+	}
+	if config.ExportSpans == nil {
+		return errors.New("providerserver: Config.ExportSpans is required")
 	}
 
 	bound, addr, err := listen()
@@ -58,7 +69,7 @@ func Serve(config Config) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	ctx, stopExporting, err := ExportSpans(ctx, filepath.Base(os.Args[0]))
+	ctx, stopExporting, err := config.ExportSpans(ctx, filepath.Base(os.Args[0]))
 	if err != nil {
 		return fmt.Errorf("export provider spans: %w", err)
 	}
@@ -68,7 +79,7 @@ func Serve(config Config) error {
 		_ = stopExporting(flushed)
 	}()
 
-	return serve(cancelWhenStdinCloses(ctx, os.Stdin), ln, newMux(config), shutdownWindow, func() {
+	return serve(cancelWhenStdinCloses(ctx, os.Stdin), ln, NewSession(config).Handler(), shutdownWindow, func() {
 		fmt.Println(localrpc.FormatReadinessLine(config.Version, addr, identity.CertificateDER()))
 	})
 }
@@ -119,14 +130,20 @@ func cancelWhenStdinCloses(ctx context.Context, stdin *os.File) context.Context 
 	return ctx
 }
 
-func ConformanceMux(config Config) *http.ServeMux { return newMux(config) }
+func ConformanceMux(config Config) http.Handler { return NewSession(config).Handler() }
 
-func newMux(config Config) *http.ServeMux {
+type Session struct {
+	handlers *handlers
+	mux      *http.ServeMux
+}
+
+func NewSession(config Config) *Session {
 	mux := http.NewServeMux()
 	asked := newQuestions()
 	interceptors := connect.WithInterceptors(
 		callSpanInterceptor{},
 		validate.NewInterceptor(),
+		servedProject{alone: config.ServesSlugAlone, slug: config.Slug, tier: config.Tier},
 		asked,
 	)
 
@@ -142,7 +159,21 @@ func newMux(config Config) *http.ServeMux {
 	path, handler = costv1connect.NewCostServiceHandler(services, interceptors)
 	mux.Handle(path, handler)
 
-	return mux
+	return &Session{handlers: services, mux: mux}
+}
+
+func (s *Session) Handler() http.Handler { return s.mux }
+
+func (s *Session) Configure(ctx context.Context, settings provider.Settings, edge *contractv1.EdgeSelection) (*contractv1.ProviderFacts, error) {
+	return s.handlers.configure(ctx, settings, edge)
+}
+
+func (s *Session) Confirm(ctx context.Context, questionID string) error {
+	return s.handlers.questions.confirm(ctx, questionID)
+}
+
+func (s *Session) ListPendingQuestions() []PendingQuestion {
+	return s.handlers.questions.listPending()
 }
 
 type handlers struct {
@@ -166,7 +197,7 @@ type sessionBackend struct {
 	session *session
 }
 
-func (s sessionBackend) Read() (variablestoreserver.Backend, error) {
+func (s sessionBackend) Read(context.Context) (variablestoreserver.Backend, error) {
 	vendor, err := s.session.use()
 	if err != nil {
 		return variablestoreserver.Backend{}, err
@@ -193,6 +224,13 @@ type session struct {
 
 	bootstrapStatuses bootstrapplan.Statuses
 	previewKeys       openedPreviewKeys
+}
+
+func (s *session) refuseOtherTier(acted environment.Tier) error {
+	if s.config.Tier == "" || acted == s.config.Tier {
+		return nil
+	}
+	return errOtherTier(s.config.Tier, acted)
 }
 
 func (s *session) transforms() []string {

@@ -423,7 +423,7 @@ func TestRemovingAPointerKeepsTheRecordsAnotherPointerStillNames(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	removed, err := l.RemovePointer(ctx, "pr-7")
+	removed, _, err := l.RemovePointer(ctx, "pr-7")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,7 +440,7 @@ func TestRemovingAPointerRemovesItAndNamesTheRecordsOnlyItNamed(t *testing.T) {
 	ctx := context.Background()
 	promoting(t, l, "pr-7", "p1", "p2")
 
-	removed, err := l.RemovePointer(ctx, "pr-7")
+	removed, _, err := l.RemovePointer(ctx, "pr-7")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -522,7 +522,7 @@ func TestPruneNamesTheDeploymentPointerAndHostsOfEachPromotionItDropped(t *testi
 		}
 	}
 
-	result, err := l.Prune(ctx, 2, "pr-7")
+	result, _, err := l.Prune(ctx, 2, "pr-7")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +531,7 @@ func TestPruneNamesTheDeploymentPointerAndHostsOfEachPromotionItDropped(t *testi
 		t.Errorf("removals = %+v, want %+v: a pruned deployment stops serving on its own hostnames", result.DeploymentRemovals, want)
 	}
 
-	removed, err := l.RemovePointer(ctx, "pr-7")
+	removed, _, err := l.RemovePointer(ctx, "pr-7")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -562,10 +562,10 @@ func TestADroppedDeploymentIsNamedByEveryPruneUntilItsWithdrawalIsForgotten(t *t
 		return named
 	}
 
-	if _, err := l.Prune(ctx, 3, "pr-7"); err != nil {
+	if _, _, err := l.Prune(ctx, 3, "pr-7"); err != nil {
 		t.Fatal(err)
 	}
-	again, err := l.Prune(ctx, 2, "pr-7")
+	again, _, err := l.Prune(ctx, 2, "pr-7")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -590,7 +590,7 @@ func TestPruneKeepsNAndTheActivePromotionAndNamesTheRestsRecords(t *testing.T) {
 	ctx := context.Background()
 	promoting(t, l, "", "p1", "p2", "p3", "p4")
 
-	result, err := l.Prune(ctx, 2, "")
+	result, _, err := l.Prune(ctx, 2, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -624,7 +624,7 @@ func TestPruneKeepsARecordAKeptPromotionStillNames(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := l.Prune(ctx, 1, "")
+	result, _, err := l.Prune(ctx, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +645,7 @@ func TestATagIsFreedWithThePromotionItNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	promoting(t, l, "", "p2", "p3")
-	if _, err := l.Prune(ctx, 1, ""); err != nil {
+	if _, _, err := l.Prune(ctx, 1, ""); err != nil {
 		t.Fatal(err)
 	}
 
