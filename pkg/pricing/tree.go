@@ -54,9 +54,9 @@ func (t *Tree) Add(scope, vendor, typ, name, region string, properties map[strin
 	return resource
 }
 
-func (t *Tree) AddShaped(scope, vendor, region string, shaped []Shaped) {
-	for _, item := range shaped {
-		t.Add(scope, vendor, item.Type, item.Name, region, item.Properties)
+func (t *Tree) AddResources(scope, vendor, region string, resources []Resource) {
+	for _, resource := range resources {
+		t.Add(scope, vendor, resource.Type, resource.Name, region, resource.Properties)
 	}
 }
 

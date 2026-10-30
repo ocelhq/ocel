@@ -452,12 +452,12 @@ func TestARealtimeIsPricedAsAGatewayOfUpToTenInstancesItsTopicAndTheirSubscripti
 	tree := &pricing.Tree{}
 	scope := tree.Scope("", pricing.ScopeProject, "shop")
 	named := names.New(provider.Namespace("ocel"), "acme-prod")
-	shape := component.Shape{
+	inventory := component.Inventory{
 		Tree: tree, Vendor: "gcp", Names: named, Region: "europe-west1", Environment: scope,
-		Request: provider.ShapeRequest{Deploy: provider.DeploySpec{Slug: "shop", Env: "prod", Tier: environment.TierProduction}},
+		Request: provider.InventoryRequest{Deploy: provider.DeploySpec{Slug: "shop", Env: "prod", Tier: environment.TierProduction}},
 	}
-	if err := shapeRealtime(shape, []provider.Resource{aRealtime("app")}); err != nil {
-		t.Fatalf("shapeRealtime() = %v", err)
+	if err := inventoryRealtime(inventory, []provider.Resource{aRealtime("app")}); err != nil {
+		t.Fatalf("inventoryRealtime() = %v", err)
 	}
 	set, err := tree.Set("ocel")
 	if err != nil {
@@ -473,12 +473,12 @@ func TestARealtimeIsPricedAsAGatewayOfUpToTenInstancesItsTopicAndTheirSubscripti
 	}
 	for _, want := range []string{cost.PubSubTopicType + ":" + gateway, cost.PubSubSubscriptionType + ":" + gateway} {
 		if found[want] == nil {
-			t.Errorf("the shape prices no %s, and every publish the gateway carries crosses it", want)
+			t.Errorf("the inventory prices no %s, and every publish the gateway carries crosses it", want)
 		}
 	}
 	service := found[cost.CloudRunServiceType+":"+gateway]
 	if service == nil {
-		t.Fatalf("the shape prices no gateway service %s", gateway)
+		t.Fatalf("the inventory prices no gateway service %s", gateway)
 	}
 	scaling := service.Properties.AsMap()["template"].(map[string]any)["scaling"].(map[string]any)
 	if scaling["max_instance_count"] != float64(10) {

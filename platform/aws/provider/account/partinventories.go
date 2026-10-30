@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-func ShapeParts(ns Namespace, tier environment.Tier, parts []string, options ...ShapeOption) (map[string][]pricing.Shaped, error) {
+func InventoryParts(ns Namespace, tier environment.Tier, parts []string, options ...InventoryOption) (map[string][]pricing.Resource, error) {
 	in := partInputs{ns: ns, tier: tier, alongside: PartSet{}, refs: stackRefs{bucketTag: naming.NewRandomTag()}}
 	for _, option := range options {
 		option(&in)
@@ -16,13 +16,13 @@ func ShapeParts(ns Namespace, tier environment.Tier, parts []string, options ...
 	for _, name := range parts {
 		in.alongside[name] = true
 	}
-	core, err := shapeTemplate(coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey), in.refs.bucketTag))
+	core, err := inventoryTemplate(coreStackTemplate(ns, tier, coreVariablesKey(in.alongside, in.variablesKey), in.refs.bucketTag))
 	if err != nil {
 		return nil, err
 	}
-	shapes := map[string][]pricing.Shaped{
+	inventories := map[string][]pricing.Resource{
 		provider.BasePart: core,
-		RuntimeLayersPart: ShapeRuntimeLayers(),
+		RuntimeLayersPart: InventoryRuntimeLayers(),
 	}
 	for _, name := range parts {
 		f, known := partNamed(name)
@@ -36,9 +36,9 @@ func ShapeParts(ns Namespace, tier environment.Tier, parts []string, options ...
 		if err != nil {
 			return nil, err
 		}
-		if shapes[name], err = shapeTemplate(stack.template); err != nil {
+		if inventories[name], err = inventoryTemplate(stack.template); err != nil {
 			return nil, err
 		}
 	}
-	return shapes, nil
+	return inventories, nil
 }

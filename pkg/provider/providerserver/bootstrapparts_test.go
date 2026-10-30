@@ -82,14 +82,14 @@ func TestABootstrapRecordsWhatEachPartItCreatedHoldsAndTheDigestOfItsContent(t *
 	}
 }
 
-func TestAPartsIdleCostIsTheFixedMonthlyCostOfWhatItHoldsAndUnknownWithoutAShape(t *testing.T) {
+func TestAPartsIdleCostIsTheFixedMonthlyCostOfWhatItHoldsAndUnknownWithoutAnInventory(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	vendor.FakeBootstrap().AddPart(environment.TierProduction, provider.BootstrapPart{
 		Name:   "containers",
 		UsedBy: []string{"api"},
-		Shape: &provider.PartShape{Vendor: string(fake.Vendor), Resources: []pricing.Shaped{
+		Inventory: &provider.PartInventory{Vendor: string(fake.Vendor), Resources: []pricing.Resource{
 			{Name: "containers", Type: fake.TypeContainer, Properties: map[string]any{}},
 		}},
 	})
@@ -113,7 +113,7 @@ func TestAPartsIdleCostIsTheFixedMonthlyCostOfWhatItHoldsAndUnknownWithoutAShape
 		t.Errorf("containers used by %v, want the users its vendor reported", containers.GetUsedBy())
 	}
 	if parts["bastion"].IdleMonthlyFixed != nil {
-		t.Errorf("bastion idle = %s, want it unknown: nothing shapes it", parts["bastion"].GetIdleMonthlyFixed())
+		t.Errorf("bastion idle = %s, want it unknown: nothing inventories it", parts["bastion"].GetIdleMonthlyFixed())
 	}
 }
 

@@ -52,8 +52,8 @@ func TestAnAWSBootstrapsBaseHoldsTheResourcesOfItsCoreStack(t *testing.T) {
 	if !reflect.DeepEqual(base.Resources, want) {
 		t.Errorf("base resources = %+v, want %+v", base.Resources, want)
 	}
-	if base.Shape == nil || len(base.Shape.Resources) == 0 {
-		t.Errorf("base shape = %+v, want what the core stack's template prices", base.Shape)
+	if base.Inventory == nil || len(base.Inventory.Resources) == 0 {
+		t.Errorf("base inventory = %+v, want what the core stack's template prices", base.Inventory)
 	}
 }
 
@@ -81,7 +81,7 @@ func TestAnAWSBootstrapsPartsStillReadWhenItsStacksResourcesCannotBeListed(t *te
 	if base.Resources != nil {
 		t.Errorf("base resources = %+v, want them unknown", base.Resources)
 	}
-	if base.Shape == nil || len(base.Shape.Resources) == 0 {
-		t.Errorf("base shape = %+v, want the core stack still priced", base.Shape)
+	if base.Inventory == nil || len(base.Inventory.Resources) == 0 {
+		t.Errorf("base inventory = %+v, want the core stack still priced", base.Inventory)
 	}
 }

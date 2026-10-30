@@ -111,7 +111,7 @@ func price(ctx context.Context, dependencies Dependencies, provider *providerpro
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	set, assumptions, err := shape(ctx, dependencies, provider, resolved, env, out)
+	set, assumptions, err := inventory(ctx, dependencies, provider, resolved, env, out)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -133,7 +133,7 @@ func price(ctx context.Context, dependencies Dependencies, provider *providerpro
 	return set, estimates, assumptions, nil
 }
 
-func shape(ctx context.Context, dependencies Dependencies, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, out io.Writer) (*costv1.ResourceSet, []string, error) {
+func inventory(ctx context.Context, dependencies Dependencies, provider *providerprocess.Provider, cfg *project.Project, env *environmentv1.Environment, out io.Writer) (*costv1.ResourceSet, []string, error) {
 	release, err := workdir.LockBuildOutput(ctx, cfg.Dir, func() {
 		_, _ = fmt.Fprintln(out, "Waiting for another ocel run in "+cfg.Dir+" to finish with "+buildoutput.Dir)
 	})
@@ -151,7 +151,7 @@ func shape(ctx context.Context, dependencies Dependencies, provider *providerpro
 	}
 	var set *costv1.ResourceSet
 	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		set, err = client.Shape(ctx, &contractv1.ShapeRequest{
+		set, err = client.Inventory(ctx, &contractv1.InventoryRequest{
 			Manifest:    manifest,
 			Environment: env,
 			Edge:        cfg.EdgeSelection(),

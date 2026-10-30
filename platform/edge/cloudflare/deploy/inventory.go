@@ -8,24 +8,24 @@ import (
 
 const entryWorker = "entry"
 
-func Shape(site pricing.EdgeSite) (pricing.EdgeShape, error) {
-	if err := refuseUnknownTier("the shape of the cloudflare edge", site.Tier); err != nil {
-		return pricing.EdgeShape{}, err
+func Inventory(site pricing.EdgeSite) (pricing.EdgeInventory, error) {
+	if err := refuseUnknownTier("the inventory of the cloudflare edge", site.Tier); err != nil {
+		return pricing.EdgeInventory{}, err
 	}
-	shape := pricing.EdgeShape{
+	inventory := pricing.EdgeInventory{
 		Vendor: cost.Vendor,
-		Shared: []pricing.Shaped{
+		Shared: []pricing.Resource{
 			{Name: workersPaidPlan, Type: cost.TypeAccountSubscription, Properties: map[string]any{"rate_plan": map[string]any{"id": workersPaidPlan}}},
 			{Name: releasesStoreStem, Type: cost.TypeWorkersScript, Properties: durableObjectScript(releasesStoreWorker)},
 		},
-		Environment: []pricing.Shaped{
+		Environment: []pricing.Resource{
 			{Name: entryWorker, Type: cost.TypeWorkersScript, Properties: describeEntryScript()},
 		},
 	}
 	if site.Tier == environment.TierPreview {
-		shape.Shared = append(shape.Shared, pricing.Shaped{Name: sharedEntryStem, Type: cost.TypeWorkersScript, Properties: describeEntryScript()})
+		inventory.Shared = append(inventory.Shared, pricing.Resource{Name: sharedEntryStem, Type: cost.TypeWorkersScript, Properties: describeEntryScript()})
 	}
-	return shape, nil
+	return inventory, nil
 }
 
 func durableObjectScript(worker durableObjectWorker) map[string]any {

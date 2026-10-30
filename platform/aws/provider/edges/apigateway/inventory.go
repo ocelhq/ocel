@@ -10,11 +10,11 @@ const (
 	endpointType = "REGIONAL"
 )
 
-func Shape(site pricing.EdgeSite) (pricing.EdgeShape, error) {
-	return pricing.EdgeShape{
+func Inventory(site pricing.EdgeSite) (pricing.EdgeInventory, error) {
+	return pricing.EdgeInventory{
 		Vendor: costVendor,
 		Region: site.Region,
-		Environment: []pricing.Shaped{{
+		Environment: []pricing.Resource{{
 			Name: site.Slug, Type: tfRestAPI,
 			Properties: map[string]any{"endpoint_configuration": map[string]any{"types": []any{endpointType}}},
 		}},

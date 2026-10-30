@@ -11,13 +11,13 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
-type ShapeOption func(*partInputs)
+type InventoryOption func(*partInputs)
 
-func WithVariablesKey(arn string) ShapeOption {
+func WithVariablesKey(arn string) InventoryOption {
 	return func(in *partInputs) { in.variablesKey = arn }
 }
 
-var shapedTypes = map[string]shapedType{
+var pricedTypes = map[string]pricedType{
 	"AWS::S3::Bucket":                 {token: "aws_s3_bucket"},
 	"AWS::DynamoDB::Table":            {token: "aws_dynamodb_table", properties: dynamoProperties},
 	"AWS::KMS::Key":                   {token: "aws_kms_key"},
@@ -32,27 +32,27 @@ var shapedTypes = map[string]shapedType{
 	"AWS::ApiGateway::RestApi":        {token: "aws_api_gateway_rest_api"},
 }
 
-type shapedType struct {
+type pricedType struct {
 	token      string
 	properties func(map[string]any) map[string]any
 }
 
-func Shape(ns Namespace, tier environment.Tier, parts []string, options ...ShapeOption) ([]pricing.Shaped, error) {
-	shapes, err := ShapeParts(ns, tier, parts, options...)
+func Inventory(ns Namespace, tier environment.Tier, parts []string, options ...InventoryOption) ([]pricing.Resource, error) {
+	inventories, err := InventoryParts(ns, tier, parts, options...)
 	if err != nil {
 		return nil, err
 	}
-	shaped := slices.Concat(shapes[provider.BasePart], shapes[RuntimeLayersPart])
+	inventory := slices.Concat(inventories[provider.BasePart], inventories[RuntimeLayersPart])
 	for _, name := range parts {
-		shaped = append(shaped, shapes[name]...)
+		inventory = append(inventory, inventories[name]...)
 	}
-	return shaped, nil
+	return inventory, nil
 }
 
-func shapeTemplate(template cfn.Template) ([]pricing.Shaped, error) {
-	var out []pricing.Shaped
+func inventoryTemplate(template cfn.Template) ([]pricing.Resource, error) {
+	var out []pricing.Resource
 	for _, resource := range template.Resources {
-		typ, priced := shapedTypes[resource.Type]
+		typ, priced := pricedTypes[resource.Type]
 		if !priced {
 			continue
 		}
@@ -64,7 +64,7 @@ func shapeTemplate(template cfn.Template) ([]pricing.Shaped, error) {
 			}
 			properties = typ.properties(raw)
 		}
-		out = append(out, pricing.Shaped{Name: resource.ID, Type: typ.token, Properties: properties})
+		out = append(out, pricing.Resource{Name: resource.ID, Type: typ.token, Properties: properties})
 	}
 	return out, nil
 }
@@ -72,11 +72,11 @@ func shapeTemplate(template cfn.Template) ([]pricing.Shaped, error) {
 func decodedProperties(resource cfn.Resource) (map[string]any, error) {
 	encoded, err := json.Marshal(resource.Properties)
 	if err != nil {
-		return nil, fmt.Errorf("shape %s: %w", resource.ID, err)
+		return nil, fmt.Errorf("inventory %s: %w", resource.ID, err)
 	}
 	decoded := map[string]any{}
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
-		return nil, fmt.Errorf("shape %s: %w", resource.ID, err)
+		return nil, fmt.Errorf("inventory %s: %w", resource.ID, err)
 	}
 	return decoded, nil
 }
