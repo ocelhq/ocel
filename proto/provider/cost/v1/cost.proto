@@ -4,10 +4,13 @@ package provider.cost.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1;costv1";
 
 import "buf/validate/validate.proto";
+import "common/scope/v1/scope.proto";
 import "google/protobuf/struct.proto";
 
 service CostService {
-    rpc Price(PriceRequest) returns (Estimate);
+    rpc Price(PriceRequest) returns (Estimate) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 }
 
 message ResourceSet {

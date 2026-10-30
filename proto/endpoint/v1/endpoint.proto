@@ -1,0 +1,39 @@
+syntax = "proto3";
+package endpoint.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/endpoint/v1;endpointv1";
+
+import "buf/validate/validate.proto";
+import "common/scope/v1/scope.proto";
+import "google/protobuf/timestamp.proto";
+
+message VersionUnserved {
+  repeated string served = 1;
+}
+
+message SessionEnded {
+}
+
+message IssueUserCertificateRequest {
+  string public_key = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1024
+    pattern: "^ssh-ed25519 [A-Za-z0-9+/]+={0,2}( [^\\x00-\\x1f\\x7f]*)?$"
+  }];
+}
+
+message IssueUserCertificateResponse {
+  string certificate = 1;
+
+  string principal = 2;
+
+  google.protobuf.Timestamp expires_at = 3;
+
+  repeated string host_keys = 4;
+}
+
+service SshCertificateService {
+  rpc IssueUserCertificate(IssueUserCertificateRequest) returns (IssueUserCertificateResponse) {
+    option (common.scope.v1.required) = SCOPE_TARGET_CREDENTIAL;
+  }
+}

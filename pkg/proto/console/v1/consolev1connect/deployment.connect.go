@@ -33,6 +33,8 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// DeploymentServiceStartProcedure is the fully-qualified name of the DeploymentService's Start RPC.
+	DeploymentServiceStartProcedure = "/console.v1.DeploymentService/Start"
 	// DeploymentServiceReportProcedure is the fully-qualified name of the DeploymentService's Report
 	// RPC.
 	DeploymentServiceReportProcedure = "/console.v1.DeploymentService/Report"
@@ -43,6 +45,7 @@ const (
 
 // DeploymentServiceClient is a client for the console.v1.DeploymentService service.
 type DeploymentServiceClient interface {
+	Start(context.Context, *v1.StartRequest) (*v1.StartResponse, error)
 	Report(context.Context, *v1.ReportRequest) (*v1.ReportResponse, error)
 	RecordEnvironmentEvent(context.Context, *v1.RecordEnvironmentEventRequest) (*v1.RecordEnvironmentEventResponse, error)
 }
@@ -58,6 +61,12 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 	baseURL = strings.TrimRight(baseURL, "/")
 	deploymentServiceMethods := v1.File_console_v1_deployment_proto.Services().ByName("DeploymentService").Methods()
 	return &deploymentServiceClient{
+		start: connect.NewClient[v1.StartRequest, v1.StartResponse](
+			httpClient,
+			baseURL+DeploymentServiceStartProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("Start")),
+			connect.WithClientOptions(opts...),
+		),
 		report: connect.NewClient[v1.ReportRequest, v1.ReportResponse](
 			httpClient,
 			baseURL+DeploymentServiceReportProcedure,
@@ -75,8 +84,18 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 
 // deploymentServiceClient implements DeploymentServiceClient.
 type deploymentServiceClient struct {
+	start                  *connect.Client[v1.StartRequest, v1.StartResponse]
 	report                 *connect.Client[v1.ReportRequest, v1.ReportResponse]
 	recordEnvironmentEvent *connect.Client[v1.RecordEnvironmentEventRequest, v1.RecordEnvironmentEventResponse]
+}
+
+// Start calls console.v1.DeploymentService.Start.
+func (c *deploymentServiceClient) Start(ctx context.Context, req *v1.StartRequest) (*v1.StartResponse, error) {
+	response, err := c.start.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
 }
 
 // Report calls console.v1.DeploymentService.Report.
@@ -99,6 +118,7 @@ func (c *deploymentServiceClient) RecordEnvironmentEvent(ctx context.Context, re
 
 // DeploymentServiceHandler is an implementation of the console.v1.DeploymentService service.
 type DeploymentServiceHandler interface {
+	Start(context.Context, *v1.StartRequest) (*v1.StartResponse, error)
 	Report(context.Context, *v1.ReportRequest) (*v1.ReportResponse, error)
 	RecordEnvironmentEvent(context.Context, *v1.RecordEnvironmentEventRequest) (*v1.RecordEnvironmentEventResponse, error)
 }
@@ -110,6 +130,12 @@ type DeploymentServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	deploymentServiceMethods := v1.File_console_v1_deployment_proto.Services().ByName("DeploymentService").Methods()
+	deploymentServiceStartHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServiceStartProcedure,
+		svc.Start,
+		connect.WithSchema(deploymentServiceMethods.ByName("Start")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deploymentServiceReportHandler := connect.NewUnaryHandlerSimple(
 		DeploymentServiceReportProcedure,
 		svc.Report,
@@ -124,6 +150,8 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 	)
 	return "/console.v1.DeploymentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case DeploymentServiceStartProcedure:
+			deploymentServiceStartHandler.ServeHTTP(w, r)
 		case DeploymentServiceReportProcedure:
 			deploymentServiceReportHandler.ServeHTTP(w, r)
 		case DeploymentServiceRecordEnvironmentEventProcedure:
@@ -136,6 +164,10 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 
 // UnimplementedDeploymentServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDeploymentServiceHandler struct{}
+
+func (UnimplementedDeploymentServiceHandler) Start(context.Context, *v1.StartRequest) (*v1.StartResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("console.v1.DeploymentService.Start is not implemented"))
+}
 
 func (UnimplementedDeploymentServiceHandler) Report(context.Context, *v1.ReportRequest) (*v1.ReportResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("console.v1.DeploymentService.Report is not implemented"))

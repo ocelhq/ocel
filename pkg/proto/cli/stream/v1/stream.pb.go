@@ -8,10 +8,10 @@ package streamv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v12 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	v11 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	v13 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	v12 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -684,7 +684,7 @@ type RunSummary struct {
 	PromotionId      string                 `protobuf:"bytes,15,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	Error            *RunError              `protobuf:"bytes,16,opt,name=error,proto3" json:"error,omitempty"`
 	Assumed          []*Assumption          `protobuf:"bytes,17,rep,name=assumed,proto3" json:"assumed,omitempty"`
-	CloudJob         *CloudJob              `protobuf:"bytes,18,opt,name=cloud_job,json=cloudJob,proto3" json:"cloud_job,omitempty"`
+	RemoteJobs       []*RemoteJob           `protobuf:"bytes,18,rep,name=remote_jobs,json=remoteJobs,proto3" json:"remote_jobs,omitempty"`
 	DeploymentReport *v13.Deployment        `protobuf:"bytes,19,opt,name=deployment_report,json=deploymentReport,proto3" json:"deployment_report,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -832,9 +832,9 @@ func (x *RunSummary) GetAssumed() []*Assumption {
 	return nil
 }
 
-func (x *RunSummary) GetCloudJob() *CloudJob {
+func (x *RunSummary) GetRemoteJobs() []*RemoteJob {
 	if x != nil {
-		return x.CloudJob
+		return x.RemoteJobs
 	}
 	return nil
 }
@@ -846,31 +846,32 @@ func (x *RunSummary) GetDeploymentReport() *v13.Deployment {
 	return nil
 }
 
-type CloudJob struct {
+type RemoteJob struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
-	State         v12.JobState           `protobuf:"varint,3,opt,name=state,proto3,enum=cloud.v1.JobState" json:"state,omitempty"`
+	State         v12.JobState           `protobuf:"varint,3,opt,name=state,proto3,enum=runner.v1.JobState" json:"state,omitempty"`
 	Result        *v12.JobResult         `protobuf:"bytes,4,opt,name=result,proto3" json:"result,omitempty"`
 	Error         *v12.JobError          `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	Runner        string                 `protobuf:"bytes,6,opt,name=runner,proto3" json:"runner,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CloudJob) Reset() {
-	*x = CloudJob{}
+func (x *RemoteJob) Reset() {
+	*x = RemoteJob{}
 	mi := &file_cli_stream_v1_stream_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CloudJob) String() string {
+func (x *RemoteJob) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CloudJob) ProtoMessage() {}
+func (*RemoteJob) ProtoMessage() {}
 
-func (x *CloudJob) ProtoReflect() protoreflect.Message {
+func (x *RemoteJob) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_stream_v1_stream_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -882,44 +883,51 @@ func (x *CloudJob) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CloudJob.ProtoReflect.Descriptor instead.
-func (*CloudJob) Descriptor() ([]byte, []int) {
+// Deprecated: Use RemoteJob.ProtoReflect.Descriptor instead.
+func (*RemoteJob) Descriptor() ([]byte, []int) {
 	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *CloudJob) GetId() string {
+func (x *RemoteJob) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *CloudJob) GetUrl() string {
+func (x *RemoteJob) GetUrl() string {
 	if x != nil {
 		return x.Url
 	}
 	return ""
 }
 
-func (x *CloudJob) GetState() v12.JobState {
+func (x *RemoteJob) GetState() v12.JobState {
 	if x != nil {
 		return x.State
 	}
 	return v12.JobState(0)
 }
 
-func (x *CloudJob) GetResult() *v12.JobResult {
+func (x *RemoteJob) GetResult() *v12.JobResult {
 	if x != nil {
 		return x.Result
 	}
 	return nil
 }
 
-func (x *CloudJob) GetError() *v12.JobError {
+func (x *RemoteJob) GetError() *v12.JobError {
 	if x != nil {
 		return x.Error
 	}
 	return nil
+}
+
+func (x *RemoteJob) GetRunner() string {
+	if x != nil {
+		return x.Runner
+	}
+	return ""
 }
 
 type RunError struct {
@@ -1054,7 +1062,7 @@ var File_cli_stream_v1_stream_proto protoreflect.FileDescriptor
 
 const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\n" +
-	"\x1acli/stream/v1/stream.proto\x12\rcli.stream.v1\x1a\x1bbuf/validate/validate.proto\x1a\x12cloud/v1/job.proto\x1a'common/environment/v1/environment.proto\x1a!common/progress/v1/progress.proto\x1a\x1bconsole/v1/deployment.proto\"\xb8\x02\n" +
+	"\x1acli/stream/v1/stream.proto\x12\rcli.stream.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a!common/progress/v1/progress.proto\x1a\x1bconsole/v1/deployment.proto\x1a\x16runner/v1/runner.proto\"\xb8\x02\n" +
 	"\bRunEvent\x12@\n" +
 	"\toperation\x18\x01 \x01(\v2\".common.progress.v1.OperationEventR\toperation\x127\n" +
 	"\awaiting\x18\x14 \x01(\v2\x1b.cli.stream.v1.WaitingEventH\x00R\awaiting\x127\n" +
@@ -1071,11 +1079,11 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x06vendor\x18\x01 \x01(\tR\x06vendor\x12\x18\n" +
 	"\aaccount\x18\x02 \x01(\tR\aaccount\x12\x1c\n" +
 	"\tprincipal\x18\x03 \x01(\tR\tprincipal\x12\x1a\n" +
-	"\blocation\x18\x04 \x01(\tR\blocation\"\x85\x01\n" +
+	"\blocation\x18\x04 \x01(\tR\blocation\"\x86\x01\n" +
 	"\fWaitingEvent\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x129\n" +
-	"\amissing\x18\x03 \x01(\v2\x1f.cli.stream.v1.MissingVariablesR\amissing\x12(\n" +
-	"\x05input\x18\x04 \x01(\v2\x12.cloud.v1.JobInputR\x05input\"\x95\x01\n" +
+	"\amissing\x18\x03 \x01(\v2\x1f.cli.stream.v1.MissingVariablesR\amissing\x12)\n" +
+	"\x05input\x18\x04 \x01(\v2\x13.runner.v1.JobInputR\x05input\"\x95\x01\n" +
 	"\vInputAnswer\x127\n" +
 	"\binput_id\x18\x01 \x01(\tB\x1c\xbaH\x19r\x17\x10\x01\x18\x80\x012\x10^[A-Za-z0-9_-]+$R\ainputId\x12\x1c\n" +
 	"\bresolved\x18\x02 \x01(\bH\x00R\bresolved\x12\x1e\n" +
@@ -1095,7 +1103,7 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x8e\x06\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x93\x06\n" +
 	"\n" +
 	"RunSummary\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
@@ -1115,15 +1123,17 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x06origin\x18\x0e \x01(\v2\x14.cli.stream.v1.PartyR\x06origin\x12!\n" +
 	"\fpromotion_id\x18\x0f \x01(\tR\vpromotionId\x12-\n" +
 	"\x05error\x18\x10 \x01(\v2\x17.cli.stream.v1.RunErrorR\x05error\x123\n" +
-	"\aassumed\x18\x11 \x03(\v2\x19.cli.stream.v1.AssumptionR\aassumed\x124\n" +
-	"\tcloud_job\x18\x12 \x01(\v2\x17.cli.stream.v1.CloudJobR\bcloudJob\x12C\n" +
-	"\x11deployment_report\x18\x13 \x01(\v2\x16.console.v1.DeploymentR\x10deploymentReport\"\xad\x01\n" +
-	"\bCloudJob\x12\x0e\n" +
+	"\aassumed\x18\x11 \x03(\v2\x19.cli.stream.v1.AssumptionR\aassumed\x129\n" +
+	"\vremote_jobs\x18\x12 \x03(\v2\x18.cli.stream.v1.RemoteJobR\n" +
+	"remoteJobs\x12C\n" +
+	"\x11deployment_report\x18\x13 \x01(\v2\x16.console.v1.DeploymentR\x10deploymentReport\"\xc9\x01\n" +
+	"\tRemoteJob\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
-	"\x03url\x18\x02 \x01(\tR\x03url\x12(\n" +
-	"\x05state\x18\x03 \x01(\x0e2\x12.cloud.v1.JobStateR\x05state\x12+\n" +
-	"\x06result\x18\x04 \x01(\v2\x13.cloud.v1.JobResultR\x06result\x12(\n" +
-	"\x05error\x18\x05 \x01(\v2\x12.cloud.v1.JobErrorR\x05error\"\xd3\x01\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12)\n" +
+	"\x05state\x18\x03 \x01(\x0e2\x13.runner.v1.JobStateR\x05state\x12,\n" +
+	"\x06result\x18\x04 \x01(\v2\x14.runner.v1.JobResultR\x06result\x12)\n" +
+	"\x05error\x18\x05 \x01(\v2\x13.runner.v1.JobErrorR\x05error\x12\x16\n" +
+	"\x06runner\x18\x06 \x01(\tR\x06runner\"\xd3\x01\n" +
 	"\bRunError\x12@\n" +
 	"\x04code\x18\x01 \x01(\tB,\xbaH)r'2%^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$R\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x17\n" +
@@ -1161,18 +1171,18 @@ var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*MissingGroup)(nil),      // 7: cli.stream.v1.MissingGroup
 	(*ResumedEvent)(nil),      // 8: cli.stream.v1.ResumedEvent
 	(*RunSummary)(nil),        // 9: cli.stream.v1.RunSummary
-	(*CloudJob)(nil),          // 10: cli.stream.v1.CloudJob
+	(*RemoteJob)(nil),         // 10: cli.stream.v1.RemoteJob
 	(*RunError)(nil),          // 11: cli.stream.v1.RunError
 	(*Assumption)(nil),        // 12: cli.stream.v1.Assumption
 	(*v1.OperationEvent)(nil), // 13: common.progress.v1.OperationEvent
 	(v11.Tier)(0),             // 14: common.environment.v1.Tier
-	(*v12.JobInput)(nil),      // 15: cloud.v1.JobInput
+	(*v12.JobInput)(nil),      // 15: runner.v1.JobInput
 	(*v1.Propagation)(nil),    // 16: common.progress.v1.Propagation
 	(*v1.AppResult)(nil),      // 17: common.progress.v1.AppResult
 	(*v13.Deployment)(nil),    // 18: console.v1.Deployment
-	(v12.JobState)(0),         // 19: cloud.v1.JobState
-	(*v12.JobResult)(nil),     // 20: cloud.v1.JobResult
-	(*v12.JobError)(nil),      // 21: cloud.v1.JobError
+	(v12.JobState)(0),         // 19: runner.v1.JobState
+	(*v12.JobResult)(nil),     // 20: runner.v1.JobResult
+	(*v12.JobError)(nil),      // 21: runner.v1.JobError
 }
 var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	13, // 0: cli.stream.v1.RunEvent.operation:type_name -> common.progress.v1.OperationEvent
@@ -1184,7 +1194,7 @@ var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	2,  // 6: cli.stream.v1.IdentityEvent.origin:type_name -> cli.stream.v1.Party
 	2,  // 7: cli.stream.v1.IdentityEvent.edge:type_name -> cli.stream.v1.Party
 	5,  // 8: cli.stream.v1.WaitingEvent.missing:type_name -> cli.stream.v1.MissingVariables
-	15, // 9: cli.stream.v1.WaitingEvent.input:type_name -> cloud.v1.JobInput
+	15, // 9: cli.stream.v1.WaitingEvent.input:type_name -> runner.v1.JobInput
 	6,  // 10: cli.stream.v1.MissingVariables.cells:type_name -> cli.stream.v1.MissingVariable
 	7,  // 11: cli.stream.v1.MissingVariables.groups:type_name -> cli.stream.v1.MissingGroup
 	16, // 12: cli.stream.v1.RunSummary.propagation:type_name -> common.progress.v1.Propagation
@@ -1194,11 +1204,11 @@ var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	2,  // 16: cli.stream.v1.RunSummary.origin:type_name -> cli.stream.v1.Party
 	11, // 17: cli.stream.v1.RunSummary.error:type_name -> cli.stream.v1.RunError
 	12, // 18: cli.stream.v1.RunSummary.assumed:type_name -> cli.stream.v1.Assumption
-	10, // 19: cli.stream.v1.RunSummary.cloud_job:type_name -> cli.stream.v1.CloudJob
+	10, // 19: cli.stream.v1.RunSummary.remote_jobs:type_name -> cli.stream.v1.RemoteJob
 	18, // 20: cli.stream.v1.RunSummary.deployment_report:type_name -> console.v1.Deployment
-	19, // 21: cli.stream.v1.CloudJob.state:type_name -> cloud.v1.JobState
-	20, // 22: cli.stream.v1.CloudJob.result:type_name -> cloud.v1.JobResult
-	21, // 23: cli.stream.v1.CloudJob.error:type_name -> cloud.v1.JobError
+	19, // 21: cli.stream.v1.RemoteJob.state:type_name -> runner.v1.JobState
+	20, // 22: cli.stream.v1.RemoteJob.result:type_name -> runner.v1.JobResult
+	21, // 23: cli.stream.v1.RemoteJob.error:type_name -> runner.v1.JobError
 	24, // [24:24] is the sub-list for method output_type
 	24, // [24:24] is the sub-list for method input_type
 	24, // [24:24] is the sub-list for extension type_name

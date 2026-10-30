@@ -89,6 +89,9 @@ const (
 	// ProviderServiceGetProtectionProcedure is the fully-qualified name of the ProviderService's
 	// GetProtection RPC.
 	ProviderServiceGetProtectionProcedure = "/provider.contract.v1.ProviderService/GetProtection"
+	// ProviderServiceRevealProtectionPasswordProcedure is the fully-qualified name of the
+	// ProviderService's RevealProtectionPassword RPC.
+	ProviderServiceRevealProtectionPasswordProcedure = "/provider.contract.v1.ProviderService/RevealProtectionPassword"
 	// ProviderServiceChangeProtectionProcedure is the fully-qualified name of the ProviderService's
 	// ChangeProtection RPC.
 	ProviderServiceChangeProtectionProcedure = "/provider.contract.v1.ProviderService/ChangeProtection"
@@ -137,8 +140,9 @@ const (
 	// ProviderServiceRemoveConnectorProcedure is the fully-qualified name of the ProviderService's
 	// RemoveConnector RPC.
 	ProviderServiceRemoveConnectorProcedure = "/provider.contract.v1.ProviderService/RemoveConnector"
-	// ProviderServiceShapeProcedure is the fully-qualified name of the ProviderService's Shape RPC.
-	ProviderServiceShapeProcedure = "/provider.contract.v1.ProviderService/Shape"
+	// ProviderServiceInventoryProcedure is the fully-qualified name of the ProviderService's Inventory
+	// RPC.
+	ProviderServiceInventoryProcedure = "/provider.contract.v1.ProviderService/Inventory"
 	// ProviderServiceConfirmProcedure is the fully-qualified name of the ProviderService's Confirm RPC.
 	ProviderServiceConfirmProcedure = "/provider.contract.v1.ProviderService/Confirm"
 	// ProviderServiceReadLogsProcedure is the fully-qualified name of the ProviderService's ReadLogs
@@ -178,6 +182,7 @@ type ProviderServiceClient interface {
 	EnsurePreviewAlias(context.Context, *v1.EnsurePreviewAliasRequest) (*v1.EnsurePreviewAliasResponse, error)
 	ForgetPreviewAlias(context.Context, *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error)
 	GetProtection(context.Context, *v1.GetProtectionRequest) (*v1.GetProtectionResponse, error)
+	RevealProtectionPassword(context.Context, *v1.RevealProtectionPasswordRequest) (*v1.RevealProtectionPasswordResponse, error)
 	ChangeProtection(context.Context, *v1.ChangeProtectionRequest) (*v1.ChangeProtectionResponse, error)
 	PublishProtection(context.Context, *v1.PublishProtectionRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	Preflight(context.Context, *v1.PreflightRequest) (*connect.ServerStreamForClient[v1.PreflightEvent], error)
@@ -194,7 +199,7 @@ type ProviderServiceClient interface {
 	DescribeConnectorTarget(context.Context, *v1.DescribeConnectorTargetRequest) (*v1.DescribeConnectorTargetResponse, error)
 	InstallConnector(context.Context, *v1.InstallConnectorRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	RemoveConnector(context.Context, *v1.RemoveConnectorRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
-	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
+	Inventory(context.Context, *v1.InventoryRequest) (*v13.ResourceSet, error)
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 	ReadLogs(context.Context, *v1.ReadLogsRequest) (*connect.ServerStreamForClient[v1.ReadLogsResponse], error)
 	ForwardPorts(context.Context, *v1.ForwardPortsRequest) (*connect.ServerStreamForClient[v1.ForwardPortsEvent], error)
@@ -322,6 +327,12 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("GetProtection")),
 			connect.WithClientOptions(opts...),
 		),
+		revealProtectionPassword: connect.NewClient[v1.RevealProtectionPasswordRequest, v1.RevealProtectionPasswordResponse](
+			httpClient,
+			baseURL+ProviderServiceRevealProtectionPasswordProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("RevealProtectionPassword")),
+			connect.WithClientOptions(opts...),
+		),
 		changeProtection: connect.NewClient[v1.ChangeProtectionRequest, v1.ChangeProtectionResponse](
 			httpClient,
 			baseURL+ProviderServiceChangeProtectionProcedure,
@@ -418,10 +429,10 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("RemoveConnector")),
 			connect.WithClientOptions(opts...),
 		),
-		shape: connect.NewClient[v1.ShapeRequest, v13.ResourceSet](
+		inventory: connect.NewClient[v1.InventoryRequest, v13.ResourceSet](
 			httpClient,
-			baseURL+ProviderServiceShapeProcedure,
-			connect.WithSchema(providerServiceMethods.ByName("Shape")),
+			baseURL+ProviderServiceInventoryProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Inventory")),
 			connect.WithClientOptions(opts...),
 		),
 		confirm: connect.NewClient[v1.ConfirmRequest, v1.ConfirmResponse](
@@ -483,6 +494,7 @@ type providerServiceClient struct {
 	ensurePreviewAlias        *connect.Client[v1.EnsurePreviewAliasRequest, v1.EnsurePreviewAliasResponse]
 	forgetPreviewAlias        *connect.Client[v1.ForgetPreviewAliasRequest, v1.ForgetPreviewAliasResponse]
 	getProtection             *connect.Client[v1.GetProtectionRequest, v1.GetProtectionResponse]
+	revealProtectionPassword  *connect.Client[v1.RevealProtectionPasswordRequest, v1.RevealProtectionPasswordResponse]
 	changeProtection          *connect.Client[v1.ChangeProtectionRequest, v1.ChangeProtectionResponse]
 	publishProtection         *connect.Client[v1.PublishProtectionRequest, v11.OperationEvent]
 	preflight                 *connect.Client[v1.PreflightRequest, v1.PreflightEvent]
@@ -499,7 +511,7 @@ type providerServiceClient struct {
 	describeConnectorTarget   *connect.Client[v1.DescribeConnectorTargetRequest, v1.DescribeConnectorTargetResponse]
 	installConnector          *connect.Client[v1.InstallConnectorRequest, v11.OperationEvent]
 	removeConnector           *connect.Client[v1.RemoveConnectorRequest, v11.OperationEvent]
-	shape                     *connect.Client[v1.ShapeRequest, v13.ResourceSet]
+	inventory                 *connect.Client[v1.InventoryRequest, v13.ResourceSet]
 	confirm                   *connect.Client[v1.ConfirmRequest, v1.ConfirmResponse]
 	readLogs                  *connect.Client[v1.ReadLogsRequest, v1.ReadLogsResponse]
 	forwardPorts              *connect.Client[v1.ForwardPortsRequest, v1.ForwardPortsEvent]
@@ -646,6 +658,15 @@ func (c *providerServiceClient) GetProtection(ctx context.Context, req *v1.GetPr
 	return nil, err
 }
 
+// RevealProtectionPassword calls provider.contract.v1.ProviderService.RevealProtectionPassword.
+func (c *providerServiceClient) RevealProtectionPassword(ctx context.Context, req *v1.RevealProtectionPasswordRequest) (*v1.RevealProtectionPasswordResponse, error) {
+	response, err := c.revealProtectionPassword.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // ChangeProtection calls provider.contract.v1.ProviderService.ChangeProtection.
 func (c *providerServiceClient) ChangeProtection(ctx context.Context, req *v1.ChangeProtectionRequest) (*v1.ChangeProtectionResponse, error) {
 	response, err := c.changeProtection.CallUnary(ctx, connect.NewRequest(req))
@@ -750,9 +771,9 @@ func (c *providerServiceClient) RemoveConnector(ctx context.Context, req *v1.Rem
 	return c.removeConnector.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// Shape calls provider.contract.v1.ProviderService.Shape.
-func (c *providerServiceClient) Shape(ctx context.Context, req *v1.ShapeRequest) (*v13.ResourceSet, error) {
-	response, err := c.shape.CallUnary(ctx, connect.NewRequest(req))
+// Inventory calls provider.contract.v1.ProviderService.Inventory.
+func (c *providerServiceClient) Inventory(ctx context.Context, req *v1.InventoryRequest) (*v13.ResourceSet, error) {
+	response, err := c.inventory.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -825,6 +846,7 @@ type ProviderServiceHandler interface {
 	EnsurePreviewAlias(context.Context, *v1.EnsurePreviewAliasRequest) (*v1.EnsurePreviewAliasResponse, error)
 	ForgetPreviewAlias(context.Context, *v1.ForgetPreviewAliasRequest) (*v1.ForgetPreviewAliasResponse, error)
 	GetProtection(context.Context, *v1.GetProtectionRequest) (*v1.GetProtectionResponse, error)
+	RevealProtectionPassword(context.Context, *v1.RevealProtectionPasswordRequest) (*v1.RevealProtectionPasswordResponse, error)
 	ChangeProtection(context.Context, *v1.ChangeProtectionRequest) (*v1.ChangeProtectionResponse, error)
 	PublishProtection(context.Context, *v1.PublishProtectionRequest, *connect.ServerStream[v11.OperationEvent]) error
 	Preflight(context.Context, *v1.PreflightRequest, *connect.ServerStream[v1.PreflightEvent]) error
@@ -841,7 +863,7 @@ type ProviderServiceHandler interface {
 	DescribeConnectorTarget(context.Context, *v1.DescribeConnectorTargetRequest) (*v1.DescribeConnectorTargetResponse, error)
 	InstallConnector(context.Context, *v1.InstallConnectorRequest, *connect.ServerStream[v11.OperationEvent]) error
 	RemoveConnector(context.Context, *v1.RemoveConnectorRequest, *connect.ServerStream[v11.OperationEvent]) error
-	Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error)
+	Inventory(context.Context, *v1.InventoryRequest) (*v13.ResourceSet, error)
 	Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error)
 	ReadLogs(context.Context, *v1.ReadLogsRequest, *connect.ServerStream[v1.ReadLogsResponse]) error
 	ForwardPorts(context.Context, *v1.ForwardPortsRequest, *connect.ServerStream[v1.ForwardPortsEvent]) error
@@ -965,6 +987,12 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("GetProtection")),
 		connect.WithHandlerOptions(opts...),
 	)
+	providerServiceRevealProtectionPasswordHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceRevealProtectionPasswordProcedure,
+		svc.RevealProtectionPassword,
+		connect.WithSchema(providerServiceMethods.ByName("RevealProtectionPassword")),
+		connect.WithHandlerOptions(opts...),
+	)
 	providerServiceChangeProtectionHandler := connect.NewUnaryHandlerSimple(
 		ProviderServiceChangeProtectionProcedure,
 		svc.ChangeProtection,
@@ -1061,10 +1089,10 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("RemoveConnector")),
 		connect.WithHandlerOptions(opts...),
 	)
-	providerServiceShapeHandler := connect.NewUnaryHandlerSimple(
-		ProviderServiceShapeProcedure,
-		svc.Shape,
-		connect.WithSchema(providerServiceMethods.ByName("Shape")),
+	providerServiceInventoryHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceInventoryProcedure,
+		svc.Inventory,
+		connect.WithSchema(providerServiceMethods.ByName("Inventory")),
 		connect.WithHandlerOptions(opts...),
 	)
 	providerServiceConfirmHandler := connect.NewUnaryHandlerSimple(
@@ -1141,6 +1169,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceForgetPreviewAliasHandler.ServeHTTP(w, r)
 		case ProviderServiceGetProtectionProcedure:
 			providerServiceGetProtectionHandler.ServeHTTP(w, r)
+		case ProviderServiceRevealProtectionPasswordProcedure:
+			providerServiceRevealProtectionPasswordHandler.ServeHTTP(w, r)
 		case ProviderServiceChangeProtectionProcedure:
 			providerServiceChangeProtectionHandler.ServeHTTP(w, r)
 		case ProviderServicePublishProtectionProcedure:
@@ -1173,8 +1203,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceInstallConnectorHandler.ServeHTTP(w, r)
 		case ProviderServiceRemoveConnectorProcedure:
 			providerServiceRemoveConnectorHandler.ServeHTTP(w, r)
-		case ProviderServiceShapeProcedure:
-			providerServiceShapeHandler.ServeHTTP(w, r)
+		case ProviderServiceInventoryProcedure:
+			providerServiceInventoryHandler.ServeHTTP(w, r)
 		case ProviderServiceConfirmProcedure:
 			providerServiceConfirmHandler.ServeHTTP(w, r)
 		case ProviderServiceReadLogsProcedure:
@@ -1268,6 +1298,10 @@ func (UnimplementedProviderServiceHandler) GetProtection(context.Context, *v1.Ge
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetProtection is not implemented"))
 }
 
+func (UnimplementedProviderServiceHandler) RevealProtectionPassword(context.Context, *v1.RevealProtectionPasswordRequest) (*v1.RevealProtectionPasswordResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RevealProtectionPassword is not implemented"))
+}
+
 func (UnimplementedProviderServiceHandler) ChangeProtection(context.Context, *v1.ChangeProtectionRequest) (*v1.ChangeProtectionResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.ChangeProtection is not implemented"))
 }
@@ -1332,8 +1366,8 @@ func (UnimplementedProviderServiceHandler) RemoveConnector(context.Context, *v1.
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RemoveConnector is not implemented"))
 }
 
-func (UnimplementedProviderServiceHandler) Shape(context.Context, *v1.ShapeRequest) (*v13.ResourceSet, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Shape is not implemented"))
+func (UnimplementedProviderServiceHandler) Inventory(context.Context, *v1.InventoryRequest) (*v13.ResourceSet, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.Inventory is not implemented"))
 }
 
 func (UnimplementedProviderServiceHandler) Confirm(context.Context, *v1.ConfirmRequest) (*v1.ConfirmResponse, error) {

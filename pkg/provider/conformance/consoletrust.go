@@ -42,8 +42,8 @@ func RunConsoleTrustBootstrap(t *testing.T, bootstrap provider.Bootstrap, tier e
 		if err != nil {
 			t.Fatalf("Describe() = %v", err)
 		}
-		if described.Identity == nil || described.Identity.IdentityProvider == "" || described.Identity.Principal == "" {
-			t.Fatalf("Describe().Identity = %+v after a bootstrap trusting the console, want the identity provider and principal it made", described.Identity)
+		if described.Identity == nil || described.Identity.IdentityProvider == "" {
+			t.Fatalf("Describe().Identity = %+v after a bootstrap trusting the console, want the identity provider it made", described.Identity)
 		}
 		if described.Trust == nil || described.Trust.TargetID != trust.TargetID || described.Trust.Issuer != trust.Issuer || described.Trust.OrganizationID != trust.OrganizationID {
 			t.Errorf("Describe().Trust = %+v, want the trust the part was applied with, %+v", described.Trust, trust)

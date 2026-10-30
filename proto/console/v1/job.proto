@@ -1,0 +1,95 @@
+syntax = "proto3";
+package console.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1";
+
+import "buf/validate/validate.proto";
+import "common/environment/v1/environment.proto";
+import "google/protobuf/timestamp.proto";
+import "runner/v1/runner.proto";
+
+message DispatchJobRequest {
+  option (buf.validate.message).cel = {
+    id: "dispatch_job.tier_of_command"
+    message: "a deploy runs in production, a preview up or preview rm in preview"
+    expression: "(this.job.command != 2 || this.tier == 2) && ((this.job.command != 3 && this.job.command != 4) || this.tier == 1)"
+  };
+  option (buf.validate.message).cel = {
+    id: "dispatch_job.uploaded_source"
+    message: "a dispatched job runs a source uploaded to its runner"
+    expression: "this.job.source_id != ''"
+  };
+
+  string request_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+
+  string project_id = 2 [(buf.validate.field).string.uuid = true];
+
+  common.environment.v1.Tier tier = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string runner_id = 4 [(buf.validate.field).string.pattern = "^(ocel-cloud|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"];
+
+  string slug = 5 [(buf.validate.field).string = {
+    max_len: 63
+    pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+  }];
+
+  runner.v1.JobRequest job = 6 [(buf.validate.field).required = true];
+
+  string provider = 7 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^([a-z0-9._:-]+)?$"
+  }];
+}
+
+message DispatchJobResponse {
+  DispatchedJob job = 1;
+}
+
+message GetJobRequest {
+  string project_id = 1 [(buf.validate.field).string.uuid = true];
+
+  string job_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[A-Za-z0-9_-]+$"
+  }];
+}
+
+message GetJobResponse {
+  DispatchedJob job = 1;
+}
+
+message DispatchedJob {
+  string id = 1;
+
+  string project_id = 2;
+
+  common.environment.v1.Tier tier = 3;
+
+  string runner_id = 4;
+
+  string deployment_id = 5;
+
+  runner.v1.JobCommand command = 6;
+
+  runner.v1.JobState state = 7;
+
+  runner.v1.JobError error = 8;
+
+  google.protobuf.Timestamp created_at = 9;
+
+  google.protobuf.Timestamp ended_at = 10;
+}
+
+service JobService {
+  rpc Dispatch(DispatchJobRequest) returns (DispatchJobResponse);
+
+  rpc Get(GetJobRequest) returns (GetJobResponse);
+}

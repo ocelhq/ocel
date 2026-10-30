@@ -26,9 +26,11 @@ import (
 	_ "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/endpoint/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	_ "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 )
 
 func ocelProtoPaths(t *testing.T) []string {

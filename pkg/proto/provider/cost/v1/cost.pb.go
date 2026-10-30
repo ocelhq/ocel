@@ -8,6 +8,7 @@ package costv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -918,7 +919,7 @@ var File_provider_cost_v1_cost_proto protoreflect.FileDescriptor
 
 const file_provider_cost_v1_cost_proto_rawDesc = "" +
 	"\n" +
-	"\x1bprovider/cost/v1/cost.proto\x12\x10provider.cost.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x99\x01\n" +
+	"\x1bprovider/cost/v1/cost.proto\x12\x10provider.cost.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1bcommon/scope/v1/scope.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x99\x01\n" +
 	"\vResourceSet\x12\x1f\n" +
 	"\x06source\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06source\x12/\n" +
 	"\x06scopes\x18\x02 \x03(\v2\x17.provider.cost.v1.ScopeR\x06scopes\x128\n" +
@@ -1011,9 +1012,9 @@ const file_provider_cost_v1_cost_proto_rawDesc = "" +
 	"\x13PROFILE_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rPROFILE_LIGHT\x10\x01\x12\x14\n" +
 	"\x10PROFILE_MODERATE\x10\x02\x12\x11\n" +
-	"\rPROFILE_HEAVY\x10\x032R\n" +
-	"\vCostService\x12C\n" +
-	"\x05Price\x12\x1e.provider.cost.v1.PriceRequest\x1a\x1a.provider.cost.v1.EstimateB:Z8github.com/ocelhq/ocel/pkg/proto/provider/cost/v1;costv1b\x06proto3"
+	"\rPROFILE_HEAVY\x10\x032X\n" +
+	"\vCostService\x12I\n" +
+	"\x05Price\x12\x1e.provider.cost.v1.PriceRequest\x1a\x1a.provider.cost.v1.Estimate\"\x04\x98\xb5\x18\x01B:Z8github.com/ocelhq/ocel/pkg/proto/provider/cost/v1;costv1b\x06proto3"
 
 var (
 	file_provider_cost_v1_cost_proto_rawDescOnce sync.Once

@@ -69,6 +69,13 @@ func TestProtovalidateAcceptsEveryTargetRequestBootstrapAndAPipelineCanSend(t *t
 	}
 	requireAccepted(t, "a service account behind a workload identity provider", federated)
 
+	vps := &consolev1.PrepareTargetRequest{Vendor: "vps", Account: "box.example.com"}
+	requireAccepted(t, "a box's hostname and no region", vps)
+
+	box := validRecordTargetTierRequest()
+	box.Identity = &consolev1.TierIdentity{IdentityProvider: "https://box.example.com/.ocel/endpoint"}
+	requireAccepted(t, "a box's certificate service and no principal", box)
+
 	requireAccepted(t, "a credential for one project tier", validIssueCredentialRequest())
 
 	requireAccepted(t, "a tier to forget", validForgetTargetTierRequest())
@@ -81,7 +88,6 @@ func TestProtovalidateRefusesATargetRequestTheConsoleCannotTrust(t *testing.T) {
 		{name: "the account is required", mutate: func(r *consolev1.PrepareTargetRequest) { r.Account = "" }},
 		{name: "the account has no slash", mutate: func(r *consolev1.PrepareTargetRequest) { r.Account = "123/456" }},
 		{name: "the account is at most 128 characters", mutate: func(r *consolev1.PrepareTargetRequest) { r.Account = strings.Repeat("a", 129) }},
-		{name: "the region is required", mutate: func(r *consolev1.PrepareTargetRequest) { r.Region = "" }},
 		{name: "the region is lower case", mutate: func(r *consolev1.PrepareTargetRequest) { r.Region = "EU-WEST-1" }},
 		{name: "the region is at most 64 characters", mutate: func(r *consolev1.PrepareTargetRequest) { r.Region = strings.Repeat("r", 65) }},
 		{name: "the project id is a uuid", mutate: func(r *consolev1.PrepareTargetRequest) { r.ProjectId = "shop" }},
@@ -95,7 +101,6 @@ func TestProtovalidateRefusesATargetRequestTheConsoleCannotTrust(t *testing.T) {
 		{name: "the identity is required", mutate: func(r *consolev1.RecordTargetTierRequest) { r.Identity = nil }},
 		{name: "the identity provider is required", mutate: func(r *consolev1.RecordTargetTierRequest) { r.Identity.IdentityProvider = "" }},
 		{name: "the identity provider has no spaces", mutate: func(r *consolev1.RecordTargetTierRequest) { r.Identity.IdentityProvider = "arn:aws:iam::1 :oidc" }},
-		{name: "the principal is required", mutate: func(r *consolev1.RecordTargetTierRequest) { r.Identity.Principal = "" }},
 		{name: "the principal is at most 2048 characters", mutate: func(r *consolev1.RecordTargetTierRequest) {
 			r.Identity.Principal = "arn:aws:iam::123456789012:role/" + strings.Repeat("r", 2048)
 		}},

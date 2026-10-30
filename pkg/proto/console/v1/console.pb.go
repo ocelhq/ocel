@@ -8,6 +8,7 @@ package consolev1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	v1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -28,6 +29,7 @@ type CloudOffer struct {
 	ApiUrl        string                 `protobuf:"bytes,1,opt,name=api_url,json=apiUrl,proto3" json:"api_url,omitempty"`
 	ProviderUrl   string                 `protobuf:"bytes,2,opt,name=provider_url,json=providerUrl,proto3" json:"provider_url,omitempty"`
 	Audience      string                 `protobuf:"bytes,3,opt,name=audience,proto3" json:"audience,omitempty"`
+	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -79,6 +81,13 @@ func (x *CloudOffer) GetProviderUrl() string {
 func (x *CloudOffer) GetAudience() string {
 	if x != nil {
 		return x.Audience
+	}
+	return ""
+}
+
+func (x *CloudOffer) GetVersion() string {
+	if x != nil {
+		return x.Version
 	}
 	return ""
 }
@@ -179,28 +188,29 @@ func (x *DescribeResponse) GetCloud() *CloudOffer {
 	return nil
 }
 
-type IssueCloudTokenRequest struct {
+type IssueEndpointTokenRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	Scopes         []string               `protobuf:"bytes,1,rep,name=scopes,proto3" json:"scopes,omitempty"`
-	OrganizationId string                 `protobuf:"bytes,2,opt,name=organization_id,json=organizationId,proto3" json:"organization_id,omitempty"`
+	OrganizationId string                 `protobuf:"bytes,1,opt,name=organization_id,json=organizationId,proto3" json:"organization_id,omitempty"`
+	EndpointId     string                 `protobuf:"bytes,2,opt,name=endpoint_id,json=endpointId,proto3" json:"endpoint_id,omitempty"`
+	Scopes         []v1.Scope             `protobuf:"varint,3,rep,packed,name=scopes,proto3,enum=common.scope.v1.Scope" json:"scopes,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
-func (x *IssueCloudTokenRequest) Reset() {
-	*x = IssueCloudTokenRequest{}
+func (x *IssueEndpointTokenRequest) Reset() {
+	*x = IssueEndpointTokenRequest{}
 	mi := &file_console_v1_console_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *IssueCloudTokenRequest) String() string {
+func (x *IssueEndpointTokenRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*IssueCloudTokenRequest) ProtoMessage() {}
+func (*IssueEndpointTokenRequest) ProtoMessage() {}
 
-func (x *IssueCloudTokenRequest) ProtoReflect() protoreflect.Message {
+func (x *IssueEndpointTokenRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_console_v1_console_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -212,26 +222,33 @@ func (x *IssueCloudTokenRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IssueCloudTokenRequest.ProtoReflect.Descriptor instead.
-func (*IssueCloudTokenRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use IssueEndpointTokenRequest.ProtoReflect.Descriptor instead.
+func (*IssueEndpointTokenRequest) Descriptor() ([]byte, []int) {
 	return file_console_v1_console_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *IssueCloudTokenRequest) GetScopes() []string {
-	if x != nil {
-		return x.Scopes
-	}
-	return nil
-}
-
-func (x *IssueCloudTokenRequest) GetOrganizationId() string {
+func (x *IssueEndpointTokenRequest) GetOrganizationId() string {
 	if x != nil {
 		return x.OrganizationId
 	}
 	return ""
 }
 
-type IssueCloudTokenResponse struct {
+func (x *IssueEndpointTokenRequest) GetEndpointId() string {
+	if x != nil {
+		return x.EndpointId
+	}
+	return ""
+}
+
+func (x *IssueEndpointTokenRequest) GetScopes() []v1.Scope {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+type IssueEndpointTokenResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
 	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
@@ -239,20 +256,20 @@ type IssueCloudTokenResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *IssueCloudTokenResponse) Reset() {
-	*x = IssueCloudTokenResponse{}
+func (x *IssueEndpointTokenResponse) Reset() {
+	*x = IssueEndpointTokenResponse{}
 	mi := &file_console_v1_console_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *IssueCloudTokenResponse) String() string {
+func (x *IssueEndpointTokenResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*IssueCloudTokenResponse) ProtoMessage() {}
+func (*IssueEndpointTokenResponse) ProtoMessage() {}
 
-func (x *IssueCloudTokenResponse) ProtoReflect() protoreflect.Message {
+func (x *IssueEndpointTokenResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_console_v1_console_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -264,19 +281,19 @@ func (x *IssueCloudTokenResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IssueCloudTokenResponse.ProtoReflect.Descriptor instead.
-func (*IssueCloudTokenResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use IssueEndpointTokenResponse.ProtoReflect.Descriptor instead.
+func (*IssueEndpointTokenResponse) Descriptor() ([]byte, []int) {
 	return file_console_v1_console_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *IssueCloudTokenResponse) GetToken() string {
+func (x *IssueEndpointTokenResponse) GetToken() string {
 	if x != nil {
 		return x.Token
 	}
 	return ""
 }
 
-func (x *IssueCloudTokenResponse) GetExpiresAt() *timestamppb.Timestamp {
+func (x *IssueEndpointTokenResponse) GetExpiresAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ExpiresAt
 	}
@@ -288,27 +305,30 @@ var File_console_v1_console_proto protoreflect.FileDescriptor
 const file_console_v1_console_proto_rawDesc = "" +
 	"\n" +
 	"\x18console/v1/console.proto\x12\n" +
-	"console.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"d\n" +
+	"console.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1bcommon/scope/v1/scope.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"~\n" +
 	"\n" +
 	"CloudOffer\x12\x17\n" +
 	"\aapi_url\x18\x01 \x01(\tR\x06apiUrl\x12!\n" +
 	"\fprovider_url\x18\x02 \x01(\tR\vproviderUrl\x12\x1a\n" +
-	"\baudience\x18\x03 \x01(\tR\baudience\"\x11\n" +
+	"\baudience\x18\x03 \x01(\tR\baudience\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\"\x11\n" +
 	"\x0fDescribeRequest\"\x8d\x01\n" +
 	"\x10DescribeResponse\x12'\n" +
 	"\x0fconsole_version\x18\x01 \x01(\tR\x0econsoleVersion\x12\"\n" +
 	"\fcapabilities\x18\x02 \x03(\tR\fcapabilities\x12,\n" +
-	"\x05cloud\x18\x03 \x01(\v2\x16.console.v1.CloudOfferR\x05cloud\"\x9e\x01\n" +
-	"\x16IssueCloudTokenRequest\x12=\n" +
-	"\x06scopes\x18\x01 \x03(\tB%\xbaH\"\x92\x01\x1f\b\x01\x10 \x18\x01\"\x17r\x15\x10\x01\x18@2\x0f^[a-z0-9._:-]+$R\x06scopes\x12E\n" +
-	"\x0forganization_id\x18\x02 \x01(\tB\x1c\xbaH\x19r\x17\x10\x01\x18\x80\x012\x10^[A-Za-z0-9_-]+$R\x0eorganizationId\"o\n" +
-	"\x17IssueCloudTokenResponse\x12\x19\n" +
+	"\x05cloud\x18\x03 \x01(\v2\x16.console.v1.CloudOfferR\x05cloud\"\x9e\x02\n" +
+	"\x19IssueEndpointTokenRequest\x12E\n" +
+	"\x0forganization_id\x18\x01 \x01(\tB\x1c\xbaH\x19r\x17\x10\x01\x18\x80\x012\x10^[A-Za-z0-9_-]+$R\x0eorganizationId\x12s\n" +
+	"\vendpoint_id\x18\x02 \x01(\tBR\xbaHOrM2K^(ocel-cloud|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$R\n" +
+	"endpointId\x12E\n" +
+	"\x06scopes\x18\x03 \x03(\x0e2\x16.common.scope.v1.ScopeB\x15\xbaH\x12\x92\x01\x0f\b\x01\x10\x10\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\x06scopes\"r\n" +
+	"\x1aIssueEndpointTokenResponse\x12\x19\n" +
 	"\x05token\x18\x01 \x01(\tB\x03\x80\x01\x01R\x05token\x129\n" +
 	"\n" +
-	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt2\xb3\x01\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt2\xbc\x01\n" +
 	"\x0eConsoleService\x12E\n" +
-	"\bDescribe\x12\x1b.console.v1.DescribeRequest\x1a\x1c.console.v1.DescribeResponse\x12Z\n" +
-	"\x0fIssueCloudToken\x12\".console.v1.IssueCloudTokenRequest\x1a#.console.v1.IssueCloudTokenResponseB7Z5github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1b\x06proto3"
+	"\bDescribe\x12\x1b.console.v1.DescribeRequest\x1a\x1c.console.v1.DescribeResponse\x12c\n" +
+	"\x12IssueEndpointToken\x12%.console.v1.IssueEndpointTokenRequest\x1a&.console.v1.IssueEndpointTokenResponseB7Z5github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1b\x06proto3"
 
 var (
 	file_console_v1_console_proto_rawDescOnce sync.Once
@@ -324,25 +344,27 @@ func file_console_v1_console_proto_rawDescGZIP() []byte {
 
 var file_console_v1_console_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_console_v1_console_proto_goTypes = []any{
-	(*CloudOffer)(nil),              // 0: console.v1.CloudOffer
-	(*DescribeRequest)(nil),         // 1: console.v1.DescribeRequest
-	(*DescribeResponse)(nil),        // 2: console.v1.DescribeResponse
-	(*IssueCloudTokenRequest)(nil),  // 3: console.v1.IssueCloudTokenRequest
-	(*IssueCloudTokenResponse)(nil), // 4: console.v1.IssueCloudTokenResponse
-	(*timestamppb.Timestamp)(nil),   // 5: google.protobuf.Timestamp
+	(*CloudOffer)(nil),                 // 0: console.v1.CloudOffer
+	(*DescribeRequest)(nil),            // 1: console.v1.DescribeRequest
+	(*DescribeResponse)(nil),           // 2: console.v1.DescribeResponse
+	(*IssueEndpointTokenRequest)(nil),  // 3: console.v1.IssueEndpointTokenRequest
+	(*IssueEndpointTokenResponse)(nil), // 4: console.v1.IssueEndpointTokenResponse
+	(v1.Scope)(0),                      // 5: common.scope.v1.Scope
+	(*timestamppb.Timestamp)(nil),      // 6: google.protobuf.Timestamp
 }
 var file_console_v1_console_proto_depIdxs = []int32{
 	0, // 0: console.v1.DescribeResponse.cloud:type_name -> console.v1.CloudOffer
-	5, // 1: console.v1.IssueCloudTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
-	1, // 2: console.v1.ConsoleService.Describe:input_type -> console.v1.DescribeRequest
-	3, // 3: console.v1.ConsoleService.IssueCloudToken:input_type -> console.v1.IssueCloudTokenRequest
-	2, // 4: console.v1.ConsoleService.Describe:output_type -> console.v1.DescribeResponse
-	4, // 5: console.v1.ConsoleService.IssueCloudToken:output_type -> console.v1.IssueCloudTokenResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	5, // 1: console.v1.IssueEndpointTokenRequest.scopes:type_name -> common.scope.v1.Scope
+	6, // 2: console.v1.IssueEndpointTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
+	1, // 3: console.v1.ConsoleService.Describe:input_type -> console.v1.DescribeRequest
+	3, // 4: console.v1.ConsoleService.IssueEndpointToken:input_type -> console.v1.IssueEndpointTokenRequest
+	2, // 5: console.v1.ConsoleService.Describe:output_type -> console.v1.DescribeResponse
+	4, // 6: console.v1.ConsoleService.IssueEndpointToken:output_type -> console.v1.IssueEndpointTokenResponse
+	5, // [5:7] is the sub-list for method output_type
+	3, // [3:5] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_console_v1_console_proto_init() }

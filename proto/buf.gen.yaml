@@ -6,12 +6,14 @@ inputs:
       - proto/cli/help
       - proto/cli/result
       - proto/cli/stream
-      - proto/cloud
       - proto/common/environment
       - proto/common/plan
       - proto/common/progress
+      - proto/common/scope
       - proto/console
+      - proto/endpoint
       - proto/provider
+      - proto/runner
 plugins:
   - local: protoc-gen-es
     out: packages/ocel/src/gen/proto

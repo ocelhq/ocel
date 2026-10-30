@@ -10,6 +10,7 @@ import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v11 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	_ "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -464,7 +465,6 @@ type GetValueRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tier          v1.Tier                `protobuf:"varint,1,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Coordinate    *Coordinate            `protobuf:"bytes,2,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
-	Reveal        bool                   `protobuf:"varint,3,opt,name=reveal,proto3" json:"reveal,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -513,18 +513,10 @@ func (x *GetValueRequest) GetCoordinate() *Coordinate {
 	return nil
 }
 
-func (x *GetValueRequest) GetReveal() bool {
-	if x != nil {
-		return x.Reveal
-	}
-	return false
-}
-
 type GetValueResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Found         bool                   `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
 	Metadata      *ValueMetadata         `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -571,13 +563,6 @@ func (x *GetValueResponse) GetMetadata() *ValueMetadata {
 		return x.Metadata
 	}
 	return nil
-}
-
-func (x *GetValueResponse) GetValue() string {
-	if x != nil {
-		return x.Value
-	}
-	return ""
 }
 
 type RevealValuesRequest struct {
@@ -2698,6 +2683,7 @@ type SyncEnvSourceRequest struct {
 	//	*SyncEnvSourceRequest_Registered
 	From          isSyncEnvSourceRequest_From `protobuf_oneof:"from"`
 	Folders       []string                    `protobuf:"bytes,4,rep,name=folders,proto3" json:"folders,omitempty"`
+	Environment   string                      `protobuf:"bytes,6,opt,name=environment,proto3" json:"environment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2776,6 +2762,13 @@ func (x *SyncEnvSourceRequest) GetFolders() []string {
 		return x.Folders
 	}
 	return nil
+}
+
+func (x *SyncEnvSourceRequest) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
 }
 
 type isSyncEnvSourceRequest_From interface {
@@ -3134,7 +3127,7 @@ var File_provider_variablestore_v1_variablestore_proto protoreflect.FileDescript
 
 const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\n" +
-	"-provider/variablestore/v1/variablestore.proto\x12\x19provider.variablestore.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a!common/bindings/v1/bindings.proto\"\xda\x04\n" +
+	"-provider/variablestore/v1/variablestore.proto\x12\x19provider.variablestore.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a!common/bindings/v1/bindings.proto\x1a\x1bcommon/scope/v1/scope.proto\"\xda\x04\n" +
 	"\n" +
 	"Coordinate\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xaa\x02\n" +
@@ -3176,17 +3169,15 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x125\n" +
 	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\"V\n" +
 	"\x12ListValuesResponse\x12@\n" +
-	"\x06values\x18\x01 \x03(\v2(.provider.variablestore.v1.ValueMetadataR\x06values\"\xb3\x01\n" +
+	"\x06values\x18\x01 \x03(\v2(.provider.variablestore.v1.ValueMetadataR\x06values\"\xa9\x01\n" +
 	"\x0fGetValueRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x12M\n" +
 	"\n" +
 	"coordinate\x18\x02 \x01(\v2%.provider.variablestore.v1.CoordinateB\x06\xbaH\x03\xc8\x01\x01R\n" +
-	"coordinate\x12\x16\n" +
-	"\x06reveal\x18\x03 \x01(\bR\x06reveal\"\x89\x01\n" +
+	"coordinateJ\x04\b\x03\x10\x04R\x06reveal\"{\n" +
 	"\x10GetValueResponse\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12D\n" +
-	"\bmetadata\x18\x02 \x01(\v2(.provider.variablestore.v1.ValueMetadataR\bmetadata\x12\x19\n" +
-	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\"\xc4\x01\n" +
+	"\bmetadata\x18\x02 \x01(\v2(.provider.variablestore.v1.ValueMetadataR\bmetadataJ\x04\b\x03\x10\x04R\x05value\"\xc4\x01\n" +
 	"\x13RevealValuesRequest\x129\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\x125\n" +
 	"\x04slug\x18\x02 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12;\n" +
@@ -3353,7 +3344,7 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\x11CredentialRefusal\x12\x1a\n" +
 	"\bvariable\x18\x01 \x01(\tR\bvariable\x12\x14\n" +
 	"\x05unset\x18\x02 \x01(\bR\x05unset\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xcc\x04\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xb8\a\n" +
 	"\x14SyncEnvSourceRequest\x12\xba\x01\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\x88\x01\xbaH\x84\x01\xba\x01\x80\x01\n" +
 	"\x1cvariablestore.envsource.tier\x12Pan env source is kept per deployed tier: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x125\n" +
@@ -3363,7 +3354,10 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\n" +
 	"registered\x18\x05 \x01(\v2..provider.variablestore.v1.RegisteredEnvSourceH\x00R\n" +
 	"registered\x12\x97\x01\n" +
-	"\afolders\x18\x04 \x03(\tB}\xbaHz\x92\x01w\x18\x01\"srq2o^(/([^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.[^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.\\.[^/#\\x00-\\x1f\\x7f]+))*$R\afoldersB\r\n" +
+	"\afolders\x18\x04 \x03(\tB}\xbaHz\x92\x01w\x18\x01\"srq2o^(/([^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.[^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.\\.[^/#\\x00-\\x1f\\x7f]+))*$R\afolders\x12\xb6\x01\n" +
+	"\venvironment\x18\x06 \x01(\tB\x93\x01\xbaH\x8f\x01\xba\x01t\n" +
+	"#variablestore.environment.tier_wide\x128\"*\" is reserved: it names the value that binds tier-wide\x1a\x13!this.contains('*')r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\venvironment:\xb0\x01\xbaH\xac\x01\x1a\xa9\x01\n" +
+	"#variablestore.envsource.environment\x12Xproduction has a single environment: name a preview environment only on the preview tier\x1a(this.environment == '' || this.tier == 1B\r\n" +
 	"\x04from\x12\x05\xbaH\x02\b\x01\"\x15\n" +
 	"\x13RegisteredEnvSource\"\x8c\x02\n" +
 	"\x15SyncEnvSourceResponse\x12B\n" +
@@ -3390,26 +3384,26 @@ const file_provider_variablestore_v1_variablestore_proto_rawDesc = "" +
 	"\x11awaiting_approval\x18\x01 \x01(\bR\x10awaitingApproval\x12I\n" +
 	"\bmetadata\x18\x02 \x01(\v2(.provider.variablestore.v1.ValueMetadataH\x00R\bmetadata\x88\x01\x01\x12\x18\n" +
 	"\acreated\x18\x03 \x01(\bR\acreatedB\v\n" +
-	"\t_metadata2\xb5\x0e\n" +
-	"\x14VariableStoreService\x12c\n" +
-	"\bSetValue\x12*.provider.variablestore.v1.SetValueRequest\x1a+.provider.variablestore.v1.SetValueResponse\x12i\n" +
+	"\t_metadata2\x97\x0f\n" +
+	"\x14VariableStoreService\x12i\n" +
+	"\bSetValue\x12*.provider.variablestore.v1.SetValueRequest\x1a+.provider.variablestore.v1.SetValueResponse\"\x04\x98\xb5\x18\x04\x12o\n" +
 	"\n" +
-	"ListValues\x12,.provider.variablestore.v1.ListValuesRequest\x1a-.provider.variablestore.v1.ListValuesResponse\x12c\n" +
-	"\bGetValue\x12*.provider.variablestore.v1.GetValueRequest\x1a+.provider.variablestore.v1.GetValueResponse\x12o\n" +
-	"\fRevealValues\x12..provider.variablestore.v1.RevealValuesRequest\x1a/.provider.variablestore.v1.RevealValuesResponse\x12l\n" +
-	"\vDeleteValue\x12-.provider.variablestore.v1.DeleteValueRequest\x1a..provider.variablestore.v1.DeleteValueResponse\x12o\n" +
-	"\fSetReference\x12..provider.variablestore.v1.SetReferenceRequest\x1a/.provider.variablestore.v1.SetReferenceResponse\x12u\n" +
-	"\x0eListReferences\x120.provider.variablestore.v1.ListReferencesRequest\x1a1.provider.variablestore.v1.ListReferencesResponse\x12o\n" +
-	"\fListVersions\x12..provider.variablestore.v1.ListVersionsRequest\x1a/.provider.variablestore.v1.ListVersionsResponse\x12i\n" +
+	"ListValues\x12,.provider.variablestore.v1.ListValuesRequest\x1a-.provider.variablestore.v1.ListValuesResponse\"\x04\x98\xb5\x18\x03\x12i\n" +
+	"\bGetValue\x12*.provider.variablestore.v1.GetValueRequest\x1a+.provider.variablestore.v1.GetValueResponse\"\x04\x98\xb5\x18\x03\x12u\n" +
+	"\fRevealValues\x12..provider.variablestore.v1.RevealValuesRequest\x1a/.provider.variablestore.v1.RevealValuesResponse\"\x04\x98\xb5\x18\x05\x12r\n" +
+	"\vDeleteValue\x12-.provider.variablestore.v1.DeleteValueRequest\x1a..provider.variablestore.v1.DeleteValueResponse\"\x04\x98\xb5\x18\x04\x12u\n" +
+	"\fSetReference\x12..provider.variablestore.v1.SetReferenceRequest\x1a/.provider.variablestore.v1.SetReferenceResponse\"\x04\x98\xb5\x18\x04\x12{\n" +
+	"\x0eListReferences\x120.provider.variablestore.v1.ListReferencesRequest\x1a1.provider.variablestore.v1.ListReferencesResponse\"\x04\x98\xb5\x18\x03\x12u\n" +
+	"\fListVersions\x12..provider.variablestore.v1.ListVersionsRequest\x1a/.provider.variablestore.v1.ListVersionsResponse\"\x04\x98\xb5\x18\x03\x12o\n" +
 	"\n" +
-	"SetBinding\x12,.provider.variablestore.v1.SetBindingRequest\x1a-.provider.variablestore.v1.SetBindingResponse\x12r\n" +
-	"\rRemoveBinding\x12/.provider.variablestore.v1.RemoveBindingRequest\x1a0.provider.variablestore.v1.RemoveBindingResponse\x12o\n" +
-	"\fListBindings\x12..provider.variablestore.v1.ListBindingsRequest\x1a/.provider.variablestore.v1.ListBindingsResponse\x12r\n" +
-	"\rSyncEnvSource\x12/.provider.variablestore.v1.SyncEnvSourceRequest\x1a0.provider.variablestore.v1.SyncEnvSourceResponse\x12~\n" +
-	"\x11DescribeEnvSource\x123.provider.variablestore.v1.DescribeEnvSourceRequest\x1a4.provider.variablestore.v1.DescribeEnvSourceResponse\x12~\n" +
-	"\x11SetEnvSourceValue\x123.provider.variablestore.v1.SetEnvSourceValueRequest\x1a4.provider.variablestore.v1.SetEnvSourceValueResponse\x12r\n" +
-	"\rPublishValues\x12/.provider.variablestore.v1.PublishValuesRequest\x1a0.provider.variablestore.v1.PublishValuesResponse\x12x\n" +
-	"\x0fUnpublishValues\x121.provider.variablestore.v1.UnpublishValuesRequest\x1a2.provider.variablestore.v1.UnpublishValuesResponseBLZJgithub.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1;variablestorev1b\x06proto3"
+	"SetBinding\x12,.provider.variablestore.v1.SetBindingRequest\x1a-.provider.variablestore.v1.SetBindingResponse\"\x04\x98\xb5\x18\x04\x12x\n" +
+	"\rRemoveBinding\x12/.provider.variablestore.v1.RemoveBindingRequest\x1a0.provider.variablestore.v1.RemoveBindingResponse\"\x04\x98\xb5\x18\x04\x12u\n" +
+	"\fListBindings\x12..provider.variablestore.v1.ListBindingsRequest\x1a/.provider.variablestore.v1.ListBindingsResponse\"\x04\x98\xb5\x18\x03\x12x\n" +
+	"\rSyncEnvSource\x12/.provider.variablestore.v1.SyncEnvSourceRequest\x1a0.provider.variablestore.v1.SyncEnvSourceResponse\"\x04\x98\xb5\x18\x04\x12\x84\x01\n" +
+	"\x11DescribeEnvSource\x123.provider.variablestore.v1.DescribeEnvSourceRequest\x1a4.provider.variablestore.v1.DescribeEnvSourceResponse\"\x04\x98\xb5\x18\x03\x12\x84\x01\n" +
+	"\x11SetEnvSourceValue\x123.provider.variablestore.v1.SetEnvSourceValueRequest\x1a4.provider.variablestore.v1.SetEnvSourceValueResponse\"\x04\x98\xb5\x18\x04\x12x\n" +
+	"\rPublishValues\x12/.provider.variablestore.v1.PublishValuesRequest\x1a0.provider.variablestore.v1.PublishValuesResponse\"\x04\x98\xb5\x18\x04\x12~\n" +
+	"\x0fUnpublishValues\x121.provider.variablestore.v1.UnpublishValuesRequest\x1a2.provider.variablestore.v1.UnpublishValuesResponse\"\x04\x98\xb5\x18\x04BLZJgithub.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1;variablestorev1b\x06proto3"
 
 var (
 	file_provider_variablestore_v1_variablestore_proto_rawDescOnce sync.Once

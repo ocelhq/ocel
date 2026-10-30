@@ -11,93 +11,180 @@ import "common/bindings/v1/bindings.proto";
 import "common/environment/v1/environment.proto";
 import "common/plan/v1/plan.proto";
 import "common/progress/v1/progress.proto";
+import "common/scope/v1/scope.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "provider/cost/v1/cost.proto";
 
 service ProviderService {
-    rpc Configure(ConfigureRequest) returns (ConfigureResponse);
+    rpc Configure(ConfigureRequest) returns (ConfigureResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc ProvisionInfra(ProvisionInfraRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc ProvisionInfra(ProvisionInfraRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc RenewDeployLease(RenewDeployLeaseRequest) returns (RenewDeployLeaseResponse);
+    rpc RenewDeployLease(RenewDeployLeaseRequest) returns (RenewDeployLeaseResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc AbandonDeploy(AbandonDeployRequest) returns (AbandonDeployResponse);
+    rpc AbandonDeploy(AbandonDeployRequest) returns (AbandonDeployResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc Deploy(DeployRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc Deploy(DeployRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc Bootstrap(BootstrapRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc Bootstrap(BootstrapRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc DescribeBootstrap(DescribeBootstrapRequest) returns (DescribeBootstrapResponse);
+    rpc DescribeBootstrap(DescribeBootstrapRequest) returns (DescribeBootstrapResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc GetCredentialPermissions(CredentialPermissionsRequest) returns (CredentialPermissionsResponse);
+    rpc GetCredentialPermissions(CredentialPermissionsRequest) returns (CredentialPermissionsResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc RemoveBootstrap(BootstrapScope) returns (stream common.progress.v1.OperationEvent);
+    rpc RemoveBootstrap(BootstrapScope) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc PlanRemoveBootstrap(BootstrapScope) returns (common.plan.v1.ChangePlan);
+    rpc PlanRemoveBootstrap(BootstrapScope) returns (common.plan.v1.ChangePlan) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc RemoveEnvironment(RemoveEnvironmentRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc RemoveEnvironment(RemoveEnvironmentRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc RemoveProject(ProjectRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc RemoveProject(ProjectRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc PlanRemoveProject(ProjectRequest) returns (common.plan.v1.ChangePlan);
+    rpc PlanRemoveProject(ProjectRequest) returns (common.plan.v1.ChangePlan) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
+    rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc GetEnvironment(GetEnvironmentRequest) returns (GetEnvironmentResponse);
+    rpc GetEnvironment(GetEnvironmentRequest) returns (GetEnvironmentResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc EnsurePreviewAlias(EnsurePreviewAliasRequest) returns (EnsurePreviewAliasResponse);
+    rpc EnsurePreviewAlias(EnsurePreviewAliasRequest) returns (EnsurePreviewAliasResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc ForgetPreviewAlias(ForgetPreviewAliasRequest) returns (ForgetPreviewAliasResponse);
+    rpc ForgetPreviewAlias(ForgetPreviewAliasRequest) returns (ForgetPreviewAliasResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc GetProtection(GetProtectionRequest) returns (GetProtectionResponse);
+    rpc GetProtection(GetProtectionRequest) returns (GetProtectionResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc ChangeProtection(ChangeProtectionRequest) returns (ChangeProtectionResponse);
+    rpc RevealProtectionPassword(RevealProtectionPasswordRequest) returns (RevealProtectionPasswordResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc PublishProtection(PublishProtectionRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc ChangeProtection(ChangeProtectionRequest) returns (ChangeProtectionResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc Preflight(PreflightRequest) returns (stream PreflightEvent);
+    rpc PublishProtection(PublishProtectionRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
+    rpc Preflight(PreflightRequest) returns (stream PreflightEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc Rollback(RollbackRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc RemoveStalePromotions(RemoveStalePromotionsRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc Rollback(RollbackRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc UsePreviewWildcard(UsePreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc RemoveStalePromotions(RemoveStalePromotionsRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc GetPreviewWildcard(PreviewWildcardRequest) returns (GetPreviewWildcardResponse);
+    rpc UsePreviewWildcard(UsePreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc PlanRemovePreviewWildcard(PreviewWildcardRequest) returns (common.plan.v1.ChangePlan);
+    rpc GetPreviewWildcard(PreviewWildcardRequest) returns (GetPreviewWildcardResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc RemovePreviewWildcard(PreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc PlanRemovePreviewWildcard(PreviewWildcardRequest) returns (common.plan.v1.ChangePlan) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc AddHostname(HostnameRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc RemovePreviewWildcard(PreviewWildcardRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc RemoveHostname(HostnameRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc AddHostname(HostnameRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc GetHostnameStatus(HostnameRequest) returns (GetHostnameStatusResponse);
+    rpc RemoveHostname(HostnameRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc DescribeConnectorTarget(DescribeConnectorTargetRequest) returns (DescribeConnectorTargetResponse);
+    rpc GetHostnameStatus(HostnameRequest) returns (GetHostnameStatusResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc InstallConnector(InstallConnectorRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc DescribeConnectorTarget(DescribeConnectorTargetRequest) returns (DescribeConnectorTargetResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc RemoveConnector(RemoveConnectorRequest) returns (stream common.progress.v1.OperationEvent);
+    rpc InstallConnector(InstallConnectorRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc Shape(ShapeRequest) returns (provider.cost.v1.ResourceSet);
+    rpc RemoveConnector(RemoveConnectorRequest) returns (stream common.progress.v1.OperationEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc Confirm(ConfirmRequest) returns (ConfirmResponse);
+    rpc Inventory(InventoryRequest) returns (provider.cost.v1.ResourceSet) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc ReadLogs(ReadLogsRequest) returns (stream ReadLogsResponse);
+    rpc Confirm(ConfirmRequest) returns (ConfirmResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc ForwardPorts(ForwardPortsRequest) returns (stream ForwardPortsEvent);
+    rpc ReadLogs(ReadLogsRequest) returns (stream ReadLogsResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+    rpc ForwardPorts(ForwardPortsRequest) returns (stream ForwardPortsEvent) {
+      option (common.scope.v1.required) = SCOPE_APPS_WRITE;
+    }
 
-    rpc GetProject(GetProjectRequest) returns (GetProjectResponse);
+    rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 
-    rpc DescribeProject(DescribeProjectRequest) returns (DescribeProjectResponse);
+    rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
+
+    rpc DescribeProject(DescribeProjectRequest) returns (DescribeProjectResponse) {
+      option (common.scope.v1.required) = SCOPE_APPS_READ;
+    }
 }
 
 message ProviderConfig {
@@ -105,7 +192,7 @@ message ProviderConfig {
 
   repeated string transforms = 2;
 
-  string slug = 3;
+  string slug = 3 [(common.scope.v1.project_slug) = true];
 
   string project_dir = 4 [(buf.validate.field).string.min_len = 1];
 
@@ -117,7 +204,7 @@ message WebIdentity {
 
   string identity_provider = 2 [(buf.validate.field).string.min_len = 1];
 
-  string principal = 3 [(buf.validate.field).string.min_len = 1];
+  string principal = 3;
 
   string session_name = 4;
 }
@@ -126,6 +213,14 @@ message ConfigureRequest {
   ProviderConfig config = 1 [(buf.validate.field).required = true];
 
   EdgeSelection edge = 2;
+}
+
+message DeployedSettings {
+  google.protobuf.Struct options = 1;
+
+  repeated string transforms = 2;
+
+  EdgeSelection edge = 3;
 }
 
 message ConfigureResponse {
@@ -146,6 +241,8 @@ message ProviderFacts {
   EdgeFacts edge = 9;
 
   WebIdentityFacts web_identity = 10;
+
+  bool connector_runs_jobs = 11;
 }
 
 message WebIdentityFacts {
@@ -172,7 +269,7 @@ message CacheTagLimits {
 }
 
 message UsePreviewWildcardRequest {
-  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1];
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1, (common.scope.v1.project_tier) = true];
 
   string base_domain = 2;
 
@@ -180,7 +277,7 @@ message UsePreviewWildcardRequest {
 }
 
 message PreviewWildcardRequest {
-  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1];
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.const = 1, (common.scope.v1.project_tier) = true];
 
   EdgeSelection edge = 2;
 }
@@ -198,7 +295,7 @@ message ConfiguredHostname {
 }
 
 message HostnameRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   repeated ConfiguredHostname configured = 2;
 
@@ -256,7 +353,7 @@ message ProductionHostname {
 message Manifest {
   repeated ManifestResource resources = 2;
 
-  string slug = 4 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 4 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   repeated TierDomains domains = 5;
 
@@ -464,7 +561,7 @@ message ProvisionInfraRequest {
 }
 
 message RenewDeployLeaseRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   common.environment.v1.Environment environment = 2;
 
@@ -474,7 +571,7 @@ message RenewDeployLeaseRequest {
 message RenewDeployLeaseResponse {}
 
 message AbandonDeployRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   common.environment.v1.Environment environment = 2;
 
@@ -483,7 +580,7 @@ message AbandonDeployRequest {
 
 message AbandonDeployResponse {}
 
-message ShapeRequest {
+message InventoryRequest {
   Manifest manifest = 1 [(buf.validate.field).required = true];
 
   common.environment.v1.Environment environment = 2;
@@ -504,7 +601,7 @@ message ImageRegistry {
 }
 
 message BootstrapRequest {
-  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true, (common.scope.v1.project_tier) = true];
 
   bool force = 2;
 
@@ -541,7 +638,7 @@ message TierIdentity {
 }
 
 message DescribeBootstrapRequest {
-  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true, (common.scope.v1.project_tier) = true];
 
   EdgeSelection edge = 2;
 
@@ -649,7 +746,7 @@ message CredentialPermissionsRequest {
 
   EdgeSelection edge = 2;
 
-  common.environment.v1.Tier tier = 3 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  common.environment.v1.Tier tier = 3 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}, (common.scope.v1.project_tier) = true];
 }
 
 message CredentialPermissionsResponse {
@@ -679,7 +776,7 @@ message EdgeSelection {
 }
 
 message BootstrapScope {
-  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true, (common.scope.v1.project_tier) = true];
 
   EdgeSelection edge = 2;
 
@@ -690,7 +787,7 @@ message BootstrapScope {
 message RemoveEnvironmentRequest {
   common.environment.v1.Environment environment = 1;
 
-  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   EdgeSelection edge = 3;
 
@@ -698,7 +795,7 @@ message RemoveEnvironmentRequest {
 }
 
 message ProjectRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   common.environment.v1.Environment environment = 2;
 
@@ -731,7 +828,13 @@ message ProjectSummary {
 }
 
 message GetProjectRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
+
+  repeated common.environment.v1.Tier tiers = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    unique: true
+    items: {enum: {defined_only: true, not_in: [0]}}
+  }];
 }
 
 message GetProjectResponse {
@@ -743,7 +846,7 @@ message GetProjectResponse {
 }
 
 message DescribeProjectRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 }
 
 message DescribeProjectResponse {
@@ -783,7 +886,7 @@ message SharedPart {
 }
 
 message ListEnvironmentsRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 }
 
 message ListEnvironmentsResponse {
@@ -791,7 +894,7 @@ message ListEnvironmentsResponse {
 }
 
 message GetEnvironmentRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   common.environment.v1.Environment environment = 2;
 }
@@ -812,7 +915,7 @@ message PreviewEnvironment {
 }
 
 message EnsurePreviewAliasRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   common.environment.v1.Environment environment = 2;
 
@@ -835,7 +938,7 @@ message EnsurePreviewAliasResponse {
 }
 
 message ForgetPreviewAliasRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   common.environment.v1.Environment environment = 2;
 
@@ -845,11 +948,12 @@ message ForgetPreviewAliasRequest {
 message ForgetPreviewAliasResponse {}
 
 message GetProtectionRequest {
-  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}, (common.scope.v1.project_tier) = true];
 
-  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
-  bool reveal_password = 3;
+  reserved 3;
+  reserved "reveal_password";
 
   EdgeSelection edge = 4;
 }
@@ -857,7 +961,8 @@ message GetProtectionRequest {
 message GetProtectionResponse {
   bool recorded = 1;
 
-  string password = 2 [debug_redact = true];
+  reserved 2;
+  reserved "password";
 
   repeated string bypass_secret_ids = 3;
 
@@ -866,10 +971,22 @@ message GetProtectionResponse {
   bool enabled = 5;
 }
 
-message ChangeProtectionRequest {
-  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+message RevealProtectionPasswordRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}, (common.scope.v1.project_tier) = true];
 
-  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
+}
+
+message RevealProtectionPasswordResponse {
+  bool recorded = 1;
+
+  string password = 2 [debug_redact = true];
+}
+
+message ChangeProtectionRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}, (common.scope.v1.project_tier) = true];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   EdgeSelection edge = 3;
 
@@ -895,9 +1012,9 @@ message ChangeProtectionResponse {
 }
 
 message PublishProtectionRequest {
-  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}];
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum = {defined_only: true, not_in: [0]}, (common.scope.v1.project_tier) = true];
 
-  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   EdgeSelection edge = 3;
 }
@@ -915,9 +1032,9 @@ message RevokeBypassSecret {
 }
 
 message PreflightRequest {
-  common.environment.v1.Tier required_tier = 1 [(buf.validate.field).enum.defined_only = true];
+  common.environment.v1.Tier required_tier = 1 [(buf.validate.field).enum.defined_only = true, (common.scope.v1.project_tier) = true];
 
-  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE, (common.scope.v1.project_slug) = true];
 
   repeated string domains = 3;
 
@@ -1078,7 +1195,7 @@ message PromotionHistoryEntry {
 }
 
 message ListPromotionsRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   EdgeSelection edge = 2;
 }
@@ -1088,7 +1205,7 @@ message ListPromotionsResponse {
 }
 
 message RollbackRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   string to = 2;
 
@@ -1100,7 +1217,7 @@ message RollbackRequest {
 }
 
 message RemoveStalePromotionsRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   int32 keep_n = 2 [(buf.validate.field).int32.gte = 0];
 
@@ -1145,6 +1262,8 @@ enum RefusalCode {
   REFUSAL_CODE_UNKNOWN_OPTION = 5;
 
   REFUSAL_CODE_UNSUPPORTED = 6;
+
+  REFUSAL_CODE_NEEDS_RUNNER = 7;
 }
 
 message DescribeConnectorTargetRequest {}
@@ -1177,12 +1296,22 @@ message InstallConnectorRequest {
   bytes config_json = 3 [(buf.validate.field).bytes.min_len = 1];
 
   string compute = 4 [(buf.validate.field).string = {in: ["serverless", "container"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+
+  ConnectorRunner runner = 5;
+}
+
+message ConnectorRunner {
+  string cpus = 1 [(buf.validate.field).string = {pattern: "^[0-9]+(\\.[0-9]+)?$", max_len: 16}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+
+  string memory = 2 [(buf.validate.field).string = {pattern: "^[0-9]+[bkmg]?$", max_len: 16}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+
+  string image = 3 [(buf.validate.field).string = {pattern: "^\\S+$", max_len: 512}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 }
 
 message RemoveConnectorRequest {}
 
 message ReadLogsRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   common.environment.v1.Environment environment = 2;
 
@@ -1264,7 +1393,7 @@ message LogNotice {
 }
 
 message ForwardPortsRequest {
-  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}, (common.scope.v1.project_slug) = true];
 
   common.environment.v1.Environment environment = 2;
 
