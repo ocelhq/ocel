@@ -1,4 +1,4 @@
-package gcp
+package control
 
 import (
 	"bytes"
@@ -83,9 +83,9 @@ func gcloudProject(ctx context.Context) (string, error) {
 	return project, nil
 }
 
-func (p *Provider) openClients(ctx context.Context) (*gcloud.Clients, error) {
-	opened, err := p.resolveClients(ctx)
-	if err != nil || opened.Emulated() || p.skipChecks {
+func (p *Provider) OpenClients(ctx context.Context) (*gcloud.Clients, error) {
+	opened, err := p.ResolveClients(ctx)
+	if err != nil || opened.Emulated() || p.SkipChecks {
 		return opened, err
 	}
 	p.mu.Lock()
@@ -102,13 +102,13 @@ func (p *Provider) openClients(ctx context.Context) (*gcloud.Clients, error) {
 	return opened, nil
 }
 
-func (p *Provider) resolveClients(ctx context.Context) (*gcloud.Clients, error) {
+func (p *Provider) ResolveClients(ctx context.Context) (*gcloud.Clients, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.resolved != nil {
-		return p.resolved, nil
+	if p.Clients != nil {
+		return p.Clients, nil
 	}
-	project := p.options.Project
+	project := p.Options.Project
 	if project == "" {
 		ambient, err := ambientProject(ctx)
 		if err != nil {
@@ -116,13 +116,13 @@ func (p *Provider) resolveClients(ctx context.Context) (*gcloud.Clients, error) 
 		}
 		project = ambient
 	}
-	names := names.New(p.namespace, project)
-	p.resolved = &gcloud.Clients{Names: names, Region: p.options.Region, Endpoint: p.endpoint, TagEndpoint: p.tagEndpoint, Records: p.KeyValues()}
-	return p.resolved, nil
+	names := names.New(p.Namespace, project)
+	p.Clients = &gcloud.Clients{Names: names, Region: p.Options.Region, Endpoint: p.Emulator, TagEndpoint: p.TagEmulator, Records: p.KeyValues()}
+	return p.Clients, nil
 }
 
 func (p *Provider) Names(ctx context.Context) (names.Names, error) {
-	resolved, err := p.resolveClients(ctx)
+	resolved, err := p.ResolveClients(ctx)
 	if err != nil {
 		return names.Names{}, err
 	}
@@ -137,10 +137,10 @@ func (p *Provider) Project(ctx context.Context) (string, error) {
 	return names.Project(), nil
 }
 
-func (p *Provider) emulated() bool { return p.endpoint != "" }
+func (p *Provider) Emulated() bool { return p.Emulator != "" }
 
-func (p *Provider) Region() string { return p.options.Region }
+func (p *Provider) Region() string { return p.Options.Region }
 
-func (p *Provider) services() *run.Services {
-	return &run.Services{OpenClients: p.openClients, Records: p.KeyValues()}
+func (p *Provider) Services() *run.Services {
+	return &run.Services{OpenClients: p.OpenClients, Records: p.KeyValues()}
 }

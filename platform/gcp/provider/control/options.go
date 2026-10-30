@@ -1,4 +1,4 @@
-package gcp
+package control
 
 type Options struct {
 	Project     string `json:"project,omitempty" doc:"The Google Cloud project to deploy into. Left off, from GOOGLE_CLOUD_PROJECT, CLOUDSDK_CORE_PROJECT or gcloud config."`

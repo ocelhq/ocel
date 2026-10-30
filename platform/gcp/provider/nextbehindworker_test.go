@@ -29,7 +29,7 @@ func behindTheWorkerWithItsSeed(t *testing.T) *wallet {
 	w.p = providerServing(w.server, t)
 	adoptBehindTheWorker(t, w.p)
 	var err error
-	if w.seed, err = cloudflareorigin.ReadPurgeSeed(context.Background(), w.p.resolved, environment.TierProduction, cloudflareKind); err != nil {
+	if w.seed, err = cloudflareorigin.ReadPurgeSeed(context.Background(), w.p.Clients, environment.TierProduction, cloudflareKind); err != nil {
 		t.Fatal(err)
 	}
 	w.spec = behindTheWorker(routedNextSpec())
@@ -148,7 +148,7 @@ func TestANextServiceBehindTheWorkerOnATierWithNoOriginSecretSeedsNoPrerenders(t
 	w := behindTheWorkerWithItsSeed(t)
 	root := plantPrerenders(t, map[string]string{"cache/blog/post.cache.json": "{}"})
 	w.server.Secrets.Mu.Lock()
-	delete(w.server.Secrets.Secrets, w.p.resolved.OriginSecret(environment.TierProduction, cloudflareKind))
+	delete(w.server.Secrets.Secrets, w.p.Clients.OriginSecret(environment.TierProduction, cloudflareKind))
 	w.server.Secrets.Mu.Unlock()
 
 	_, err := w.p.ProvisionFunctions(context.Background(), builtAt(w.spec, root), nil)

@@ -20,7 +20,7 @@ import (
 func bucketBootstrap(t *testing.T) (bootstrap.Engine, bootstrap.Survey, *storageServer) {
 	t.Helper()
 	p, server := servingStorage(t)
-	clients := &gcloud.Clients{Names: p.resolved.Names, Region: "europe-west1", Endpoint: p.resolved.Endpoint, Records: fake.NewKeyValues()}
+	clients := &gcloud.Clients{Names: p.Clients.Names, Region: "europe-west1", Endpoint: p.Clients.Endpoint, Records: fake.NewKeyValues()}
 	read := bootstrap.Survey{Tier: environment.TierProduction, Names: clients.Names, Project: "acme-prod", Region: "europe-west1", Buckets: naming.Buckets{}}
 	return bootstrap.Engine{Clients: clients}, read, server
 }

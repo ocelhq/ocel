@@ -65,12 +65,18 @@ func New(
 	return &Realtime{openClients: openClients, records: store, services: services, pushBinary: pushBinary, emulatorEndpoint: emulatorEndpoint}
 }
 
+var bindingTypes = []provider.BindingType{provider.BindingRealtime}
+
+func (p *Realtime) Listing() component.Component {
+	return component.Component{Types: bindingTypes, ListResources: p.ListResources}
+}
+
 func (p *Realtime) Component() component.Component {
 	return component.Component{
-		Types:         []provider.BindingType{provider.BindingRealtime},
+		Types:         bindingTypes,
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
-		Shape:         shapeRealtime,
+		Inventory:     inventoryRealtime,
 		Parts:         []component.Part{component.NewPart(bootstrap.Realtime)},
 		Accounts:      []bootstrap.Account{{Name: names.Names.RealtimeAccount, Purpose: Purpose}},
 	}
@@ -330,29 +336,29 @@ func (r realtimeEnvironment) place(ctx context.Context, keys map[string]string, 
 	return r.serveGateway(ctx, keys, progress)
 }
 
-func shapeRealtime(shape component.Shape, declared []provider.Resource) error {
-	tree, names, req, region, environment := shape.Tree, shape.Names, shape.Request, shape.Region, shape.Environment
-	secret, _ := bootstrap.Resource{Kind: bootstrap.KindSecret}.Shape(region)
+func inventoryRealtime(inventory component.Inventory, declared []provider.Resource) error {
+	tree, names, req, region, environment := inventory.Tree, inventory.Names, inventory.Request, inventory.Region, inventory.Environment
+	secret, _ := bootstrap.Resource{Kind: bootstrap.KindSecret}.Priced(region)
 	for _, resource := range declared {
 		namespace := realtimeNamespaceOf(resource.Declared, resource.Name)
 		signing, err := names.RealtimeSigningSecret(req.Deploy.Slug, req.Deploy.Env, namespace)
 		if err != nil {
 			return err
 		}
-		tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, signing, region, secret.Properties)
+		tree.Add(environment, inventory.Vendor, cost.SecretManagerSecretType, signing, region, secret.Properties)
 	}
 	keys, err := names.RealtimeKeysSecret(req.Deploy.Tier, req.Deploy.Slug, req.Deploy.Env)
 	if err != nil {
 		return err
 	}
-	tree.Add(environment, shape.Vendor, cost.SecretManagerSecretType, keys, region, secret.Properties)
+	tree.Add(environment, inventory.Vendor, cost.SecretManagerSecretType, keys, region, secret.Properties)
 	gateway, err := names.RealtimeGateway(req.Deploy.Slug, req.Deploy.Env)
 	if err != nil {
 		return err
 	}
-	tree.Add(environment, shape.Vendor, cost.PubSubTopicType, gateway, region, map[string]any{})
-	tree.Add(environment, shape.Vendor, cost.PubSubSubscriptionType, gateway, region, map[string]any{})
-	tree.Add(environment, shape.Vendor, cost.CloudRunServiceType, gateway, region, map[string]any{
+	tree.Add(environment, inventory.Vendor, cost.PubSubTopicType, gateway, region, map[string]any{})
+	tree.Add(environment, inventory.Vendor, cost.PubSubSubscriptionType, gateway, region, map[string]any{})
+	tree.Add(environment, inventory.Vendor, cost.CloudRunServiceType, gateway, region, map[string]any{
 		"location":      region,
 		"ingress":       run.IngressEverywhere,
 		"holds_sockets": true,

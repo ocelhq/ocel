@@ -72,7 +72,7 @@ func TestAWorkerServiceIsLabelledWithNoApp(t *testing.T) {
 	p := providerServing(server, t)
 	spec := functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{})
 	spec.App.Workers = []provider.WorkerSpec{{Name: "media"}}
-	account, _, err := ensureAccount(p, context.Background(), p.resolved, spec, nil)
+	account, _, err := ensureAccount(p, context.Background(), p.Clients, spec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

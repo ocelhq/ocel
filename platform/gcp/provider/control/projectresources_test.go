@@ -1,4 +1,4 @@
-package gcp
+package control
 
 import (
 	"slices"
@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
@@ -71,7 +72,7 @@ func TestProjectResourcesNameTheEntryNEGAndBackendServiceAnALBEdgeHoldsForAHost(
 		t.Fatalf("ReadHostResources() = %+v, %v", held, err)
 	}
 
-	listed := listProjectResources(t, provider.ProjectResourcesRequest{Tier: environment.TierProduction, Project: "shop", EdgeKind: alb.Kind, EdgeStack: state})
+	listed := listProjectResources(t, provider.ProjectResourcesRequest{Tier: environment.TierProduction, Project: "shop", EdgeKind: albresources.Kind, EdgeStack: state})
 
 	want := []provider.PhysicalResource{
 		{Kind: "certificatemanager:certificatemapentry", ID: held[0].CertificateMapEntry, Location: "global"},

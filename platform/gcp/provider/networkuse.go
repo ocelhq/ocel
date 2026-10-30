@@ -25,15 +25,15 @@ type networkUse struct {
 }
 
 func (p *Provider) newNetworkUse(deploy provider.DeploySpec) networkUse {
-	named := names.New(p.namespace, p.options.Project)
+	named := names.New(p.Namespace, p.Options.Project)
 	return networkUse{
 		pass:      p.transforms,
-		registry:  p.components(),
+		registry:  p.Components(),
 		allowed:   p.transformed(),
 		evaluated: &p.evaluatedPlacements,
 		own: []string{
 			named.Network(deploy.Tier), named.NetworkPath(deploy.Tier),
-			named.Subnetwork(deploy.Tier), named.SubnetworkPath(p.options.Region, deploy.Tier),
+			named.Subnetwork(deploy.Tier), named.SubnetworkPath(p.Options.Region, deploy.Tier),
 		},
 	}
 }
@@ -141,7 +141,7 @@ func (u networkUse) evaluate(ctx context.Context, req transform.Request) (surfac
 }
 
 func (p *Provider) partsUsedBy(ctx context.Context, pre provider.DeployPreflight) ([]string, error) {
-	parts, err := newDeployUse(pre).partNames(p.components())
+	parts, err := newDeployUse(pre).partNames(p.Components())
 	if err != nil {
 		return nil, err
 	}

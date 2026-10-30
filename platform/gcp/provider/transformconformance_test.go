@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 	"github.com/ocelhq/ocel/platform/gcp/provider/network"
 )
@@ -51,7 +52,7 @@ func leafPathsOf(prefix string, value any) []string {
 }
 
 func TestATransformPatchesExactlyThePathsTheProviderTranslates(t *testing.T) {
-	allowed := (&Provider{}).transformed()
+	allowed := newProvider(&control.Provider{}).transformed()
 	allowed[network.TransformKind] = network.Allowed()
 	root := transformtest.Root(t, map[string]string{"conformance.transform.ts": conformanceModule})
 

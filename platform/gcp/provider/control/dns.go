@@ -1,4 +1,4 @@
-package gcp
+package control
 
 import (
 	"github.com/ocelhq/ocel/pkg/edge"

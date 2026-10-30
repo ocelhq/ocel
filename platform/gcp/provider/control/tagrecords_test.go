@@ -1,12 +1,8 @@
-package gcp
+package control
 
 import (
 	"slices"
 	"testing"
-
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
 func TestTheTagRecordsOfAnISRPrefixAreReadThroughOneIndexOnPrefixThenWriteTime(t *testing.T) {
@@ -37,23 +33,5 @@ func TestNoTagRecordFieldAQueryNeverFiltersOnIsIndexed(t *testing.T) {
 	}
 	if slices.Contains(unindexedTagFields(), "prefix") {
 		t.Error("the prefix is exempted from indexing, and a prune ranges over it")
-	}
-}
-
-func TestNoTierKeepsADatabaseOfRunsOrTagRecordsAndADeployMayMakeEachProjectsOwn(t *testing.T) {
-	t.Parallel()
-
-	names := names.New("ocel", "acme-prod")
-	for _, tier := range googletest.BothTiers {
-		for _, item := range bootstrap.Resources(names, tier, false) {
-			if item.Kind == bootstrap.KindDatabase && item.Name != names.RecordsDatabase(tier) {
-				t.Errorf("a %s bootstrap provisions database %s, and every database but the tier's records is a project's own", tier, item.Name)
-			}
-		}
-	}
-	for _, offered := range composed(bootstrap.Engine{}).Parts() {
-		if offered.Name == "tasks" || offered.Name == "tag-database" {
-			t.Errorf("the bootstrap offers the %s part, and runs and tag records are kept in the database each project keeps its records in", offered.Name)
-		}
 	}
 }

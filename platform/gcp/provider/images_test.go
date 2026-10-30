@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -21,14 +22,14 @@ func pushing(t *testing.T, endpoint string) *Provider {
 	t.Helper()
 	names := names.New(provider.Namespace("ocel"), "acme-prod")
 	store := fake.NewKeyValues()
-	return &Provider{
-		options:   Options{Project: names.Project(), Region: "europe-west1"},
-		tokens:    handedToken("ya29.stub"),
-		endpoint:  endpoint,
-		namespace: names.Namespace(),
-		resolved:  googletest.WithTierBuckets(&gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: endpoint, Records: store}),
-		records:   store,
-	}
+	return newProvider(&control.Provider{
+		Options:   control.Options{Project: names.Project(), Region: "europe-west1"},
+		Tokens:    handedToken("ya29.stub"),
+		Emulator:  endpoint,
+		Namespace: names.Namespace(),
+		Clients:   googletest.WithTierBuckets(&gcloud.Clients{Names: names, Region: "europe-west1", Endpoint: endpoint, Records: store}),
+		Records:   store,
+	})
 }
 
 func namesOf(t *testing.T, p *Provider) names.Names {
@@ -51,7 +52,7 @@ func TestEachTierPushesToTheRepositoryItsBootstrapProvisioned(t *testing.T) {
 		if target.Server != "europe-west1-docker.pkg.dev" {
 			t.Errorf("EnsureImageRegistry(%s) server = %q, want the region's own Artifact Registry host", tier, target.Server)
 		}
-		if want := "acme-prod/" + p.resolved.Repository(tier); target.Namespace != want {
+		if want := "acme-prod/" + p.Clients.Repository(tier); target.Namespace != want {
 			t.Errorf("EnsureImageRegistry(%s) namespace = %q, want %q", tier, target.Namespace, want)
 		}
 		if target.Username != "oauth2accesstoken" {
@@ -61,7 +62,7 @@ func TestEachTierPushesToTheRepositoryItsBootstrapProvisioned(t *testing.T) {
 			t.Errorf("EnsureImageRegistry(%s) password = %q, want the access token this deploy has", tier, target.Password)
 		}
 	}
-	if p.resolved.Repository(environment.TierProduction) == p.resolved.Repository(environment.TierPreview) {
+	if p.Clients.Repository(environment.TierProduction) == p.Clients.Repository(environment.TierPreview) {
 		t.Error("both tiers push to one repository, and a tier keeps its images apart from the other tier's")
 	}
 }
@@ -74,7 +75,7 @@ func TestTheCoordinateAnImageLandsUnderIsTheRepositoryPathTheBootstrapNames(t *t
 		t.Fatal(err)
 	}
 	coordinate := target.ImageRef("web", "sha256-abc")
-	want := p.resolved.RepositoryPath("europe-west1", environment.TierProduction) + "/web:sha256-abc"
+	want := p.Clients.RepositoryPath("europe-west1", environment.TierProduction) + "/web:sha256-abc"
 	if coordinate != want {
 		t.Errorf("an image lands at %q, want %q", coordinate, want)
 	}

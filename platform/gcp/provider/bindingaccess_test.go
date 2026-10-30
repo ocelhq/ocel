@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	connect "connectrpc.com/connect"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -16,13 +17,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
 func TestAGCPProviderForwardsPorts(t *testing.T) {
 	t.Parallel()
 
-	p, err := NewProvider(Options{Project: "acme-prod", Region: "europe-west1"})
+	p, err := NewProvider(control.Options{Project: "acme-prod", Region: "europe-west1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +36,7 @@ func TestAGCPProviderForwardsPorts(t *testing.T) {
 func TestForwardingNoBindingTouchesNoCloud(t *testing.T) {
 	t.Parallel()
 
-	forwards, err := (&Provider{}).ForwardPorts(context.Background(), provider.PortForwardRequest{}, nil)
+	forwards, err := newProvider(&control.Provider{}).ForwardPorts(context.Background(), provider.PortForwardRequest{}, nil)
 
 	if err != nil || len(forwards) != 0 {
 		t.Errorf("ForwardPorts() of no binding = %v, %v, want nothing forwarded and nothing reached", forwards, err)

@@ -8,7 +8,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -265,12 +264,18 @@ func New(openClients func(ctx context.Context) (*gcloud.Clients, error), store r
 	return &Topic{openClients: openClients, records: store}
 }
 
+var bindingTypes = []provider.BindingType{provider.BindingTopic, provider.BindingTask}
+
+func (p *Topic) Listing() component.Component {
+	return component.Component{Types: bindingTypes, ListResources: p.ListResources}
+}
+
 func (p *Topic) Component() component.Component {
 	return component.Component{
-		Types:         []provider.BindingType{provider.BindingTopic, provider.BindingTask},
+		Types:         bindingTypes,
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
-		Shape:         shapeTopics,
+		Inventory:     inventoryTopics,
 		Transforms:    transformTargets(),
 		Parts:         []component.Part{component.NewPart(bootstrap.Topics)},
 		Accounts:      []bootstrap.Account{{Name: names.Names.PushAccount, Purpose: task.PushPurpose}},
@@ -283,37 +288,35 @@ func (p *Topic) Component() component.Component {
 	}
 }
 
-func shapeTopics(shape component.Shape, declared []provider.Resource) error {
-	req := shape.Request
-	scope := Names(shape.Names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
+func inventoryTopics(inventory component.Inventory, declared []provider.Resource) error {
+	req := inventory.Request
+	scope := Names(inventory.Names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
 	for _, resource := range declared {
 		topic := declaredTopicOf(resource)
 		name, err := scope.Topic(topic.declared)
 		if err != nil {
 			return err
 		}
-		retained, err := shapeRetention(shape, resource)
+		retained, err := pricedRetention(inventory, resource)
 		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubTopicType, name, shape.Region, retained.topic, retained.topicUnknown...)
+		inventory.Tree.Add(inventory.Environment, inventory.Vendor, cost.PubSubTopicType, name, inventory.Region, retained.topic, retained.topicUnknown...)
 		for _, consumer := range topic.spec.Consumers {
 			subscription, err := scope.Subscription(topic.declared, consumer.Name)
 			if err != nil {
 				return err
 			}
-			properties := map[string]any{"ack_deadline_seconds": int(PushCeiling.Seconds()), "enable_message_ordering": topic.spec.Ordered}
+			properties := map[string]any{"ack_deadline_seconds": int(topics.PushAckDeadline.Seconds()), "enable_message_ordering": topic.spec.Ordered}
 			maps.Copy(properties, retained.subscription)
-			shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubSubscriptionType, subscription, shape.Region, properties, retained.subscriptionUnknown...)
+			inventory.Tree.Add(inventory.Environment, inventory.Vendor, cost.PubSubSubscriptionType, subscription, inventory.Region, properties, retained.subscriptionUnknown...)
 		}
 		if topic.spec.Cron != "" {
-			shape.Tree.Add(shape.Environment, shape.Vendor, cost.SchedulerJobType, name, shape.Region, map[string]any{"region": shape.Region, "schedule": topic.spec.Cron})
+			inventory.Tree.Add(inventory.Environment, inventory.Vendor, cost.SchedulerJobType, name, inventory.Region, map[string]any{"region": inventory.Region, "schedule": topic.spec.Cron})
 		}
 	}
 	return nil
 }
-
-const PushCeiling = 600 * time.Second
 
 func publishURL(c *gcloud.Clients) string {
 	if c.Emulated() {

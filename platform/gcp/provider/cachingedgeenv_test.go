@@ -9,14 +9,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
 func TestANextServiceBehindAnEdgeThatPurgesByTagKeepsItsCacheTags(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
-	front, err := p.Edges().Open(alb.Kind, nil)
+	front, err := p.Edges().Open(albresources.Kind, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestANextServiceBehindAnEdgeThatPurgesByTagKeepsItsCacheTags(t *testing.T) 
 func TestANodeServiceBehindAnEdgeThatCachesResponsesIsToldItsRelease(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
-	front, err := p.Edges().Open(alb.Kind, nil)
+	front, err := p.Edges().Open(albresources.Kind, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestANextServiceBehindAnEdgeThatPurgesNothingByTagKeepsNoCacheTags(t *testi
 func TestANextServiceBehindAnEdgeThatCachesResponsesIsToldItsEdgeStoresWhateverItsHeadersAllow(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
-	front, err := p.Edges().Open(alb.Kind, nil)
+	front, err := p.Edges().Open(albresources.Kind, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

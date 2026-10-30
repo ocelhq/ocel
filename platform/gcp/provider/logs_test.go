@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 )
 
 type loggedGCP struct {
@@ -60,7 +61,7 @@ func TestLogsReadsEachTargetFromItsServiceAndRevision(t *testing.T) {
 	server := httptest.NewServer(stub)
 	t.Cleanup(server.Close)
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", server.URL)
-	p, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p, err := gcp.NewProvider(control.Options{Project: "acme-prod", Region: "europe-west1"})
 	if err != nil {
 		t.Fatalf("NewProvider() = %v", err)
 	}
@@ -123,7 +124,7 @@ func TestLogsReadsNothingFromAnEmptyTargetList(t *testing.T) {
 	server := httptest.NewServer(stub)
 	t.Cleanup(server.Close)
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", server.URL)
-	p, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p, err := gcp.NewProvider(control.Options{Project: "acme-prod", Region: "europe-west1"})
 	if err != nil {
 		t.Fatalf("NewProvider() = %v", err)
 	}
@@ -141,7 +142,7 @@ func TestLogsReadsNothingFromAnEmptyTargetList(t *testing.T) {
 }
 
 func TestEachCredentialIsGrantedTheRoleThatReadsLogEntries(t *testing.T) {
-	p, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p, err := gcp.NewProvider(control.Options{Project: "acme-prod", Region: "europe-west1"})
 	if err != nil {
 		t.Fatalf("NewProvider() = %v", err)
 	}
@@ -204,7 +205,7 @@ func tailingGCP(t *testing.T, stub *tailedGCP) provider.Provider {
 	go server.Serve(listener)
 	t.Cleanup(server.Stop)
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "http://"+listener.Addr().String())
-	p, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p, err := gcp.NewProvider(control.Options{Project: "acme-prod", Region: "europe-west1"})
 	if err != nil {
 		t.Fatalf("NewProvider() = %v", err)
 	}
@@ -360,7 +361,7 @@ func TestLogsRefuseAQueryOfNoTier(t *testing.T) {
 	server := httptest.NewServer(stub)
 	t.Cleanup(server.Close)
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", server.URL)
-	p, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p, err := gcp.NewProvider(control.Options{Project: "acme-prod", Region: "europe-west1"})
 	if err != nil {
 		t.Fatalf("NewProvider() = %v", err)
 	}

@@ -23,7 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/next"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 )
@@ -256,7 +256,7 @@ func TestAGuardedNextServiceBehindAnEdgeThatShieldsNothingIsRefused(t *testing.T
 }
 
 func TestANextServiceBehindAnEdgeThatRunsNoCodeRoutesItsOwnRequests(t *testing.T) {
-	for _, kind := range []edge.Kind{edge.None, alb.Kind} {
+	for _, kind := range []edge.Kind{edge.None, albresources.Kind} {
 		t.Run(string(kind), func(t *testing.T) {
 			server := &googletest.Run{}
 			p := providerServing(server, t)
@@ -304,7 +304,7 @@ func TestANextServiceBehindAnEdgeThatRunsCodeLeavesRoutingToIt(t *testing.T) {
 }
 
 func TestAGuardedNextServiceIsReleasedWhereItsIngressKeepsClientsOffIt(t *testing.T) {
-	for _, kind := range []edge.Kind{edge.None, alb.Kind} {
+	for _, kind := range []edge.Kind{edge.None, albresources.Kind} {
 		t.Run(string(kind), func(t *testing.T) {
 			server := &googletest.Run{}
 			p := providerServing(server, t)
@@ -348,7 +348,7 @@ func tagEmulatorEnv(t *testing.T, p *Provider, env map[string]string) {
 		t.Errorf("the Next service reads OCEL_FIRESTORE_ENDPOINT=%q, want host.docker.internal:8085", env["OCEL_FIRESTORE_ENDPOINT"])
 	}
 	storage, err := url.Parse(env["OCEL_STORAGE_ENDPOINT"])
-	floci, _ := url.Parse(p.endpoint)
+	floci, _ := url.Parse(p.Emulator)
 	if err != nil || storage.Hostname() != "host.docker.internal" || storage.Port() != floci.Port() {
 		t.Errorf("the Next service reads OCEL_STORAGE_ENDPOINT=%q, want host.docker.internal:%s", env["OCEL_STORAGE_ENDPOINT"], floci.Port())
 	}
@@ -357,7 +357,7 @@ func tagEmulatorEnv(t *testing.T, p *Provider, env map[string]string) {
 func TestANextServiceReadsItsTagsFromTheFirestoreEmulatorWhenTheLaneRunsOne(t *testing.T) {
 	server := &googletest.Run{}
 	p := providerServing(server, t)
-	p.tagEndpoint = "http://127.0.0.1:8085"
+	p.TagEmulator = "http://127.0.0.1:8085"
 	if _, err := p.ProvisionFunctions(context.Background(), routedNextSpec(), nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
