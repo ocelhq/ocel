@@ -7,7 +7,26 @@ import (
 	"testing"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
 )
+
+func TestThePublicFrontsLivenessPermissionCarriesAStatementIDLambdaAccepts(t *testing.T) {
+	t.Parallel()
+
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return publicInfraWork().run(pctx) }, pulumi.WithMocks("ocel-containers", "production--infra", rec)); err != nil {
+		t.Fatalf("run the container infrastructure program: %v", err)
+	}
+
+	permission := rec.recorded["aws:lambda/permission:Permission::ocel-prod-public-liveness/invoke"]
+	if len(permission) == 0 {
+		t.Fatal("the public front's liveness function has no invoke permission")
+	}
+	if id, ok := componenttest.LambdaAcceptsStatementID(permission); !ok {
+		t.Errorf("statementId = %q, which Lambda refuses; left unset, Pulumi derives it from the resource name and its '/'", id)
+	}
+}
 
 func TestEveryContainerInfraResourceIsNamedForWhatItIsInTheAccount(t *testing.T) {
 	t.Parallel()

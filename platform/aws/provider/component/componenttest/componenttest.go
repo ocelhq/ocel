@@ -1,6 +1,7 @@
 package componenttest
 
 import (
+	"regexp"
 	"slices"
 	"sync"
 	"testing"
@@ -19,6 +20,16 @@ const (
 	RandomTag      = "k3x9q2"
 	StateTableARN  = "arn:aws:dynamodb:us-east-1:1234:table/ocel-state"
 )
+
+var lambdaStatementID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,100}$`)
+
+func LambdaAcceptsStatementID(permission resource.PropertyMap) (string, bool) {
+	id, ok := permission["statementId"]
+	if !ok || !id.IsString() {
+		return "", false
+	}
+	return id.StringValue(), lambdaStatementID.MatchString(id.StringValue())
+}
 
 func Autonamed(args pulumi.MockResourceArgs) resource.PropertyMap {
 	state := args.Inputs.Copy()

@@ -157,6 +157,15 @@ func TestOnlyTheStagesAPIMayInvokeTheAuthorizer(t *testing.T) {
 	}
 }
 
+func TestTheAuthorizersInvokePermissionCarriesAStatementIDLambdaAccepts(t *testing.T) {
+	t.Parallel()
+
+	permission := registeredRealtime(t).InputsOf(t, component.TokenLambdaPermission, testAPI+"-authorizer/appsync-invoke")
+	if id, ok := componenttest.LambdaAcceptsStatementID(permission); !ok {
+		t.Errorf("statementId = %q, which Lambda refuses; left unset, Pulumi derives it from the resource name and its '/'", id)
+	}
+}
+
 func TestTheAuthorizersRoleIsBoundedAndReadsItsOwnAPIAlone(t *testing.T) {
 	t.Parallel()
 

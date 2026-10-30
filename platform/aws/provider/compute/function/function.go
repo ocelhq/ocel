@@ -293,9 +293,10 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 	if urlAuth == functionurl.AuthNone {
 		for _, permission := range functionurl.Public() {
 			args := &lambda.PermissionArgs{
-				Action:    pulumi.String(permission.Action),
-				Function:  fn.Name,
-				Principal: pulumi.String("*"),
+				Action:      pulumi.String(permission.Action),
+				Function:    fn.Name,
+				Principal:   pulumi.String("*"),
+				StatementId: pulumi.String(strings.ToLower(permission.Verb())),
 			}
 			if permission.URLAuthType != "" {
 				args.FunctionUrlAuthType = pulumi.String(permission.URLAuthType)

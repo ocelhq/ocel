@@ -214,10 +214,11 @@ func register(ctx *pulumi.Context, stack component.Stack, logicalName string, ar
 	}
 
 	perm, err := lambda.NewPermission(ctx, completerName.Part(completerInvokePermission), &lambda.PermissionArgs{
-		Action:    pulumi.String("lambda:InvokeFunction"),
-		Function:  completer.Name,
-		Principal: pulumi.String("s3.amazonaws.com"),
-		SourceArn: bucket.Arn,
+		Action:      pulumi.String("lambda:InvokeFunction"),
+		Function:    completer.Name,
+		Principal:   pulumi.String("s3.amazonaws.com"),
+		SourceArn:   bucket.Arn,
+		StatementId: pulumi.String(completerInvokePermission),
 	})
 	if err != nil {
 		return err
