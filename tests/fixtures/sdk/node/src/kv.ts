@@ -220,10 +220,11 @@ kvRoutes.post("/api/kv/native/blocking-pop", async (req, res) => {
 });
 
 kvRoutes.get("/api/kv/unauthenticated", async (_req, res) => {
-  const { hostname, port } = new URL(cache.connectionString);
+  const { protocol, hostname, port } = new URL(cache.connectionString);
   const bare = new Redis({
     host: hostname,
     port: Number(port),
+    tls: protocol === "rediss:" ? { servername: hostname } : undefined,
     lazyConnect: true,
     enableReadyCheck: false,
     maxRetriesPerRequest: 0,

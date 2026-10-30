@@ -171,6 +171,7 @@
     "@types/ioredis-mock": "^8.2.8",
     "@types/pg": "^8.20.0",
     "@types/ws": "^8.18.2",
+    "esbuild": "0.28.2",
     "express": "~5.0.0",
     "hono": "~4.11.1",
     "ioredis": "^5.11.1",
