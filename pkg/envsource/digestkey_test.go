@@ -173,7 +173,7 @@ func TestADigestKeyThatWillNotOpenStopsTheCopyAndIsNeverReplaced(t *testing.T) {
 	sync := &envsource.Sync{Store: resealed, Tier: scope.Tier}
 	registration := envsource.Registration{Project: "shop", Descriptor: execDescriptor(envsource.FormatJSON, "vault"), Folders: []string{""}}
 	register(t, resealed, registration)
-	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", map[variablestore.Cell]envsource.Value{cell("", "K"): value("v", "")})); err == nil {
+	if _, err := sync.CopyProjectFrom(ctx, registration, "", envsource.NewFixed("exec", map[variablestore.Cell]envsource.Value{cell("", "K"): value("v", "")})); err == nil {
 		t.Fatal("CopyProjectFrom() without a key it can open succeeded, want it refused rather than versioned some weaker way")
 	}
 	if _, err := store.Get(ctx, scope, tierWide("", "K"), false); !errors.Is(err, variablestore.ErrNotFound) {

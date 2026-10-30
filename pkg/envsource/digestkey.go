@@ -33,12 +33,14 @@ type sealedDigestKey struct {
 	Sealed []byte `json:"sealed"`
 }
 
+const digestKeyPurpose = "env source digest key"
+
 func digestKeyAt(tier environment.Tier) records.Key {
 	return records.Partition{Tier: tier, Root: RootDigestKey}.Key(digestKeyName)
 }
 
 func newDigestKeyAssociatedData(tier environment.Tier) seal.AssociatedData {
-	return seal.Bind("env source digest key", string(tier))
+	return seal.Bind(digestKeyPurpose, string(tier))
 }
 
 func EnsureDigestKey(ctx context.Context, store variablestore.Store, tier environment.Tier) (DigestKey, error) {
@@ -114,4 +116,18 @@ func writeLengthPrefixed(h hash.Hash, part string) {
 	binary.BigEndian.PutUint64(length[:], uint64(len(part)))
 	h.Write(length[:])
 	h.Write([]byte(part))
+}
+
+func ownerOfDigestKey(path []string) (records.Owner, bool) {
+	if len(path) == 1 && path[0] == digestKeyName {
+		return records.Owner{Shared: true}, true
+	}
+	return records.Owner{}, false
+}
+
+func OwnerOfAssociatedData(bound seal.AssociatedData) (records.Owner, bool) {
+	if bound.Purpose() == digestKeyPurpose {
+		return records.Owner{Shared: true}, true
+	}
+	return records.Owner{}, false
 }

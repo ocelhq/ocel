@@ -55,6 +55,47 @@ func (s Store) ForgetFromEnvSource(ctx context.Context, scope Scope, at Coordina
 	})
 }
 
+func (s Store) ForgetEnvSourceCopies(ctx context.Context, scope Scope, environment string) error {
+	if environment == "" || environment == TierWideEnvironment {
+		return fmt.Errorf("forget what an env source copied for %s: name the preview environment it was copied into, never the tier", scope.Project)
+	}
+	recorded, err := s.listUnder(ctx, cellsPrefix(scope))
+	if err != nil {
+		return fmt.Errorf("read %s's values: %w", scope.Project, err)
+	}
+	for _, entry := range recorded {
+		at, ok := cellOf(entry.Key)
+		if !ok || at.Environment != environment {
+			continue
+		}
+		copied := false
+		err := records.ForgetMatching(ctx, s.KeyValues, entry.Key, func(current records.Entry) (bool, error) {
+			var stored storedValue
+			if err := json.Unmarshal(current.Value, &stored); err != nil {
+				return false, fmt.Errorf("read %s: %w", at, err)
+			}
+			copied = stored.EnvSource != ""
+			return copied, nil
+		})
+		if err != nil {
+			return fmt.Errorf("forget %s: %w", at, err)
+		}
+		if !copied {
+			continue
+		}
+		versions, err := s.listUnder(ctx, historyPrefix(scope, at))
+		if err != nil {
+			return fmt.Errorf("read %s's versions: %w", at, err)
+		}
+		for _, version := range versions {
+			if err := records.Forget(ctx, s.KeyValues, version.Key); err != nil {
+				return fmt.Errorf("forget a version of %s: %w", at, err)
+			}
+		}
+	}
+	return nil
+}
+
 type Dereferenced struct {
 	Project string
 	Metadata

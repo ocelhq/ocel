@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/variablestore"
 	"github.com/ocelhq/ocel/pkg/variablestoreserver"
 )
 
@@ -380,7 +381,7 @@ func TestATierSwitchedBackToBuiltinKeepsEachCopiedValueAsOcelsOwn(t *testing.T) 
 	if _, err := syncEnvSource(variables, production, builtin); err != nil {
 		t.Fatal(err)
 	}
-	got, err := variables.GetValue(context.Background(), &variablestorev1.GetValueRequest{Tier: production, Coordinate: cell("DATABASE_URL"), Reveal: true})
+	got, err := revealOne(context.Background(), variables, production, cell("DATABASE_URL"))
 	if err != nil || got.GetValue() != "postgres://prod" || got.GetMetadata().GetEnvSource() != "" {
 		t.Fatalf("GetValue(DATABASE_URL) after the switch back = %q from %q, %v, want the value kept and named as ocel's own", got.GetValue(), got.GetMetadata().GetEnvSource(), err)
 	}
@@ -469,7 +470,7 @@ func TestAnExecEnvSourceIsWrittenAsTheOutputTheCallerReadAndIsNeverScheduled(t *
 	if synced.GetStatus().GetEnvSource() != "exec" || synced.GetStatus().GetScheduled() || synced.GetWritten() != 2 {
 		t.Fatalf("SyncEnvSource(exec) = %+v, want both values written and nothing scheduled", synced)
 	}
-	got, err := variables.GetValue(context.Background(), &variablestorev1.GetValueRequest{Tier: production, Coordinate: &variablestorev1.Coordinate{Slug: slug, Folder: "/web", Key: "API_KEY"}, Reveal: true})
+	got, err := revealOne(context.Background(), variables, production, &variablestorev1.Coordinate{Slug: slug, Folder: "/web", Key: "API_KEY"})
 	if err != nil || got.GetValue() != "k" || got.GetMetadata().GetEnvSource() != "exec" {
 		t.Fatalf("GetValue() = %q from %q, %v", got.GetValue(), got.GetMetadata().GetEnvSource(), err)
 	}
@@ -548,7 +549,7 @@ func TestAnEnvSourceWritingValuesUpdatesOneItHoldsThenCopiesIt(t *testing.T) {
 	if !slices.Equal(fake.updated, []string{"/web API_KEY"}) || fake.secrets["/web"]["API_KEY"] != "new" {
 		t.Fatalf("updated = %v, want API_KEY updated in place", fake.updated)
 	}
-	got, err := variables.GetValue(context.Background(), &variablestorev1.GetValueRequest{Tier: production, Coordinate: &variablestorev1.Coordinate{Slug: slug, Folder: "/web", Key: "API_KEY"}, Reveal: true})
+	got, err := revealOne(context.Background(), variables, production, &variablestorev1.Coordinate{Slug: slug, Folder: "/web", Key: "API_KEY"})
 	if err != nil || got.GetValue() != "new" {
 		t.Fatalf("GetValue() = %q, %v, want the updated value synced straight back", got.GetValue(), err)
 	}
@@ -905,5 +906,106 @@ func TestAnEnvSourceTheCallerNamesIsDecodedBeforeAnythingIsRegistered(t *testing
 	described, err := variables.DescribeEnvSource(context.Background(), &variablestorev1.DescribeEnvSourceRequest{Tier: production, Slug: slug})
 	if err != nil || described.GetStatus().GetEnvSource() != "builtin" {
 		t.Errorf("DescribeEnvSource() after every refusal = %+v, %v, want nothing registered", described, err)
+	}
+}
+
+type tierWideValuesRefused struct {
+	records.Store
+}
+
+func (s tierWideValuesRefused) refuse(key records.Key) error {
+	if owner, known := variablestore.OwnerOf(key); known && key.Partition.Root == variablestore.RootValues && owner.Environment == "" {
+		return errors.New("a preview's job changes no tier-wide value")
+	}
+	return nil
+}
+
+func (s tierWideValuesRefused) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
+	if err := s.refuse(entry.Key); err != nil {
+		return "", err
+	}
+	return s.Store.Write(ctx, entry)
+}
+
+func (s tierWideValuesRefused) Remove(ctx context.Context, key records.Key, expected records.Revision) error {
+	if err := s.refuse(key); err != nil {
+		return err
+	}
+	return s.Store.Remove(ctx, key, expected)
+}
+
+func TestAPreviewDeploySyncsItsEnvSourceIntoItsOwnEnvironmentWhereTierWideValuesAreRefusedToIt(t *testing.T) {
+	provider := fake.NewProvider(fake.Options{})
+	ctx := context.Background()
+	preview := environmentv1.Tier_TIER_PREVIEW
+	person := serve(t, &variablestoreserver.Service{Source: variablestoreserver.FixedBackend{KeyValues: provider.KeyValues(), Cipher: provider.Cipher()}})
+	job := serve(t, &variablestoreserver.Service{Source: variablestoreserver.FixedBackend{KeyValues: tierWideValuesRefused{provider.KeyValues()}, Cipher: provider.Cipher()}})
+	exec := func(token string) *variablestorev1.EnvSource {
+		return execSource(t, &variablestorev1.EnvSourceValue{Cell: &variablestorev1.Cell{Key: "TOKEN"}, Value: token})
+	}
+	if _, err := syncEnvSource(person, preview, exec("tier-wide")); err != nil {
+		t.Fatalf("SyncEnvSource() tier-wide = %v", err)
+	}
+
+	_, err := job.SyncEnvSource(ctx, &variablestorev1.SyncEnvSourceRequest{
+		Tier: preview, Slug: slug, Environment: "pr-7",
+		From: &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: exec("for-pr-7")},
+	})
+	if err != nil {
+		t.Fatalf("SyncEnvSource() for pr-7 = %v, want it written where pr-7 alone reads it", err)
+	}
+
+	tierWide, err := revealOne(ctx, person, preview, cell("TOKEN"))
+	if err != nil || tierWide.GetValue() != "tier-wide" {
+		t.Fatalf("tier-wide TOKEN = %q, %v, want it as the tier-wide sync left it", tierWide.GetValue(), err)
+	}
+	reader := variablestore.EnvironmentReader{KeyValues: provider.KeyValues(), Cipher: provider.Cipher(), Scope: variablestore.Scope{Project: slug, Tier: environment.TierPreview}, Environment: "pr-7"}
+	read, err := reader.Values(ctx, []variablestore.Cell{{Key: "TOKEN"}})
+	if err != nil || read["TOKEN"] != "for-pr-7" {
+		t.Fatalf("pr-7 reads TOKEN = %q, %v, want the value its own sync wrote", read["TOKEN"], err)
+	}
+}
+
+func TestASyncNamingAnEnvironmentOfProductionIsRefused(t *testing.T) {
+	variables, _ := served(t)
+	_, err := variables.SyncEnvSource(context.Background(), &variablestorev1.SyncEnvSourceRequest{
+		Tier: environmentv1.Tier_TIER_PRODUCTION, Slug: slug, Environment: "pr-7",
+		From: &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: execSource(t)},
+	})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("SyncEnvSource() of production for pr-7 = %v, want it refused as naming an environment production lacks", err)
+	}
+}
+
+func TestAPreviewDeploySwitchingToBuiltinKeepsItsOwnCopiesAsItsOwnValuesAndChangesNothingTierWide(t *testing.T) {
+	provider := fake.NewProvider(fake.Options{})
+	ctx := context.Background()
+	preview := environmentv1.Tier_TIER_PREVIEW
+	person := serve(t, &variablestoreserver.Service{Source: variablestoreserver.FixedBackend{KeyValues: provider.KeyValues(), Cipher: provider.Cipher()}})
+	job := serve(t, &variablestoreserver.Service{Source: variablestoreserver.FixedBackend{KeyValues: tierWideValuesRefused{provider.KeyValues()}, Cipher: provider.Cipher()}})
+	syncFor := func(source *variablestorev1.EnvSource) error {
+		_, err := job.SyncEnvSource(ctx, &variablestorev1.SyncEnvSourceRequest{
+			Tier: preview, Slug: slug, Environment: "pr-7",
+			From: &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: source},
+		})
+		return err
+	}
+	if _, err := syncEnvSource(person, preview, execSource(t, &variablestorev1.EnvSourceValue{Cell: &variablestorev1.Cell{Key: "WIDE"}, Value: "w"})); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncFor(execSource(t, &variablestorev1.EnvSourceValue{Cell: &variablestorev1.Cell{Key: "TOKEN"}, Value: "for-pr-7"})); err != nil {
+		t.Fatalf("SyncEnvSource(exec) for pr-7 = %v", err)
+	}
+
+	if err := syncFor(builtin); err != nil {
+		t.Fatalf("SyncEnvSource(builtin) for pr-7 = %v, want the switch made without a tier-wide write", err)
+	}
+	own, err := revealOne(ctx, person, preview, &variablestorev1.Coordinate{Slug: slug, Key: "TOKEN", Environment: "pr-7"})
+	if err != nil || own.GetValue() != "for-pr-7" || own.GetMetadata().GetEnvSource() != "" {
+		t.Fatalf("pr-7's TOKEN = %q from %q, %v, want the copy kept as pr-7's own value", own.GetValue(), own.GetMetadata().GetEnvSource(), err)
+	}
+	described, err := person.DescribeEnvSource(ctx, &variablestorev1.DescribeEnvSourceRequest{Tier: preview, Slug: slug})
+	if err != nil || described.GetStatus().GetEnvSource() != "builtin" {
+		t.Fatalf("DescribeEnvSource() = %+v, %v, want the tier back on builtin", described, err)
 	}
 }
