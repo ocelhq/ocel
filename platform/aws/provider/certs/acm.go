@@ -114,7 +114,7 @@ const (
 	issueAttempts = 60
 	issueEvery    = 10 * time.Second
 
-	releaseBudget  = 2 * time.Minute
+	releaseBudget  = 15 * time.Minute
 	releaseFirst   = 2 * time.Second
 	releaseLongest = 20 * time.Second
 )
