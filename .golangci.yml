@@ -32,7 +32,7 @@ linters:
       - path: ^(sdk|tests|scripts|cli/testdata)/
         linters:
           - forbidigo
-      - path: ^(pkg/tracing|pkg/enginetest|pkg/internal/depstest|pkg/cloudconformance|pkg/provider/conformance|cli/internal/clitest|cli/internal/incustest)/
+      - path: ^(pkg/tracing|pkg/enginetest|pkg/internal/depstest|pkg/provider/conformance|cli/internal/clitest|cli/internal/incustest)/
         linters:
           - forbidigo
       - path: ^pkg/runtime/child/child\.go$

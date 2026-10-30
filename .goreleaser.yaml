@@ -32,6 +32,19 @@ builds:
       - goos: windows
         goarch: arm64
 
+  - id: ocel-job
+    dir: cli
+    main: ./ocel-job
+    binary: ocel-job
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    goos: [linux]
+    goarch: [amd64, arm64]
+
   - id: provider-aws
     dir: platform/aws/provider
     main: ./cmd/deploy
@@ -88,6 +101,9 @@ builds:
       - CGO_ENABLED=0
     flags:
       - -trimpath
+    tags:
+      - grpcnotrace
+      - lambda.norpc
     ldflags:
       - -s -w -X main.version={{ .Version }}
     goos: [linux]
@@ -127,6 +143,11 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+
+  - id: ocel-job
+    ids: [ocel-job]
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE, NOTICE]
 
   - id: provider-aws
     ids: [provider-aws]
