@@ -321,6 +321,49 @@ func TestAProvidersDirResolvesWithNothingOnPATH(t *testing.T) {
 	}
 }
 
+func TestAProvidersDirShadowsOnlyTheProvidersItContainsAndTheRestArePinnedAndFetched(t *testing.T) {
+	store := storeFor(t, fakeRelease(t, "fake"))
+	store.Override = t.TempDir()
+	shadowed := filepath.Join(store.Override, "provider", "other", testVersion, "linux-amd64", "provider-other")
+	if err := os.MkdirAll(filepath.Dir(shadowed), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(shadowed, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	projectDir := t.TempDir()
+	got, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "fake", store.Platform, PinToLock)
+	if err != nil {
+		t.Fatalf("ensurePinned() of a provider the providers directory lacks error = %v, want it fetched", err)
+	}
+	if strings.HasPrefix(got, store.Override) || !strings.HasPrefix(got, store.Dir) {
+		t.Errorf("ensurePinned() = %q, want the fetched provider in the cache %s", got, store.Dir)
+	}
+	if _, err := os.Stat(lockfile.Path(projectDir)); err != nil {
+		t.Errorf("no %s was written for the provider fetched: %v", lockfile.Name, err)
+	}
+	if got, err := ensurePinned(context.Background(), store, KindProvider, projectDir, "other", store.Platform, PinToLock); err != nil || got != shadowed {
+		t.Errorf("ensurePinned() of the provider the directory holds = %q, %v, want %q", got, err, shadowed)
+	}
+}
+
+func TestAProvidersDirLackingAProviderTheReleaseCannotServeSaysWhereItLooked(t *testing.T) {
+	store := storeOn(t, unsignedRelease(t), "linux", "amd64")
+	store.Override = t.TempDir()
+
+	_, err := ensurePinned(context.Background(), store, KindProvider, t.TempDir(), "fake", store.Platform, PinToLock)
+	if err == nil {
+		t.Fatal("ensurePinned() error = nil, want a provider neither the directory nor the release holds refused")
+	}
+	expected := filepath.Join(store.Override, "provider", "fake", pinnedVersion, "linux-amd64", "provider-fake")
+	for _, want := range []string{OverrideEnvVar, expected, SignatureAsset} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not name %q", err.Error(), want)
+		}
+	}
+}
+
 func TestAReleaseThatSignsNoChecksumsPinsNothing(t *testing.T) {
 	t.Parallel()
 
