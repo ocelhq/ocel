@@ -14,7 +14,7 @@ func (h *Service) PublishValues(ctx context.Context, req *variablestorev1.Publis
 	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
-	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (h *Service) UnpublishValues(ctx context.Context, req *variablestorev1.Unpu
 	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
-	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}

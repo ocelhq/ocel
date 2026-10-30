@@ -352,7 +352,7 @@ func TestCopyingAProjectFromASourceAlreadyReadCopiesWhatItHoldsAndRecordsTheSucc
 	register(t, store, registration)
 	source := envsource.NewFixed("exec", map[variablestore.Cell]envsource.Value{cell("/web", "WEB"): value("w", "v1")})
 
-	result, err := sync.CopyProjectFrom(context.Background(), registration, source)
+	result, err := sync.CopyProjectFrom(context.Background(), registration, "", source)
 	if err != nil || !slices.Equal(result.Written, []variablestore.Cell{cell("/web", "WEB")}) {
 		t.Fatalf("CopyProjectFrom() = %+v, %v", result, err)
 	}
@@ -704,7 +704,7 @@ func TestASyncStaysInUseUntilItCanNoLongerBeCopyingIntoARemovedProject(t *testin
 func switchToBuiltinAndSet(t *testing.T, store variablestore.Store, project, key, value string) {
 	t.Helper()
 	ctx := context.Background()
-	if err := envsource.ClearProvenance(ctx, store, scopeOf(project)); err != nil {
+	if err := envsource.ClearProvenance(ctx, store, scopeOf(project), ""); err != nil {
 		t.Error(err)
 	}
 	if err := envsource.Unregister(ctx, store, environment.TierProduction, project); err != nil {

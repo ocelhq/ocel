@@ -15,6 +15,15 @@ const (
 )
 
 const (
+	cellsSegment          = "cells"
+	historySegment        = "history"
+	bindingsSegment       = "bindings"
+	bindingRecordsSegment = "records"
+	bindingValuesSegment  = "values"
+	bindingOwnersSegment  = "bindingowners"
+)
+
+const (
 	TierWideEnvironment = "*"
 	EveryProject        = "*"
 
@@ -86,16 +95,16 @@ func ValuesPartition(scope Scope) records.Partition {
 	return records.Partition{Tier: scope.Tier, Root: RootValues, Path: []string{scope.Project}}
 }
 
-func cellsPrefix(scope Scope) records.Key { return ValuesPartition(scope).Key("cells") }
+func cellsPrefix(scope Scope) records.Key { return ValuesPartition(scope).Key(cellsSegment) }
 
 func CellKey(scope Scope, at Coordinate) records.Key {
 	at = at.canonical()
-	return ValuesPartition(scope).Key("cells", at.Folder, at.Key, at.Environment)
+	return ValuesPartition(scope).Key(cellsSegment, at.Folder, at.Key, at.Environment)
 }
 
 func historyPrefix(scope Scope, at Coordinate) records.Key {
 	at = at.canonical()
-	return ValuesPartition(scope).Key("history", at.Folder, at.Key, at.Environment)
+	return ValuesPartition(scope).Key(historySegment, at.Folder, at.Key, at.Environment)
 }
 
 func versionKey(scope Scope, at Coordinate, version int64) records.Key {
@@ -103,26 +112,26 @@ func versionKey(scope Scope, at Coordinate, version int64) records.Key {
 	return history.Partition.Key(append(history.Path, fmt.Sprintf("%0*d", versionDigits, version))...)
 }
 
-func bindingsPrefix(scope Scope) records.Key { return ValuesPartition(scope).Key("bindings") }
+func bindingsPrefix(scope Scope) records.Key { return ValuesPartition(scope).Key(bindingsSegment) }
 
 func bindingPrefix(scope Scope, binding string) records.Key {
-	return ValuesPartition(scope).Key("bindings", binding)
+	return ValuesPartition(scope).Key(bindingsSegment, binding)
 }
 
 func bindingRecordAt(scope Scope, binding, environment string) records.Key {
-	return ValuesPartition(scope).Key("bindings", binding, "records", canonicalEnvironment(environment))
+	return ValuesPartition(scope).Key(bindingsSegment, binding, bindingRecordsSegment, canonicalEnvironment(environment))
 }
 
 func bindingValueAt(scope Scope, binding, environment string) records.Key {
-	return ValuesPartition(scope).Key("bindings", binding, "values", canonicalEnvironment(environment))
+	return ValuesPartition(scope).Key(bindingsSegment, binding, bindingValuesSegment, canonicalEnvironment(environment))
 }
 
 func bindingOwnersPrefix(scope Scope) records.Key {
-	return ValuesPartition(scope).Key("bindingowners")
+	return ValuesPartition(scope).Key(bindingOwnersSegment)
 }
 
 func bindingOwnerKey(scope Scope, owner, environment string) records.Key {
-	return ValuesPartition(scope).Key("bindingowners", owner, canonicalEnvironment(environment))
+	return ValuesPartition(scope).Key(bindingOwnersSegment, owner, canonicalEnvironment(environment))
 }
 
 func ReferencesPartition(scope Scope) records.Partition {
@@ -153,4 +162,36 @@ func cellOf(key records.Key) (Coordinate, bool) {
 		return Coordinate{}, false
 	}
 	return Coordinate{Cell: Cell{Folder: plainFolder(folder), Key: name}, Environment: plainEnvironment(environment)}, true
+}
+
+func OwnerOf(key records.Key) (records.Owner, bool) {
+	if len(key.Partition.Path) != 1 {
+		return records.Owner{}, false
+	}
+	project, path := key.Partition.Path[0], key.Path
+	switch key.Partition.Root {
+	case RootValues:
+		switch {
+		case len(path) == 4 && path[0] == cellsSegment:
+			return ownerOfValue(project, path[3]), true
+		case len(path) == 5 && path[0] == historySegment:
+			return ownerOfValue(project, path[3]), true
+		case len(path) == 4 && path[0] == bindingsSegment && (path[2] == bindingRecordsSegment || path[2] == bindingValuesSegment):
+			return ownerOfValue(project, path[3]), true
+		case len(path) == 3 && path[0] == bindingOwnersSegment:
+			return ownerOfValue(project, path[2]), true
+		}
+	case RootValueRefs:
+		if len(path) == 6 {
+			return ownerOfValue(path[2], path[5]), true
+		}
+	}
+	return records.Owner{}, false
+}
+
+func ownerOfValue(project, environment string) records.Owner {
+	if project == EveryProject {
+		return records.Owner{Shared: true}
+	}
+	return records.Owner{Project: project, Environment: plainEnvironment(environment)}
 }
