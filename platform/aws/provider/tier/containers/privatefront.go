@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/securitygroup"
 )
 
 const (
@@ -28,14 +29,14 @@ func (w *work) createFrontSecurityGroup(ctx *pulumi.Context, vpc string, tags pu
 	}
 	return ec2.NewSecurityGroup(ctx, frontGroupName(w.namespace, w.tier), &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(frontGroupName(w.namespace, w.tier)),
-		Description: pulumi.String("Ocel: the load balancer every container app in the " + string(w.tier) + " class answers behind"),
+		Description: pulumi.String(securitygroup.FitDescription("Ocel: the load balancer every container app in the " + string(w.tier) + " class answers behind")),
 		VpcId:       pulumi.String(vpc),
 		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
 			Protocol:      pulumi.String("tcp"),
 			FromPort:      pulumi.Int(originListenerPort),
 			ToPort:        pulumi.Int(originListenerPort),
 			PrefixListIds: pulumi.StringArray{pulumi.String(edgeRanges.Id)},
-			Description:   pulumi.String("Ocel: only CloudFront reaches the front, through the VPC origin, and every rule behind it demands the origin secret"),
+			Description:   pulumi.String(securitygroup.FitDescription("Ocel: only CloudFront reaches the front, through the VPC origin, and every rule behind it demands the origin secret")),
 		}},
 		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{
 			Protocol: pulumi.String("-1"), FromPort: pulumi.Int(0), ToPort: pulumi.Int(0),

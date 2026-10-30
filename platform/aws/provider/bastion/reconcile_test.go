@@ -282,3 +282,17 @@ func TestReconcileRegistersAFreshTaskDefinitionOverALaterRevisionFargateCannotRu
 		})
 	}
 }
+
+func TestReconcileCreatesTheSecurityGroupWithADescriptionEC2Accepts(t *testing.T) {
+	t.Parallel()
+
+	account := newAccount()
+	if _, err := bastion.Reconcile(context.Background(), account.clients(), testSpec); err != nil {
+		t.Fatalf("Reconcile() = %v, want the security group created", err)
+	}
+	for _, group := range account.groups {
+		if group.description == "" || !ec2AcceptedDescription.MatchString(group.description) {
+			t.Errorf("security group %s is described %q, which EC2 refuses", group.name, group.description)
+		}
+	}
+}

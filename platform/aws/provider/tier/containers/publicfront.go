@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/securitygroup"
 )
 
 const (
@@ -41,7 +42,7 @@ func renderLivenessSource() string {
 func (w *work) createPublicSecurityGroup(ctx *pulumi.Context, vpc string, tags pulumi.StringMap) (*ec2.SecurityGroup, error) {
 	return ec2.NewSecurityGroup(ctx, publicGroupName(w.namespace, w.tier), &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(publicGroupName(w.namespace, w.tier)),
-		Description: pulumi.String("Ocel: the load balancer the edge forwards the hostnames of the " + string(w.tier) + " class to"),
+		Description: pulumi.String(securitygroup.FitDescription("Ocel: the load balancer the edge forwards the hostnames of the " + string(w.tier) + " class to")),
 		VpcId:       pulumi.String(vpc),
 		Ingress: ec2.SecurityGroupIngressArray{
 			&ec2.SecurityGroupIngressArgs{
@@ -49,14 +50,14 @@ func (w *work) createPublicSecurityGroup(ctx *pulumi.Context, vpc string, tags p
 				FromPort:    pulumi.Int(awsports.PublicListenerPort),
 				ToPort:      pulumi.Int(awsports.PublicListenerPort),
 				CidrBlocks:  pulumi.ToStringArray(w.fronts.Public),
-				Description: pulumi.String("Ocel: only the edge reaches the public front, presenting its client certificate"),
+				Description: pulumi.String(securitygroup.FitDescription("Ocel: only the edge reaches the public front, presenting its client certificate")),
 			},
 			&ec2.SecurityGroupIngressArgs{
 				Protocol:    pulumi.String("tcp"),
 				FromPort:    pulumi.Int(originListenerPort),
 				ToPort:      pulumi.Int(originListenerPort),
 				CidrBlocks:  pulumi.ToStringArray(w.fronts.Public),
-				Description: pulumi.String("Ocel: plain http from the edge is redirected to https, forwarding nothing"),
+				Description: pulumi.String(securitygroup.FitDescription("Ocel: plain http from the edge is redirected to https, forwarding nothing")),
 			},
 		},
 		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{

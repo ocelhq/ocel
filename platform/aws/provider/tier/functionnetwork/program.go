@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/securitygroup"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
@@ -95,13 +96,13 @@ func (w *work) run(ctx *pulumi.Context) error {
 	group := component.SecurityGroupName(nameFor(w.namespace, tier))
 	functions, err := ec2.NewSecurityGroup(ctx, group, &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(group),
-		Description: pulumi.String("Ocel: the functions in the " + string(tier) + " class that reach a VPC-only resource run as"),
+		Description: pulumi.String(securitygroup.FitDescription("Ocel: the functions in the " + string(tier) + " class that reach a VPC-only resource run as")),
 		VpcId:       pulumi.String(placed.VPC),
 		Ingress:     ec2.SecurityGroupIngressArray{},
 		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{
 			Protocol: pulumi.String("-1"), FromPort: pulumi.Int(0), ToPort: pulumi.Int(0),
 			CidrBlocks:  pulumi.StringArray{pulumi.String(anyIPv4)},
-			Description: pulumi.String("Ocel: a function calls out to its resources and the internet; nothing connects to it"),
+			Description: pulumi.String(securitygroup.FitDescription("Ocel: a function calls out to its resources and the internet; nothing connects to it")),
 		}},
 		Tags: tagsFor(group),
 	}, pulumi.Timeouts(&pulumi.CustomTimeouts{Delete: deleteWait}))
