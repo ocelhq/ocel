@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-lambda-go/lambda"
+
 	"github.com/ocelhq/ocel/platform/realtime/token"
 	"github.com/ocelhq/ocel/platform/realtime/token/tokentest"
 )
@@ -121,9 +123,58 @@ func TestAuthorizeAdmitsOnlyTokensMintedForTheOperationAndChannel(t *testing.T) 
 		}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := a.authorize(context.Background(), tc.req)
-			if got.IsAuthorized != tc.want {
-				t.Fatalf("authorize = %+v, want isAuthorized %v", got, tc.want)
+			got, err := a.authorize(context.Background(), tc.req)
+			if err != nil || got.IsAuthorized != tc.want {
+				t.Fatalf("authorize = %+v, %v, want isAuthorized %v", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLambdaRuntimeAnswersAppSyncEventsWithTheAuthorizerVerdict(t *testing.T) {
+	app := newTestKey(t, 0)
+	handler := lambda.NewHandler(newTestAuthorizer(t, map[string]ed25519.PrivateKey{"app": app}).authorize)
+	event := func(raw, operation, namespace, channel string) []byte {
+		t.Helper()
+		requestContext := map[string]any{
+			"apiId":                testAPIID,
+			"accountId":            "111122223333",
+			"requestId":            "f4081827-1111-4444-5555-5cf4695f339f",
+			"operation":            operation,
+			"channelNamespaceName": nil,
+			"channel":              nil,
+		}
+		if namespace != "" {
+			requestContext["channelNamespaceName"] = namespace
+			requestContext["channel"] = channel
+		}
+		payload, err := json.Marshal(map[string]any{
+			"authorizationToken": raw,
+			"requestContext":     requestContext,
+			"requestHeaders":     map[string]string{"host": testHost, "sec-websocket-protocol": "aws-appsync-event-ws"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return payload
+	}
+
+	for _, tc := range []struct {
+		name    string
+		payload []byte
+		want    string
+	}{
+		{"a connect with a live token", event(sign(t, app, token.Connect, "app", "/app"), operationConnect, "", ""), `{"isAuthorized":true,"ttlOverride":0}`},
+		{"a subscribe with a live token", event(sign(t, app, token.Subscribe, "app", "/app/orders/o1"), operationSubscribe, "app", "/app/orders/o1"), `{"isAuthorized":true,"ttlOverride":0}`},
+		{"a connect with a token that is no JWT", event("not-a-token", operationConnect, "", ""), `{"isAuthorized":false,"ttlOverride":0}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := handler.Invoke(context.Background(), tc.payload)
+			if err != nil {
+				t.Fatalf("Invoke = %v, want an answer AppSync reads rather than an authorizer failure", err)
+			}
+			if string(got) != tc.want {
+				t.Errorf("Invoke = %s, want %s", got, tc.want)
 			}
 		})
 	}
@@ -136,15 +187,19 @@ func TestAuthorizeAsksAppSyncNeverToCacheAnAnswer(t *testing.T) {
 		connectRequest(sign(t, app, token.Connect, "app", "/app")),
 		connectRequest("not-a-token"),
 	} {
-		encoded, err := json.Marshal(a.authorize(context.Background(), req))
+		answer, err := a.authorize(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var answer map[string]any
-		if err := json.Unmarshal(encoded, &answer); err != nil {
+		encoded, err := json.Marshal(answer)
+		if err != nil {
 			t.Fatal(err)
 		}
-		if ttl, present := answer["ttlOverride"]; !present || ttl != float64(0) {
+		var fields map[string]any
+		if err := json.Unmarshal(encoded, &fields); err != nil {
+			t.Fatal(err)
+		}
+		if ttl, present := fields["ttlOverride"]; !present || ttl != float64(0) {
 			t.Errorf("answer = %s, want ttlOverride 0 so a revoked or expired token is never admitted from cache", encoded)
 		}
 	}

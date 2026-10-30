@@ -75,12 +75,12 @@ type authorizer struct {
 	now   func() time.Time
 }
 
-func (a *authorizer) authorize(ctx context.Context, req authorizationRequest) authorizationResponse {
+func (a *authorizer) authorize(ctx context.Context, req authorizationRequest) (authorizationResponse, error) {
 	err := a.verify(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel realtime authorizer: %s refused: %s\n", req.RequestContext.Operation, err)
 	}
-	return authorizationResponse{IsAuthorized: err == nil, TTLOverride: 0}
+	return authorizationResponse{IsAuthorized: err == nil, TTLOverride: 0}, nil
 }
 
 func (a *authorizer) verify(ctx context.Context, req authorizationRequest) error {
