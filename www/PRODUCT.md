@@ -171,8 +171,8 @@ Binding, confirmed by the owner:
    of targets, `ocel deploy` with no provider, its error codes), described as plainly
    as AWS. No banners, upsells, or pricing on the open-source side. On the landing it
    is a name in the hero's list of targets, one of the three windows in "Change the
-   target", a project in the console clip, and the last cell of the closing title block.
-   Sign-up is open to a capped number of organizations, then by invite.
+   target", a project in the console still, and the waitlist beside it at the foot of the page.
+   Ocel Cloud is by invite during the alpha; the waitlist is how people ask.
 6. **Agents are first-class, and the site shows it.** The skill, `--json` everywhere,
    stable error codes with docs URLs, a self-describing binary, `llms.txt` and `.md`
    pages are product, not footnotes (`content/docs/agents.mdx`).
