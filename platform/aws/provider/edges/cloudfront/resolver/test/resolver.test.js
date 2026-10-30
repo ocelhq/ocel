@@ -300,6 +300,43 @@ describe("the resolver", () => {
   });
 });
 
+describe("the query the resolver hands on", () => {
+  function withQuery(querystring) {
+    const event = request("/api/probes/echo");
+    for (const [name, value] of Object.entries(querystring)) {
+      event.request.querystring[name] = { value };
+    }
+    return event;
+  }
+
+  it("escapes every % no two hex digits follow, so a function URL decodes the query rather than refusing it", async () => {
+    const { answered } = await resolve(withQuery({ a: "%%URL%%", b: "%zz", c: "100%" }));
+
+    expect(answered.querystring).toBe("a=%25%25URL%25%25&b=%25zz&c=100%25");
+  });
+
+  it("keeps every value of a repeated name", async () => {
+    const event = request("/api/probes/echo");
+    event.request.querystring.a = {
+      value: "%zz",
+      multiValue: [{ value: "%zz" }, { value: "%41" }],
+    };
+
+    const { answered } = await resolve(event);
+
+    expect(answered.querystring).toBe("a=%25zz&a=%41");
+  });
+
+  it("leaves a query every escape of which decodes exactly as the viewer sent it", async () => {
+    const event = withQuery({ a: "caf%C3%A9", b: "100%25" });
+    const sent = event.request.querystring;
+
+    const { answered } = await resolve(event);
+
+    expect(answered.querystring).toBe(sent);
+  });
+});
+
 describe("the headers a viewer cannot forge past the resolver", () => {
   it("never lets a viewer's own origin secret reach the origin", async () => {
     const { answered, origins } = await resolve(

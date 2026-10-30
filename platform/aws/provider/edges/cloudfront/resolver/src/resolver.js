@@ -24,6 +24,7 @@ var CONTROL_HEADERS = [
 ];
 var ORIGIN_READ_TIMEOUT_SECONDS = 60;
 var SHIELDED_METHODS = ['GET', 'HEAD'];
+var UNDECODABLE_ESCAPE = /%(?![0-9a-fA-F]{2})/g;
 
 function isUnderAnyPrefix(uri, prefixes) {
   if (!prefixes) return false;
@@ -91,6 +92,18 @@ function assetOriginPath(prefix) {
   return path === '' ? '' : '/' + path;
 }
 
+function escapedQuery(querystring) {
+  var pairs = [];
+  var names = Object.keys(querystring);
+  for (let i = 0; i < names.length; i++) {
+    const values = valuesOf(querystring[names[i]]);
+    for (let j = 0; j < values.length; j++) pairs.push(names[i] + '=' + values[j]);
+  }
+  var query = pairs.join('&');
+  var escaped = query.replace(UNDECODABLE_ESCAPE, '%25');
+  return escaped === query ? null : escaped;
+}
+
 function originShieldFor(route, method) {
   if (route.shieldRegion && SHIELDED_METHODS.indexOf(method) >= 0) {
     return { enabled: true, region: route.shieldRegion };
@@ -149,6 +162,8 @@ async function handler(event) {
   if (!route || !route.origin || !route.release) return unknownHost();
 
   stripClientControl(request.headers);
+  var query = escapedQuery(request.querystring);
+  if (query !== null) request.querystring = query;
   var refused = await enforceGate(request, route, host);
   if (refused) return refused;
   request.headers[FORWARDED_HOST_HEADER] = { value: host };
