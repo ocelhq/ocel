@@ -73,7 +73,7 @@ func TestTheStatusOfAProjectWithProtectionOffSaysNothingOfFunctionsThatIgnoreThe
 	}
 	previewIgnoringTheGate(t, vendor, "pr-3")
 
-	edges := getProtectionThrough(t, client, fake.KindDirect, false).GetEdges()
+	edges := getProtectionThrough(t, client, fake.KindDirect).GetEdges()
 
 	if len(edges) != 1 || edges[0].GetError() != "" {
 		t.Errorf("status edges = %v, want the edge reported plainly: with protection off no preview is meant to be gated", edges)
@@ -84,7 +84,7 @@ func TestFunctionsIgnoringTheGateDoNotMarkAProjectWhoseEdgeGatesItselfNotLive(t 
 	client, vendor := protectedPreview(t)
 	previewIgnoringTheGate(t, vendor, "pr-3")
 
-	edges := getProtection(t, client, false).GetEdges()
+	edges := getProtection(t, client).GetEdges()
 	result, _, err := publishProtection(t, client)
 
 	if len(edges) != 1 || !edges[0].GetPublished() || edges[0].GetError() != "" {

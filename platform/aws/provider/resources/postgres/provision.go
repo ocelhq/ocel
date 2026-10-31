@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 )
 
 const (
@@ -200,7 +201,7 @@ func register(ctx *pulumi.Context, stack component.Stack, logicalName string, ar
 		"secret":   secretARN,
 		"database": pulumi.String(args.DatabaseName),
 		"master":   cluster.MasterUsername,
-		"role":     pulumi.String(AppRoleFor(args.Tier)),
+		"role":     pulumi.String(signin.AppRoleFor(args.Tier)),
 	}, &appRoleState{}, pulumi.DependsOn([]pulumi.Resource{instance})); err != nil {
 		return err
 	}
@@ -208,7 +209,7 @@ func register(ctx *pulumi.Context, stack component.Stack, logicalName string, ar
 		component.OutputKeyHost: cluster.Endpoint,
 		component.OutputKeyPort: cluster.Port,
 		OutputKeyDatabase:       pulumi.String(args.DatabaseName),
-		OutputKeyUsername:       pulumi.String(AppRoleFor(args.Tier)),
+		OutputKeyUsername:       pulumi.String(signin.AppRoleFor(args.Tier)),
 		OutputKeyClusterARN:     cluster.Arn,
 		OutputKeyResourceID:     cluster.ClusterResourceId,
 

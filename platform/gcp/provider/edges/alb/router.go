@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
@@ -17,7 +18,7 @@ type Router struct{ e *Edge }
 
 func NewRouter(e *Edge) Router { return Router{e: e} }
 
-func (r Router) Kind() router.Kind { return router.Kind(Kind) }
+func (r Router) Kind() router.Kind { return router.Kind(albresources.Kind) }
 
 func (r Router) Facts() router.Facts {
 	return router.Facts{
@@ -34,7 +35,7 @@ func (r Router) Hooks() router.Hooks { return router.Hooks{} }
 
 func (r Router) Reconcile(_ context.Context, spec router.StackSpec, prior router.StackState) (router.Stack, error) {
 	if spec.Slug == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid, "the %q edge serves a project by slug, and this stack names none", Kind)
+		return nil, refusal.Refuse(refusal.CodeInvalid, "the %q edge serves a project by slug, and this stack names none", albresources.Kind)
 	}
 	return r.Open(prior.WithSpec(spec))
 }
@@ -98,9 +99,19 @@ func (r routerStack) moveTraffic(ctx context.Context, move router.PointerMove, p
 	if _, _, deployment := router.ParseDeploymentPointer(move.Pointer); deployment {
 		return nil
 	}
+	planned, err := r.s.planRelease(move.Records)
+	if err != nil {
+		return err
+	}
+	if err := r.s.raiseTaken(ctx, planned, progress); err != nil {
+		return err
+	}
 	pointers, err := pin.MovePointer(ctx, r.s.e.deps.Pins, r.s.recorded.Pointers, move, progress)
 	r.s.recorded.Pointers = pointers
 	r.s.keep()
+	if err != nil && len(planned.took) > 0 {
+		err = errors.Join(err, r.s.raise(ctx, r.s.recorded.Hosts))
+	}
 	var unserved router.Unserved
 	if errors.As(err, &unserved) {
 		return router.Unserved{Err: errors.Join(err, r.s.restorePreviewHosts(ctx, hosts, tags))}
@@ -108,7 +119,7 @@ func (r routerStack) moveTraffic(ctx context.Context, move router.PointerMove, p
 	if err != nil {
 		return err
 	}
-	if err := r.s.released(ctx, move.Records, progress); err != nil {
+	if err := r.s.routeReleased(ctx, planned, progress); err != nil {
 		return err
 	}
 	r.s.purgeReplaced(ctx, move, releases, progress)

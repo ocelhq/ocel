@@ -11,6 +11,7 @@ import (
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/credential"
 )
 
 const transformKind = "kv"
@@ -43,7 +44,7 @@ func New(tokens Tokens) component.Component {
 			}
 			return &variablestorev1.PublishedBinding{Binding: binding}, nil
 		},
-		Credential: credential,
+		Credential: credential.KV,
 		Sweep: func(ctx context.Context, at component.Stack, kept []provider.Resource) error {
 			return sweep(ctx, at, kept, tokens)
 		},
@@ -57,7 +58,7 @@ func New(tokens Tokens) component.Component {
 				return checkKVNodeCount(name, patches["replicationGroup"])
 			}}, err
 		},
-		Shape: shape,
+		Inventory: inventory,
 	}
 }
 

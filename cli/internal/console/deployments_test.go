@@ -24,6 +24,8 @@ const (
 )
 
 type recordedReports struct {
+	consolev1connect.UnimplementedDeploymentServiceHandler
+
 	mu      sync.Mutex
 	reports []*consolev1.ReportRequest
 	events  []*consolev1.RecordEnvironmentEventRequest

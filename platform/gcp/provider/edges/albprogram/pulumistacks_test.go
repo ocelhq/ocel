@@ -1,0 +1,146 @@
+package albprogram
+
+import (
+	"context"
+	"errors"
+	"maps"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/pkg/provider/pulumi"
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
+)
+
+func stacking(t *testing.T) PulumiStacks {
+	t.Helper()
+	return PulumiStacks{OpenClients: googletest.Opener(googletest.Clients(""))}
+}
+
+func TestEachProjectsBindingKeepsItsStateUnderAPrefixOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	stacks := stacking(t)
+	tier := environment.TierProduction
+	prefixes := map[string]string{}
+	for _, stack := range []albresources.Stack{
+		{Tier: tier},
+		{Tier: tier, Slug: "shop"},
+		{Tier: tier, Slug: "blog"},
+	} {
+		config, _ := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", stack, "secret")
+		prefixes[stack.Slug] = config.Backend.URL
+	}
+
+	bucket := "gs://ocel-prod-state-k3x9q2/"
+	for slug, url := range prefixes {
+		if !strings.HasPrefix(url, bucket) {
+			t.Errorf("the %q stack keeps state at %q, want it in the tier's own state bucket %q", slug, url, bucket)
+		}
+	}
+	if prefixes["shop"] == prefixes["blog"] || prefixes["shop"] == prefixes[""] {
+		t.Errorf("the stacks keep state at %v, want a prefix each: the state backend lists every stack under the prefix "+
+			"it is opened at, so one shared prefix makes every operation cost what the account stores", prefixes)
+	}
+}
+
+func TestTheEngineAuthenticatesWithTheCredentialItIsHandedBesideTheProjectAndRegion(t *testing.T) {
+	t.Parallel()
+
+	stacks := stacking(t)
+	stacks.CredentialEnv = map[string]string{"GOOGLE_APPLICATION_CREDENTIALS": "/run/ocel/google-external-account.json"}
+	clients := googletest.Clients("")
+	config, _ := stacks.config(clients, "ocel-prod-state-k3x9q2", albresources.Stack{Tier: environment.TierProduction}, "secret")
+
+	want := map[string]string{
+		"GOOGLE_PROJECT":                 clients.Project(),
+		"GOOGLE_REGION":                  clients.Region,
+		"GOOGLE_APPLICATION_CREDENTIALS": "/run/ocel/google-external-account.json",
+	}
+	if !maps.Equal(config.Backend.Env, want) {
+		t.Errorf("the engine's env = %v, want %v: the engine reads its credential from its own env, never the process's", config.Backend.Env, want)
+	}
+}
+
+func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t *testing.T) {
+	t.Parallel()
+
+	stacks := stacking(t)
+	front, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", albresources.Stack{Tier: environment.TierProduction}, "secret")
+	if front.Refresh == nil || !front.Refresh(ref, pulumi.OperationProvision) {
+		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by keeping " +
+			"what state says: state that never saw the host rules a bind wrote puts every project in the tier back to unrouted")
+	}
+}
+
+func TestTheFrontIsRefreshedBeforeItIsDestroyedOnlyWhenTheChecksAreNotSkipped(t *testing.T) {
+	t.Parallel()
+
+	for skipChecks, wantRefreshed := range map[bool]bool{false: true, true: false} {
+		stacks := stacking(t)
+		stacks.SkipChecks = skipChecks
+		front, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", albresources.Stack{Tier: environment.TierProduction}, "secret")
+		if refreshed := front.Refresh(ref, pulumi.OperationDestroy); refreshed != wantRefreshed {
+			t.Errorf("refresh before the front's destroy with the checks skipped %t = %t, want %t: the harness skips them to trade the drift check for speed", skipChecks, refreshed, wantRefreshed)
+		}
+		if !front.Refresh(ref, pulumi.OperationProvision) {
+			t.Errorf("refresh before the front is raised with the checks skipped %t = false, want true: it keeps the routes binds wrote beside it", skipChecks)
+		}
+	}
+}
+
+func TestAnALBStackIsTornDownWithoutBeingHandedTheProgramThatRaisedIt(t *testing.T) {
+	t.Parallel()
+
+	stacks := stacking(t)
+	config, ref := stacks.config(googletest.Clients(""), "ocel-prod-state-k3x9q2", albresources.Stack{Tier: environment.TierProduction, Slug: "shop"}, "secret")
+	if _, err := pulumi.New(config).Workspace(ref, Program{}); err != nil {
+		t.Errorf("Workspace() for a teardown = %v, want the stack ready to destroy: a teardown has no program to hand it", err)
+	}
+}
+
+func unsealedStacks(t *testing.T) PulumiStacks {
+	t.Helper()
+	secrets := googletest.NewSecrets()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		secrets.Serve(t, w, r)
+	}))
+	t.Cleanup(server.Close)
+	return PulumiStacks{OpenClients: googletest.Opener(googletest.Clients(server.URL))}
+}
+
+func TestATierWhosePassphraseWasNeverMadeHasNoLoadBalancerOutputs(t *testing.T) {
+	t.Parallel()
+
+	outputs, err := unsealedStacks(t).Outputs(context.Background(), albresources.Stack{Tier: environment.TierProduction})
+	if err != nil || len(outputs) > 0 {
+		t.Errorf("Outputs() = %v, %v, want none and no error: no state is sealed under a passphrase that was never made, "+
+			"and refusing leaves a bootstrap that failed before making it unable to be read or resumed", outputs, err)
+	}
+}
+
+func TestATierWhosePassphraseWasNeverMadeRefusesToRaiseItsLoadBalancer(t *testing.T) {
+	t.Parallel()
+
+	spec := albresources.LoadBalancerSpec{Tier: environment.TierProduction, Names: albresources.LoadBalancerNames("ocel", environment.TierProduction)}
+	_, err := unsealedStacks(t).UpLoadBalancer(context.Background(), spec, progress.Discard())
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+		t.Errorf("UpLoadBalancer() = %v, want a %s refusal naming `ocel bootstrap`: it seals state under the passphrase", err, refusal.CodeNotReady)
+	}
+}
+
+func TestATierWhosePassphraseWasNeverMadeHasNoLoadBalancerToDestroy(t *testing.T) {
+	t.Parallel()
+
+	stack := albresources.Stack{Tier: environment.TierProduction}
+	if err := unsealedStacks(t).Destroy(context.Background(), stack, progress.Discard()); err != nil {
+		t.Errorf("Destroy() = %v, want nil: no state is sealed under a passphrase that was never made, and refusing leaves "+
+			"a bootstrap that failed before making it, or a removal retried after deleting it, unable to be removed", err)
+	}
+}

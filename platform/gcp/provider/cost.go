@@ -9,12 +9,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	cloudflarecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/next"
 	"github.com/ocelhq/ocel/platform/gcp/provider/compute/release"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -23,35 +23,35 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 )
 
-func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
-	names := names.New(p.namespace, p.options.Project)
+func (p *Provider) InventoryDeploy(ctx context.Context, req provider.InventoryRequest) (*costv1.ResourceSet, error) {
+	names := names.New(p.Namespace, p.Options.Project)
 	tree := &pricing.Tree{}
-	region := p.options.Region
+	region := p.Options.Region
 	project := tree.Scope("", pricing.ScopeProject, req.Deploy.Slug)
 	shared := tree.Scope(project, pricing.ScopeShared, string(req.Deploy.Tier))
 	environment := tree.Scope(project, pricing.ScopeEnvironment, req.Deploy.Env)
 
 	for _, item := range bootstrap.Resources(names, req.Deploy.Tier, false) {
-		shaped, priced := item.Shape(region)
+		entry, priced := item.Priced(region)
 		if !priced {
-			return nil, refusal.Refuse(refusal.CodeInvalid, "bootstrap item %s has no shape", item.ID())
+			return nil, refusal.Refuse(refusal.CodeInvalid, "bootstrap resource %s has no priced type", item.ID())
 		}
-		tree.Add(shared, string(gcloud.Vendor), shaped.Type, item.Name, region, shaped.Properties)
+		tree.Add(shared, string(gcloud.Vendor), entry.Type, item.Name, region, entry.Properties)
 	}
-	use := newShapeUse(req)
+	use := newInventoryUse(req)
 	var owned []bootstrap.Resource
 	if use.keepsProjectRecords() {
 		database := names.SharedDatabase(req.Deploy.Tier)
-		if p.options.OwnDatabase {
+		if p.Options.OwnDatabase {
 			database = names.OwnDatabase(req.Deploy.Tier, req.Deploy.Slug)
 		}
 		owned = append(owned, bootstrap.Resource{Kind: bootstrap.KindDatabase, Name: database})
 	}
 	for _, owned := range owned {
-		shaped, _ := owned.Shape(region)
-		tree.Add(shared, string(gcloud.Vendor), shaped.Type, owned.Name, region, shaped.Properties)
+		entry, _ := owned.Priced(region)
+		tree.Add(shared, string(gcloud.Vendor), entry.Type, owned.Name, region, entry.Properties)
 	}
-	tree.AddShaped(shared, string(gcloud.Vendor), region, envsource.Shape(names.EnvSourceSync(req.Deploy.Tier), region))
+	tree.AddResources(shared, string(gcloud.Vendor), region, envsource.Inventory(names.EnvSourceSync(req.Deploy.Tier), region))
 
 	front, err := p.Edges().Open(req.Edge, nil)
 	if err != nil {
@@ -62,16 +62,16 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	for _, app := range req.Deploy.Apps {
 		site.Apps = append(site.Apps, pricing.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
 	}
-	shapes, err := edgeShapes(front.Kind(), string(p.namespace), site)
+	inventories, err := edgeInventories(front.Kind(), string(p.Namespace), site)
 	if err != nil {
 		return nil, err
 	}
-	for _, shape := range shapes {
-		tree.AddShaped(shared, shape.Vendor, shape.Region, shape.Shared)
-		tree.AddShaped(environment, shape.Vendor, shape.Region, shape.Environment)
+	for _, inventory := range inventories {
+		tree.AddResources(shared, inventory.Vendor, inventory.Region, inventory.Shared)
+		tree.AddResources(environment, inventory.Vendor, inventory.Region, inventory.Environment)
 	}
 
-	registry := p.components()
+	registry := p.Components()
 	candidates := registry.TransformCandidates(req.Resources)
 	for _, app := range req.Deploy.Apps {
 		candidates = append(candidates, release.ServiceCandidates(app.App, app.Compute(), functionNamesOf(req, app), workerNamesOf(app))...)
@@ -115,8 +115,8 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 				}
 			}
 		}
-		for _, shape := range shapes {
-			tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
+		for _, inventory := range inventories {
+			tree.AddResources(scope, inventory.Vendor, inventory.Region, inventory.Apps[app.App])
 		}
 		for _, worker := range app.Workers {
 			service, err := names.WorkerService(req.Deploy.Slug, req.Deploy.Env, app.App, worker.Name)
@@ -129,14 +129,14 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 		}
 	}
 
-	if err := registry.Shape(component.Shape{Tree: tree, Vendor: string(gcloud.Vendor), Names: names, Request: req, Region: region, Shared: shared, Environment: environment, Transforms: transforms}, req.Resources, use.parts()); err != nil {
+	if err := registry.Inventory(component.Inventory{Tree: tree, Vendor: string(gcloud.Vendor), Names: names, Request: req, Region: region, Shared: shared, Environment: environment, Transforms: transforms}, req.Resources, use.parts()); err != nil {
 		return nil, err
 	}
 
 	return tree.Set(provider.CostSource)
 }
 
-func functionNamesOf(req provider.ShapeRequest, app provider.AppEntry) []string {
+func functionNamesOf(req provider.InventoryRequest, app provider.AppEntry) []string {
 	specs := req.Functions[app.App]
 	if len(specs) == 0 {
 		return []string{app.App}
@@ -156,23 +156,19 @@ func workerNamesOf(app provider.AppEntry) []string {
 	return workers
 }
 
-func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	return cost.Price(req, cloudflarecost.Rates)
-}
-
-func edgeShapes(kind edge.Kind, namespace string, site pricing.EdgeSite) ([]pricing.EdgeShape, error) {
-	var shaped pricing.EdgeShape
+func edgeInventories(kind edge.Kind, namespace string, site pricing.EdgeSite) ([]pricing.EdgeInventory, error) {
+	var inventory pricing.EdgeInventory
 	var err error
 	switch kind {
-	case alb.Kind:
-		shaped, err = alb.Shape(namespace, site)
+	case albresources.Kind:
+		inventory, err = alb.Inventory(namespace, site)
 	case cloudflare.Kind:
-		shaped, err = cloudflare.Shape(site)
+		inventory, err = cloudflare.Inventory(site)
 	default:
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return []pricing.EdgeShape{shaped}, nil
+	return []pricing.EdgeInventory{inventory}, nil
 }

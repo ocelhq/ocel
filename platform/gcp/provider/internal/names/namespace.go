@@ -57,8 +57,24 @@ func (n Names) RepositoryPath(region string, tier environment.Tier) string {
 }
 
 const (
-	cdnPurgeSuffix = "cdn_purge"
+	cdnPurgeSuffix         = "cdn_purge"
+	connectorSuffix        = "connector"
+	connectorRoutingSuffix = "connector_routing"
 )
+
+func (n Names) ConnectorRole() string { return customRoleID(n.namespace, connectorSuffix) }
+
+func (n Names) ConnectorRolePath() string {
+	return "projects/" + n.project + "/roles/" + n.ConnectorRole()
+}
+
+func (n Names) ConnectorRoutingRole() string {
+	return customRoleID(n.namespace, connectorRoutingSuffix)
+}
+
+func (n Names) ConnectorRoutingRolePath() string {
+	return "projects/" + n.project + "/roles/" + n.ConnectorRoutingRole()
+}
 
 func customRoleID(ns provider.Namespace, suffix string) string {
 	return strings.ReplaceAll(naming.NamespaceField(string(ns)), "-", "_") + "_" + suffix

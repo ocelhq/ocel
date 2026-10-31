@@ -13,10 +13,12 @@ import (
 	runv2 "google.golang.org/api/run/v2"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/ocelhq/ocel/pkg/connectorserver"
+
+	"github.com/ocelhq/ocel/pkg/endpoint"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
@@ -25,7 +27,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
-	"github.com/ocelhq/ocel/platform/gcp/provider/resources/variables"
 )
 
 const (
@@ -122,7 +123,7 @@ func (p Connector) Install(ctx context.Context, install provider.ConnectorInstal
 			"this run talks to an emulator, which deploys no Cloud Run service and hands out no url a console could dial: add the connector against the project itself")
 	}
 
-	trust, err := connectorserver.ParseConfig(install.Config, "this install")
+	trust, err := endpoint.ParseConfig(install.Config, "this install")
 	if err != nil {
 		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 	}
@@ -131,7 +132,11 @@ func (p Connector) Install(ctx context.Context, install provider.ConnectorInstal
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
-	if err := p.ensureConnectorAccount(ctx, trust.Grants, progress); err != nil {
+	allowed, err := trust.ListAllowedScopes()
+	if err != nil {
+		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeInvalid, "%s", err)
+	}
+	if err := p.ensureConnectorAccount(ctx, allowed, progress); err != nil {
 		return provider.ConnectorAddress{}, err
 	}
 	publicKey, err := p.connectorKey(ctx, progress)
@@ -180,13 +185,13 @@ func buildConnectorServing(names names.Names, region, image, version, publicKey 
 		Instances: provider.Instances{Max: connectorInstances},
 		Mounts:    []run.SecretMount{connectorKeyMount(names.ConnectorKeySecret())},
 		Env: map[string]string{
-			provider.NamespaceEnvVar:       string(names.Namespace()),
-			ports.ProjectEnvVar:            names.Project(),
-			ports.RegionEnvVar:             region,
-			ports.ConnectorAccountEnvVar:   names.ConnectorAccountEmail(),
-			connectorVersionEnv:            version,
-			connectorPublicKeyEnv:          publicKey,
-			provider.ConnectorConfigEnvVar: string(config),
+			provider.NamespaceEnvVar:     string(names.Namespace()),
+			ports.ProjectEnvVar:          names.Project(),
+			ports.RegionEnvVar:           region,
+			ports.ConnectorAccountEnvVar: names.ConnectorAccountEmail(),
+			connectorVersionEnv:          version,
+			connectorPublicKeyEnv:        publicKey,
+			endpoint.ConfigEnvVar:        string(config),
 		},
 	}
 }
@@ -271,7 +276,7 @@ func (p Connector) pushedConnector(ctx context.Context, binary []byte, progress 
 	return ref, nil
 }
 
-func (p Connector) ensureConnectorAccount(ctx context.Context, grants []string, progress progress.Log) error {
+func (p Connector) ensureConnectorAccount(ctx context.Context, allowed []scopev1.Scope, progress progress.Log) error {
 	names, err := p.openClients(ctx)
 	if err != nil {
 		return err
@@ -296,18 +301,18 @@ func (p Connector) ensureConnectorAccount(ctx context.Context, grants []string, 
 	default:
 		return fmt.Errorf("create the %s service account: %w", names.Connector(), err)
 	}
-	if err := p.bindConnectorProject(ctx, true); err != nil {
+	if err := p.bindConnectorProject(ctx, allowed, true); err != nil {
 		return err
 	}
-	return p.bindConnectorKeys(ctx, keyRolesFor(grants), progress)
+	return p.bindConnectorKeys(ctx, keyRolesFor(allowed), progress)
 }
 
-func keyRolesFor(grants []string) []string {
+func keyRolesFor(allowed []scopev1.Scope) []string {
 	var roles []string
-	if slices.Contains(grants, connectorserver.CapabilityVariablesWrite) {
+	if slices.Contains(allowed, scopev1.Scope_SCOPE_VARIABLES_WRITE) {
 		roles = append(roles, connectorSealingRole)
 	}
-	if slices.Contains(grants, connectorserver.CapabilityVariablesReveal) {
+	if slices.Contains(allowed, scopev1.Scope_SCOPE_VARIABLES_REVEAL) {
 		roles = append(roles, connectorOpeningRole)
 	}
 	return roles
@@ -315,21 +320,9 @@ func keyRolesFor(grants []string) []string {
 
 func (p Connector) forgetConnectorGrants(ctx context.Context, progress progress.Log) error {
 	return gcloud.EveryStep(
-		func() error { return p.bindConnectorProject(ctx, false) },
+		func() error { return p.bindConnectorProject(ctx, nil, false) },
 		func() error { return p.bindConnectorKeys(ctx, nil, progress) },
 	)
-}
-
-func (p Connector) bindConnectorProject(ctx context.Context, granting bool) error {
-	clients, err := p.openClients(ctx)
-	if err != nil {
-		return err
-	}
-	member := "serviceAccount:" + clients.ConnectorAccountEmail()
-	if err := gcloud.BindProjectRole(ctx, clients, member, connectorRecordsRole, variables.RecordsCondition(clients, environment.TierProduction, environment.TierPreview), granting); err != nil {
-		return fmt.Errorf("let %s read and write both tiers' records and every project's: %w", member, err)
-	}
-	return nil
 }
 
 func (p Connector) bindConnectorKeys(ctx context.Context, wanted []string, progress progress.Log) error {

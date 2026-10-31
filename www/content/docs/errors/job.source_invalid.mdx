@@ -1,0 +1,10 @@
+---
+title: job.source_invalid
+description: The runner would not accept the source the CLI read for the job.
+---
+
+The command runs as a job on a runner, so the CLI reads the project's source to upload it, and the source broke a limit a runner sets before any of it went up. A source holds at least one file and at most the number of files a runner accepts, no file is over the size a source file may be, and all of it together is under the size an upload may be. A path is relative, separated by `/`, and holds no backslash and no control character. The message names the files that broke a limit, or the limit the whole source broke.
+
+## Fix
+
+Leave out what the build does not need: list it in the project's `.gitignore` or `.dockerignore`. Rename a file whose name holds a backslash or a control character. A source with no file at all means every file is ignored; check the ignore files above the project.

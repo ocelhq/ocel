@@ -1,0 +1,229 @@
+syntax = "proto3";
+package console.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1";
+
+import "buf/validate/validate.proto";
+import "common/environment/v1/environment.proto";
+import "common/scope/v1/scope.proto";
+import "console/v1/deployment.proto";
+import "google/protobuf/timestamp.proto";
+
+enum EndpointReach {
+  ENDPOINT_REACH_UNSPECIFIED = 0;
+  ENDPOINT_REACH_DIAL = 1;
+}
+
+message EndpointDenial {
+  string verb = 1;
+
+  google.protobuf.Timestamp at = 2;
+
+  string message = 3;
+}
+
+message Endpoint {
+  string id = 1;
+
+  string organization_id = 2;
+
+  string name = 3;
+
+  string target = 4;
+
+  string vendor = 5;
+
+  ComputeKind compute = 6;
+
+  EndpointReach reach = 7;
+
+  optional string url = 8;
+
+  optional string public_key = 9;
+
+  optional string tls_pin = 10;
+
+  optional string version = 11;
+
+  repeated string services = 12;
+
+  repeated common.scope.v1.Scope allowed_scopes = 13;
+
+  google.protobuf.Timestamp connected_at = 14;
+
+  google.protobuf.Timestamp last_seen_at = 15;
+
+  EndpointDenial last_denied = 16;
+
+  bool online = 17;
+}
+
+message UpsertEndpointRequest {
+  string name = 1 [
+    (buf.validate.field).string = {
+      min_len: 1
+      max_len: 63
+      pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    (buf.validate.field).cel = {
+      id: "upsert_endpoint.name_not_ocel_cloud"
+      message: "ocel-cloud names Ocel Cloud's endpoint, which is never registered"
+      expression: "this != 'ocel-cloud'"
+    }
+  ];
+
+  string target = 2 [
+    (buf.validate.field) = {
+      ignore: IGNORE_IF_ZERO_VALUE
+      string: {
+        max_len: 256
+        pattern: "^[a-z0-9._:-]+(?:/[a-z0-9._:-]+)+$"
+      }
+    },
+    (buf.validate.field).cel = {
+      id: "upsert_endpoint.target_not_ocel_cloud"
+      message: "Ocel Cloud's endpoint is the console's own, never a registered one"
+      expression: "this != 'ocel/cloud'"
+    }
+  ];
+
+  string vendor = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+    pattern: "^[a-z0-9._:-]+$"
+  }];
+
+  EndpointReach reach = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+message UpsertEndpointResponse {
+  Endpoint endpoint = 1;
+}
+
+message ListEndpointsRequest {
+}
+
+message ListEndpointsResponse {
+  repeated Endpoint endpoints = 1;
+}
+
+message RemoveEndpointRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message RemoveEndpointResponse {
+}
+
+message SetEndpointAddressRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+
+  string url = 2 [(buf.validate.field).string = {
+    uri: true
+    max_len: 2048
+  }];
+
+  optional string public_key = 3 [(buf.validate.field).string = {min_len: 1, max_len: 256}];
+
+  optional string tls_pin = 4 [(buf.validate.field).string = {min_len: 1, max_len: 256}];
+
+  ComputeKind compute = 5 [(buf.validate.field).enum.defined_only = true];
+}
+
+message SetEndpointAddressResponse {
+  Endpoint endpoint = 1;
+}
+
+message HeartbeatEndpointRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+
+  string version = 2 [(buf.validate.field).string.max_len = 64];
+
+  repeated string services = 3 [(buf.validate.field).repeated = {
+    max_items: 16
+    unique: true
+    items: {
+      string: {
+        max_len: 128
+        pattern: "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*\\.[A-Z][A-Za-z0-9]*Service$"
+      }
+    }
+  }];
+
+  repeated common.scope.v1.Scope allowed_scopes = 4 [(buf.validate.field).repeated = {
+    max_items: 16
+    unique: true
+    items: {enum: {defined_only: true, not_in: [0]}}
+  }];
+}
+
+message HeartbeatEndpointResponse {
+}
+
+message BindRunnerRequest {
+  string project_id = 1 [(buf.validate.field).string.uuid = true];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string runner_id = 3 [(buf.validate.field).string.pattern = "^(ocel-cloud|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"];
+
+  bool credentials = 4;
+}
+
+message BindRunnerResponse {
+}
+
+message UnbindRunnerRequest {
+  string project_id = 1 [(buf.validate.field).string.uuid = true];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+message UnbindRunnerResponse {
+}
+
+message ResolveRunnerRequest {
+  string project_id = 1 [(buf.validate.field).string.uuid = true];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+
+  string provider = 3 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^([a-z0-9._:-]+)?$"
+  }];
+}
+
+message ResolveRunnerResponse {
+  Endpoint runner = 1;
+
+  bool credentials = 2;
+}
+
+service EndpointService {
+  rpc Upsert(UpsertEndpointRequest) returns (UpsertEndpointResponse);
+
+  rpc List(ListEndpointsRequest) returns (ListEndpointsResponse);
+
+  rpc Remove(RemoveEndpointRequest) returns (RemoveEndpointResponse);
+
+  rpc SetAddress(SetEndpointAddressRequest) returns (SetEndpointAddressResponse);
+
+  rpc Heartbeat(HeartbeatEndpointRequest) returns (HeartbeatEndpointResponse);
+
+  rpc BindRunner(BindRunnerRequest) returns (BindRunnerResponse);
+
+  rpc UnbindRunner(UnbindRunnerRequest) returns (UnbindRunnerResponse);
+
+  rpc ResolveRunner(ResolveRunnerRequest) returns (ResolveRunnerResponse);
+}

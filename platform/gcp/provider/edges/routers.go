@@ -5,6 +5,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/router"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudrun"
 )
 
@@ -14,7 +15,7 @@ func (r Routers) Open(kind router.Kind) (router.Router, error) {
 	switch kind {
 	case cloudrun.RouterKind:
 		return cloudrun.NewRouter(r.Registry.OpenCloudRun()), nil
-	case router.Kind(alb.Kind):
+	case router.Kind(albresources.Kind):
 		return alb.NewRouter(r.Registry.OpenALB()), nil
 	case router.Kind(cloudflare.Kind):
 		return cloudflare.NewRouter(), nil

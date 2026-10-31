@@ -28,9 +28,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/progress"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -38,7 +38,6 @@ type Dependencies struct {
 	commands.Invocation
 	BuildApps           func(ctx context.Context, cfg *project.Project, variables map[string]build.AppVariables, archs map[string]string, workers build.HostedWorkers, host build.Host, log build.Log) (build.Output, error)
 	CollectDeclarations func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
-	OpenBrowser         func(ctx context.Context, url string) error
 	ReadGitBranch       func(ctx context.Context, dir string) (string, error)
 	DiscoverPRNumber    func() string
 }
@@ -79,7 +78,7 @@ func NewCommand(dependencies Dependencies) *cobra.Command {
 		},
 	}
 	commands.AddNoWaitFlag(cmd, &opts.noWait)
-	cmd.Flags().StringVar(&opts.env, "env", "", "Build with the values of a deployed `environment`: production, or preview for the current branch's preview")
+	cmd.Flags().StringVar(&opts.env, "env", "", "Build with the values of a deployed `environment`: production, or preview for the current branch's preview. A project that names no provider builds on that tier's runner with its values, production's when none is named")
 	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
@@ -94,15 +93,12 @@ func runBuild(ctx context.Context, dependencies Dependencies, cwd string, opts o
 	if err != nil {
 		return err
 	}
-	if resolved.IsCloud() {
+	if resolved.IsRemote(false) {
+		remote := commands.RemoteRun{Command: "ocel build", Tiers: []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION}, Kind: runnerv1.JobCommand_JOB_COMMAND_BUILD, NoWait: opts.noWait}
 		if env != nil {
-			return commands.NotOnCloud("ocel build --env")
+			remote.Tiers, remote.TierValues = []environmentv1.Tier{env.GetTier()}, true
 		}
-		job := commands.CloudJob{Command: "ocel build", Tier: environmentv1.Tier_TIER_UNSPECIFIED, Kind: cloudv1.JobCommand_JOB_COMMAND_BUILD, NoWait: opts.noWait}
-		if dependencies.IsBrowserReachable(stdin) {
-			job.OpenBrowser = dependencies.OpenBrowser
-		}
-		return dependencies.RunOnCloud(ctx, resolved, job)
+		return dependencies.RunRemote(ctx, resolved, stdin, remote)
 	}
 	if opts.noWait {
 		return commands.RefuseNoWait()

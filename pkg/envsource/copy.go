@@ -21,20 +21,29 @@ type CopyResult struct {
 	Removed   []variablestore.Cell
 	Refused   map[variablestore.Cell]string
 
-	versions map[variablestore.Cell]variablestore.Version
+	environment string
+	versions    map[variablestore.Cell]variablestore.Version
 }
 
-func CopyValues(ctx context.Context, store variablestore.Store, scope variablestore.Scope, listed []variablestore.Metadata, key DigestKey, envSource string, readAt time.Time, read map[variablestore.Cell]Value, folders []string, keep []variablestore.Cell) (CopyResult, error) {
-	result := CopyResult{EnvSource: envSource}
+func CopyValues(ctx context.Context, store variablestore.Store, scope variablestore.Scope, environment string, listed []variablestore.Metadata, key DigestKey, envSource string, readAt time.Time, read map[variablestore.Cell]Value, folders []string, keep []variablestore.Cell) (CopyResult, error) {
+	result := CopyResult{EnvSource: envSource, environment: environment}
 	stored := map[variablestore.Cell]variablestore.Metadata{}
+	tierWide := map[variablestore.Cell]variablestore.Metadata{}
 	for _, metadata := range listed {
-		if metadata.Coordinate.Environment == "" {
+		if metadata.Coordinate.Environment == environment {
 			stored[metadata.Coordinate.Cell] = metadata
+		}
+		if metadata.Coordinate.Environment == "" {
+			tierWide[metadata.Coordinate.Cell] = metadata
 		}
 	}
 	copied := func(at variablestore.Cell) bool {
 		return slices.Contains(folders, at.Folder) && !slices.Contains(keep, at)
 	}
+	holds := func(metadata variablestore.Metadata, found bool, version string) bool {
+		return found && metadata.Provenance.EnvSource == envSource && !isNewerVersion(version, metadata.Provenance.Version)
+	}
+	from := variablestore.Provenance{EnvSource: envSource, ReadAt: readAt}
 
 	for _, at := range slices.SortedFunc(maps.Keys(read), variablestore.Cell.Compare) {
 		if !copied(at) {
@@ -47,7 +56,23 @@ func CopyValues(ctx context.Context, store variablestore.Store, scope variablest
 			return result, err
 		}
 		current, found := stored[at]
-		if found && current.Provenance.EnvSource == envSource && !isNewerVersion(version, current.Provenance.Version) {
+		if environment != "" {
+			tierWideValue, isTierWide := tierWide[at]
+			switch {
+			case found && isSetByHand(current):
+				continue
+			case found && current.Provenance.Publisher != "":
+			case holds(tierWideValue, isTierWide, version):
+				if found {
+					if err := removeCopy(ctx, store, scope, current, from); err != nil {
+						return result, err
+					}
+				}
+				result.Unchanged = append(result.Unchanged, at)
+				continue
+			}
+		}
+		if holds(current, found, version) {
 			result.Unchanged = append(result.Unchanged, at)
 			continue
 		}
@@ -55,7 +80,7 @@ func CopyValues(ctx context.Context, store variablestore.Store, scope variablest
 		if found {
 			expected = current.Version
 		}
-		written, err := store.SetFromEnvSource(ctx, scope, variablestore.Coordinate{Cell: at}, string(next.Plaintext), variablestore.Provenance{EnvSource: envSource, Version: version, ReadAt: readAt}, expected)
+		written, err := store.SetFromEnvSource(ctx, scope, variablestore.Coordinate{Cell: at, Environment: environment}, string(next.Plaintext), variablestore.Provenance{EnvSource: envSource, Version: version, ReadAt: readAt}, expected)
 		if written.Version > 0 {
 			result.recordVersion(at, variablestore.Version{Version: written.Version, CreatedAt: written.UpdatedAt, Size: written.Size})
 		}
@@ -75,13 +100,16 @@ func CopyValues(ctx context.Context, store variablestore.Store, scope variablest
 
 	for _, metadata := range listed {
 		at := metadata.Coordinate.Cell
-		if metadata.Coordinate.Environment != "" || metadata.Target != nil || metadata.Provenance.Publisher != "" || !copied(at) {
+		if metadata.Coordinate.Environment != environment || metadata.Target != nil || metadata.Provenance.Publisher != "" || !copied(at) {
+			continue
+		}
+		if environment != "" && isSetByHand(metadata) {
 			continue
 		}
 		if _, present := read[at]; present {
 			continue
 		}
-		removed, err := store.DeleteFromEnvSource(ctx, scope, metadata.Coordinate, variablestore.Provenance{EnvSource: envSource, ReadAt: readAt}, metadata.Version)
+		removed, err := store.DeleteFromEnvSource(ctx, scope, metadata.Coordinate, from, metadata.Version)
 		if errors.Is(err, variablestore.ErrStaleVersion) {
 			continue
 		}
@@ -95,13 +123,25 @@ func CopyValues(ctx context.Context, store variablestore.Store, scope variablest
 	return result, nil
 }
 
-func ClearProvenance(ctx context.Context, store variablestore.Store, scope variablestore.Scope) error {
+func isSetByHand(metadata variablestore.Metadata) bool {
+	return metadata.Provenance.EnvSource == "" && metadata.Provenance.Publisher == ""
+}
+
+func removeCopy(ctx context.Context, store variablestore.Store, scope variablestore.Scope, copied variablestore.Metadata, from variablestore.Provenance) error {
+	_, err := store.DeleteFromEnvSource(ctx, scope, copied.Coordinate, from, copied.Version)
+	if errors.Is(err, variablestore.ErrStaleVersion) {
+		return nil
+	}
+	return err
+}
+
+func ClearProvenance(ctx context.Context, store variablestore.Store, scope variablestore.Scope, environment string) error {
 	listed, err := store.List(ctx, scope)
 	if err != nil {
 		return err
 	}
 	for _, metadata := range listed {
-		if metadata.Coordinate.Environment != "" || metadata.Target != nil || metadata.Provenance.EnvSource == "" {
+		if metadata.Coordinate.Environment != environment || metadata.Target != nil || metadata.Provenance.EnvSource == "" {
 			continue
 		}
 		copied, err := store.Get(ctx, scope, metadata.Coordinate, true)

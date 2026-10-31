@@ -1,0 +1,10 @@
+---
+title: job.unsupported
+description: The job cannot run the command as it was asked.
+---
+
+The command runs as a job on a runner, because it was run with `--remote` or the project names no provider, and the job cannot do what was asked. A job takes no `--dry` or `--prebuilt`, and `ocel projects destroy` destroys only the project it runs from. A runner the console binds to a tier without target credentials runs no job that reaches a provider the project names.
+
+## Fix
+
+Drop the flag the message names. For a runner without target credentials, bind it to the tier with credentials in the console.

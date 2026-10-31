@@ -132,3 +132,16 @@ func TestAConsentedChangeThatBecameADeleteOrReplaceIsWorkNobodyConsentedTo(t *te
 		}
 	}
 }
+
+func TestAResourceShownTwiceInOneGroupKeepsTheConsentItsWritingRowGot(t *testing.T) {
+	t.Parallel()
+
+	keep := provider.Change{Kind: "oidc-provider", Name: "console.example.com/oidc", Action: provider.ActionKeep}
+	update := provider.Change{Kind: "oidc-provider", Name: "console.example.com/oidc", Action: provider.ActionUpdate}
+	for _, rows := range [][]provider.Change{{keep, update}, {update, keep}} {
+		plan := provider.Plan{Groups: []provider.ChangeGroup{{Kind: provider.StackGroupKind, Name: "console-trust", Changes: rows}}}
+		if err := provider.RefuseUnconsentedChanges(plan, plan); err != nil {
+			t.Errorf("RefuseUnconsentedChanges() over the plan %+v it was shown = %v, want the apply to run", rows, err)
+		}
+	}
+}

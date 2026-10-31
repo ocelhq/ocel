@@ -1,0 +1,10 @@
+---
+title: job.agent
+description: The runner's job agent failed the job.
+---
+
+The job agent that runs `ocel` on the runner could not finish the job: it could not prepare the job's source or start the run. The failure is the runner's, not the project's. The CLI reports the job as [`job.failed`](/docs/errors/job.failed), naming this code and the agent's message.
+
+## Fix
+
+Run the command again. If it fails the same way, check the runner, or report it with the job's page.

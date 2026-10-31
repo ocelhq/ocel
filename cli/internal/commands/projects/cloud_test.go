@@ -1,13 +1,15 @@
 package projects
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 )
 
 func onOcelCloud(t *testing.T) clitest.CloudProject {
@@ -26,7 +28,7 @@ func TestProjectsRunOnOcelCloudThroughTheProviderItServes(t *testing.T) {
 		if got.err != nil || !strings.Contains(got.stdout, clitest.FixtureSlug) {
 			t.Fatalf("err = %v, stdout = %q, want %s listed", got.err, got.stdout, clitest.FixtureSlug)
 		}
-		requireTokenScopes(t, project.Cloud, "cloud.apps.read")
+		requireTokenScopes(t, project.Cloud, "apps.read")
 	})
 
 	t.Run("a run names the organization, the console and the person, as a deploy does", func(t *testing.T) {
@@ -40,7 +42,7 @@ func TestProjectsRunOnOcelCloudThroughTheProviderItServes(t *testing.T) {
 		if got.err != nil {
 			t.Fatal(got.err)
 		}
-		host := strings.TrimPrefix(project.Cloud.ConsoleURL, "http://")
+		host := strings.TrimPrefix(project.Cloud.URL, "http://")
 		for _, want := range []string{"Ocel Cloud", "Acme Inc", host, "as dev@acme.test"} {
 			if !strings.Contains(got.run, want) || !strings.Contains(got.stdout, "Ocel Cloud Acme Inc") {
 				t.Fatalf("run = %q, stdout = %q, want %q named as a deploy names it", got.run, got.stdout, want)
@@ -62,39 +64,43 @@ func TestProjectsRunOnOcelCloudThroughTheProviderItServes(t *testing.T) {
 		if got.err != nil || !strings.Contains(got.stdout, "pr-1") {
 			t.Fatalf("err = %v, stdout = %q, want the preview environments shown", got.err, got.stdout)
 		}
-		requireTokenScopes(t, project.Cloud, "cloud.apps.read")
+		requireTokenScopes(t, project.Cloud, "apps.read")
 	})
 
-	t.Run("destroy takes both tiers behind the typed name and records it in the linked console project", func(t *testing.T) {
+	t.Run("destroy dispatches a job for each tier behind one typed name", func(t *testing.T) {
 		project := onOcelCloud(t)
-		if err := console.WriteLink(project.Root, console.Link{APIURL: project.Cloud.ConsoleURL, OrganizationID: "org_1", ProjectID: clitest.FixtureConsoleProjectID, ProjectName: clitest.FixtureSlug}); err != nil {
-			t.Fatal(err)
-		}
+		project.Cloud.Link(t, project.Root)
+		clitest.WriteFile(t, filepath.Join(project.Root, "ocel.json"), `{"slug": "`+clitest.FixtureSlug+`"}`)
 		invocation := askingInvocation()
 		project.LogIn(&invocation)
 		got := runDestroyCommand(t, invocation, project.Root, clitest.FixtureSlug+"\n")
 		if got.err != nil || strings.Count(got.stdout, "Type the project name") != 1 || !strings.Contains(got.stdout, "Destroyed project "+clitest.FixtureSlug) {
 			t.Fatalf("err = %v, stdout = %s, want both tiers destroyed behind one typed name", got.err, got.stdout)
 		}
-		if _, removed := removals(t, project.FakeProject); len(removed) != 2 {
-			t.Fatalf("removed %d tiers, want both", len(removed))
+		dispatched := project.Cloud.Dispatched
+		if len(dispatched) != 2 || dispatched[0].GetTier() != environmentv1.Tier_TIER_PRODUCTION || dispatched[1].GetTier() != environmentv1.Tier_TIER_PREVIEW ||
+			dispatched[0].GetJob().GetCommand() != runnerv1.JobCommand_JOB_COMMAND_PROJECTS_DESTROY || dispatched[0].GetRequestId() == dispatched[1].GetRequestId() {
+			t.Fatalf("dispatched %v, want one destroy job per tier, each its own request", clitest.DescribeDispatched(dispatched))
 		}
-		sessions := map[string]bool{}
-		for _, call := range project.Remote.Calls() {
-			sessions[call.Session] = true
+		if _, removed := removals(t, project.FakeProject); len(removed) != 0 {
+			t.Fatalf("removed %d tiers here, want the jobs to remove them", len(removed))
 		}
-		if len(sessions) != 1 {
-			t.Fatalf("opened %d sessions on Ocel Cloud, want the one run open one", len(sessions))
-		}
-		requireTokenScopes(t, project.Cloud, "cloud.apps.read", "cloud.apps.write")
-		events := project.Cloud.RecordedEvents()
-		if len(events) != 2 || events[0].GetEvent().GetKind() != consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED {
-			t.Fatalf("events = %v, want each tier's destroy recorded", events)
+	})
+
+	t.Run("destroy dispatches nothing when the typed name does not match", func(t *testing.T) {
+		project := onOcelCloud(t)
+		project.Cloud.Link(t, project.Root)
+		clitest.WriteFile(t, filepath.Join(project.Root, "ocel.json"), `{"slug": "`+clitest.FixtureSlug+`"}`)
+		invocation := askingInvocation()
+		project.LogIn(&invocation)
+		got := runDestroyCommand(t, invocation, project.Root, "other\n")
+		if got.err != nil || len(project.Cloud.Dispatched) != 0 || project.Cloud.Runner.Committed != nil {
+			t.Fatalf("err = %v, dispatched %v, want nothing uploaded or dispatched", got.err, clitest.DescribeDispatched(project.Cloud.Dispatched))
 		}
 	})
 }
 
-func requireTokenScopes(t *testing.T, cloud *clitest.FakeOcelCloud, want ...string) {
+func requireTokenScopes(t *testing.T, cloud *clitest.FakeConsole, want ...string) {
 	t.Helper()
 	if len(cloud.TokenScopes) == 0 || slices.ContainsFunc(cloud.TokenScopes, func(got []string) bool { return !slices.Equal(got, want) }) {
 		t.Fatalf("tokens issued with scopes %v, want each with exactly %v", cloud.TokenScopes, want)

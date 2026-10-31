@@ -34,6 +34,8 @@ func inspecting() map[string]string {
 		"what a port forward reads its container's address with":                 release.ContainerAddressCommand(physical),
 		"what a release reads to archive the image of the container it retires":  release.ReleaseCommand(physical),
 		"what a load reads to tell which image the tag names after it":           release.ImageIDCommand(imageRef),
+		"what a bootstrap reads to tell whether the job image is there":          jobImageSurvey(jobImage(testAssets, released)),
+		"what a bootstrap reads to tell whether the jobs' daemon runs as stated": jobsDaemonSurvey(jobsDaemon()),
 	}
 }
 
@@ -88,9 +90,9 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 
 func inspectRosters() map[string][]string {
 	return map[string][]string{
-		"docker inspect":         {"ReloadCommand", "ContainerAddressCommand", "containerProbe", "Inspecting", "Removing", "ReleaseCommand", "EnvCommand", "restoredCommand", "Restoring", "Rising", "RenderLastRunLogs", "RunningCommand", "ServingCommand", "StateCommand", "RenderStartWatch"},
+		"docker inspect":         {"ReloadCommand", "ContainerAddressCommand", "containerProbe", "Inspecting", "Removing", "ReleaseCommand", "EnvCommand", "restoredCommand", "Restoring", "Rising", "RenderLastRunLogs", "RunningCommand", "ServingCommand", "StateCommand", "RenderStartWatch", "jobsDaemonSurvey"},
 		"docker network inspect": {"Command", "JoiningNetwork", "CreatingNetwork", "EnsuringNetwork", "ForgettingNetwork", "networkProbe", "NetworksPresent"},
-		"docker image inspect":   {"ImageIDCommand", "Pulled"},
+		"docker image inspect":   {"ImageIDCommand", "Pulled", "jobImageSurvey"},
 	}
 }
 

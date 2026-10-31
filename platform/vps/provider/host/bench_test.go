@@ -64,7 +64,7 @@ func newBench(installed map[environment.Tier][]machine.Item) *bench {
 func (b *bench) host() *Host { return b.fronted(front.Proxy{}) }
 
 func (b *bench) fronted(fronting front.Proxy) *Host {
-	return New(ssh.NewBox(b.dial, b.pause), "shop", Keys{}, nil, fronting)
+	return New(ssh.NewBox(b.dial, b.pause), testAssets, "shop", Keys{}, nil, fronting)
 }
 
 func (h *Host) useFront(front proxy.Proxy) {
@@ -302,14 +302,14 @@ func bootstrapped(t *testing.T, tier environment.Tier) []machine.Item {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return append(Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), stamp)
+	return append(Items(testAssets, tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), stamp)
 }
 
 func TestASurveyedHostReadsBackAsTheItemsThatAreInstalledOnIt(t *testing.T) {
 	t.Parallel()
 
 	tier := environment.TierProduction
-	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	items := Items(testAssets, tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
 	box := newBench(map[environment.Tier][]machine.Item{tier: items})
 
 	read, err := box.host().Survey(context.Background(), tier)
@@ -338,7 +338,7 @@ func bootstrappedBehind(t *testing.T, tier environment.Tier, fronting front.Prox
 	t.Helper()
 
 	keys := []byte(aKey + "\n")
-	items := Items(tier, keys, ssh.AMD64, fronting)
+	items := Items(testAssets, tier, keys, ssh.AMD64, fronting)
 	minted := []byte("the key this box minted for itself")
 	present := make([]machine.Item, 0, len(items)+1)
 	for _, item := range items {

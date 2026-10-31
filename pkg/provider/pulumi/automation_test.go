@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -169,6 +170,20 @@ func TestWorkspacePassesThePassphraseAndTheVendorsOwnEnvironment(t *testing.T) {
 	}
 	if setup.EnvVariables["VENDOR_REGION"] != "nowhere" {
 		t.Errorf("the workspace's environment is %v, want the vendor's own variables passed through", setup.EnvVariables)
+	}
+}
+
+func TestTheWorkspaceKeepsTheEnginesPluginsUnderHomeNotTheAccountsHomeDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PULUMI_HOME", "")
+
+	setup, err := pulumi.New(pulumi.Config[provider.StackSpec]{Backend: backend(), Program: program{}.Run}).Workspace(spec().Ref, spec())
+	if err != nil {
+		t.Fatalf("Workspace() = %v", err)
+	}
+	if got, want := setup.EnvVariables["PULUMI_HOME"], filepath.Join(home, ".pulumi"); got != want {
+		t.Errorf("the workspace's PULUMI_HOME is %q, want %q under $HOME", got, want)
 	}
 }
 

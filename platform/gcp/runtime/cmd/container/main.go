@@ -25,6 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/mountedgate"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/bucket"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 	source "github.com/ocelhq/ocel/platform/gcp/runtime/live"
 	realtimeproxy "github.com/ocelhq/ocel/platform/realtime/proxy"
@@ -205,7 +206,7 @@ func readManifest(raw string) (variables.Manifest, error) {
 func serveProxy(ctx context.Context, values *live.Values, manifest variables.Manifest, app string, engine *runs.Engine) (bindingproxy.Served, error) {
 	var services bindingproxy.Services
 	if values != nil && bindsBuckets(values) {
-		store, err := bucket.Open(ctx, manifest.Endpoint, "")
+		store, err := bucket.Open(ctx, ports.Credentials{}, manifest.Endpoint, "")
 		if err != nil {
 			return bindingproxy.Served{}, err
 		}

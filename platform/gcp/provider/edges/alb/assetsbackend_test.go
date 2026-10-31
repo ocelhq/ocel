@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 var errAgentUnseen = errors.New("updating urn:pulumi:production::ocel-alb::gcp:projects/iAMMember:IAMMember::ocel-alb-production-reader: " +
@@ -16,7 +17,7 @@ func TestABootstrapRaisedBeforeGoogleHasMadeTheLoadBalancersAgentRaisesItAgainOn
 	t.Parallel()
 
 	balancer, w := balancing(t)
-	w.failUps(LoadBalancerStack(environment.TierProduction), errAgentUnseen, errAgentUnseen)
+	w.failUps(albresources.LoadBalancerStack(environment.TierProduction), errAgentUnseen, errAgentUnseen)
 
 	if _, err := balancer.Bootstrap(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("Bootstrap = %v, want it to wait for the agent the first backend bucket brings into being", err)
@@ -31,7 +32,7 @@ func TestABootstrapRefusedForAnythingButTheMissingAgentIsNotRaisedAgain(t *testi
 
 	balancer, w := balancing(t)
 	refused := errors.New("googleapi: Error 403: Required 'compute.backendBuckets.create' permission, forbidden")
-	w.failUps(LoadBalancerStack(environment.TierProduction), refused)
+	w.failUps(albresources.LoadBalancerStack(environment.TierProduction), refused)
 
 	if _, err := balancer.Bootstrap(context.Background(), environment.TierProduction); !errors.Is(err, refused) {
 		t.Fatalf("Bootstrap = %v, want %v", err, refused)

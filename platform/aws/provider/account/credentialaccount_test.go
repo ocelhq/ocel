@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/kv"
-	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/realtime"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/envsourcesync"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
@@ -698,7 +698,7 @@ func tierResources() []tierResource {
 			return requestContext{"aws:ResourceTag/" + iam.ManagedSecretClusterTagKey: tierCluster(tier)}
 		}},
 		{"postgres", "rds-db:connect", func(tier environment.Tier) string {
-			return "arn:aws:rds-db:" + region + ":dbuser:cluster-ABCDEFGHIJKL/" + postgres.AppRoleFor(tier)
+			return "arn:aws:rds-db:" + region + ":dbuser:cluster-ABCDEFGHIJKL/" + signin.AppRoleFor(tier)
 		}, untagged},
 		{"kv", "elasticache:DeleteReplicationGroup", fixed("arn:aws:elasticache:" + region + ":replicationgroup:ocel-app-shop-prod-kv-cache"), ocelRoleOf},
 		{"kv", "elasticache:ModifyReplicationGroup", fixed("arn:aws:elasticache:" + region + ":replicationgroup:ocel-app-shop-prod-kv-cache"), ocelRoleOf},

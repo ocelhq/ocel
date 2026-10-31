@@ -4,8 +4,9 @@ import (
 	"testing"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"google.golang.org/api/secretmanager/v1"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 )
 
 func TestAKeyWhosePrimaryVersionIsGoneIsSurveyedAsOneTheBootstrapReplaces(t *testing.T) {

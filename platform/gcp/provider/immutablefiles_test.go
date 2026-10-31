@@ -17,7 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/platform/gcp/provider/assets"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
@@ -104,8 +104,8 @@ func staticObject(name, cacheControl string, metadata map[string]string) *raw.Ob
 	return &raw.Object{Name: name, Bucket: tierBucket, ContentType: "text/javascript", CacheControl: cacheControl, Metadata: metadata}
 }
 
-func releaseRoutes(release string) alb.StaticRoutes {
-	return alb.StaticRoutes{
+func releaseRoutes(release string) albresources.StaticRoutes {
+	return albresources.StaticRoutes{
 		Backend:    "ocel-alb-production-assets",
 		Objects:    "/assets/shop/prod/web/" + release + "/",
 		Immutable:  []string{"/_next/static/"},
@@ -122,7 +122,7 @@ func TestCopyingImmutableFilesGivesTheTargetReleaseTheFilesOnlyTheSourceUploaded
 		staticObject("assets/shop/prod/web/r1/_next/static/chunks/a1.js", immutableCache, nil),
 		staticObject("assets/shop/prod/web/r2/_next/static/chunks/b2.js", immutableCache, nil),
 	)
-	if err := p.objects().CopyImmutableFiles(context.Background(), environment.TierProduction, releaseRoutes("r1"), releaseRoutes("r2")); err != nil {
+	if err := p.Objects().CopyImmutableFiles(context.Background(), environment.TierProduction, releaseRoutes("r1"), releaseRoutes("r2")); err != nil {
 		t.Fatalf("CopyImmutableFiles = %v", err)
 	}
 
@@ -147,7 +147,7 @@ func TestCopyingImmutableFilesSkipsWhatTheTargetHoldsWhatTheSourceCopiedAndWhatM
 		staticObject("assets/shop/prod/web/r1/_next/static/chunks/old.js", immutableCache, map[string]string{assets.CopiedFromKey: "/assets/shop/prod/web/r0/"}),
 		staticObject("assets/shop/prod/web/r1/_next/static/live/feed.json", "no-cache", nil),
 	)
-	if err := p.objects().CopyImmutableFiles(context.Background(), environment.TierProduction, releaseRoutes("r1"), releaseRoutes("r2")); err != nil {
+	if err := p.Objects().CopyImmutableFiles(context.Background(), environment.TierProduction, releaseRoutes("r1"), releaseRoutes("r2")); err != nil {
 		t.Fatalf("CopyImmutableFiles = %v", err)
 	}
 	if got := server.copied(); got != 0 {

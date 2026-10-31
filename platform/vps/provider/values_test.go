@@ -187,7 +187,7 @@ func TestAValueDeliveredUnderANameTheRuntimeReadsItsOwnFromIsRefused(t *testing.
 func TestTheProviderWrapsEveryContainerInTheRuntimeItShips(t *testing.T) {
 	t.Parallel()
 
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	for arch, machine := range map[string]elf.Machine{ssh.AMD64: elf.EM_X86_64, ssh.ARM64: elf.EM_AARCH64} {
 		raw, err := p.Runtime().Binary(context.Background(), arch)
 		if err != nil {

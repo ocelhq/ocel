@@ -11,9 +11,12 @@ ocel connector add [flags]
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--allow-reveal` | `bool` | `false` | Let the console read secret values back in the clear |
-| `--allow-write` | `bool` | `true` | Let the console write values |
 | `--compute` | `string` |  | What the connector runs on: serverless or container, and the provider's own default when this names neither |
+| `--cpus` | `string` |  | With `--runner`, the CPUs all jobs on the target share; the provider's own cap when left off |
+| `--image` | `string` |  | With `--runner`, the job image to pull instead of the one the provider builds from this release |
+| `--memory` | `string` |  | With `--runner`, the memory all jobs on the target share, as Docker spells it (4g); the provider's own cap when left off |
+| `--name` | `string` |  | The name the console shows this connector by: lowercase letters, digits and dashes; one made from the target when left off |
+| `--runner` | `bool` | `false` | Run the console's jobs on this target too, where its provider can; a job is trusted like the target's admins |
 
 Every command also takes the [global flags](/docs/cli#global-flags).
 

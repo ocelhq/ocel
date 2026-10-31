@@ -37,7 +37,7 @@ func publishGate(t *testing.T, p *Provider, held *gate.Gate) {
 
 func publishGateOn(t *testing.T, p *Provider, tier environment.Tier, held *gate.Gate) {
 	t.Helper()
-	if err := (cloudrun.GateSecrets{OpenClients: p.openClients}).Publish(context.Background(), tier, "shop", held); err != nil {
+	if err := (cloudrun.GateSecrets{OpenClients: p.OpenClients}).Publish(context.Background(), tier, "shop", held); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -238,7 +238,7 @@ func TestRevokingAGatedProductionAppTakesItsReadOfTheProductionGateSecretAway(t 
 	if _, err := p.ProvisionContainers(context.Background(), spec, &fake.Log{}); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	c, err := p.openClients(context.Background())
+	c, err := p.OpenClients(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -465,7 +465,7 @@ func TestRevokingAGatedPreviewAppTakesItsReadOfTheGateSecretAway(t *testing.T) {
 	if _, err := p.ProvisionContainers(context.Background(), spec, &fake.Log{}); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	c, err := p.openClients(context.Background())
+	c, err := p.OpenClients(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -534,7 +534,7 @@ func openGateSecrets(t *testing.T) (*googletest.Run, *gcloud.Clients) {
 	t.Helper()
 	server := &googletest.Run{}
 	p := providerServing(server, t)
-	c, err := p.openClients(context.Background())
+	c, err := p.OpenClients(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	pushAckDeadline     = 600 * time.Second
+	PushAckDeadline     = 600 * time.Second
 	maxBackoff          = 600 * time.Second
 	mutableSubscription = "pushConfig,retryPolicy,ackDeadlineSeconds"
 
@@ -144,7 +144,7 @@ func (s Subscriptions) subscription(project, name string, topic *provider.TopicS
 	}
 	return &pubsub.Subscription{
 		Topic:                 path,
-		AckDeadlineSeconds:    int64(pushAckDeadline / time.Second),
+		AckDeadlineSeconds:    int64(PushAckDeadline / time.Second),
 		EnableMessageOrdering: topic.Ordered,
 		Filter:                fmt.Sprintf(`NOT attributes:%s OR attributes.%s = %q`, ConsumerAttribute, ConsumerAttribute, consumer.Name),
 		PushConfig: &pubsub.PushConfig{

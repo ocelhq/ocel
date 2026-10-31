@@ -40,9 +40,14 @@ const (
 	SocketBytes        = 64 << 10
 )
 
-type Resource struct{ box component.Box }
+type Resource struct {
+	box       component.Box
+	binarySum func() string
+}
 
-func New(box component.Box) Resource { return Resource{box: box} }
+func New(box component.Box, binarySum func() string) Resource {
+	return Resource{box: box, binarySum: binarySum}
+}
 
 func GatewayName(ref provider.StackRef) (string, error) {
 	return container.Name(ref, gatewayOwner, gatewayKind)
@@ -77,7 +82,6 @@ func NewGateway(ref provider.StackRef, name string, keys map[string]string) (con
 		ReadOnly: true,
 		Memory:   strconv.Itoa(GatewayMemoryBytes),
 		Mounts:   []container.Mount{{Source: host.RealtimeDir, Target: host.RealtimeMount}},
-		Labels:   map[string]string{labelBinary: host.RealtimeBinarySum()},
 		Env: map[string]string{
 			gatewayenv.HostVar:       gatewayAddress(name),
 			gatewayenv.KeysVar:       string(encoded),
@@ -85,6 +89,15 @@ func NewGateway(ref provider.StackRef, name string, keys map[string]string) (con
 		},
 		Ready: []string{host.RealtimeMounted, "ready"},
 	}, nil
+}
+
+func (r Resource) gateway(ref provider.StackRef, name string, keys map[string]string) (container.Spec, error) {
+	spec, err := NewGateway(ref, name, keys)
+	if err != nil {
+		return container.Spec{}, err
+	}
+	spec.Labels = map[string]string{labelBinary: r.binarySum()}
+	return spec, nil
 }
 
 func mintSigningSeed() (string, error) {
@@ -199,7 +212,7 @@ func (r Resource) Plan(ctx context.Context, in resources.ProvisionRequest, recor
 		return "", "", err
 	}
 	keys[record.namespace] = record.verifyKey
-	spec, err := NewGateway(in.Ref, gateway, keys)
+	spec, err := r.gateway(in.Ref, gateway, keys)
 	if err != nil {
 		return "", "", err
 	}
@@ -322,7 +335,7 @@ func (r Resource) placeGateway(ctx context.Context, ref provider.StackRef, gatew
 		progress.Say("Removing the realtime gateway " + gateway + ": " + ref.Name.Env + " declares no realtime any more")
 		return r.box.Containers.Remove(ctx, container.Ref{Tier: ref.Tier, Project: ref.Project, Resource: gatewayResource, Name: gateway})
 	}
-	spec, err := NewGateway(ref, gateway, keys)
+	spec, err := r.gateway(ref, gateway, keys)
 	if err != nil {
 		return err
 	}

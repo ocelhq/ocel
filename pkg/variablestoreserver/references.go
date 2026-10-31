@@ -20,7 +20,7 @@ func (h *Service) SetReference(ctx context.Context, req *variablestorev1.SetRefe
 			"a reference resolves against the value %s sets for all environments; %q is an environment of the project that owns the reference, and names nothing in the target's",
 			target.GetKey(), target.GetEnvironment()))
 	}
-	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func (h *Service) SetReference(ctx context.Context, req *variablestorev1.SetRefe
 }
 
 func (h *Service) ListReferences(ctx context.Context, req *variablestorev1.ListReferencesRequest) (*variablestorev1.ListReferencesResponse, error) {
-	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}

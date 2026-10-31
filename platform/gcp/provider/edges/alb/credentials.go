@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -71,10 +72,10 @@ func (e *Edge) credentialPermissions(purpose edge.CredentialPurpose) (edge.Crede
 			"and binds a hostname: a certificate and its map entry, a backend onto a serverless NEG, and a host rule in the url map"
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
-			"the %s edge lists its roles for bootstrap or deploy credentials, not %q", Kind, string(purpose))
+			"the %s edge lists its roles for bootstrap or deploy credentials, not %q", albresources.Kind, string(purpose))
 	}
 	return edge.CredentialDocument{
-		Heading:  fmt.Sprintf("the roles the %s edge adds on project %s, since a %s credential %s", Kind, e.deps.Project, purpose, does),
+		Heading:  fmt.Sprintf("the roles the %s edge adds on project %s, since a %s credential %s", albresources.Kind, e.deps.Project, purpose, does),
 		Document: strings.Join(grants.Roles(), "\n"),
 	}, nil
 }

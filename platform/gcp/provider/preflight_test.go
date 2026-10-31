@@ -169,7 +169,7 @@ func TestADeployAsksWhetherTheAPIsItRunsOnAreOnOnlyWhenTheChecksAreNotSkipped(t 
 		}))
 		t.Cleanup(served.Close)
 		p := pushing(t, served.URL)
-		p.skipChecks = skipChecks
+		p.SkipChecks = skipChecks
 		recordedCurrent(t, p, environment.TierProduction, bootstrap.Keys, bootstrap.EdgeBucket, bootstrap.CacheBucket)
 
 		if _, err := p.PlanPreflight(context.Background(), shippingNext(false)); err != nil {
@@ -325,7 +325,7 @@ func deployingProject(project string) provider.DeployPreflight {
 
 func cachingProvider(t *testing.T, p *Provider, own bool) *Provider {
 	t.Helper()
-	p.options.OwnDatabase = own
+	p.Options.OwnDatabase = own
 	recordedCurrent(t, p, environment.TierProduction, bootstrap.CacheBucket)
 	return p
 }
@@ -378,7 +378,7 @@ func TestADeployThatTurnsOnOwnDatabaseAfterTheProjectsFirstIsRefusedBeforeAnyCha
 	if err := p.ApplyPreflight(ctx, deployingProject("shop")); err != nil {
 		t.Fatal(err)
 	}
-	p.options.OwnDatabase = true
+	p.Options.OwnDatabase = true
 
 	if _, err := p.PlanPreflight(ctx, deployingProject("shop")); err == nil || !strings.Contains(err.Error(), "ownDatabase") {
 		t.Errorf("planning shop with ownDatabase after it shared its tier's database = %v, want a refusal naming ownDatabase", err)

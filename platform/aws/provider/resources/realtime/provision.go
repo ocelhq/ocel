@@ -54,7 +54,7 @@ type realtimeArgs struct {
 
 func apiName(namespace, project, env string) (string, error) {
 	at := naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: naming.KindRealtime, Name: realtimeWord}
-	return component.PhysicalName(namespace, at, maxAppSyncAPINameLen)
+	return at.TaggedResourceName(namespace).Fit(maxAppSyncAPINameLen)
 }
 
 func encodeVerifyKeys(namespaces []realtimeNamespace) (string, error) {

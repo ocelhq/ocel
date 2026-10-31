@@ -282,10 +282,12 @@ func (b *Box) deploying(ctx context.Context) (prefix, error) {
 			boxapi.StateRoot, boxapi.DeployLogin, dest.User, refused.Message, boxapi.DeployLogin)
 	}
 	if elevation == asLogin {
-		return prefix("runuser -u " + boxapi.DeployLogin + " -- env PATH=" + boxapi.DeployPath + " "), nil
+		return prefix("runuser -u " + boxapi.DeployLogin + " -- " + fromRoot), nil
 	}
-	return elevation + prefix("-u "+boxapi.DeployLogin+" env PATH="+boxapi.DeployPath+" "), nil
+	return elevation + prefix("-u "+boxapi.DeployLogin+" "+fromRoot), nil
 }
+
+var fromRoot = "env PATH=" + boxapi.DeployPath + " sh -c " + shell.Quote(`cd / && exec "$@"`) + " " + boxapi.DeployLogin + " "
 
 func (b *Box) dockering(ctx context.Context) (prefix, error) {
 	return b.docker.get(func() (prefix, error) {

@@ -9,8 +9,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
-	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
+	"github.com/ocelhq/ocel/platform/aws/provider/quotas"
 )
 
 const witnessWord = "w"
@@ -30,12 +30,22 @@ var actionsOnWhatBothTiersShare = []string{
 	"iam:GetOpenIDConnectProvider",
 	"iam:RemoveClientIDFromOpenIDConnectProvider",
 	"iam:TagOpenIDConnectProvider",
+	"route53:ChangeResourceRecordSets",
+	"route53:ListResourceRecordSets",
+}
+
+var hostnamesTheUserNames = []string{
+	iam.DomainNameARN,
+}
+
+var stacksBothTiersRead = []string{
+	"arn:aws:cloudformation:*:*:stack/" + naming.MustUntieredOcelName(string(defaultNamespace), "connector") + "/*",
 }
 
 var resourcesAWSOwns = []string{
 	bastion.PortForwardingDocumentARN,
-	component.VPCQuota.ARN(),
-	component.ElasticIPQuota.ARN(),
+	quotas.VPC.ARN(),
+	quotas.ElasticIP.ARN(),
 }
 
 var resourcesAWSNamesByIDAndScopesByNoTag = []string{
@@ -115,7 +125,9 @@ func witnessesOf(t *testing.T, tier environment.Tier) []witness {
 
 func isOfNoTier(w witness) bool {
 	switch {
-	case w.resource == iam.AnyResource && readOnly(w.action):
+	case w.resource == iam.AnyResource && readOnly(w.action),
+		slices.Contains(hostnamesTheUserNames, w.resource) && readOnly(w.action),
+		slices.Contains(stacksBothTiersRead, w.resource) && readOnly(w.action):
 		return true
 	case slices.Contains(actionsAWSGivesNoScopingKey, w.action),
 		slices.Contains(actionsOnWhatBothTiersShare, w.action):

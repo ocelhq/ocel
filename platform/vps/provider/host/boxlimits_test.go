@@ -17,7 +17,7 @@ func TestEveryContainerOcelRunsForTheBoxItselfRunsUnderAMemoryLimit(t *testing.T
 	t.Parallel()
 
 	for name, box := range map[string]docker.Service{
-		"the switchboard": switchboardBox(switchboardBinary(ssh.AMD64), front.Proxy{}),
+		"the switchboard": switchboardBox(switchboardBinary(testAssets, ssh.AMD64), front.Proxy{}),
 		"the proxy":       frontProxy(),
 		"the tunnel":      tunnel.Service(boxapi.Tunnel{Name: "ocel-box", ID: "5a6b7c8d-1"}, edge.TunnelConnector{Image: "example/connector@sha256:abc", TokenFileEnv: "TOKEN_FILE"}),
 	} {

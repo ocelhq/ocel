@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/front"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -128,7 +129,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if stamp.Writer != "live-suite" {
 		t.Errorf("the stamp reads writer %q, want the writer that applied it", stamp.Writer)
 	}
-	for _, item := range host.Items(tier, nil, ssh.AMD64, front.Proxy{}) {
+	for _, item := range host.Items(vps.TestAssets, tier, nil, ssh.AMD64, front.Proxy{}) {
 		if stamp.Digests[item.ID()] == "" {
 			t.Errorf("the stamp records no digest for %s, and nothing can say whether it drifted", item.ID())
 		}

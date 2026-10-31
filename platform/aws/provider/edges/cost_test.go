@@ -7,29 +7,29 @@ import (
 	"github.com/ocelhq/ocel/pkg/pricing"
 )
 
-func TestEveryEdgeThisProviderFrontsWithShapesWhatItProvisions(t *testing.T) {
+func TestEveryEdgeThisProviderFrontsWithInventoriesWhatItProvisions(t *testing.T) {
 	t.Parallel()
 
 	site := pricing.EdgeSite{Slug: "shop", Tier: environment.TierProduction, Region: "us-east-1"}
 	for _, kind := range SupportedEdges() {
-		shape, err := Shape(kind, "ocel", site)
+		inventory, err := Inventory(kind, "ocel", site)
 		if err != nil {
-			t.Fatalf("Shape(%s) = %v", kind, err)
+			t.Fatalf("Inventory(%s) = %v", kind, err)
 		}
-		if shape.Vendor == "" || len(shape.Shared)+len(shape.Environment)+len(shape.Apps) == 0 {
-			t.Errorf("Shape(%s) = %+v, want what the edge provisions for the site, billed to its vendor", kind, shape)
+		if inventory.Vendor == "" || len(inventory.Shared)+len(inventory.Environment)+len(inventory.Apps) == 0 {
+			t.Errorf("Inventory(%s) = %+v, want what the edge provisions for the site, billed to its vendor", kind, inventory)
 		}
 	}
 }
 
-func TestAnEdgeThisProviderCannotFrontWithShapesNothing(t *testing.T) {
+func TestAnEdgeThisProviderCannotFrontWithInventoriesNothing(t *testing.T) {
 	t.Parallel()
 
-	shape, err := Shape("relay", "ocel", pricing.EdgeSite{Slug: "shop", Tier: environment.TierProduction})
+	inventory, err := Inventory("relay", "ocel", pricing.EdgeSite{Slug: "shop", Tier: environment.TierProduction})
 	if err != nil {
-		t.Fatalf("Shape(relay) = %v", err)
+		t.Fatalf("Inventory(relay) = %v", err)
 	}
-	if shape.Vendor != "" || len(shape.Shared)+len(shape.Environment)+len(shape.Apps) != 0 {
-		t.Errorf("Shape(relay) = %+v, want nothing shaped for an edge this provider does not front with", shape)
+	if inventory.Vendor != "" || len(inventory.Shared)+len(inventory.Environment)+len(inventory.Apps) != 0 {
+		t.Errorf("Inventory(relay) = %+v, want nothing inventoried for an edge this provider does not front with", inventory)
 	}
 }

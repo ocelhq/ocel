@@ -109,9 +109,9 @@ func listRecordedProjects(ctx context.Context, store records.Store) ([]recordedP
 	return projects, nil
 }
 
-func readRecordedProject(ctx context.Context, store records.Store, slug string) (recordedProject, bool, error) {
+func readRecordedProject(ctx context.Context, store records.Store, slug string, tiers []environment.Tier) (recordedProject, bool, error) {
 	project := recordedProject{slug: slug, records: map[environment.Tier]stackrecords.Project{}}
-	for _, tier := range projectTiers {
+	for _, tier := range tiers {
 		recorded, found, err := stackrecords.ReadProject(ctx, store, tier, slug)
 		if isUnbootstrapped(err) {
 			continue

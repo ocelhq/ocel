@@ -4,11 +4,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/containerservice"
 )
 
 const (
-	maxServiceNameLen = 255
-
 	targetGroupWord = "tg"
 	rulePart        = "rule"
 	scalingPart     = "scaling"
@@ -22,11 +21,11 @@ type Names struct {
 }
 
 func NamesFor(namespace, project string, stack naming.StackName) (Names, error) {
-	return namesAt(namespace, serviceCoordinate(project, stack), component.AppRoleCoordinate(project, stack))
+	return namesAt(namespace, containerservice.Coordinate(project, stack), component.AppRoleCoordinate(project, stack))
 }
 
 func namesAt(namespace string, service, roleAt naming.Coordinate) (Names, error) {
-	physical, err := component.PhysicalName(namespace, service, maxServiceNameLen)
+	physical, err := containerservice.NameAt(namespace, service)
 	if err != nil {
 		return Names{}, err
 	}

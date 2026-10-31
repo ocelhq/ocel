@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/consolecontract"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 )
 
 var contractBinding = consolecontract.Binding{Values: map[string]string{
@@ -64,13 +64,13 @@ var contractCalls = map[string]contractCall{
 	"console-describe": {send: func(ctx context.Context, c *Client, _ map[string]string) (any, error) {
 		return asProtoJSON(c.Describe(ctx))
 	}},
-	"cloud-token": {send: func(ctx context.Context, c *Client, values map[string]string) (any, error) {
-		decoded, err := c.IssueCloudToken(ctx, values["session.token"], values["organization.id"], []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_READ})
+	"endpoint-token-ocel-cloud": {send: func(ctx context.Context, c *Client, values map[string]string) (any, error) {
+		decoded, err := c.IssueEndpointToken(ctx, values["session.token"], values["organization.id"], CloudEndpointID, []scopev1.Scope{scopev1.Scope_SCOPE_APPS_READ})
 		return decoded, err
 	}},
-	"cloud-token-without-session": {
+	"endpoint-token-without-session": {
 		send: func(ctx context.Context, c *Client, values map[string]string) (any, error) {
-			_, err := c.IssueCloudToken(ctx, "", values["organization.id"], []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_READ})
+			_, err := c.IssueEndpointToken(ctx, "", values["organization.id"], CloudEndpointID, []scopev1.Scope{scopev1.Scope_SCOPE_APPS_READ})
 			return nil, err
 		},
 		refused: func(err error) bool { return connect.CodeOf(err) == connect.CodeUnauthenticated },

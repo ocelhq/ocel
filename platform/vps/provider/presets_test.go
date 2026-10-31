@@ -227,7 +227,7 @@ func TestAProxyMissingWhatItNeedsIsRefusedNamingTheField(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := vps.New(context.Background(), provider.Settings{Options: proxied(tc.proxy)})
+			_, err := vps.New(vps.TestAssets)(context.Background(), provider.Settings{Options: proxied(tc.proxy)})
 			if err == nil {
 				t.Fatalf("New() with %v = nil, want a refusal", tc.proxy)
 			}

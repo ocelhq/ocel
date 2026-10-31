@@ -18,7 +18,7 @@ import (
 func TestTraceFlagsGoToTheBoxOnlyWhenItsAgentIsThisBuilds(t *testing.T) {
 	ctx, _ := tracingtest.Record(t)
 	var installed string
-	for _, item := range host.Items(environment.TierProduction, nil, ssh.AMD64, front.Proxy{}) {
+	for _, item := range host.Items(vps.TestAssets, environment.TierProduction, nil, ssh.AMD64, front.Proxy{}) {
 		if item.Kind == machine.KindFile && item.Name == host.LiveBinary {
 			installed = item.Sum()
 		}

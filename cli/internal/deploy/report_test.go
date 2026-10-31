@@ -94,6 +94,24 @@ func TestADeployFromALinkedTreeReportsOneDeploymentToTheConsole(t *testing.T) {
 	}
 }
 
+func TestADeployFromALinkedTreeReportsItsStartBeforeItsOutcome(t *testing.T) {
+	dependencies, fixture, console := reportingDeploy(t)
+	console.Link(t, fixture.Root)
+
+	if _, stderr, err := deployOnce(t, dependencies, fixture, deployOptions{}); err != nil {
+		t.Fatalf("runDeploy err = %v; stderr=%s", err, stderr)
+	}
+
+	starts, reports := console.Starts(), console.Reports()
+	if len(starts) != 1 || len(reports) != 1 {
+		t.Fatalf("the console received %d starts and %d reports, want one of each", len(starts), len(reports))
+	}
+	started := starts[0].GetDeployment()
+	if started.GetId() != reports[0].GetDeployment().GetId() || started.GetKind() != consolev1.DeploymentKind_DEPLOYMENT_KIND_DEPLOY || started.GetTarget() != fixtureTarget || starts[0].GetProjectId() != clitest.FixtureConsoleProjectID {
+		t.Fatalf("started %v, want the deploy the report names, of the linked project", starts[0])
+	}
+}
+
 func TestADeployedPromotionIsSequencedByTheTimeTheRouterRecordedIt(t *testing.T) {
 	dependencies, fixture, console := reportingDeploy(t)
 	console.Link(t, fixture.Root)

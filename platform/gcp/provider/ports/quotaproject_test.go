@@ -86,7 +86,7 @@ func billedProjectOf(t *testing.T, quotaProject string) string {
 	http.DefaultTransport = redirected
 	defer func() { http.DefaultTransport = original }()
 
-	options, err := newRESTOptions(context.Background(), "", quotaProject)
+	options, err := newRESTOptions(context.Background(), Credentials{}, "", quotaProject)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func billedProjectOf(t *testing.T, quotaProject string) string {
 func TestAUserCredentialBillsItsCallsToTheProjectItDeploysTo(t *testing.T) {
 	userCredentials(t)
 
-	if billed := billedProjectOf(t, findQuotaProject("acme-prod")); billed != "acme-prod" {
+	if billed := billedProjectOf(t, findQuotaProject("acme-prod", Credentials{})); billed != "acme-prod" {
 		t.Errorf("the call was billed to %q, want acme-prod: a user's credential names its own quota project, and a deploy's calls are the target project's", billed)
 	}
 }
@@ -112,7 +112,7 @@ func TestAQuotaProjectTheEnvironmentNamesBillsTheCallsInsteadOfTheProjectDeploye
 	userCredentials(t)
 	t.Setenv(QuotaProjectEnvVar, "acme-billing")
 
-	if billed := billedProjectOf(t, findQuotaProject("acme-prod")); billed != "acme-billing" {
+	if billed := billedProjectOf(t, findQuotaProject("acme-prod", Credentials{})); billed != "acme-billing" {
 		t.Errorf("the call was billed to %q, want acme-billing: %s names the project a user bills Google API calls to", billed, QuotaProjectEnvVar)
 	}
 }
@@ -120,7 +120,7 @@ func TestAQuotaProjectTheEnvironmentNamesBillsTheCallsInsteadOfTheProjectDeploye
 func TestAServiceAccountCredentialNamesNoQuotaProject(t *testing.T) {
 	serviceAccountCredentials(t)
 
-	if got := findQuotaProject("acme-prod"); got != "" {
+	if got := findQuotaProject("acme-prod", Credentials{}); got != "" {
 		t.Errorf("findQuotaProject() = %q, want none: a service account's own project bills its calls, as Google's libraries default it", got)
 	}
 }

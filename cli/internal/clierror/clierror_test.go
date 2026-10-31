@@ -40,10 +40,10 @@ func TestACodedErrorBecomesARunErrorWithItsCodeHintRetryAndDocsPage(t *testing.T
 }
 
 func TestACodedErrorNamingAnotherCodesPageLinksThatPage(t *testing.T) {
-	got := clierror.NewRunError(&clierror.Error{Code: "cloud.job_failed", DocsCode: "cloud.builder", Cause: errors.New("the builder stopped")})
+	got := clierror.NewRunError(&clierror.Error{Code: "job.failed", DocsCode: "cloud.preview_limit", Cause: errors.New("the plan allows 3 previews")})
 
-	if got.GetCode() != "cloud.job_failed" || got.GetDocsUrl() != "https://ocel.dev/docs/errors/cloud.builder" {
-		t.Fatalf("run error = %s, want cloud.job_failed linking cloud.builder's page", protojson.Format(got))
+	if got.GetCode() != "job.failed" || got.GetDocsUrl() != "https://ocel.dev/docs/errors/cloud.preview_limit" {
+		t.Fatalf("run error = %s, want job.failed linking cloud.preview_limit's page", protojson.Format(got))
 	}
 }
 

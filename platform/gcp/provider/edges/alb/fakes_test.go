@@ -16,6 +16,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albprogram"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
@@ -25,7 +27,7 @@ const notFoundBackend = "ocel-alb-production-notfound"
 
 const assetsBackend = "ocel-alb-production-assets"
 
-var tierAssets = AssetsBucket{Name: "ocel-prod-edge-k3x9q2", Agent: "serviceAccount:service-4242@https-lb.iam.gserviceaccount.com"}
+var tierAssets = albresources.AssetsBucket{Name: "ocel-prod-edge-k3x9q2", Agent: "serviceAccount:service-4242@https-lb.iam.gserviceaccount.com"}
 
 const backendToken = "gcp:compute/backendService:BackendService"
 
@@ -35,7 +37,7 @@ type world struct {
 	ups          []string
 	destroys     []string
 	routed       map[string]map[string]string
-	staticRoutes map[string]map[string]*StaticRoutes
+	staticRoutes map[string]map[string]*albresources.StaticRoutes
 	pinned       []string
 	backends     map[string]map[string]bool
 	entries      map[string]map[string]bool
@@ -88,11 +90,11 @@ func (w *world) warmedThrough() []string {
 func newWorld() *world {
 	return &world{
 		outputs: map[string]map[string]string{
-			LoadBalancerStack(environment.TierProduction): balancer(),
-			LoadBalancerStack(environment.TierPreview):    balancer(),
+			albresources.LoadBalancerStack(environment.TierProduction): balancer(),
+			albresources.LoadBalancerStack(environment.TierPreview):    balancer(),
 		},
 		routed:              map[string]map[string]string{},
-		staticRoutes:        map[string]map[string]*StaticRoutes{},
+		staticRoutes:        map[string]map[string]*albresources.StaticRoutes{},
 		backends:            map[string]map[string]bool{"": {notFoundBackend: true}},
 		entries:             map[string]map[string]bool{},
 		declared:            map[string]map[string]declaration{},
@@ -113,11 +115,22 @@ func balancer() map[string]string {
 	}
 }
 
-func (w *world) Up(_ context.Context, target Target, program Program, _ progress.Log) (map[string]string, error) {
-	stack := target.Name()
-	if program.Run == nil {
-		return nil, errors.New("a stack was raised with no program to raise")
-	}
+func (w *world) UpLoadBalancer(_ context.Context, spec albresources.LoadBalancerSpec, _ progress.Log) (map[string]string, error) {
+	program, built := albprogram.LoadBalancer(spec)
+	return w.up(albresources.Stack{Tier: spec.Tier}, program, built)
+}
+
+func (w *world) UpBinding(_ context.Context, spec albresources.BindingSpec, _ progress.Log) (map[string]string, error) {
+	program, built := albprogram.Binding(spec)
+	return w.up(albresources.Stack{Tier: spec.Tier, Slug: spec.Slug}, program, built)
+}
+
+func (w *world) UpGate(_ context.Context, tier environment.Tier, publish func(context.Context, bool) (albresources.GateSpec, error), _ progress.Log) (map[string]string, error) {
+	return w.up(albresources.Stack{Tier: tier, Gate: true}, albprogram.Gate(publish), nil)
+}
+
+func (w *world) up(raised albresources.Stack, program albprogram.Program, built error) (map[string]string, error) {
+	stack := raised.Name()
 	w.mu.Lock()
 	overlapping := w.onUp
 	w.onUp = nil
@@ -125,11 +138,14 @@ func (w *world) Up(_ context.Context, target Target, program Program, _ progress
 	if overlapping != nil {
 		overlapping()
 	}
-	seen, err := declared(program)
+	seen, err := declared(program, built)
 	if err != nil {
 		return nil, err
 	}
 	outputs, err := w.commitUp(stack, seen)
+	if err == nil {
+		err = program.Patches.RefuseUnclaimed()
+	}
 	w.mu.Lock()
 	finished := w.afterUp
 	w.afterUp = nil
@@ -167,7 +183,7 @@ func (w *world) commitUp(stack string, seen map[string]declaration) (map[string]
 	return map[string]string{}, nil
 }
 
-func (w *world) Destroy(_ context.Context, target Target, _ progress.Log) error {
+func (w *world) Destroy(_ context.Context, target albresources.Stack, _ progress.Log) error {
 	stack := target.Name()
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -177,14 +193,14 @@ func (w *world) Destroy(_ context.Context, target Target, _ progress.Log) error 
 	return nil
 }
 
-func (w *world) Outputs(_ context.Context, target Target) (map[string]string, error) {
+func (w *world) Outputs(_ context.Context, target albresources.Stack) (map[string]string, error) {
 	stack := target.Name()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return maps.Clone(w.outputs[stack]), nil
 }
 
-func (w *world) Route(_ context.Context, urlMap, hostname, backend string, routes *StaticRoutes) error {
+func (w *world) Route(_ context.Context, urlMap, hostname, backend string, routes *albresources.StaticRoutes) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !w.hasBackend(backend) {
@@ -208,14 +224,14 @@ func (w *world) Route(_ context.Context, urlMap, hostname, backend string, route
 	return nil
 }
 
-func (w *world) keepStaticRoutes(urlMap, hostname string, routes *StaticRoutes) {
+func (w *world) keepStaticRoutes(urlMap, hostname string, routes *albresources.StaticRoutes) {
 	if w.staticRoutes[urlMap] == nil {
-		w.staticRoutes[urlMap] = map[string]*StaticRoutes{}
+		w.staticRoutes[urlMap] = map[string]*albresources.StaticRoutes{}
 	}
 	w.staticRoutes[urlMap][hostname] = routes
 }
 
-func (w *world) staticRoutesRouted(urlMap, hostname string) *StaticRoutes {
+func (w *world) staticRoutesRouted(urlMap, hostname string) *albresources.StaticRoutes {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.staticRoutes[urlMap][hostname]
@@ -384,14 +400,14 @@ func (w *world) tagOf(service, revision string) string {
 }
 
 func (w *world) servedRevision(slug string, tier environment.Tier, hostnames []string) string {
-	declared := w.declarations(BindingStack(slug, tier))
+	declared := w.declarations(albresources.BindingStack(slug, tier))
 	routed := w.hosts(balancer()["urlMap"])
 	for _, hostname := range hostnames {
 		backend, ok := routed[hostname]
 		if !ok || backend == notFoundBackend {
 			continue
 		}
-		run, _ := declared[must(negName("ocel", slug, tier, hostname))].Args["cloudRun"].(map[string]any)
+		run, _ := declared[must(albresources.NegName("ocel", slug, tier, hostname))].Args["cloudRun"].(map[string]any)
 		service, _ := run["service"].(string)
 		tag, _ := run["tag"].(string)
 		if tag == "" {
@@ -485,7 +501,7 @@ var _ Routes = (*world)(nil)
 
 var _ Entries = (*world)(nil)
 
-func declared(program Program, built ...error) (map[string]declaration, error) {
+func declared(program albprogram.Program, built ...error) (map[string]declaration, error) {
 	if err := errors.Join(built...); err != nil {
 		return nil, err
 	}
@@ -582,7 +598,7 @@ type immutableCopy struct {
 	Routed     string
 }
 
-func (w *world) copyImmutableFiles(_ context.Context, _ environment.Tier, from, to StaticRoutes) error {
+func (w *world) copyImmutableFiles(_ context.Context, _ environment.Tier, from, to albresources.StaticRoutes) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.copying != nil {
@@ -612,4 +628,8 @@ func (w *world) pinCount() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return len(w.pinned)
+}
+
+func gateProgram(spec albresources.GateSpec) albprogram.Program {
+	return albprogram.Gate(func(context.Context, bool) (albresources.GateSpec, error) { return spec, nil })
 }

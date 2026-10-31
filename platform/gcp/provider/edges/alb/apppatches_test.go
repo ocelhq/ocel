@@ -10,14 +10,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 func armored(policy string) transform.Result {
-	return transform.Result{Patches: transform.Patches{surfaceBackendService: {"securityPolicy": policy}}}
+	return transform.Result{Patches: transform.Patches{albresources.SurfaceBackendService: {"securityPolicy": policy}}}
 }
 
 func readingApps(balancer *Edge, apps *AppPatches) {
-	balancer.deps.ReadApps = apps.Read
+	balancer.deps.Engine.ReadApps = apps.Read
 }
 
 func servedWeb(t *testing.T, stack edge.EdgeStack, hostname string) {
@@ -38,7 +39,7 @@ func servedWeb(t *testing.T, stack edge.EdgeStack, hostname string) {
 }
 
 func webBackend(w *world, hostname string) declaration {
-	return w.declarations(BindingStack("shop", environment.TierProduction))[must(backendName("ocel", "shop", environment.TierProduction, hostname))]
+	return w.declarations(albresources.BindingStack("shop", environment.TierProduction))[must(albresources.BackendName("ocel", "shop", environment.TierProduction, hostname))]
 }
 
 func TestADeployWhoseAppPatchesChangedProvisionsItsHostnamesBackendsAgain(t *testing.T) {
@@ -63,7 +64,7 @@ func TestADeployWhoseAppPatchesChangedProvisionsItsHostnamesBackendsAgain(t *tes
 	if got := webBackend(w, "shop.example.com").Patch["securityPolicy"]; got != "web-armor" {
 		t.Errorf("shop.example.com's backend carries %v, want the security policy web's deploy evaluated", webBackend(w, "shop.example.com").Patch)
 	}
-	if got := w.raised()[raised:]; !slices.Contains(got, BindingStack("shop", environment.TierProduction)) {
+	if got := w.raised()[raised:]; !slices.Contains(got, albresources.BindingStack("shop", environment.TierProduction)) {
 		t.Errorf("the deploy raised %v, want the project's binding stack raised again with the patch", got)
 	}
 	want := "Applying the transforms that patch the alb edge resources of web: they differ from the ones they were provisioned with"
@@ -75,7 +76,7 @@ func TestADeployWhoseAppPatchesChangedProvisionsItsHostnamesBackendsAgain(t *tes
 	if _, err := balancer.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Tier: environment.TierProduction}, stack.State()); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.raised()[raised:]; slices.Contains(got, BindingStack("shop", environment.TierProduction)) {
+	if got := w.raised()[raised:]; slices.Contains(got, albresources.BindingStack("shop", environment.TierProduction)) {
 		t.Errorf("a deploy with unchanged patches raised %v, want the binding stack left as it is", got)
 	}
 }
@@ -94,7 +95,7 @@ func TestAHostnameBoundLaterCarriesThePatchesItsAppsLastDeployEvaluated(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	balancer.deps.ReadApps = nil
+	balancer.deps.Engine.ReadApps = (&AppPatches{}).Read
 	servedWeb(t, reopened, "shop.example.com")
 
 	if got := webBackend(w, "shop.example.com").Patch["securityPolicy"]; got != "web-armor" {
@@ -139,8 +140,8 @@ func TestAnAppsPatchesAreKeptApartPerProjectAndTier(t *testing.T) {
 	apps.Set(environment.TierPreview, "shop", "web", armored("preview"))
 	apps.Set(environment.TierProduction, "store", "web", armored("store"))
 
-	read := apps.Read(environment.TierProduction, "shop")
-	if len(read) != 1 || read["web"].Patches[surfaceBackendService]["securityPolicy"] != "shop" {
+	read, _ := apps.Read(context.Background(), environment.TierProduction, "shop")
+	if len(read) != 1 || read["web"].Patches[albresources.SurfaceBackendService]["securityPolicy"] != "shop" {
 		t.Errorf("Read(production, shop) = %v, want only shop's production patch", read)
 	}
 }

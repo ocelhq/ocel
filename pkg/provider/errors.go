@@ -19,6 +19,7 @@ var refusalCodes = map[refusal.Code]connect.Code{
 
 	refusal.CodeUnknownOption: connect.CodeInvalidArgument,
 	refusal.CodeUnsupported:   connect.CodeUnimplemented,
+	refusal.CodeNeedsRunner:   connect.CodeFailedPrecondition,
 }
 
 func RefusalError(err error) error {
@@ -68,6 +69,7 @@ var protoRefusalCodes = map[refusal.Code]contractv1.RefusalCode{
 
 	refusal.CodeUnknownOption: contractv1.RefusalCode_REFUSAL_CODE_UNKNOWN_OPTION,
 	refusal.CodeUnsupported:   contractv1.RefusalCode_REFUSAL_CODE_UNSUPPORTED,
+	refusal.CodeNeedsRunner:   contractv1.RefusalCode_REFUSAL_CODE_NEEDS_RUNNER,
 }
 
 func RefusedCode(err error) (refusal.Code, bool) {

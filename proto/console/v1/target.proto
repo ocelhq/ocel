@@ -14,10 +14,12 @@ message TierIdentity {
     pattern: "^\\S+$"
   }];
 
-  string principal = 2 [(buf.validate.field).string = {
-    min_len: 1
-    max_len: 2048
-    pattern: "^\\S+$"
+  string principal = 2 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {
+      max_len: 2048
+      pattern: "^\\S+$"
+    }
   }];
 }
 
@@ -34,15 +36,25 @@ message PrepareTargetRequest {
     pattern: "^[a-z0-9._:-]+$"
   }];
 
-  string region = 3 [(buf.validate.field).string = {
-    min_len: 1
-    max_len: 64
-    pattern: "^[a-z0-9-]+$"
+  string region = 3 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {
+      max_len: 64
+      pattern: "^[a-z0-9-]+$"
+    }
   }];
 
   string project_id = 4 [(buf.validate.field) = {
     ignore: IGNORE_IF_ZERO_VALUE
     string: {uuid: true}
+  }];
+
+  string namespace = 5 [(buf.validate.field) = {
+    ignore: IGNORE_IF_ZERO_VALUE
+    string: {
+      max_len: 44
+      pattern: "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    }
   }];
 }
 
@@ -122,6 +134,8 @@ message IssueCredentialResponse {
   string session_name = 6;
 
   TierIdentity identity = 7;
+
+  string namespace = 8;
 }
 
 service TargetService {

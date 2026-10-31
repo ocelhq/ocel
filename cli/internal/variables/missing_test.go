@@ -11,8 +11,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -355,13 +355,13 @@ func TestAMissingErrorNamesTheVariablesAJobNeedsWithWhatTheConsoleShowsForEach(t
 		Scope:  variables.Scope{Tier: environmentv1.Tier_TIER_PREVIEW},
 	}
 
-	want := &cloudv1.VariablesNeeded{
+	want := &runnerv1.VariablesNeeded{
 		Tier: environmentv1.Tier_TIER_PREVIEW,
-		Variables: []*cloudv1.NeededVariable{
+		Variables: []*runnerv1.NeededVariable{
 			{Key: "DATABASE_URL", Secret: true, Description: "Where orders are kept.", Reason: "no value", Group: "db"},
 			{Key: "API_BASE", Folder: "/web", Reason: "set, but not a URL"},
 		},
-		Groups: []*cloudv1.NeededGroup{{Key: "db", Description: "The database."}},
+		Groups: []*runnerv1.NeededGroup{{Key: "db", Description: "The database."}},
 	}
 	if got := refusal.Needed(); !proto.Equal(got, want) {
 		t.Errorf("Needed() = %v, want %v", got, want)

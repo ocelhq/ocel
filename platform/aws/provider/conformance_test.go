@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 )
 
@@ -32,24 +33,24 @@ func TestAWSProvider(t *testing.T) {
 func TestAContainerBuiltFromAFunctionPassesTheConformanceSuite(t *testing.T) {
 	t.Parallel()
 
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace).PullingImagesWith(fake.PullStandInImage)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace).PullingImagesWith(fake.PullStandInImage)
 	conformance.RunFunctionContainers(t, p.Facts(), p.Runtime())
 }
 
 func TestTheRouterRegistryOpensTheRouterEveryEdgePairsWith(t *testing.T) {
 	t.Parallel()
 
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	conformance.RunRouters(t, p.Facts(), p.Edges(), p.Routers())
 }
 
 func TestTheProviderNamesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 	t.Parallel()
 
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 
-	if p.Facts().Vendor != aws.Vendor {
-		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, aws.Vendor)
+	if p.Facts().Vendor != control.Vendor {
+		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, control.Vendor)
 	}
 	for _, want := range []provider.BindingType{provider.BindingPostgres, provider.BindingBucket} {
 		if !slices.Contains(p.Facts().Bindings, want) {
@@ -98,21 +99,21 @@ func buildProvider(t *testing.T) string {
 func TestTopicsTasksAndWorkersAreServedRatherThanRefusedAtPreflight(t *testing.T) {
 	t.Parallel()
 
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	conformance.RunWorkers(t, p.Facts())
 }
 
 func TestKVStoresAreServedRatherThanRefusedAtPreflight(t *testing.T) {
 	t.Parallel()
 
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	conformance.RunKVStores(t, p.Facts())
 }
 
 func TestRealtimeIsServedRatherThanRefusedAtPreflight(t *testing.T) {
 	t.Parallel()
 
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	if !slices.Contains(p.Facts().Bindings, provider.BindingRealtime) {
 		t.Errorf("Facts().Bindings = %v, want realtime served over AppSync Events", p.Facts().Bindings)
 	}
@@ -122,7 +123,7 @@ func TestRealtimeIsServedRatherThanRefusedAtPreflight(t *testing.T) {
 func TestTheProviderOffersTheConsolesTrustAsABootstrapPart(t *testing.T) {
 	t.Parallel()
 
-	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
+	p := aws.NewProvider(control.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	boot, err := p.Bootstrap(edges.DefaultKind)
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)

@@ -169,3 +169,10 @@ func TestSanitizingDropsJoinersVariationSelectorsAndOtherInvisibleCharacters(t *
 		}
 	}
 }
+
+func TestEscapeControlLinesKeepsLineBreaksAndEscapesEverythingElse(t *testing.T) {
+	got := EscapeControlLines("credential check failed:\r\n  ✗ vps: refused\x1b[2J")
+	if want := "credential check failed:\n  ✗ vps: refused\\u001b[2J"; got != want {
+		t.Errorf("EscapeControlLines() = %q, want %q", got, want)
+	}
+}

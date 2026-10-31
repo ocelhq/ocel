@@ -16,37 +16,32 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
-	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/scope"
 )
 
 type options struct {
 	compute string
+	runner  bool
+	name    string
+	yes     bool
+	policy  consent.Policy
+	cpus    string
+	memory  string
+	image   string
 	target  string
-	reveal  bool
-	write   bool
 	apiURL  string
 	console *console.Client
-}
-
-func (o options) grants() []string {
-	capabilities := []string{connectorserver.CapabilityVariablesRead}
-	if o.write {
-		capabilities = append(capabilities, connectorserver.CapabilityVariablesWrite)
-	}
-	if o.reveal {
-		capabilities = append(capabilities, connectorserver.CapabilityVariablesReveal)
-	}
-	return capabilities
 }
 
 type Dependencies struct {
@@ -57,7 +52,7 @@ type Dependencies struct {
 func NewCommand(dependencies Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "connector <command>",
-		Short:   "Manage the connector the console reads this target's variables through",
+		Short:   "Manage the connector the console reaches this target through",
 		Example: "  $ ocel connector add --config ocel.staging.json\n  $ ocel connector status\n  $ ocel connector rm --config ocel.staging.json",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_ = cmd.Help()
@@ -73,7 +68,7 @@ func newAddCommand(dependencies Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "add",
 		Short:   "Put a connector on this target and pair it with the console",
-		Example: "  $ ocel connector add --config ocel.staging.json\n  $ ocel connector add --config ocel.staging.json --allow-reveal",
+		Example: "  $ ocel connector add --config ocel.staging.json\n  $ ocel connector add --runner --cpus 2 --memory 4g",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withOptions(cmd, dependencies, &opts, func(ctx context.Context, cfg *project.Project, link *console.Link) error {
@@ -82,8 +77,11 @@ func newAddCommand(dependencies Dependencies) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&opts.compute, "compute", "", "What the connector runs on: `serverless` or container, and the provider's own default when this names neither")
-	cmd.Flags().BoolVar(&opts.reveal, "allow-reveal", false, "Let the console read secret values back in the clear")
-	cmd.Flags().BoolVar(&opts.write, "allow-write", true, "Let the console write values")
+	cmd.Flags().StringVar(&opts.name, "name", "", "The `name` the console shows this connector by: lowercase letters, digits and dashes; one made from the target when left off")
+	cmd.Flags().BoolVar(&opts.runner, "runner", false, "Run the console's jobs on this target too, where its provider can; a job is trusted like the target's admins")
+	cmd.Flags().StringVar(&opts.cpus, "cpus", "", "With --runner, the `CPUs` all jobs on the target share; the provider's own cap when left off")
+	cmd.Flags().StringVar(&opts.memory, "memory", "", "With --runner, the `memory` all jobs on the target share, as Docker spells it (4g); the provider's own cap when left off")
+	cmd.Flags().StringVar(&opts.image, "image", "", "With --runner, the job `image` to pull instead of the one the provider builds from this release")
 	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
@@ -95,11 +93,13 @@ func newRemoveCommand(dependencies Dependencies) *cobra.Command {
 		Example: "  $ ocel connector rm --config ocel.staging.json\n  $ ocel connector rm --target <fingerprint>",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			opts.policy = dependencies.Policy("ocel connector rm", opts.yes, cmd.ErrOrStderr(), cmd.InOrStdin())
 			return withOptions(cmd, dependencies, &opts, func(ctx context.Context, cfg *project.Project, link *console.Link) error {
 				return runRemove(ctx, dependencies, cfg, link, opts)
 			})
 		},
 	}
+	commands.AddYesFlag(cmd, &opts.yes)
 	cmd.Flags().StringVar(&opts.target, "target", "", "The `fingerprint` ocel connector status prints, to forget a connector whose target will not answer")
 	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
@@ -184,19 +184,19 @@ func requireProviderID(ctx context.Context, dependencies Dependencies, cfg *proj
 	return declared.ID, nil
 }
 
-func printConnector(out io.Writer, registered *consolev1.Connector, live console.Liveness) {
+func printConnector(out io.Writer, registered *consolev1.Endpoint, live console.Liveness) {
 	fmt.Fprintf(out, "%s\n", terminal.PaletteFor(out).Bold(registered.GetTarget()))
 	fmt.Fprintf(out, "  compute %s over %s, %s\n", formatOptional(console.ComputeNameOf(registered.GetCompute()), "unset"), reachName(registered.GetReach()), live)
 	fmt.Fprintf(out, "  url %s\n", formatOptional(registered.GetUrl(), "none"))
-	fmt.Fprintf(out, "  can %s\n", formatCapabilities(registered.GetCapabilities()))
+	fmt.Fprintf(out, "  can %s\n", formatCapabilities(scope.ClaimsOf(registered.GetAllowedScopes())))
 	if denied := registered.GetLastDenied(); denied != nil {
 		fmt.Fprintf(out, "  last refused %s at %s: %s\n", denied.GetVerb(), terminal.FormatRFC3339(timeOf(denied.GetAt())), denied.GetMessage())
 	}
 }
 
-func reachName(reach consolev1.ConnectorReach) string {
+func reachName(reach consolev1.EndpointReach) string {
 	switch reach {
-	case consolev1.ConnectorReach_CONNECTOR_REACH_DIAL:
+	case consolev1.EndpointReach_ENDPOINT_REACH_DIAL:
 		return "dial"
 	default:
 		return "unknown"

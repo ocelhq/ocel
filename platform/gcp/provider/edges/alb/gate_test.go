@@ -18,6 +18,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albprogram"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 var shopGate = gate.Gate{Key: "shop-key", PasswordHash: gate.SignPassword("shop-key", "shop password"), BypassSecrets: []string{"shop-bypass"}}
@@ -65,7 +67,7 @@ func TestBootstrappingEachTierAttachesAFailClosedGateExtensionToItsForwardingRul
 
 			_, w := gatedEdgeOn(t, tier)
 
-			declared := w.declarations(GateStack(tier))
+			declared := w.declarations(albresources.GateStack(tier))
 			extension, found := declared["ocel-"+naming.TierWord(tier)+"-alb-gate-edge"]
 			if !found || extension.Token != lbEdgeExtensionToken {
 				t.Fatalf("the gate stack declares %v, want a load balancer edge extension: it runs before the url map and before Cloud CDN, on every request", keys(declared))
@@ -99,8 +101,8 @@ func TestEveryForwardingRuleThatServesContentRunsTheGateBeforeCloudCDN(t *testin
 
 			_, w := gatedEdgeOn(t, tier)
 
-			front := w.declarations(LoadBalancerStack(tier))
-			extension := w.declarations(GateStack(tier))["ocel-"+naming.TierWord(tier)+"-alb-gate-edge"]
+			front := w.declarations(albresources.LoadBalancerStack(tier))
+			extension := w.declarations(albresources.GateStack(tier))["ocel-"+naming.TierWord(tier)+"-alb-gate-edge"]
 			attached, _ := extension.Args["forwardingRules"].([]any)
 			rules := 0
 			for name, declared := range front {
@@ -130,7 +132,7 @@ func TestThePluginIsUploadedOnceToTheTiersRegistryAndTheTierRunsThatImage(t *tes
 			if w.gate.uploads[tier] != 1 || len(w.gate.uploads) != 1 {
 				t.Errorf("the bootstrap ensured the plugin images %v, want once in the %s tier's repository", w.gate.uploads, tier)
 			}
-			declared := w.declarations(GateStack(tier))
+			declared := w.declarations(albresources.GateStack(tier))
 			versions, _ := declared["ocel-"+naming.TierWord(tier)+"-alb-gate"].Args["versions"].([]any)
 			version, _ := versions[0].(map[string]any)
 			if image, _ := version["imageUri"].(string); !strings.HasPrefix(image, pluginRepository(tier)) {
@@ -145,10 +147,10 @@ func TestAnEmptyGateSetStillAttachesThePluginSoGatingLaterIsAVersionSwapAlone(t 
 
 	_, w := gatedEdge(t)
 
-	if config := w.gateConfig(GateStack(environment.TierPreview)); config == "" {
+	if config := w.gateConfig(albresources.GateStack(environment.TierPreview)); config == "" {
 		t.Fatal("the plugin holds no config, and a plugin that cannot start refuses every request")
 	}
-	if hosts := w.gatedHosts(GateStack(environment.TierPreview)); len(hosts) != 0 {
+	if hosts := w.gatedHosts(albresources.GateStack(environment.TierPreview)); len(hosts) != 0 {
 		t.Errorf("the plugin gates %v on a tier no project gates", hosts)
 	}
 }
@@ -183,11 +185,11 @@ func TestAGatedPreviewsKeysAndHostsReachThePluginBeforeAnyRequestIsRoutedToIt(t 
 		t.Fatalf("MovePointer = %v", err)
 	}
 
-	if hosts := w.gatedHosts(GateStack(environment.TierPreview)); !slices.Equal(hosts, []string{aliasHost}) {
+	if hosts := w.gatedHosts(albresources.GateStack(environment.TierPreview)); !slices.Equal(hosts, []string{aliasHost}) {
 		t.Errorf("the plugin gates %v, want %s", hosts, aliasHost)
 	}
 	events := w.happened()
-	gatedAt, probedAt, routedAt := lastIndex(events, "up "+GateStack(environment.TierPreview)), indexOf(events, "probe "+aliasHost), indexOf(events, "route "+aliasHost)
+	gatedAt, probedAt, routedAt := lastIndex(events, "up "+albresources.GateStack(environment.TierPreview)), indexOf(events, "probe "+aliasHost), indexOf(events, "route "+aliasHost)
 	if gatedAt < 0 || gatedAt >= probedAt || probedAt >= routedAt {
 		t.Errorf("events %v, want the gate published, then %s probed until it answered 401, then %s routed", events, aliasHost, aliasHost)
 	}
@@ -211,7 +213,7 @@ func TestAHostBoundToAGatedPreviewIsInThePluginBeforeItIsRoutedToTheApp(t *testi
 		t.Fatalf("MovePointer = %v", err)
 	}
 
-	if hosts := w.gatedHosts(GateStack(environment.TierPreview)); !slices.Contains(hosts, bound) {
+	if hosts := w.gatedHosts(albresources.GateStack(environment.TierPreview)); !slices.Contains(hosts, bound) {
 		t.Errorf("the plugin gates %v, want %s, which now routes to the preview", hosts, bound)
 	}
 	events := w.happened()
@@ -339,7 +341,7 @@ func TestAPreviewWithNoGateIsNeitherPublishedNorProbed(t *testing.T) {
 	if got := w.probed(aliasHost); got != 0 {
 		t.Errorf("an ungated host was probed %d times", got)
 	}
-	if again := eventsMentioning(w.happened()[ups:], "up "+GateStack(environment.TierPreview)); len(again) != 0 {
+	if again := eventsMentioning(w.happened()[ups:], "up "+albresources.GateStack(environment.TierPreview)); len(again) != 0 {
 		t.Errorf("the plugin was republished %v for a project that gates nothing", again)
 	}
 }
@@ -349,11 +351,11 @@ func TestADeployWhoseGateIsUnchangedPublishesNoNewVersion(t *testing.T) {
 
 	balancer, w := gatedEdge(t)
 	reconcileGated(t, balancer, "shop", &shopGate)
-	ups := len(eventsMentioning(w.happened(), "up "+GateStack(environment.TierPreview)))
+	ups := len(eventsMentioning(w.happened(), "up "+albresources.GateStack(environment.TierPreview)))
 
 	reconcileGated(t, balancer, "shop", &shopGate)
 
-	if now := len(eventsMentioning(w.happened(), "up "+GateStack(environment.TierPreview))); now != ups {
+	if now := len(eventsMentioning(w.happened(), "up "+albresources.GateStack(environment.TierPreview))); now != ups {
 		t.Errorf("the gate stack was raised %d times, want %d: the same keys are the same version", now, ups)
 	}
 }
@@ -368,7 +370,7 @@ func TestChangingAGateAddsAVersionAndKeepsTheOneItReplacedForTheSwitch(t *testin
 
 	reconcileGated(t, balancer, "shop", &rotated)
 
-	versions, _ := w.declarations(GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["versions"].([]any)
+	versions, _ := w.declarations(albresources.GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["versions"].([]any)
 	if len(versions) != 2 {
 		t.Errorf("the plugin lists %d versions, want the new one and the one it replaces: Google will not delete the main version, and older ones are pruned", len(versions))
 	}
@@ -379,10 +381,10 @@ func TestARaiseThatFailedKeepsEveryVersionThePluginMayStillRun(t *testing.T) {
 
 	balancer, w := gatedEdge(t)
 	reconcileGated(t, balancer, "shop", &shopGate)
-	running := w.declarations(GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["mainVersionId"]
+	running := w.declarations(albresources.GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["mainVersionId"]
 	failed := shopGate
 	failed.BypassSecrets = []string{"failed"}
-	w.failUps(GateStack(environment.TierPreview), errors.New("the update was interrupted"))
+	w.failUps(albresources.GateStack(environment.TierPreview), errors.New("the update was interrupted"))
 	if _, err := balancer.Reconcile(context.Background(),
 		edge.StackSpec{Slug: "shop", Tier: environment.TierPreview, Gate: &failed}, edge.StackState{}); err == nil {
 		t.Fatal("Reconcile succeeded through a failed raise")
@@ -392,7 +394,7 @@ func TestARaiseThatFailedKeepsEveryVersionThePluginMayStillRun(t *testing.T) {
 
 	reconcileGated(t, balancer, "shop", &next)
 
-	versions, _ := w.declarations(GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["versions"].([]any)
+	versions, _ := w.declarations(albresources.GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["versions"].([]any)
 	var names []any
 	for _, each := range versions {
 		names = append(names, each.(map[string]any)["versionName"])
@@ -412,7 +414,7 @@ func TestPublishingManyTimesNeverKeepsMoreThanTwoVersions(t *testing.T) {
 		reconcileGated(t, balancer, "shop", &rotated)
 	}
 
-	versions, _ := w.declarations(GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["versions"].([]any)
+	versions, _ := w.declarations(albresources.GateStack(environment.TierPreview))["ocel-preview-alb-gate"].Args["versions"].([]any)
 	if len(versions) != 2 {
 		t.Errorf("the plugin lists %d versions after six publishes, want 2", len(versions))
 	}
@@ -433,7 +435,7 @@ func TestRemovingAGateRemovesItsHostsFromThePluginWithoutProbing(t *testing.T) {
 		t.Fatalf("Reconcile without a gate = %v", err)
 	}
 
-	if hosts := w.gatedHosts(GateStack(environment.TierPreview)); len(hosts) != 0 {
+	if hosts := w.gatedHosts(albresources.GateStack(environment.TierPreview)); len(hosts) != 0 {
 		t.Errorf("the plugin still gates %v after the gate was removed", hosts)
 	}
 	if got := w.probed(aliasHost); got != probes {
@@ -451,7 +453,7 @@ func TestTwoProjectsGatesDeployedAtOnceAreBothInThePluginAtTheEnd(t *testing.T) 
 
 	reconcileGated(t, balancer, "shop", &shopGate)
 
-	config := w.gateConfig(GateStack(environment.TierPreview))
+	config := w.gateConfig(albresources.GateStack(environment.TierPreview))
 	for _, key := range []string{"shop-key", "blog-key"} {
 		if !strings.Contains(config, key) {
 			t.Errorf("the final plugin config lacks %s: a deploy that raced another published a snapshot without it\n%s", key, config)
@@ -510,7 +512,7 @@ func TestAPublicationThatLostARaceRecordsThePluginVersionThatIsRunning(t *testin
 	}
 	reconcileGated(t, balancer, "shop", &shopGate)
 
-	config := w.gateConfig(GateStack(environment.TierPreview))
+	config := w.gateConfig(albresources.GateStack(environment.TierPreview))
 	for _, key := range []string{"shop-key", "blog-key"} {
 		if !strings.Contains(config, key) {
 			t.Errorf("the plugin runs a config without %s after blog's raise finished before shop's and recorded after it:\n%s", key, config)
@@ -571,7 +573,7 @@ func TestTearingDownATierDeletesOnlyItsOwnPluginRepositoryAndGates(t *testing.T)
 	if _, found, err := balancer.readGateRecord(ctx, environment.TierPreview, "shop"); err != nil || !found {
 		t.Errorf("the preview gate of shop = %t, %v after production was torn down, want it kept", found, err)
 	}
-	if len(w.declarations(GateStack(environment.TierPreview))) == 0 {
+	if len(w.declarations(albresources.GateStack(environment.TierPreview))) == 0 {
 		t.Error("tearing production down took the preview tier's gate stack with it")
 	}
 }
@@ -590,7 +592,7 @@ func TestDestroyingAGatedProjectRemovesItsGateFromThePlugin(t *testing.T) {
 		t.Fatalf("Destroy = %v", err)
 	}
 
-	if config := w.gateConfig(GateStack(environment.TierPreview)); strings.Contains(config, "shop-key") {
+	if config := w.gateConfig(albresources.GateStack(environment.TierPreview)); strings.Contains(config, "shop-key") {
 		t.Errorf("the plugin still holds the destroyed project's keys:\n%s", config)
 	}
 }
@@ -611,7 +613,7 @@ func TestDestroyingAGatedProjectUnroutesItsHostsBeforeTheGateLetsThemThrough(t *
 	}
 
 	events := w.happened()[before:]
-	unroutedAt, ungatedAt := indexOf(events, "unroute "+aliasHost), indexOf(events, "up "+GateStack(environment.TierPreview))
+	unroutedAt, ungatedAt := indexOf(events, "unroute "+aliasHost), indexOf(events, "up "+albresources.GateStack(environment.TierPreview))
 	if unroutedAt < 0 || ungatedAt < 0 || ungatedAt < unroutedAt {
 		t.Errorf("events %v, want %s unrouted before the gate is published without it: in between it serves the preview to anyone", events, aliasHost)
 	}
@@ -632,7 +634,7 @@ func TestADestroyThatCannotUnrouteAGatedHostKeepsItsGate(t *testing.T) {
 		t.Fatal("Destroy succeeded with a host still routed")
 	}
 
-	if hosts := w.gatedHosts(GateStack(environment.TierPreview)); !slices.Equal(hosts, []string{aliasHost}) {
+	if hosts := w.gatedHosts(albresources.GateStack(environment.TierPreview)); !slices.Equal(hosts, []string{aliasHost}) {
 		t.Errorf("the plugin gates %v, want %s still gated: it is still routed", hosts, aliasHost)
 	}
 }
@@ -662,22 +664,22 @@ func TestThePluginConfigIsNeverHeldInThePlainByTheKeyValueStore(t *testing.T) {
 func TestEveryPreviewBackendAndTheAssetsBucketMarkTheirResponsesNoindex(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(bindingProgram(bindingSpec{
+	seen, err := declared(albprogram.Binding(albresources.BindingSpec{
 		Namespace: "ocel",
 		Region:    "europe-west1", Slug: "shop", Tier: environment.TierPreview, CertificateMap: "certs",
-		Hosts: map[string]Host{aliasHost: {Service: previewService, Backend: must(backendName("ocel", "shop", environment.TierPreview, aliasHost))}},
+		Hosts: map[string]albresources.BindingHost{aliasHost: {Service: previewService, Backend: must(albresources.BackendName("ocel", "shop", environment.TierPreview, aliasHost))}},
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	backend := seen[must(backendName("ocel", "shop", environment.TierPreview, aliasHost))]
+	backend := seen[must(albresources.BackendName("ocel", "shop", environment.TierPreview, aliasHost))]
 	if headers, _ := backend.Args["customResponseHeaders"].([]any); len(headers) != 1 || headers[0] != "X-Robots-Tag: noindex" {
 		t.Errorf("a preview backend adds %v to its responses, want X-Robots-Tag: noindex: the plugin cannot add a header to a response", headers)
 	}
 
-	front, err := declared(loadBalancerProgram(loadBalancerSpec{
+	front, err := declared(albprogram.LoadBalancer(albresources.LoadBalancerSpec{
 		Namespace: "ocel",
-		Names:     loadBalancerNames("ocel", environment.TierPreview), Tier: environment.TierPreview, Assets: &tierAssets,
+		Names:     albresources.LoadBalancerNames("ocel", environment.TierPreview), Tier: environment.TierPreview, Assets: &tierAssets,
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -691,14 +693,14 @@ func TestEveryPreviewBackendAndTheAssetsBucketMarkTheirResponsesNoindex(t *testi
 func TestProductionBackendsAndAssetsAddNoHeaderToTheirResponses(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(binding(map[string]Host{"shop.example.com": {Service: "svc", Backend: "shop-backend"}}))
+	seen, err := declared(binding(map[string]albresources.BindingHost{"shop.example.com": {Service: "svc", Backend: "shop-backend"}}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if headers := seen["shop-backend"].Args["customResponseHeaders"]; headers != nil {
 		t.Errorf("a production backend adds %v, want none", headers)
 	}
-	front, err := declared(loadBalancerProgram(frontSpec()))
+	front, err := declared(albprogram.LoadBalancer(frontSpec()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -710,9 +712,9 @@ func TestProductionBackendsAndAssetsAddNoHeaderToTheirResponses(t *testing.T) {
 func TestThePluginConfigIsMarkedSecretInThePulumiState(t *testing.T) {
 	t.Parallel()
 
-	secret, err := pluginConfigIsSecret(gateProgram(gateSpec{
-		Names: loadBalancerNames("ocel", environment.TierPreview),
-		Main:  gateVersion{ID: "v1", Image: "projects/p/locations/r/repositories/x/genericArtifacts/y:z", Config: "ocel-gate 1\n"},
+	secret, err := pluginConfigIsSecret(gateProgram(albresources.GateSpec{
+		Names: albresources.LoadBalancerNames("ocel", environment.TierPreview),
+		Main:  albresources.GateVersion{ID: "v1", Image: "projects/p/locations/r/repositories/x/genericArtifacts/y:z", Config: "ocel-gate 1\n"},
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -748,7 +750,7 @@ func TestPublishingAGateSendsItToThePluginWithoutAnotherDeploy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PublishGate = %v", err)
 	}
-	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
+	if config := w.gateConfig(albresources.GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
 		t.Errorf("the plugin runs %q, want a config holding the published gate's key", config)
 	}
 	if recorded, found, err := balancer.readGateRecord(ctx, environment.TierPreview, "shop"); err != nil || !found || recorded.Gate.Key != shopGate.Key {
@@ -787,12 +789,12 @@ func TestDestroyingAGatedProjectAgainAfterAFailedWithdrawalRollsTheGateOutOfTheP
 	ctx := context.Background()
 	balancer, w := gatedEdge(t)
 	stack := reconcileGated(t, balancer, "shop", &shopGate)
-	w.failUps(GateStack(environment.TierPreview), errors.New("the rollout failed"))
+	w.failUps(albresources.GateStack(environment.TierPreview), errors.New("the rollout failed"))
 
 	if err := stack.Destroy(ctx); err == nil {
 		t.Fatal("Destroy = nil, want the failed rollout")
 	}
-	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
+	if config := w.gateConfig(albresources.GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
 		t.Fatalf("the plugin runs %q after the failed rollout, want the gate still in it", config)
 	}
 
@@ -800,7 +802,7 @@ func TestDestroyingAGatedProjectAgainAfterAFailedWithdrawalRollsTheGateOutOfTheP
 		t.Fatalf("Destroy (retry) = %v", err)
 	}
 
-	if config := w.gateConfig(GateStack(environment.TierPreview)); strings.Contains(config, shopGate.Key) {
+	if config := w.gateConfig(albresources.GateStack(environment.TierPreview)); strings.Contains(config, shopGate.Key) {
 		t.Errorf("the plugin still holds the destroyed project's keys after the retry:\n%s", config)
 	}
 }

@@ -45,7 +45,7 @@ func newOffersHarness(t *testing.T) *offersHarness {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(server.Close)
-	h.clients = pushing(t, server.URL).resolved
+	h.clients = pushing(t, server.URL).Clients
 	return h
 }
 

@@ -196,8 +196,8 @@ func TestATierWithAnEnvSourceSyncDescribesItAsAPartUsedByItsScheduledProjects(t 
 	if err != nil || !present {
 		t.Fatalf("envSourceSyncPart() = %v, %v, want the part", present, err)
 	}
-	if part.Name != PartName || !part.Current || len(part.Resources) != 3 || part.Shape == nil || len(part.Shape.Resources) != 2 {
-		t.Errorf("part = %+v, want it current, with the account, the service and schedule and the shape that prices the last two", part)
+	if part.Name != PartName || !part.Current || len(part.Resources) != 3 || part.Inventory == nil || len(part.Inventory.Resources) != 2 {
+		t.Errorf("part = %+v, want it current, with the account, the service and schedule and the inventory that prices the last two", part)
 	}
 }
 

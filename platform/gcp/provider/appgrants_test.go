@@ -427,7 +427,7 @@ func TestDestroyingTheLastReleaseOfAnAppRevokesItsAccountAndAnotherReleaseKeepsI
 	first.App.Values, second.App.Values = openingASecret, openingASecret
 	released.provision(t, first)
 	released.provision(t, second)
-	member := appMember(p.resolved, first.Ref, "web")
+	member := appMember(p.Clients, first.Ref, "web")
 	holding := func() bool {
 		return slices.ContainsFunc(projectBindingsOf(server.Identities()), func(bound string) bool { return strings.Contains(bound, member) })
 	}

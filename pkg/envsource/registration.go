@@ -332,3 +332,22 @@ func ScheduledProjects(ctx context.Context, store records.Store, tier environmen
 	slices.Sort(projects)
 	return slices.Compact(projects), nil
 }
+
+func OwnerOf(key records.Key) (records.Owner, bool) {
+	switch key.Partition.Root {
+	case RootRegistrations:
+		return ownerOfRegistration(key.Path)
+	case RootStatus:
+		return ownerOfStatus(key.Path)
+	case RootDigestKey:
+		return ownerOfDigestKey(key.Path)
+	}
+	return records.Owner{}, false
+}
+
+func ownerOfRegistration(path []string) (records.Owner, bool) {
+	if len(path) == 1 || (len(path) == 2 && path[1] == removalSegment) {
+		return records.Owner{Project: path[0]}, true
+	}
+	return records.Owner{}, false
+}

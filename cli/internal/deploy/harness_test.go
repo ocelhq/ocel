@@ -60,12 +60,13 @@ func runPreviewUp(ctx context.Context, dependencies Dependencies, cwd string, op
 }
 
 type previewRemoveOptions struct {
-	name string
-	yes  bool
+	name   string
+	yes    bool
+	remote bool
 }
 
 func runPreviewRemove(ctx context.Context, dependencies Dependencies, cwd string, opts previewRemoveOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	return RemovePreview(ctx, dependencies, cwd, opts.name, opts.yes, stdout, stderr, stdin)
+	return RemovePreview(ctx, dependencies, cwd, opts.name, RemoveOptions{Yes: opts.yes, Remote: opts.remote}, stdout, stderr, stdin)
 }
 
 type previewPruneOptions struct {

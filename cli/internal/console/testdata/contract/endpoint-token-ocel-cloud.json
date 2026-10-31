@@ -1,0 +1,29 @@
+{
+  "name": "endpoint-token-ocel-cloud",
+  "request": {
+    "method": "POST",
+    "path": "/api/connect/console.v1.ConsoleService/IssueEndpointToken",
+    "headers": {
+      "Authorization": "Bearer {{session.token}}",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "organizationId": "{{organization.id}}",
+      "endpointId": "ocel-cloud",
+      "scopes": [
+        "SCOPE_APPS_READ"
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "token": "eyJhbGciOiJFZERTQSJ9.eyJhdWQiOiJvY2VsLWNsb3VkIn0.c2lnbmF0dXJl",
+      "expiresAt": "2026-02-01T03:09:05Z"
+    }
+  },
+  "dynamic": [
+    "$.token",
+    "$.expiresAt"
+  ]
+}

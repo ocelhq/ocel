@@ -19,8 +19,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
-func (h *Service) envSourceSync(store variablestore.Store, tier environment.Tier) (*envsource.Sync, error) {
-	backend, err := h.Source.Read()
+func (h *Service) envSourceSync(ctx context.Context, store variablestore.Store, tier environment.Tier) (*envsource.Sync, error) {
+	backend, err := h.Source.Read(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func (h *Service) ensureSync(ctx context.Context, scope variablestore.Scope, des
 	if descriptor.Reading() != envsource.ReadingOnSchedule {
 		return nil
 	}
-	backend, err := h.Source.Read()
+	backend, err := h.Source.Read(ctx)
 	if err != nil || backend.EnsureEnvSourceSync == nil {
 		return err
 	}
@@ -44,24 +44,24 @@ func (h *Service) ensureSync(ctx context.Context, scope variablestore.Scope, des
 }
 
 func (h *Service) SyncEnvSource(ctx context.Context, req *variablestorev1.SyncEnvSourceRequest) (*variablestorev1.SyncEnvSourceResponse, error) {
-	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
 	if req.GetRegistered() != nil {
-		return h.syncRegistered(ctx, store, scope)
+		return h.syncRegistered(ctx, store, scope, req.GetEnvironment())
 	}
 	descriptor, read, err := decodeEnvSource(req.GetEnvSource())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if descriptor.Reading() == envsource.ReadingOwnStore {
-		if err := switchToBuiltin(ctx, store, scope); err != nil {
+		if err := switchToBuiltin(ctx, store, scope, req.GetEnvironment()); err != nil {
 			return nil, provider.RefusalError(err)
 		}
 		return &variablestorev1.SyncEnvSourceResponse{Status: &variablestorev1.EnvSourceStatus{EnvSource: descriptor.ID()}}, nil
 	}
-	envSync, err := h.envSourceSync(store, scope.Tier)
+	envSync, err := h.envSourceSync(ctx, store, scope.Tier)
 	if err != nil {
 		return nil, err
 	}
@@ -90,9 +90,9 @@ func (h *Service) SyncEnvSource(ctx context.Context, req *variablestorev1.SyncEn
 
 	var copied envsource.CopyResult
 	if descriptor.Reading() == envsource.ReadingWhereOcelRuns {
-		copied, err = envSync.CopyProjectFrom(ctx, registration, envsource.NewFixed(descriptor.ID(), read))
+		copied, err = envSync.CopyProjectFrom(ctx, registration, req.GetEnvironment(), envsource.NewFixed(descriptor.ID(), read))
 	} else {
-		copied, err = envSync.CopyProject(ctx, registration)
+		copied, err = envSync.CopyProjectFrom(ctx, registration, req.GetEnvironment(), nil)
 	}
 	if err != nil {
 		if len(credentialErrors(err)) == 0 {
@@ -132,18 +132,18 @@ func readBy(descriptor envsource.Descriptor) string {
 	return "from ocel's own store"
 }
 
-func switchToBuiltin(ctx context.Context, store variablestore.Store, scope variablestore.Scope) error {
+func switchToBuiltin(ctx context.Context, store variablestore.Store, scope variablestore.Scope, environment string) error {
 	_, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if (err != nil && !isUndecodable(err)) || !registered {
 		return err
 	}
-	if err := envsource.ClearProvenance(ctx, store, scope); err != nil {
+	if err := envsource.ClearProvenance(ctx, store, scope, environment); err != nil {
 		return err
 	}
 	return envsource.Unregister(ctx, store, scope.Tier, scope.Project)
 }
 
-func (h *Service) syncRegistered(ctx context.Context, store variablestore.Store, scope variablestore.Scope) (*variablestorev1.SyncEnvSourceResponse, error) {
+func (h *Service) syncRegistered(ctx context.Context, store variablestore.Store, scope variablestore.Scope, environment string) (*variablestorev1.SyncEnvSourceResponse, error) {
 	registration, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
 	if err != nil {
 		return nil, registrationError(err)
@@ -155,14 +155,14 @@ func (h *Service) syncRegistered(ctx context.Context, store variablestore.Store,
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 			"%s in %s reads from %s, which is read where ocel deploys: deploy again to read it", scope.Project, scope.Tier, registration.Descriptor.ID()))
 	}
-	envSync, err := h.envSourceSync(store, scope.Tier)
+	envSync, err := h.envSourceSync(ctx, store, scope.Tier)
 	if err != nil {
 		return nil, err
 	}
 	if err := refuseLogin(registration.Descriptor, envSync.Login); err != nil {
 		return nil, err
 	}
-	copied, err := envSync.CopyProject(ctx, registration)
+	copied, err := envSync.CopyProjectFrom(ctx, registration, environment, nil)
 	if err != nil {
 		return nil, envSourceError(registration.Descriptor, err)
 	}
@@ -189,7 +189,7 @@ func syncResponse(ctx context.Context, store variablestore.Store, scope variable
 }
 
 func (h *Service) DescribeEnvSource(ctx context.Context, req *variablestorev1.DescribeEnvSourceRequest) (*variablestorev1.DescribeEnvSourceResponse, error) {
-	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (h *Service) SetEnvSourceValue(ctx context.Context, req *variablestorev1.Se
 			"a value for preview environment %q is stored by ocel, never by the env source: set it with `ocel env set %s=<VALUE> --preview --environment %s`",
 			at.GetEnvironment(), at.GetKey(), at.GetEnvironment()))
 	}
-	store, scope, err := h.scoped(req.GetTier(), at.GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), at.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +250,7 @@ func (h *Service) SetEnvSourceValue(ctx context.Context, req *variablestorev1.Se
 	if err != nil {
 		return nil, err
 	}
-	envSync, err := h.envSourceSync(store, scope.Tier)
+	envSync, err := h.envSourceSync(ctx, store, scope.Tier)
 	if err != nil {
 		return nil, err
 	}

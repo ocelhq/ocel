@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -34,6 +35,7 @@ type infraProvisioning struct {
 	renewalTimeout  time.Duration
 
 	sent      *contractv1.ProvisionInfraRequest
+	held      sync.Mutex
 	attempted bool
 	shipped   bool
 	renewing  *leaseRenewal
@@ -58,6 +60,7 @@ type leaseRenewal struct {
 const (
 	leaseRenewalInterval = 2 * time.Minute
 	abandonTimeout       = 30 * time.Second
+	forcedAbandonTimeout = 5 * time.Second
 )
 
 func newInfraProvisioning(providerProcess *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts) *infraProvisioning {
@@ -97,7 +100,9 @@ func (i *infraProvisioning) provision(ctx context.Context, resources []declarati
 	if proto.Equal(req, i.sent) {
 		return nil
 	}
+	i.held.Lock()
 	i.attempted = true
+	i.held.Unlock()
 	if _, err := providerprocess.Stream(ctx, i.providerProcess, "ProvisionInfra", req, contractv1connect.ProviderServiceClient.ProvisionInfra); err != nil {
 		return err
 	}
@@ -185,17 +190,40 @@ func (i *infraProvisioning) readLeaseToken() string {
 }
 
 func (i *infraProvisioning) markShipped() {
+	i.held.Lock()
+	defer i.held.Unlock()
 	i.shipped = true
+}
+
+func (i *infraProvisioning) holdsLease() bool {
+	i.held.Lock()
+	defer i.held.Unlock()
+	return i.attempted && !i.shipped
+}
+
+func (i *infraProvisioning) abandonBeforeForcedStop(ctx context.Context, slug string) {
+	if !i.holdsLease() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), forcedAbandonTimeout)
+	defer cancel()
+	_ = i.providerProcess.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
+		_, err := client.AbandonDeploy(ctx, &contractv1.AbandonDeployRequest{Slug: slug, Environment: i.env, LeaseToken: i.leaseToken})
+		return err
+	})
 }
 
 func (i *infraProvisioning) release(ctx context.Context, r *run.Run, slug string) error {
 	i.stopRenewing()
-	if i.shipped {
+	i.held.Lock()
+	attempted, shipped := i.attempted, i.shipped
+	i.held.Unlock()
+	if shipped {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abandonTimeout)
 	defer cancel()
-	if i.attempted {
+	if attempted {
 		_ = releaseIn(ctx, r, progressv1.Phase_PHASE_PROVISION, slug, progress.Releasing.Title("this deploy's lease on "+place(i.env)), func(ctx context.Context) error {
 			return i.providerProcess.Call(ctx, func(client contractv1connect.ProviderServiceClient) error {
 				_, err := client.AbandonDeploy(ctx, &contractv1.AbandonDeployRequest{Slug: slug, Environment: i.env, LeaseToken: i.leaseToken})

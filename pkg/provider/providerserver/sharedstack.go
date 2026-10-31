@@ -354,22 +354,22 @@ func (s *sharedStack) forgetRemovedDeployments(ctx context.Context, pointer stri
 	return s.ledger.ForgetPendingRemovals(ctx, pointer, removed)
 }
 
-func (s *sharedStack) removePointer(ctx context.Context, removal router.PointerRemoval, progress progress.Log) (router.PruneResult, error) {
+func (s *sharedStack) removePointer(ctx context.Context, removal router.PointerRemoval, progress progress.Log) (router.PruneResult, []ledger.RecordedPromotion, error) {
 	recorded, err := s.ledger.Read(ctx, removal.Pointer)
 	if err != nil {
-		return router.PruneResult{}, err
+		return router.PruneResult{}, nil, err
 	}
 	for _, kind := range s.listRouterKinds() {
 		routed, err := s.openRouterStack(kind)
 		if err != nil {
-			return router.PruneResult{}, err
+			return router.PruneResult{}, nil, err
 		}
 		if err := errors.Join(routed.RemovePointer(ctx, removal, progress), s.adopt(kind, routed)); err != nil {
-			return router.PruneResult{}, err
+			return router.PruneResult{}, nil, err
 		}
 	}
 	if err := s.removeDeployments(ctx, recorded.ListDeploymentRemovals(), progress); err != nil {
-		return router.PruneResult{}, err
+		return router.PruneResult{}, nil, err
 	}
 	return s.ledger.RemovePointer(ctx, removal.Pointer)
 }

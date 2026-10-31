@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	gcpenvsource "github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -66,7 +67,7 @@ func servicesEnabled(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	service, err := ports.NewRESTService(ctx, serviceusage.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(ctx, ports.Credentials{}, serviceusage.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
@@ -234,7 +235,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 	here := bootstrapped(t, p, tier)
 
 	t.Setenv(provider.NamespaceEnvVar, namesOf(t, p).Namespace().String()+"-beside")
-	beside := newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
+	beside := newProvider(t, control.Options{Project: liveProject(), Region: liveRegion()})
 	if namesOf(t, beside).TierBucketStem(tier, naming.StorageState) == namesOf(t, p).TierBucketStem(tier, naming.StorageState) {
 		t.Fatalf("both namespaces name the state bucket %s, and this test turns on them naming different ones", namesOf(t, beside).TierBucketStem(tier, naming.StorageState))
 	}
@@ -306,7 +307,7 @@ func servicesDisabled(t *testing.T, api string) {
 	}
 
 	ctx := context.Background()
-	service, err := ports.NewRESTService(ctx, serviceusage.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(ctx, ports.Credentials{}, serviceusage.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
@@ -453,7 +454,7 @@ func storedPassphrase(t *testing.T, tier environment.Tier) []byte {
 	t.Helper()
 
 	ctx := context.Background()
-	service, err := ports.NewRESTService(ctx, secretmanager.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(ctx, ports.Credentials{}, secretmanager.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
@@ -555,7 +556,7 @@ func TestProjectAZoneIsRefusedBeforeItsBootstrapIsReadNamingTheRegionItSitsIn(t 
 	onRealGoogleCloud(t)
 
 	zone := liveRegion() + "-f"
-	inAZone := newProvider(t, gcp.Options{Project: liveProject(), Region: zone})
+	inAZone := newProvider(t, control.Options{Project: liveProject(), Region: zone})
 	var refused refusal.Refusal
 	_, err := bootstrapOf(t, inAZone).Describe(context.Background(), environment.TierProduction)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
@@ -586,7 +587,7 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 	bootstrap := bootstrapped(t, p, tier)
 
 	ctx := context.Background()
-	secrets, err := ports.NewRESTService(ctx, secretmanager.NewService, endpoint(), "")
+	secrets, err := ports.NewRESTService(ctx, ports.Credentials{}, secretmanager.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
@@ -699,7 +700,7 @@ func TestLiveASecretWithNoVersionInItIsNotPresentAndAReApplyMintsOne(t *testing.
 	bootstrap := bootstrapped(t, p, tier)
 
 	ctx := context.Background()
-	service, err := ports.NewRESTService(ctx, secretmanager.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(ctx, ports.Credentials{}, secretmanager.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
@@ -819,7 +820,7 @@ func TestProjectADatabaseInAnotherRegionIsRefusedRatherThanUsed(t *testing.T) {
 	tier := environment.TierProduction
 	bootstrapped(t, p, tier)
 
-	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: elsewhereRegion()})
+	elsewhere := newProvider(t, control.Options{Project: liveProject(), Region: elsewhereRegion()})
 	var refused refusal.Refusal
 	err := bootstrapOf(t, elsewhere).Apply(context.Background(),
 		provider.BootstrapRequest{Tier: tier, WrittenBy: "live-suite"}, nil)
@@ -884,7 +885,7 @@ func TestLiveASharedRowNamesTheSiblingTierInEveryPlanItAppearsIn(t *testing.T) {
 
 func accounts(t *testing.T) *iam.Service {
 	t.Helper()
-	service, err := ports.NewRESTService(context.Background(), iam.NewService, endpoint(), "")
+	service, err := ports.NewRESTService(context.Background(), ports.Credentials{}, iam.NewService, endpoint(), "")
 	if err != nil {
 		t.Fatalf("reach the IAM API: %v", err)
 	}
@@ -929,7 +930,7 @@ func TestLiveRemovingATierBesideItsSiblingForgetsEveryRecordItKeptAndNoneOfTheSi
 func emulatorStorage(t *testing.T) *storage.Client {
 	t.Helper()
 	ctx := context.Background()
-	options, err := ports.NewStorageOptions(ctx, endpoint(), "")
+	options, err := ports.NewStorageOptions(ctx, ports.Credentials{}, endpoint(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

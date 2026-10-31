@@ -174,12 +174,18 @@ func plannedTrustedIssuer(ctx context.Context, apis ParamAPIs, ns Namespace, tie
 			change.Action, change.Reason = provider.ActionUpdate, "adds audience "+issuer.audience
 		}
 	}
-	changes := []provider.Change{change}
 	released, err := plannedRelease(ctx, apis, ns, tier, &issuer)
-	if err != nil || released == nil {
-		return changes, err
+	switch {
+	case err != nil || released == nil:
+		return []provider.Change{change}, err
+	case released.Name != change.Name:
+		return []provider.Change{change, *released}, nil
+	case change.Action.Writes():
+		change.Reason += ", " + released.Reason
+		return []provider.Change{change}, nil
+	default:
+		return []provider.Change{*released}, nil
 	}
-	return append(changes, *released), nil
 }
 
 type issuerRelease struct {

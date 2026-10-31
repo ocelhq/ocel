@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 )
 
 func againstAProject(t *testing.T) *gcp.Provider {
@@ -19,7 +20,7 @@ func againstAProject(t *testing.T) *gcp.Provider {
 	if emulated() || os.Getenv(liveProjectVariable) == "" {
 		t.Skipf("Artifact Registry is served by Google alone, so this runs against a real project: name one in %s", liveProjectVariable)
 	}
-	return newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
+	return newProvider(t, control.Options{Project: liveProject(), Region: liveRegion()})
 }
 
 func readRepository(t *testing.T, p *gcp.Provider, tier environment.Tier) *artifactregistry.Repository {

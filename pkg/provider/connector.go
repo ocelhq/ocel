@@ -9,8 +9,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
-const ConnectorConfigEnvVar = "OCEL_CONNECTOR_CONFIG_JSON"
-
 type ConnectorTarget struct {
 	Fingerprint string
 	Hostname    string
@@ -30,6 +28,13 @@ type ConnectorInstall struct {
 	Version string
 	Config  []byte
 	Compute Compute
+	Runner  *ConnectorRunner
+}
+
+type ConnectorRunner struct {
+	CPUs   string
+	Memory string
+	Image  string
 }
 
 type ConnectorAddress struct {

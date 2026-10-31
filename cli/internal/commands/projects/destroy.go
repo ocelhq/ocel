@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
@@ -21,22 +22,24 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 )
 
 const destroyCommand = "ocel projects destroy"
 
 type destroyOptions struct {
-	slug string
-	tier string
-	yes  bool
-	dry  bool
+	slug   string
+	tier   string
+	yes    bool
+	dry    bool
+	remote bool
 }
 
 func newDestroyCommand(invocation commands.Invocation) *cobra.Command {
@@ -67,6 +70,7 @@ func newDestroyCommand(invocation commands.Invocation) *cobra.Command {
 	cmd.Flags().StringVar(&opts.tier, "tier", "", "Destroy only the project's production or preview")
 	commands.AddYesFlag(cmd, &opts.yes)
 	commands.AddDryFlag(cmd, &opts.dry, "Print what would be destroyed and stop, destroying nothing")
+	commands.AddRemoteFlag(cmd, &opts.remote)
 	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }
 
@@ -119,9 +123,12 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, opts destro
 	if err != nil {
 		return err
 	}
-	policy := consent.NewPlanPolicy(destroyCommand, opts.yes || bypass, invocation.CanAsk(stdin), stdout, stdin)
+	policy := invocation.PlanPolicy(destroyCommand, opts.yes || bypass, stdout, stdin)
 	policy.DryRun = opts.dry
 	policy.UnattendedRemedy = fmt.Sprintf("pass --yes, or set %s to the project name", consent.BypassEnv)
+	if resolved.IsRemote(opts.remote) {
+		return destroyRemotely(ctx, invocation, resolved, slug, tiers, policy, notice, stdin)
+	}
 
 	destroyed, err := destroyProject(ctx, invocation, resolved, slug, tiers, policy, notice)
 	if slug == cfg.Slug {
@@ -132,12 +139,40 @@ func runDestroy(ctx context.Context, invocation commands.Invocation, opts destro
 	return err
 }
 
+func destroyRemotely(ctx context.Context, invocation commands.Invocation, resolved commands.Target, slug string, tiers []environmentv1.Tier, policy consent.Policy, bypassNotice string, stdin io.Reader) error {
+	cfg := resolved.Project
+	switch {
+	case slug != cfg.Slug:
+		return &clierror.Error{Code: clierror.CodeJobUnsupported, Cause: fmt.Errorf("a job destroys only the project it runs for, %s, and not %s: run `%s` from %s's directory", cfg.Slug, slug, destroyCommand, slug)}
+	case policy.DryRun:
+		return commands.RefuseRemote(destroyCommand + " --dry")
+	}
+	if err := policy.Refuse(); err != nil {
+		return err
+	}
+	return invocation.RunRemote(ctx, resolved, stdin, commands.RemoteRun{
+		Command: destroyCommand,
+		Kind:    runnerv1.JobCommand_JOB_COMMAND_PROJECTS_DESTROY,
+		Tiers:   tiers,
+		Yes:     policy.Yes,
+		Consent: &commands.RemoteConsent{
+			Ask: func(ctx context.Context, span *run.Span) (bool, error) {
+				if bypassNotice != "" {
+					span.Warn(bypassNotice)
+				}
+				span.Say(fmt.Sprintf("This destroys %s in %s through a job, with every resource and all their data; the job shows each tier's plan and asks before it destroys anything", slug, tierNames(tiers)))
+				return policy.ConfirmPlanByName(ctx, span, &planv1.ChangePlan{Subject: slug}, "project name", slug)
+			},
+			Declined: fmt.Sprintf("Nothing destroyed: %s stays", slug),
+			Done:     fmt.Sprintf("Destroyed project %s", slug),
+		},
+	})
+}
+
 func destroyProject(ctx context.Context, invocation commands.Invocation, resolved commands.Target, slug string, tiers []environmentv1.Tier, policy consent.Policy, bypassNotice string) (destroyed []*consolev1.EnvironmentEvent, err error) {
 	cfg := resolved.Project
-	if !resolved.IsCloud() {
-		if _, err := cfg.RequireProvider(); err != nil {
-			return nil, err
-		}
+	if _, err := cfg.RequireProvider(); err != nil {
+		return nil, err
 	}
 	if err := policy.Refuse(); err != nil {
 		return nil, err
@@ -153,7 +188,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, resolve
 	if bypassNotice != "" {
 		check.Warn(bypassNotice)
 	}
-	target, err := readRemovalTarget(ctx, invocation, check, resolved, slug)
+	target, err := readRemovalTarget(ctx, invocation, check, resolved, slug, tiers)
 	if err != nil {
 		check.End(err)
 		return nil, err
@@ -176,7 +211,7 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, resolve
 			check.Say(fmt.Sprintf("nothing of %s in %s", slug, readiness.TierName(tier)))
 			continue
 		}
-		provider, _, err := invocation.OpenProvider(ctx, check, subject, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, Policy: policy, DryRun: policy.DryRun, Cloud: resolved.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}})
+		provider, _, err := invocation.OpenProvider(ctx, check, subject, commands.OpenOptions{Intent: commands.UseParts, Tier: tier, Policy: policy, DryRun: policy.DryRun, ConsoleCredential: true})
 		if err != nil {
 			check.End(err)
 			return nil, err
@@ -238,33 +273,29 @@ func destroyProject(ctx context.Context, invocation commands.Invocation, resolve
 		if _, err := providerprocess.Stream(ctx, removal.provider, "RemoveProject", req, contractv1connect.ProviderServiceClient.RemoveProject); err != nil {
 			return destroyed, err
 		}
-		destroyed = append(destroyed, deployreport.NewEnvironmentEvent(ctx, consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED, &environmentv1.Environment{Tier: removal.tier}, running.TraceID(), time.Now(), cfg.Dir, os.Getenv))
+		destroyed = append(destroyed, deployreport.NewEnvironmentEvent(ctx, consolev1.EnvironmentEventKind_ENVIRONMENT_EVENT_KIND_DESTROYED, &environmentv1.Environment{Tier: removal.tier}, deployreport.TierEventID(running.TraceID(), removal.tier), time.Now(), cfg.Dir, os.Getenv))
 	}
 	running.Succeed(fmt.Sprintf("Destroyed project %s", slug))
 	return destroyed, nil
 }
 
-func readRemovalTarget(ctx context.Context, invocation commands.Invocation, check *run.Span, resolved commands.Target, slug string) (removalTarget, error) {
+func readRemovalTarget(ctx context.Context, invocation commands.Invocation, check *run.Span, resolved commands.Target, slug string, tiers []environmentv1.Tier) (removalTarget, error) {
 	cfg := resolved.Project
-	open := accountOptions(resolved)
-	open.CloudScopes = []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}
-	provider, _, err := invocation.OpenProvider(ctx, check, cfg, open)
-	if err != nil {
-		return removalTarget{}, err
+	target := removalTarget{slug: slug}
+	var recordedEdge *contractv1.EdgeSelection
+	var recordedRegistry *contractv1.ImageRegistry
+	for _, tier := range tiers {
+		recorded, err := readRecordedTier(ctx, invocation, check, resolved, slug, tier)
+		if err != nil {
+			return removalTarget{}, err
+		}
+		if len(recorded.GetTiers()) == 0 {
+			continue
+		}
+		target.recorded = append(target.recorded, recorded.GetTiers()...)
+		recordedEdge = cmp.Or(recordedEdge, recorded.GetEdge())
+		recordedRegistry = cmp.Or(recordedRegistry, recorded.GetRegistry())
 	}
-	defer provider.Close()
-
-	ctx, span := check.Child(ctx, slug, progress.Reading.Title("what "+slug+" is deployed in"))
-	var recorded *contractv1.GetProjectResponse
-	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
-		recorded, err = client.GetProject(ctx, &contractv1.GetProjectRequest{Slug: slug})
-		return err
-	})
-	span.End(err)
-	if err != nil {
-		return removalTarget{}, err
-	}
-	target := removalTarget{slug: slug, recorded: recorded.GetTiers()}
 	if len(target.recorded) == 0 {
 		return target, nil
 	}
@@ -273,13 +304,33 @@ func readRemovalTarget(ctx context.Context, invocation commands.Invocation, chec
 		target.registry, target.warning = readiness.RemovalRegistry(cfg)
 		return target, nil
 	}
-	target.edge = recorded.GetEdge()
-	if registry := recorded.GetRegistry(); registry.GetServer() != "" {
+	target.edge = recordedEdge
+	if registry := recordedRegistry; registry.GetServer() != "" {
 		target.warning = fmt.Sprintf("The images %s pushed to %s stay there until they are deleted in the registry: "+
 			"its password is never recorded, so run `%s` from %s's directory for the removal to delete them",
 			slug, registry.GetServer(), destroyCommand, slug)
 	}
 	return target, nil
+}
+
+func readRecordedTier(ctx context.Context, invocation commands.Invocation, check *run.Span, resolved commands.Target, slug string, tier environmentv1.Tier) (*contractv1.GetProjectResponse, error) {
+	open := accountOptions(resolved)
+	open.Tier, open.ConsoleCredential = tier, true
+	open.CloudScopes = []scopev1.Scope{scopev1.Scope_SCOPE_APPS_WRITE}
+	provider, _, err := invocation.OpenProvider(ctx, check, resolved.Project, open)
+	if err != nil {
+		return nil, err
+	}
+	defer provider.Close()
+
+	ctx, span := check.Child(ctx, slug, progress.Reading.Title("whether "+slug+" is deployed in "+readiness.TierName(tier)))
+	var recorded *contractv1.GetProjectResponse
+	err = provider.Call(ctx, func(client contractv1connect.ProviderServiceClient) (err error) {
+		recorded, err = client.GetProject(ctx, &contractv1.GetProjectRequest{Slug: slug, Tiers: []environmentv1.Tier{tier}})
+		return err
+	})
+	span.End(err)
+	return recorded, err
 }
 
 func asRecorded(cfg *project.Project, target removalTarget) *project.Project {

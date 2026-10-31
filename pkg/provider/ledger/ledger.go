@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
 const Root records.Root = "ledger"
@@ -48,12 +49,17 @@ func SplitRecordKey(key string) (string, string, bool) {
 	return app, release, prefixed && split && app != "" && release != ""
 }
 
+const (
+	pointersSegment = "pointers"
+	recordsSegment  = "records"
+)
+
 func (l *Ledger) pointerKey(pointer string) records.Key {
-	return l.partition.Key("pointers", pointer)
+	return l.partition.Key(pointersSegment, pointer)
 }
 
 func (l *Ledger) releaseKey(app, release string) records.Key {
-	return l.partition.Key("records", app, release)
+	return l.partition.Key(recordsSegment, app, release)
 }
 
 func (l *Ledger) PutStaged(ctx context.Context, record router.ReleaseRecord) error {
@@ -188,7 +194,7 @@ func (l *Ledger) change(ctx context.Context, name string, apply func(Pointer) (P
 }
 
 func (l *Ledger) write(ctx context.Context, stored records.Entry, next Pointer) error {
-	if next.Active == "" && len(next.Promotions) == 0 && len(next.PendingRemovals) == 0 {
+	if next.Active == "" && len(next.Promotions) == 0 && len(next.PendingRemovals) == 0 && len(next.PendingReclaims) == 0 {
 		if len(stored.Value) == 0 {
 			return nil
 		}
@@ -226,18 +232,26 @@ func (l *Ledger) Rollback(ctx context.Context, target string, promotion router.P
 	return dropped, err
 }
 
-func (l *Ledger) changeAndReadUnnamed(ctx context.Context, pointer string, apply func(Pointer) (Pointer, []RecordedPromotion, error)) (router.PruneResult, error) {
+func (l *Ledger) changeAndReadUnnamed(ctx context.Context, pointer string, apply func(Pointer) (Pointer, []RecordedPromotion, error)) (router.PruneResult, []RecordedPromotion, error) {
 	name := router.ResolvePointer(pointer)
 	_, dropped, err := l.change(ctx, name, apply)
 	if err != nil {
-		return router.PruneResult{}, err
+		return router.PruneResult{}, nil, err
 	}
-	return l.ReadUnnamedRecords(ctx, name, dropped)
+	result, err := l.ReadUnnamedRecords(ctx, name, dropped)
+	return result, dropped, err
 }
 
 func (l *Ledger) ForgetPendingRemovals(ctx context.Context, pointer string, withdrawn []string) error {
 	_, _, err := l.change(ctx, router.ResolvePointer(pointer), func(current Pointer) (Pointer, []RecordedPromotion, error) {
 		return current.ForgetPendingRemovals(withdrawn), nil, nil
+	})
+	return err
+}
+
+func (l *Ledger) RecordPendingReclaims(ctx context.Context, pointer string, dropped []RecordedPromotion) error {
+	_, _, err := l.change(ctx, router.ResolvePointer(pointer), func(current Pointer) (Pointer, []RecordedPromotion, error) {
+		return current.RecordPendingReclaims(dropped), nil, nil
 	})
 	return err
 }
@@ -277,16 +291,16 @@ func (l *Ledger) ReadActive(ctx context.Context, pointer string) (router.Promoti
 	return read.Promotions[at].Promotion, true, nil
 }
 
-func (l *Ledger) Prune(ctx context.Context, keep int, pointer string) (router.PruneResult, error) {
+func (l *Ledger) Prune(ctx context.Context, keep int, pointer string) (router.PruneResult, []RecordedPromotion, error) {
 	return l.changeAndReadUnnamed(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
 		kept, dropped := current.Retain(keep)
 		return kept, dropped, nil
 	})
 }
 
-func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, error) {
+func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (router.PruneResult, []RecordedPromotion, error) {
 	return l.changeAndReadUnnamed(ctx, pointer, func(current Pointer) (Pointer, []RecordedPromotion, error) {
-		return Pointer{Name: current.Name}, append(slices.Clone(current.Promotions), current.PendingRemovals...), nil
+		return Pointer{Name: current.Name}, appendUnlisted(append(slices.Clone(current.Promotions), current.PendingRemovals...), current.PendingReclaims), nil
 	})
 }
 
@@ -369,7 +383,7 @@ func (l *Ledger) ForgetUnnamedRecords(ctx context.Context, keys []string) error 
 		return errors.Join(append(errs, err)...)
 	}
 	for _, entry := range stored {
-		rest, _ := entry.Key.Under("records")
+		rest, _ := entry.Key.Under(recordsSegment)
 		if named[RecordKey(rest[0], rest[1])] {
 			continue
 		}
@@ -431,7 +445,7 @@ func (l *Ledger) ReadNamedRecordKeys(ctx context.Context) (map[string]bool, erro
 }
 
 func (l *Ledger) readPointers(ctx context.Context) ([]Pointer, error) {
-	stored, err := l.keyValues.List(ctx, l.partition, "pointers")
+	stored, err := l.keyValues.List(ctx, l.partition, pointersSegment)
 	if err != nil {
 		return nil, fmt.Errorf("read the pointers for %s: %w", l.partition, err)
 	}
@@ -447,13 +461,13 @@ func (l *Ledger) readPointers(ctx context.Context) ([]Pointer, error) {
 }
 
 func (l *Ledger) Pointers(ctx context.Context) ([]string, error) {
-	stored, err := l.keyValues.List(ctx, l.partition, "pointers")
+	stored, err := l.keyValues.List(ctx, l.partition, pointersSegment)
 	if err != nil {
 		return nil, fmt.Errorf("read the pointers for %s: %w", l.partition, err)
 	}
 	names := make([]string, 0, len(stored))
 	for _, entry := range stored {
-		rest, under := entry.Key.Under("pointers")
+		rest, under := entry.Key.Under(pointersSegment)
 		if !under || len(rest) != 1 {
 			continue
 		}
@@ -477,13 +491,13 @@ func (l *Ledger) Destroy(ctx context.Context) error {
 }
 
 func (l *Ledger) readRecordKeys(ctx context.Context) ([]string, error) {
-	stored, err := l.keyValues.List(ctx, l.partition, "records")
+	stored, err := l.keyValues.List(ctx, l.partition, recordsSegment)
 	if err != nil {
 		return nil, fmt.Errorf("read the release records for %s: %w", l.partition, err)
 	}
 	keys := make([]string, 0, len(stored))
 	for _, entry := range stored {
-		rest, under := entry.Key.Under("records")
+		rest, under := entry.Key.Under(recordsSegment)
 		if !under || len(rest) != 2 {
 			continue
 		}
@@ -512,4 +526,20 @@ func collectRecordKeys(promotions []RecordedPromotion) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+func OwnerOf(key records.Key) (records.Owner, bool) {
+	if key.Partition.Root != Root || len(key.Partition.Path) != 1 {
+		return records.Owner{}, false
+	}
+	project, path := key.Partition.Path[0], key.Path
+	switch {
+	case len(path) == 2 && path[0] == pointersSegment && path[1] == router.DefaultPointer:
+		return records.Owner{Project: project, Environment: stackrecords.ProductionEnv}, true
+	case len(path) == 2 && path[0] == pointersSegment:
+		return records.Owner{Project: project, Environment: path[1]}, true
+	case len(path) == 3 && path[0] == recordsSegment:
+		return records.Owner{Project: project, EnvironmentInValue: true}, true
+	}
+	return records.Owner{}, false
 }

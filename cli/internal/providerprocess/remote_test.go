@@ -17,7 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
 	"github.com/ocelhq/ocel/cli/internal/clitest"
-	"github.com/ocelhq/ocel/cli/internal/cloud"
+	"github.com/ocelhq/ocel/cli/internal/endpointcall"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -59,7 +59,7 @@ func remoteProject(t *testing.T) *project.Project {
 	return project.NewUnconfigured(dir, "shop")
 }
 
-func startRemote(t *testing.T, server *clitest.FakeRemoteProvider, cfg *project.Project, tokens cloud.TokenSource) (*providerprocess.Provider, error) {
+func startRemote(t *testing.T, server *clitest.FakeRemoteProvider, cfg *project.Project, tokens endpointcall.TokenSource) (*providerprocess.Provider, error) {
 	t.Helper()
 	ctx, span := remoteSpan(t)
 	p, err := providerprocess.StartRemote(ctx, cfg, span, providerprocess.Questions{}, providerprocess.Remote{Name: "ocel", URL: server.URL, Tokens: tokens})

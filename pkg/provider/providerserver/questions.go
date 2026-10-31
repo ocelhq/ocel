@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -18,14 +19,26 @@ import (
 
 const maxPendingQuestions = 16
 
+var ErrQuestionNotPending = errors.New("no such question is pending")
+
+type PendingQuestion struct {
+	ID      string
+	AskedAt time.Time
+}
+
+type askedQuestion struct {
+	question provider.Question
+	askedAt  time.Time
+}
+
 type questions struct {
 	mu      sync.Mutex
-	pending map[string]provider.Question
+	pending map[string]askedQuestion
 	order   []string
 }
 
 func newQuestions() *questions {
-	return &questions{pending: map[string]provider.Question{}}
+	return &questions{pending: map[string]askedQuestion{}}
 }
 
 func (q *questions) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -63,7 +76,7 @@ func (q *questions) pose(err error) error {
 		return errors.Join(err, detailErr)
 	}
 	q.mu.Lock()
-	q.pending[id] = question
+	q.pending[id] = askedQuestion{question: question, askedAt: time.Now()}
 	q.order = append(q.order, id)
 	for len(q.order) > maxPendingQuestions {
 		delete(q.pending, q.order[0])
@@ -76,14 +89,24 @@ func (q *questions) pose(err error) error {
 
 func (q *questions) confirm(ctx context.Context, id string) error {
 	q.mu.Lock()
-	question, asked := q.pending[id]
+	pending, asked := q.pending[id]
 	delete(q.pending, id)
-	q.order = slices.DeleteFunc(q.order, func(pending string) bool { return pending == id })
+	q.order = slices.DeleteFunc(q.order, func(listed string) bool { return listed == id })
 	q.mu.Unlock()
-	if !asked || question.Confirm == nil {
-		return refusal.Refuse(refusal.CodeInvalid, "this provider is waiting on no question %q", id)
+	if !asked || pending.question.Confirm == nil {
+		return ErrQuestionNotPending
 	}
-	return question.Confirm(ctx)
+	return pending.question.Confirm(ctx)
+}
+
+func (q *questions) listPending() []PendingQuestion {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	listed := make([]PendingQuestion, 0, len(q.order))
+	for _, id := range q.order {
+		listed = append(listed, PendingQuestion{ID: id, AskedAt: q.pending[id].askedAt})
+	}
+	return listed
 }
 
 func newQuestionID() (string, error) {
@@ -95,8 +118,16 @@ func newQuestionID() (string, error) {
 }
 
 func (h *handlers) Confirm(ctx context.Context, req *contractv1.ConfirmRequest) (*contractv1.ConfirmResponse, error) {
-	if err := h.questions.confirm(ctx, req.GetQuestionId()); err != nil {
+	err := h.questions.confirm(ctx, req.GetQuestionId())
+	if errors.Is(err, ErrQuestionNotPending) {
+		err = RefuseNotPending(req.GetQuestionId())
+	}
+	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	return &contractv1.ConfirmResponse{}, nil
+}
+
+func RefuseNotPending(questionID string) error {
+	return refusal.Refuse(refusal.CodeInvalid, "this provider is waiting on no question %q", questionID)
 }

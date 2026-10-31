@@ -9,9 +9,14 @@ import (
 )
 
 func (p *Provider) onHost(dial ssh.Dial) *Provider {
+	p.wire(dial)
+	p.ssh.SendTraceFlagsWhen(p.host.IsAgentCurrent)
+	return p
+}
+
+func (p *Provider) wire(dial ssh.Dial) *Provider {
 	box := ssh.NewBox(dial, nil)
-	p.host = host.New(box, p.project, host.Keys{Path: p.options.DeployKey}, pins(p.options.Certificates), p.options.Proxy.Filled())
-	box.SendTraceFlagsWhen(p.host.IsAgentCurrent)
+	p.host = host.New(box, p.assets, p.project, host.Keys{Path: p.options.DeployKey}, pins(p.options.Certificates), p.options.Proxy.Filled())
 	p.routing = p.host.Routing()
 	p.tunnel = p.host.Tunnel()
 	p.pins = p.host.Pins()

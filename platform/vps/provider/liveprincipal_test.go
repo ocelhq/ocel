@@ -67,7 +67,7 @@ func TestLiveTheDeployKeyOptionOverridesTheMirroredKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p := vps.NewProvider(vps.Options{
+	p := vps.NewProvider(vps.TestAssets, vps.Options{
 		SSH:       vps.Target{Host: vm.addr, User: vm.user, IdentityFile: vm.key, Config: vm.config},
 		DeployKey: named + ".pub",
 	})
@@ -132,7 +132,7 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
-	for _, item := range host.Items(tier, nil, ssh.AMD64, front.Proxy{}) {
+	for _, item := range host.Items(vps.TestAssets, tier, nil, ssh.AMD64, front.Proxy{}) {
 		if item.Owner != deployLogin || item.Kind == "linux:user" {
 			continue
 		}
@@ -155,7 +155,7 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 
 	ctx := context.Background()
 	tier := environment.TierProduction
-	installing := vps.NewProvider(vps.Options{
+	installing := vps.NewProvider(vps.TestAssets, vps.Options{
 		SSH:       vps.Target{Host: vm.addr, User: vm.user, IdentityFile: vm.key, Config: vm.config},
 		DeployKey: named,
 	})
@@ -172,7 +172,7 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p := vps.NewProvider(vps.Options{
+	p := vps.NewProvider(vps.TestAssets, vps.Options{
 		SSH:       vps.Target{Host: vm.addr, User: vm.user, IdentityFile: vm.key, Config: vm.config},
 		DeployKey: named,
 	})

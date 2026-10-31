@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -147,13 +148,13 @@ func TestACredentialThatMayNotListTheRegionsCloudRunServesIsRefusedNamingThePerm
 func TestARunChecksItsRegionAgainstCloudRunOnlyWhenTheChecksAreNotSkipped(t *testing.T) {
 	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(t.TempDir(), "no-such-key.json"))
 	for skipChecks, wantChecked := range map[bool]bool{false: true, true: false} {
-		p := &Provider{
-			options:    Options{Project: "acme-prod", Region: "europe-west1"},
-			resolved:   &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Region: "europe-west1"},
-			skipChecks: skipChecks,
-		}
+		p := newProvider(&control.Provider{
+			Options:    control.Options{Project: "acme-prod", Region: "europe-west1"},
+			Clients:    &gcloud.Clients{Names: names.New(provider.Namespace("ocel"), "acme-prod"), Region: "europe-west1"},
+			SkipChecks: skipChecks,
+		})
 
-		_, err := p.openClients(context.Background())
+		_, err := p.OpenClients(context.Background())
 		if checked := err != nil; checked != wantChecked {
 			t.Errorf("openClients() with the checks skipped %t = %v, want the region checked %t: with no credential, only the check reaches for one", skipChecks, err, wantChecked)
 		}
@@ -172,12 +173,12 @@ func TestARunOfAUserCredentialThatMayNotBillTheProjectIsRefusedBeforeItCallsAnyt
 		_, _ = w.Write([]byte(`{"error":{"code":403,"status":"PERMISSION_DENIED","message":"Caller does not have required permission to use project acme-prod.",` +
 			`"details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"USER_PROJECT_DENIED","domain":"googleapis.com"}]}}`))
 	})
-	p := &Provider{
-		options:  Options{Project: googletest.Project, Region: googletest.Region},
-		resolved: &gcloud.Clients{Names: googletest.Names, Region: googletest.Region},
-	}
+	p := newProvider(&control.Provider{
+		Options: control.Options{Project: googletest.Project, Region: googletest.Region},
+		Clients: &gcloud.Clients{Names: googletest.Names, Region: googletest.Region},
+	})
 
-	_, err := p.openClients(context.Background())
+	_, err := p.OpenClients(context.Background())
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied || !strings.Contains(refused.Message, credential.BillingPermission) {

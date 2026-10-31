@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -17,12 +19,12 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
-func TestEveryTierPartShapesWhatItHoldsAndPlansItsOwnTeardown(t *testing.T) {
+func TestEveryTierPartInventoriesWhatItHoldsAndPlansItsOwnTeardown(t *testing.T) {
 	t.Parallel()
 
 	for _, part := range partsOver(fake.NewKeyValues()) {
-		if part.Shape == nil {
-			t.Errorf("part %s shapes nothing, so its plan and its status cannot say what it costs", part.Name)
+		if part.Inventory == nil {
+			t.Errorf("part %s inventories nothing, so its plan and its status cannot say what it costs", part.Name)
 		}
 		if part.Describe == nil {
 			t.Errorf("part %s describes nothing, so status cannot show it", part.Name)
@@ -41,7 +43,7 @@ func TestARemovalOfTheNetworkThatAPartStillRunsInIsRefusedNamingIt(t *testing.T)
 
 	store := fake.NewKeyValues()
 	ctx := context.Background()
-	if err := stackrecords.MarkBootstrapPartReady(ctx, store, environment.TierProduction, network.Part, stackrecords.BootstrapPart{
+	if err := stackrecords.MarkBootstrapPartReady(ctx, store, environment.TierProduction, sharedparts.NetworkPart, stackrecords.BootstrapPart{
 		WrittenBy: "1.0.0", AddedBy: "shop",
 		Resources: []provider.PhysicalResource{{Kind: "AWS::EC2::VPC", ID: "vpc-ocel"}},
 	}); err != nil {
@@ -52,9 +54,9 @@ func TestARemovalOfTheNetworkThatAPartStillRunsInIsRefusedNamingIt(t *testing.T)
 		t.Fatal(err)
 	}
 
-	part, found := partsOver(store).Named(network.Part)
+	part, found := partsOver(store).Named(sharedparts.NetworkPart)
 	if !found || part.Removal == nil {
-		t.Fatalf("no removable %s part", network.Part)
+		t.Fatalf("no removable %s part", sharedparts.NetworkPart)
 	}
 	_, err := part.Removal.Plan(ctx, environment.TierProduction)
 	var refused refusal.Refusal

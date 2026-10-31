@@ -219,9 +219,9 @@ func (b *Bootstrap) DescribeParts(_ context.Context, described provider.Bootstra
 			Current:   stack.DigestCurrent,
 			Digest:    "digest-" + stack.Name,
 			Resources: []provider.PhysicalResource{{Kind: "Fake::Stack", ID: stack.Name}},
-			Shape: &provider.PartShape{
+			Inventory: &provider.PartInventory{
 				Vendor:    string(Vendor),
-				Resources: []pricing.Shaped{{Name: stack.Name, Type: TypeBucket, Properties: map[string]any{}}},
+				Resources: []pricing.Resource{{Name: stack.Name, Type: TypeBucket, Properties: map[string]any{}}},
 			},
 		})
 	}

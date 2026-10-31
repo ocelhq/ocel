@@ -12,8 +12,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	cloudscheduler "google.golang.org/api/cloudscheduler/v1"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
 type topicsServer struct {

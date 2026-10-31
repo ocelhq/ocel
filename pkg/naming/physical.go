@@ -25,6 +25,14 @@ func (c Coordinate) AppResourceName(namespace, tag string) PhysicalName {
 	return PhysicalName{Fence: AppFence(namespace), Project: c.Project, Env: c.Env, App: c.App, Declared: c.Name, Tag: tag}
 }
 
+func (c Coordinate) TaggedResourceName(namespace string) PhysicalName {
+	tag := c.Release.String()
+	if c.Release.IsZero() {
+		tag = c.HashTag(namespace)
+	}
+	return c.AppResourceName(namespace, tag)
+}
+
 func (p PhysicalName) Fit(limit int, childSuffixes ...string) (string, error) {
 	return p.fit(limit, longestChildSuffix(childSuffixes), true)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
@@ -18,6 +19,10 @@ func runRemove(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 	if _, err := requireProviderID(ctx, dependencies, cfg, "ocel connector rm"); err != nil {
 		return err
 	}
+	question := "Take the connector off this target and forget it in the console?"
+	if err := opts.policy.RefuseQuestion(question, "before it takes the connector off"); err != nil {
+		return err
+	}
 	access, err := readAccessToken(dependencies)
 	if err != nil {
 		return err
@@ -28,6 +33,16 @@ func runRemove(ctx context.Context, dependencies Dependencies, cfg *project.Proj
 		return err
 	}
 	defer run.End(&err)
+	check := run.Phase(progressv1.Phase_PHASE_CHECK)
+	proceed, err := opts.policy.Confirm(ctx, check, consent.Guard{ID: consent.GuardConnectorRemoval, Question: question, Action: "removing the connector"})
+	check.End(err)
+	if err != nil {
+		return err
+	}
+	if !proceed {
+		run.Succeed("Nothing removed: the connector stays")
+		return nil
+	}
 
 	fingerprint, unreached := removeFromTarget(ctx, dependencies, run, cfg, opts)
 	if fingerprint == "" {

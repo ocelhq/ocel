@@ -14,7 +14,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/githubactions"
+	"github.com/ocelhq/ocel/cli/internal/jobcontext"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -34,7 +34,7 @@ var ErrNoTarget = errors.New("the console binds no target to this project's tier
 var finalCodes = []connect.Code{connect.CodeNotFound, connect.CodePermissionDenied, connect.CodeFailedPrecondition, connect.CodeUnauthenticated}
 
 type Console struct {
-	Getenv       func(string) string
+	Context      *jobcontext.Context
 	Version      string
 	RefreshFloor time.Duration
 }
@@ -66,7 +66,7 @@ type refusedIssue struct {
 func (e *refusedIssue) Error() string { return "the console issued no credential: " + e.message }
 
 func (c Console) IsRequested() bool {
-	return c.Getenv != nil && githubactions.IsRunning(c.Getenv) && c.Getenv(console.ProjectIDEnvVar) != ""
+	return c.Context != nil
 }
 
 func (c Console) Issue(ctx context.Context, req Request, warn func(string)) (*Credential, error) {
@@ -108,14 +108,12 @@ func (c Console) refreshFloor() time.Duration {
 }
 
 func (c Console) issuing(req Request) (func(context.Context) (*consolev1.IssueCredentialResponse, error), error) {
-	apiURL := console.NormalizeBaseURL(c.Getenv(console.URLEnvVar))
-	audience, err := console.Origin(apiURL)
-	if err != nil {
+	if _, err := console.Origin(c.Context.ConsoleURL); err != nil {
 		return nil, err
 	}
-	client := console.New(apiURL)
+	client := console.New(c.Context.ConsoleURL)
 	request := &consolev1.IssueCredentialRequest{
-		ProjectId:  c.Getenv(console.ProjectIDEnvVar),
+		ProjectId:  c.Context.ProjectID,
 		Tier:       req.Tier,
 		Vendor:     req.Vendor,
 		CliVersion: c.Version,
@@ -123,11 +121,11 @@ func (c Console) issuing(req Request) (func(context.Context) (*consolev1.IssueCr
 	return func(ctx context.Context) (*consolev1.IssueCredentialResponse, error) {
 		ctx, cancel := context.WithTimeout(ctx, issueTimeout)
 		defer cancel()
-		idToken, err := githubactions.RequestIDToken(ctx, c.Getenv, audience)
+		bearer, err := c.Context.Bearer(ctx)
 		if err != nil {
 			return nil, err
 		}
-		issued, err := client.IssueCredential(ctx, idToken, request)
+		issued, err := client.IssueCredential(ctx, bearer, request)
 		var refused *connect.Error
 		switch {
 		case errors.As(err, &refused):
@@ -153,6 +151,8 @@ func (c *Credential) WebIdentity() *contractv1.WebIdentity {
 func (c *Credential) Account() string { return c.issued.GetAccount() }
 
 func (c *Credential) Region() string { return c.issued.GetRegion() }
+
+func (c *Credential) Namespace() string { return c.issued.GetNamespace() }
 
 func (c *Credential) Close() error {
 	c.stop()

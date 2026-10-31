@@ -44,11 +44,11 @@ func envSourceSyncUnit() []byte {
 	}, "\n"))
 }
 
-func EnvSourceSyncItems(tier environment.Tier, architecture string) []machine.Item {
+func EnvSourceSyncItems(assets Assets, tier environment.Tier, architecture string) []machine.Item {
 	template := envSourceSyncUnit()
 	return []machine.Item{
 		{Kind: machine.KindFile, Name: envSourceSyncTemplateFile, Mode: 0o644, Owner: machine.RootOwner, Content: template},
-		machine.SystemdUnit(machine.Item{Name: EnvSourceSyncService(tier), Owner: machine.RootOwner, Content: machine.UnitWatchFacts(template, liveAgent(architecture)),
+		machine.SystemdUnit(machine.Item{Name: EnvSourceSyncService(tier), Owner: machine.RootOwner, Content: machine.UnitWatchFacts(template, liveAgent(assets, architecture)),
 			Watch: []string{envSourceSyncTemplateFile, LiveBinary},
 			Slow:  true, Note: "keeps values in step with env sources"}),
 	}

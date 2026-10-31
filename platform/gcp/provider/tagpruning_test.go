@@ -114,15 +114,15 @@ func prefixBounds(t *testing.T, query *firestorepb.StructuredQuery) map[string]s
 func TestPruningOnALaneWithATagEmulatorDeletesTheTagRecordsThere(t *testing.T) {
 	fake := &taggedFirestore{listed: []string{tagDocument("aaa"), tagDocument("bbb")}}
 	p := pushing(t, "http://127.0.0.1:1")
-	p.tagEndpoint = tagRecordsServedAt(t, fake)
-	p.resolved.TagEndpoint = p.tagEndpoint
+	p.TagEmulator = tagRecordsServedAt(t, fake)
+	p.Clients.TagEndpoint = p.TagEmulator
 	log := &sayings{Log: progress.Discard()}
 
 	scope, err := naming.ReleaseScope(cachedRelease())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, scope, log); err != nil {
+	if err := p.Objects().RemoveTagRecords(context.Background(), environment.TierProduction, scope, log); err != nil {
 		t.Fatalf("removeTagRecords() = %v", err)
 	}
 
@@ -147,7 +147,7 @@ func TestPruningAReleaseDeletesTheTagRecordsOfItsPagesPrefixAndNoOther(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, scope, log); err != nil {
+	if err := p.Objects().RemoveTagRecords(context.Background(), environment.TierProduction, scope, log); err != nil {
 		t.Fatalf("removeTagRecords() = %v", err)
 	}
 
@@ -181,7 +181,7 @@ func TestRemovingAnAppsObjectsDeletesOnlyThatAppsTagRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierPreview, scope, nil); err != nil {
+	if err := p.Objects().RemoveTagRecords(context.Background(), environment.TierPreview, scope, nil); err != nil {
 		t.Fatalf("removeTagRecords() = %v", err)
 	}
 
@@ -200,7 +200,7 @@ func TestPruningATierWithNoTagsDatabaseSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := (artifacts{p}).removeTagRecords(context.Background(), environment.TierProduction, scope, log); err != nil {
+	if err := p.Objects().RemoveTagRecords(context.Background(), environment.TierProduction, scope, log); err != nil {
 		t.Fatalf("removeTagRecords() with no tags database = %v, want nil", err)
 	}
 	if len(log.said) != 0 {

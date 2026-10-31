@@ -10,6 +10,7 @@ import (
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 )
 
 func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
@@ -28,7 +29,7 @@ func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	front, err := ensurePreviewDomain(ctx, c, wildcard, spec.Certificate)
+	front, err := ensurePreviewDomain(ctx, c, wildcard, spec.Certificate, namespaceTags(p.ns, environment.TierPreview))
 	if err != nil {
 		return "", err
 	}
@@ -65,7 +66,7 @@ func (p *apiGateway) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 	return errors.Join(errs...)
 }
 
-func ensurePreviewDomain(ctx context.Context, c Clients, wildcard, certificate string) (string, error) {
+func ensurePreviewDomain(ctx context.Context, c Clients, wildcard, certificate string, tags map[string]string) (string, error) {
 	current, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
 		DomainName: aws.String(wildcard),
 	})
@@ -80,6 +81,7 @@ func ensurePreviewDomain(ctx context.Context, c Clients, wildcard, certificate s
 		RegionalCertificateArn: aws.String(certificate),
 		SecurityPolicy:         agtypes.SecurityPolicyTls12,
 		RoutingMode:            agtypes.RoutingModeRoutingRuleOnly,
+		Tags:                   tags,
 		EndpointConfiguration: &agtypes.EndpointConfiguration{
 			Types: []agtypes.EndpointType{agtypes.EndpointTypeRegional},
 		},

@@ -15,7 +15,16 @@ const (
 	detachedHead      = "HEAD"
 	githubActionsName = "github-actions"
 	unknownCIName     = "ci"
+	runnerName        = "ocel-runner"
 )
+
+func ReadRunnerTrigger(prNumber string) (*consolev1.Trigger, *consolev1.CI) {
+	ci := &consolev1.CI{Name: runnerName}
+	if pr, err := strconv.ParseUint(prNumber, 10, 32); err == nil {
+		ci.Pr = uint32(pr)
+	}
+	return &consolev1.Trigger{Kind: consolev1.TriggerKind_TRIGGER_KIND_CI}, ci
+}
 
 func ReadTrigger(getenv func(string) string, prNumber string) (*consolev1.Trigger, *consolev1.CI) {
 	if !githubactions.IsRunning(getenv) && getenv("CI") == "" {

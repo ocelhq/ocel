@@ -21,6 +21,8 @@ const (
 	KindFile    = "fs:file"
 	KindUser    = "linux:user"
 	KindSealKey = "ocel:seal-key"
+
+	KindAuthorityKey = "ocel:ssh-authority"
 )
 
 const (
@@ -65,6 +67,7 @@ var kindNouns = map[string]string{
 	KindFile:            "file",
 	KindUser:            "user",
 	KindSealKey:         "seal key",
+	KindAuthorityKey:    "ssh certificate authority",
 	KindUnit:            "systemd unit",
 	KindLiveRestore:     "Docker's live-restore setting in",
 	KindNetwork:         "Docker network",

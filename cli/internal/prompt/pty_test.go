@@ -95,6 +95,19 @@ func TestAnAttendedInputTakesWhatIsTyped(t *testing.T) {
 	}
 }
 
+func TestAnAttendedSecretTakesWhatIsTypedWithoutShowingIt(t *testing.T) {
+	ptmx, tty, screen := aPromptTerminal(t)
+	typeOnSight(t, ptmx, screen, "STRIPE_KEY", "sk_test_placeholder", "\r")
+
+	typed, answered, err := New(tty, tty).Secret(withinSeconds(t), "STRIPE_KEY", "The billing key")
+	if err != nil || !answered || typed != "sk_test_placeholder" {
+		t.Errorf("Secret() = %q, %t, %v; want the value typed", typed, answered, err)
+	}
+	if screen.shows("sk_test_placeholder") {
+		t.Error("the screen shows the value typed, want it hidden")
+	}
+}
+
 func TestAnAttendedAwaitEnterGoesOnAtEnter(t *testing.T) {
 	ptmx, tty, screen := aPromptTerminal(t)
 	typeOnSight(t, ptmx, screen, "Press Enter", "\r")

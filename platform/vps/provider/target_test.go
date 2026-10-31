@@ -42,7 +42,7 @@ func TestTheDestinationReadsWhatWasAuthored(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			p, err := vps.New(context.Background(), provider.Settings{Options: tc.options})
+			p, err := vps.New(vps.TestAssets)(context.Background(), provider.Settings{Options: tc.options})
 			if err != nil {
 				t.Fatalf("New() = %v, want %s accepted", err, name)
 			}
@@ -92,7 +92,7 @@ func TestTheDestinationRefusesWhatItCannotRead(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := vps.New(context.Background(), provider.Settings{Options: tc.options})
+			_, err := vps.New(vps.TestAssets)(context.Background(), provider.Settings{Options: tc.options})
 			if err == nil {
 				t.Fatalf("New() with %s = nil, want a refusal", name)
 			}

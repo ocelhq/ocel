@@ -3,6 +3,7 @@ package providerprocess
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/executables"
@@ -15,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type Provider struct {
@@ -28,6 +30,7 @@ type Provider struct {
 type Launch struct {
 	Pinning     executables.Pinning
 	WebIdentity *contractv1.WebIdentity
+	Namespace   string
 	Release     func()
 }
 
@@ -37,6 +40,9 @@ func Start(ctx context.Context, cfg *project.Project, span *run.Span, questions 
 		return nil, err
 	}
 	spec.ProviderConfig.WebIdentity = launch.WebIdentity
+	if launch.Namespace != "" {
+		spec.Env = append(os.Environ(), provider.NamespaceEnvVar+"="+launch.Namespace)
+	}
 	provider, err := start(ctx, span, questions, spec)
 	if err != nil {
 		return nil, err

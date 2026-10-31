@@ -11,7 +11,6 @@ import (
 	kms "cloud.google.com/go/kms/apiv1"
 	logging "cloud.google.com/go/logging/apiv2"
 	"cloud.google.com/go/storage"
-	"golang.org/x/oauth2/google"
 	"google.golang.org/api/artifactregistry/v1"
 	certmanager "google.golang.org/api/certificatemanager/v1"
 	"google.golang.org/api/cloudresourcemanager/v1"
@@ -54,6 +53,7 @@ type Clients struct {
 	Endpoint    string
 	TagEndpoint string
 	Records     records.Store
+	Credentials ports.Credentials
 
 	TierTagEndpoint string
 
@@ -87,7 +87,7 @@ type Clients struct {
 func opened[T any](c *Clients, cache *Memo[T], doing string, open func() (T, error)) (T, error) {
 	client, err := cache.Get(func() (T, error) {
 		if !c.Emulated() {
-			if _, err := google.FindDefaultCredentials(context.Background(), ports.CloudPlatformScope); err != nil {
+			if _, err := c.Credentials.Find(context.Background()); err != nil {
 				var nothing T
 				return nothing, Unauthenticated()
 			}
@@ -107,7 +107,7 @@ func opened[T any](c *Clients, cache *Memo[T], doing string, open func() (T, err
 
 func (c *Clients) Storage() (*storage.Client, error) {
 	return opened(c, &c.storage, "Cloud Storage", func() (*storage.Client, error) {
-		options, err := ports.NewStorageOptions(context.Background(), c.Endpoint, c.QuotaProject())
+		options, err := ports.NewStorageOptions(context.Background(), c.Credentials, c.Endpoint, c.QuotaProject())
 		if err != nil {
 			return nil, err
 		}
@@ -119,25 +119,25 @@ func (c *Clients) Databases() (*firestoreadmin.Service, error) { return c.Worklo
 
 func (c *Clients) Secrets() (*secretmanager.Service, error) {
 	return opened(c, &c.secrets, "Secret Manager", func() (*secretmanager.Service, error) {
-		return ports.NewRESTService(context.Background(), secretmanager.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, secretmanager.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
 func (c *Clients) Services() (*serviceusage.Service, error) {
 	return opened(c, &c.services, "Service Usage", func() (*serviceusage.Service, error) {
-		return ports.NewRESTService(context.Background(), serviceusage.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, serviceusage.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
 func (c *Clients) Repositories() (*artifactregistry.Service, error) {
 	return opened(c, &c.images, "Artifact Registry", func() (*artifactregistry.Service, error) {
-		return ports.NewRESTService(context.Background(), artifactregistry.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, artifactregistry.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
 func (c *Clients) Run() (*run.Service, error) {
 	return opened(c, &c.runs, "Cloud Run", func() (*run.Service, error) {
-		return ports.NewRESTService(context.Background(), run.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, run.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
@@ -147,61 +147,61 @@ func (c *Clients) RunV1() (*runv1.APIService, error) {
 		if !c.Emulated() {
 			regional = append(regional, option.WithEndpoint("https://"+c.Region+"-run.googleapis.com/"))
 		}
-		return ports.NewRESTService(context.Background(), runv1.NewService, c.Endpoint, c.QuotaProject(), regional...)
+		return ports.NewRESTService(context.Background(), c.Credentials, runv1.NewService, c.Endpoint, c.QuotaProject(), regional...)
 	})
 }
 
 func (c *Clients) RunLocations() (*runv1.APIService, error) {
 	return opened(c, &c.runLocations, "Cloud Run locations", func() (*runv1.APIService, error) {
-		return ports.NewRESTService(context.Background(), runv1.NewService, c.Endpoint, "")
+		return ports.NewRESTService(context.Background(), c.Credentials, runv1.NewService, c.Endpoint, "")
 	})
 }
 
 func (c *Clients) Scheduler() (*cloudscheduler.Service, error) {
 	return opened(c, &c.schedules, "Cloud Scheduler", func() (*cloudscheduler.Service, error) {
-		return ports.NewRESTService(context.Background(), cloudscheduler.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, cloudscheduler.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
 func (c *Clients) LoggingREST() (*loggingrest.Service, error) {
 	return opened(c, &c.loggingREST, "Cloud Logging", func() (*loggingrest.Service, error) {
-		return ports.NewRESTService(context.Background(), loggingrest.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, loggingrest.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
 func (c *Clients) Compute() (*compute.Service, error) {
 	return opened(c, &c.compute, "Compute Engine", func() (*compute.Service, error) {
-		return ports.NewRESTService(context.Background(), compute.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, compute.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
 func (c *Clients) Certificates() (*certmanager.Service, error) {
 	return opened(c, &c.certs, "Certificate Manager", func() (*certmanager.Service, error) {
-		return ports.NewRESTService(context.Background(), certmanager.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, certmanager.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
 func (c *Clients) Connectivity() (*networkconnectivity.Service, error) {
 	return opened(c, &c.connectivity, "Network Connectivity", func() (*networkconnectivity.Service, error) {
-		return ports.NewRESTService(context.Background(), networkconnectivity.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, networkconnectivity.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
 func (c *Clients) SQL() (*sqladmin.Service, error) {
 	return opened(c, &c.sql, "Cloud SQL Admin", func() (*sqladmin.Service, error) {
-		return ports.NewRESTService(context.Background(), sqladmin.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, sqladmin.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
 func (c *Clients) Accounts() (*iam.Service, error) {
 	return opened(c, &c.accounts, "IAM", func() (*iam.Service, error) {
-		return ports.NewRESTService(context.Background(), iam.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, iam.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
 func (c *Clients) Memorystore() (Memorystore, error) {
 	return opened(c, &c.memorystore, "Memorystore", func() (Memorystore, error) {
-		client, err := ports.NewHTTPClient(context.Background(), c.Endpoint, c.QuotaProject())
+		client, err := ports.NewHTTPClient(context.Background(), c.Credentials, c.Endpoint, c.QuotaProject())
 		if err != nil {
 			return Memorystore{}, err
 		}
@@ -218,7 +218,7 @@ func (c *Clients) Principal(ctx context.Context) (string, error) {
 		if c.Emulated() {
 			return EmulatorPrincipal, nil
 		}
-		token, err := ApplicationDefault{}.Token(ctx)
+		token, err := c.Credentials.Token(ctx)
 		if err != nil {
 			return "", Unauthenticated()
 		}
@@ -228,13 +228,13 @@ func (c *Clients) Principal(ctx context.Context) (string, error) {
 
 func (c *Clients) Projects() (*cloudresourcemanager.Service, error) {
 	return opened(c, &c.projects, "Resource Manager", func() (*cloudresourcemanager.Service, error) {
-		return ports.NewRESTService(context.Background(), cloudresourcemanager.NewService, c.Endpoint, c.QuotaProject())
+		return ports.NewRESTService(context.Background(), c.Credentials, cloudresourcemanager.NewService, c.Endpoint, c.QuotaProject())
 	})
 }
 
 func (c *Clients) Logging() (*logging.Client, error) {
 	return opened(c, &c.logs, "Cloud Logging", func() (*logging.Client, error) {
-		return logging.NewClient(context.Background(), ports.NewGRPCOptions(c.Endpoint, c.QuotaProject())...)
+		return logging.NewClient(context.Background(), ports.NewGRPCOptions(c.Credentials, c.Endpoint, c.QuotaProject())...)
 	})
 }
 
@@ -299,6 +299,7 @@ func (c *Clients) Workload() *ports.Clients {
 			Endpoint:    c.Endpoint,
 			TagEndpoint: c.TagEndpoint,
 			Records:     c.Records,
+			Credentials: c.Credentials,
 		}, nil
 	})
 	return workload

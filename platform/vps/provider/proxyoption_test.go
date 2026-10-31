@@ -37,7 +37,7 @@ func TestTheProxyOptionReadsEveryFormItTakes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			p, err := vps.New(context.Background(), provider.Settings{Options: tc.options})
+			p, err := vps.New(vps.TestAssets)(context.Background(), provider.Settings{Options: tc.options})
 			if err != nil {
 				t.Fatalf("New() = %v, want %s accepted", err, name)
 			}
@@ -60,7 +60,7 @@ func TestACaddyOptionFrontsTheBox(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if _, err := vps.New(context.Background(), provider.Settings{Options: proxied(map[string]any{"caddy": option})}); err != nil {
+			if _, err := vps.New(vps.TestAssets)(context.Background(), provider.Settings{Options: proxied(map[string]any{"caddy": option})}); err != nil {
 				t.Errorf("New() with %s = %v, want it served", name, err)
 			}
 		})
@@ -105,7 +105,7 @@ func TestTheProxyOptionRefusesWhatThisOcelDoesNotServe(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := vps.New(context.Background(), provider.Settings{Options: tc.options})
+			_, err := vps.New(vps.TestAssets)(context.Background(), provider.Settings{Options: tc.options})
 			if err == nil {
 				t.Fatalf("New() with %s = nil, want a refusal", name)
 			}

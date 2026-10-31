@@ -15,17 +15,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
-
-const Kind edge.Kind = "alb"
-
-const BaselineCost = "about $18 a month plus Premium-tier egress"
 
 type Deps struct {
 	Namespace string
 	KeyValues records.Store
-	Stacks    Stacks
 	Routes    Routes
 	Entries   Entries
 	Pins      pin.Pins
@@ -33,18 +29,23 @@ type Deps struct {
 	Project   string
 	Region    string
 
-	Cipher     seal.Cipher
-	GatePlugin []byte
-	Images     PluginImages
-	ProbeGate  func(ctx context.Context, hostname, address string) (bool, error)
+	Cipher    seal.Cipher
+	ProbeGate func(ctx context.Context, hostname, address string) (bool, error)
 
 	WaitBeforeRetry    func(ctx context.Context, attempt int) bool
-	ReadAssetsBucket   func(ctx context.Context, tier environment.Tier) (AssetsBucket, error)
-	CopyImmutableFiles func(ctx context.Context, tier environment.Tier, from, to StaticRoutes) error
-	FrontPart          *FrontPart
+	ReadAssetsBucket   func(ctx context.Context, tier environment.Tier) (albresources.AssetsBucket, error)
+	CopyImmutableFiles func(ctx context.Context, tier environment.Tier, from, to albresources.StaticRoutes) error
 
+	Engine Engine
+}
+
+type Engine struct {
+	Stacks        Stacks
+	Images        PluginImages
+	GatePlugin    []byte
+	FrontPart     FrontPart
 	EvaluateFront func(ctx context.Context, tier environment.Tier) (transform.Result, error)
-	ReadApps      func(tier environment.Tier, slug string) map[string]transform.Result
+	ReadApps      func(ctx context.Context, tier environment.Tier, slug string) (map[string]transform.Result, error)
 }
 
 type FrontPart struct {
@@ -52,29 +53,15 @@ type FrontPart struct {
 	Release func(ctx context.Context, tier environment.Tier, user string) error
 }
 
-func (e *Edge) claimFront(ctx context.Context, tier environment.Tier, user string) error {
-	if e.deps.FrontPart == nil {
-		return nil
-	}
-	return e.deps.FrontPart.Claim(ctx, tier, user)
-}
-
-func (e *Edge) releaseFront(ctx context.Context, tier environment.Tier, user string) error {
-	if e.deps.FrontPart == nil {
-		return nil
-	}
-	return e.deps.FrontPart.Release(ctx, tier, user)
-}
-
 type Edge struct{ deps Deps }
 
-func (e *Edge) loadBalancerTarget(tier environment.Tier) Target {
-	return Target{Tier: tier}
+func (e *Edge) loadBalancerStack(tier environment.Tier) albresources.Stack {
+	return albresources.Stack{Tier: tier}
 }
 
 func New(deps Deps) *Edge { return &Edge{deps: deps} }
 
-func (e *Edge) Kind() edge.Kind { return Kind }
+func (e *Edge) Kind() edge.Kind { return albresources.Kind }
 
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
@@ -101,7 +88,7 @@ func (e *Edge) Hooks() edge.Hooks {
 func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.BootstrapOutput, error) {
 	if tier == "" {
 		return edge.BootstrapOutput{}, refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge provisions one load balancer per tier, and this bootstrap names none", Kind)
+			"the %q edge provisions one load balancer per tier, and this bootstrap names none", albresources.Kind)
 	}
 	if _, err := e.raise(ctx, tier, "", progress.Discard()); err != nil {
 		return edge.BootstrapOutput{}, err
@@ -113,7 +100,7 @@ func (e *Edge) Bootstrap(ctx context.Context, tier environment.Tier) (edge.Boots
 }
 
 func (e *Edge) raise(ctx context.Context, tier environment.Tier, project string, progress progress.Log) (LoadBalancer, error) {
-	var preview previewEntry
+	var preview albresources.PreviewEntry
 	if tier == environment.TierPreview {
 		recorded, err := e.recordedPreview(ctx)
 		if err != nil {
@@ -124,11 +111,11 @@ func (e *Edge) raise(ctx context.Context, tier environment.Tier, project string,
 	return e.raiseServing(ctx, tier, preview, project, progress)
 }
 
-func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview previewEntry, project string, progress progress.Log) (LoadBalancer, error) {
-	spec := loadBalancerSpec{
+func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview albresources.PreviewEntry, project string, progress progress.Log) (LoadBalancer, error) {
+	spec := albresources.LoadBalancerSpec{
 		Namespace: e.deps.Namespace,
 		Region:    e.deps.Region,
-		Names:     loadBalancerNames(e.deps.Namespace, tier),
+		Names:     albresources.LoadBalancerNames(e.deps.Namespace, tier),
 		Tier:      tier,
 		Preview:   preview,
 	}
@@ -153,26 +140,26 @@ func (e *Edge) raiseServing(ctx context.Context, tier environment.Tier, preview 
 	if !balancer.provisioned() {
 		return LoadBalancer{}, fmt.Errorf(
 			"provision the %s load balancer for tier %s: it reported %+v, and a hostname is bound by writing into its certificate map and its url map",
-			Kind, tier, balancer)
+			albresources.Kind, tier, balancer)
 	}
 	return balancer, nil
 }
 
 func (e *Edge) readProvisionedLoadBalancer(ctx context.Context, tier environment.Tier) (LoadBalancer, error) {
-	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(tier))
+	outputs, err := e.deps.Engine.Stacks.Outputs(ctx, e.loadBalancerStack(tier))
 	if err != nil {
 		return LoadBalancer{}, err
 	}
 	balancer := loadBalancerOf(outputs)
 	if !balancer.provisioned() {
 		return LoadBalancer{}, refusal.Refuse(refusal.CodeNotReady,
-			"no %s load balancer is provisioned for tier %s: run `ocel bootstrap` for this tier first", Kind, tier)
+			"no %s load balancer is provisioned for tier %s: run `ocel bootstrap` for this tier first", albresources.Kind, tier)
 	}
 	return balancer, nil
 }
 
 func (e *Edge) bootstrapInstalled(ctx context.Context, tier environment.Tier) (bool, error) {
-	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(tier))
+	outputs, err := e.deps.Engine.Stacks.Outputs(ctx, e.loadBalancerStack(tier))
 	if err != nil {
 		return false, err
 	}
@@ -183,7 +170,7 @@ func (e *Edge) boundHostnames(ctx context.Context, tier environment.Tier) ([]str
 	if e.deps.Entries == nil {
 		return nil, nil
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(tier))
+	outputs, err := e.deps.Engine.Stacks.Outputs(ctx, e.loadBalancerStack(tier))
 	if err != nil {
 		return nil, err
 	}
@@ -203,12 +190,12 @@ func (e *Edge) Teardown(ctx context.Context, tier environment.Tier) error {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %s load balancer of tier %s still serves %s, and Google will not delete a certificate map that has entries: "+
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
-			Kind, tier, strings.Join(bound, ", "))
+			albresources.Kind, tier, strings.Join(bound, ", "))
 	}
 	if err := e.removeGate(ctx, tier); err != nil {
 		return err
 	}
-	if err := e.deps.Stacks.Destroy(ctx, e.loadBalancerTarget(tier), progress.Discard()); err != nil {
+	if err := e.deps.Engine.Stacks.Destroy(ctx, e.loadBalancerStack(tier), progress.Discard()); err != nil {
 		return err
 	}
 	return e.forgetFront(ctx, tier)
@@ -252,9 +239,9 @@ type Host struct {
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge serves a project by slug, and this stack names none", Kind)
+			"the %q edge serves a project by slug, and this stack names none", albresources.Kind)
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, e.loadBalancerTarget(spec.Tier))
+	outputs, err := e.deps.Engine.Stacks.Outputs(ctx, e.loadBalancerStack(spec.Tier))
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +249,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	if !balancer.provisioned() {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"no %s load balancer is provisioned for tier %s: the %q edge serves every project in a tier from one, at %s, which a deploy adds before it reaches the edge. Deploy again",
-			Kind, spec.Tier, Kind, BaselineCost)
+			albresources.Kind, spec.Tier, albresources.Kind, albresources.BaselineCost)
 	}
 	said := sayingTo(spec.Say)
 	repatched, raised, err := e.repatchFront(ctx, spec.Tier, spec.Slug, said)
@@ -297,7 +284,7 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 }
 
 func (e *Edge) claim(tier environment.Tier, hostname string) records.Key {
-	return stackrecords.EdgeStacksPartition(tier).Key(string(Kind), "domains", hostname)
+	return stackrecords.EdgeStacksPartition(tier).Key(string(albresources.Kind), "domains", hostname)
 }
 
 func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error) {
@@ -314,14 +301,14 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
 		entry, err := records.ReadOrEmpty(ctx, e.deps.KeyValues, e.claim(tier, hostname))
 		if err != nil {
-			return "", fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
+			return "", fmt.Errorf("read what serves %s on the %s edge: %w", hostname, albresources.Kind, err)
 		}
 		if len(entry.Value) == 0 {
 			continue
 		}
 		var claimed claim
 		if err := json.Unmarshal(entry.Value, &claimed); err != nil {
-			return "", fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
+			return "", fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, albresources.Kind, err)
 		}
 		return claimed.Owner, nil
 	}
@@ -339,11 +326,11 @@ func (e *Edge) ProjectOwner(_ context.Context, slug string, tier environment.Tie
 func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {
 	changes := make([]edge.PlanChange, 0, len(scope.Hostnames)*3+1)
 	for _, hostname := range scope.Hostnames {
-		backend, err := backendName(e.deps.Namespace, scope.Slug, scope.Tier, hostname)
+		backend, err := albresources.BackendName(e.deps.Namespace, scope.Slug, scope.Tier, hostname)
 		if err != nil {
 			return nil, err
 		}
-		entry, err := entryName(e.deps.Namespace, scope.Slug, scope.Tier, hostname)
+		entry, err := albresources.EntryName(e.deps.Namespace, scope.Slug, scope.Tier, hostname)
 		if err != nil {
 			return nil, err
 		}
@@ -354,33 +341,33 @@ func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, er
 		)
 	}
 	changes = append(changes, edge.PlanChange{
-		Kind: "compute.RegionNetworkEndpointGroup", Name: BindingStack(scope.Slug, scope.Tier), Action: edge.PlanDelete,
+		Kind: "compute.RegionNetworkEndpointGroup", Name: albresources.BindingStack(scope.Slug, scope.Tier), Action: edge.PlanDelete,
 	})
 	return []edge.PlanGroup{
 		{
 			Kind:    edge.EdgeGroupKind,
-			Name:    edge.EdgeGroupName(Kind),
+			Name:    edge.EdgeGroupName(albresources.Kind),
 			Action:  edge.PlanDelete,
 			Changes: changes,
 		},
 		{
 			Kind:   edge.EdgeGroupKind,
-			Name:   edge.EdgeGroupName(Kind) + "/load-balancer",
+			Name:   edge.EdgeGroupName(albresources.Kind) + "/load-balancer",
 			Action: edge.PlanKeep,
-			Reason: "the load balancer this project was balancing by is one per tier and costs " + BaselineCost + ": " +
+			Reason: "the load balancer this project was balancing by is one per tier and costs " + albresources.BaselineCost + ": " +
 				"it stays while another project in the tier is served through it or a hostname is bound to it, and is taken down with the last project otherwise",
 		},
 	}, nil
 }
 
 func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.PlanGroup, err error) {
-	entry, err := previewEntryName(e.deps.Namespace, strings.TrimPrefix(wildcard, "*."))
+	entry, err := albresources.PreviewEntryName(e.deps.Namespace, strings.TrimPrefix(wildcard, "*."))
 	if err != nil {
 		return edge.PlanGroup{}, edge.PlanGroup{}, err
 	}
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
-		Name:   edge.EdgeGroupName(Kind),
+		Name:   edge.EdgeGroupName(albresources.Kind),
 		Action: edge.PlanDelete,
 		Changes: []edge.PlanChange{
 			{Kind: "certificatemanager.CertificateMapEntry", Name: entry, Action: edge.PlanDelete},
@@ -391,9 +378,9 @@ func (e *Edge) PlanPreviewWildcardRemoval(wildcard string) (removed, kept edge.P
 func (e *Edge) PlanSharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
-		Name:   edge.EdgeGroupName(Kind) + "/load-balancer",
+		Name:   edge.EdgeGroupName(albresources.Kind) + "/load-balancer",
 		Action: edge.PlanKeep,
-		Reason: "previews are answered by the same load balancer production is, one per bootstrap tier at " + BaselineCost + ", " +
+		Reason: "previews are answered by the same load balancer production is, one per bootstrap tier at " + albresources.BaselineCost + ", " +
 			"so releasing a wildcard takes its certificate and leaves the balancer in place",
 	}
 }

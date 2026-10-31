@@ -136,7 +136,7 @@ func TestFollowContainerLogsOnABoxFollowsEveryContainerAndStopsThemWhenTheCaller
 		t.Fatal(err)
 	}
 	box := localShell{t: t, path: bin}
-	h := New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return box, nil }, nil), "shop", Keys{}, nil, front.Proxy{})
+	h := New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return box, nil }, nil), testAssets, "shop", Keys{}, nil, front.Proxy{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -143,7 +143,7 @@ func locatedAt(dir, root string, written language.Language) (Location, error) {
 		Path:           filepath.ToSlash(rel),
 		Language:       written,
 		Package:        describe(dir, app),
-		PackageManager: detect(root),
+		PackageManager: Detect(root),
 	}
 	if globs, ok := declaredPackages(root); ok {
 		_, located.Member = memberOf(root, dir, globs)

@@ -1,0 +1,56 @@
+package control
+
+import (
+	"context"
+	"errors"
+	"net/http"
+
+	"google.golang.org/api/cloudresourcemanager/v1"
+	"google.golang.org/api/googleapi"
+
+	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
+)
+
+type Projects interface {
+	Reaches(ctx context.Context, project string) error
+}
+
+type resourceManager struct {
+	endpoint    string
+	credentials ports.Credentials
+}
+
+func (r resourceManager) Reaches(ctx context.Context, project string) error {
+	service, err := ports.NewRESTService(ctx, r.credentials, cloudresourcemanager.NewService, r.endpoint, "")
+	if err != nil {
+		return gcloud.Unauthenticated()
+	}
+	_, _, err = googleretry.Asked(ctx, func() (*cloudresourcemanager.Project, int, error) {
+		found, err := service.Projects.Get(project).Context(ctx).Do()
+		return found, googleretry.AnsweredCode(err), err
+	})
+	if err != nil {
+		return unreachableProject(project, err)
+	}
+	return nil
+}
+
+func unreachableProject(project string, err error) error {
+	var answered *googleapi.Error
+	if !errors.As(err, &answered) {
+		return refusal.Refuse(refusal.CodeBusy,
+			"Google's project endpoint answered neither yes nor no about %s, and this credential may well be good", project)
+	}
+	switch answered.Code {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
+		return refusal.Refuse(refusal.CodeDenied,
+			"this credential cannot read project %s: either it does not exist or nothing has granted this principal `resourcemanager.projects.get` on it",
+			project)
+	default:
+		return refusal.Refuse(refusal.CodeBusy,
+			"Google's project endpoint answered %d about %s, and this credential may well be good", answered.Code, project)
+	}
+}

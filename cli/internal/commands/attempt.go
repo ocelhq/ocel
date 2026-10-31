@@ -15,19 +15,37 @@ import (
 func (p ProviderRun) NewAttempt(ctx context.Context, parent *run.Span, kind consolev1.DeploymentKind, cfg *project.Project, env *environmentv1.Environment, prNumber string) *deployreport.Attempt {
 	ctx, reading := parent.Child(ctx, cfg.Slug, progress.Reading.Title("the target and the source checkout"))
 	defer reading.End(nil)
-	trigger, ci := deployreport.ReadTrigger(os.Getenv, prNumber)
+	trigger, ci := p.readTrigger(prNumber)
+	target, err := deployreport.ReadTarget(ctx, p.Provider)
+	if err != nil {
+		reading.Warn(err.Error())
+	}
 	return &deployreport.Attempt{
 		Kind:        kind,
 		Project:     cfg,
 		Provider:    p.providerName(cfg),
 		Environment: env,
-		Target:      deployreport.ReadTarget(ctx, p.Provider),
-		TraceID:     p.Run.TraceID(),
+		Target:      target,
+		TraceID:     p.deploymentID(),
 		StartedAt:   p.Run.StartedAt(),
 		Trigger:     trigger,
 		CI:          ci,
 		Source:      p.readSource(ctx, cfg.Dir),
 	}
+}
+
+func (p ProviderRun) readTrigger(prNumber string) (*consolev1.Trigger, *consolev1.CI) {
+	if p.job != nil {
+		return deployreport.ReadRunnerTrigger(prNumber)
+	}
+	return deployreport.ReadTrigger(os.Getenv, prNumber)
+}
+
+func (p ProviderRun) deploymentID() string {
+	if p.job != nil && p.job.DeploymentID != "" {
+		return p.job.DeploymentID
+	}
+	return p.Run.TraceID()
 }
 
 func (p ProviderRun) readSource(ctx context.Context, dir string) *consolev1.Source {

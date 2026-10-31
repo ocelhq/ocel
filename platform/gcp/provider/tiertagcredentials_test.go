@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 )
 
@@ -50,7 +51,7 @@ func TestABootstrapChecksItMayMakeTheTierTagAndBindEveryKindItTags(t *testing.T)
 func TestADeployCredentialForNoTierIsRefused(t *testing.T) {
 	t.Parallel()
 
-	if _, err := (Credentials{Project: Named("acme-prod")}).Permissions(edge.PurposeDeploy, ""); err == nil {
+	if _, err := (control.Credentials{Project: control.Named("acme-prod")}).Permissions(edge.PurposeDeploy, ""); err == nil {
 		t.Errorf("a deploy credential for no tier rendered its roles, want a refusal: every deploy credential is fenced to one tier")
 	}
 }

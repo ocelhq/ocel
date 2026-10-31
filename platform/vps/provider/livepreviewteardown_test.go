@@ -183,7 +183,7 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	if err := routes.RemovePointer(ctx, router.PointerRemoval{Pointer: pointer}, spoken); err != nil {
 		t.Fatalf("RemovePointer(%s) = %v", pointer, err)
 	}
-	removed, err := ledger.New(p.KeyValues(), environment.TierPreview, teardownSlug).RemovePointer(ctx, pointer)
+	removed, _, err := ledger.New(p.KeyValues(), environment.TierPreview, teardownSlug).RemovePointer(ctx, pointer)
 	if err != nil {
 		t.Fatalf("ledger RemovePointer(%s) = %v", pointer, err)
 	}

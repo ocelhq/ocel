@@ -12,13 +12,17 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
+const NoConfig = "none"
+
 type Target struct {
-	Alias        string
-	Host         string
-	Port         int
-	User         string
-	IdentityFile string
-	Config       string
+	Alias           string
+	Host            string
+	Port            int
+	User            string
+	IdentityFile    string
+	CertificateFile string
+	KnownHostsFile  string
+	Config          string
 }
 
 func (t Target) Destination() string {
@@ -41,6 +45,12 @@ func (t Target) options() []string {
 	}
 	if t.IdentityFile != "" {
 		args = append(args, "-i", t.IdentityFile, "-o", "IdentitiesOnly=yes")
+	}
+	if t.CertificateFile != "" {
+		args = append(args, "-o", "CertificateFile="+t.CertificateFile)
+	}
+	if t.KnownHostsFile != "" {
+		args = append(args, "-o", "UserKnownHostsFile="+t.KnownHostsFile, "-o", "GlobalKnownHostsFile=/dev/null")
 	}
 	return args
 }
