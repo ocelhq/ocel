@@ -205,6 +205,22 @@ func TestEachPublicPermissionOfTheEntryCarriesAStatementIDLambdaAccepts(t *testi
 	}
 }
 
+func TestEachPolicyWriteOnTheEntryWaitsForTheOneBeforeIt(t *testing.T) {
+	t.Parallel()
+
+	stack := testStack(t, "prod", "web")
+	rec := registerRoutedGuarded(t, cloudfront.Kind, stack)
+
+	previousToken, previous := functionURLToken, namedFunction(stack, "fn--web--entry").Part("url")
+	for _, permission := range functionurl.Public() {
+		name := publicPermissionID(stack, "fn--web--entry", permission)
+		if !rec.dependsOn(lambdaPermissionToken, name, previousToken, previous) {
+			t.Errorf("the %s permission does not wait for %s, so Lambda refuses one of two concurrent policy writes with a 409", permission.Action, previous)
+		}
+		previousToken, previous = lambdaPermissionToken, name
+	}
+}
+
 func TestEveryFunctionURLBehindCloudflareStaysSigned(t *testing.T) {
 	t.Parallel()
 

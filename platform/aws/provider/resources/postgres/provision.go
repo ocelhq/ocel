@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/securitygroup"
 )
 
 const (
@@ -131,7 +132,7 @@ func register(ctx *pulumi.Context, stack component.Stack, logicalName string, ar
 				FromPort:    pulumi.Int(0),
 				ToPort:      pulumi.Int(0),
 				CidrBlocks:  pulumi.StringArray{pulumi.String("0.0.0.0/0")},
-				Description: component.CapDescription(at.Description("outbound access for the "+at.Name+" database"), component.MaxSecurityGroupDescriptionLen),
+				Description: pulumi.String(securitygroup.FitDescription(at.Description("outbound access for the " + at.Name + " database"))),
 			},
 		},
 		Tags: component.Tags(at.Kind, "", args.Tags),

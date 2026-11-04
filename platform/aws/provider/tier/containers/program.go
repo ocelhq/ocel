@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/securitygroup"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 )
 
@@ -99,14 +100,14 @@ func (w *work) run(ctx *pulumi.Context) error {
 	}
 	tasks, err := ec2.NewSecurityGroup(ctx, tasksGroupName(w.namespace, tier), &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(tasksGroupName(w.namespace, tier)),
-		Description: pulumi.String("Ocel: the tasks every container app in the " + string(tier) + " class runs as"),
+		Description: pulumi.String(securitygroup.FitDescription("Ocel: the tasks every container app in the " + string(tier) + " class runs as")),
 		VpcId:       pulumi.String(vpcID),
 		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
 			Protocol:       pulumi.String("tcp"),
 			FromPort:       pulumi.Int(TaskPort),
 			ToPort:         pulumi.Int(TaskPort),
 			SecurityGroups: sources,
-			Description:    pulumi.String("Ocel: only the load balancer reaches a task"),
+			Description:    pulumi.String(securitygroup.FitDescription("Ocel: only the load balancer reaches a task")),
 		}},
 		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{
 			Protocol: pulumi.String("-1"), FromPort: pulumi.Int(0), ToPort: pulumi.Int(0),

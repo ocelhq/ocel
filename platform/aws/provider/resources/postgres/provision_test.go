@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	"github.com/ocelhq/ocel/platform/aws/provider/component/componenttest"
+	"github.com/ocelhq/ocel/platform/aws/provider/securitygroup"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
@@ -67,13 +68,13 @@ func TestPostgresDescriptionsFitAWSLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 	sg := rec.InputsOf(t, "aws:ec2/securityGroup:SecurityGroup", cluster+"-sg")
-	if got := sg["description"].StringValue(); len(got) != component.MaxSecurityGroupDescriptionLen {
-		t.Errorf("security group description is %d chars, want it clamped to the %d EC2 accepts", len(got), component.MaxSecurityGroupDescriptionLen)
+	if got := sg["description"].StringValue(); len(got) != securitygroup.MaxDescriptionLen {
+		t.Errorf("security group description is %d chars, want it clamped to the %d EC2 accepts", len(got), securitygroup.MaxDescriptionLen)
 	}
 	for _, rules := range []string{"ingress", "egress"} {
 		for _, rule := range sg[resource.PropertyKey(rules)].ArrayValue() {
-			if got := rule.ObjectValue()["description"].StringValue(); len(got) != component.MaxSecurityGroupDescriptionLen {
-				t.Errorf("%s rule description is %d chars, want it clamped to the %d EC2 accepts", rules, len(got), component.MaxSecurityGroupDescriptionLen)
+			if got := rule.ObjectValue()["description"].StringValue(); len(got) != securitygroup.MaxDescriptionLen {
+				t.Errorf("%s rule description is %d chars, want it clamped to the %d EC2 accepts", rules, len(got), securitygroup.MaxDescriptionLen)
 			}
 		}
 	}

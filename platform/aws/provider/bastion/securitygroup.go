@@ -13,6 +13,7 @@ import (
 	"github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/aws/provider/securitygroup"
 )
 
 type peer int
@@ -119,7 +120,7 @@ func (c Clients) createSecurityGroup(ctx context.Context, namespace string, tier
 	name := NameFor(namespace, tier)
 	_, err := c.EC2.CreateSecurityGroup(ctx, &ec2.CreateSecurityGroupInput{
 		GroupName:         aws.String(name),
-		Description:       aws.String("Ocel: the " + string(tier) + " tier's bastion, which nothing reaches and which reaches only HTTPS and the ports of its databases and caches"),
+		Description:       aws.String(securitygroup.FitDescription("Ocel: the bastion of the " + string(tier) + " tier, which nothing reaches and which reaches only HTTPS and the ports of its databases and caches")),
 		VpcId:             aws.String(vpc),
 		TagSpecifications: []ec2types.TagSpecification{{ResourceType: ec2types.ResourceTypeSecurityGroup, Tags: ec2TagsFor(namespace, tier)}},
 	})

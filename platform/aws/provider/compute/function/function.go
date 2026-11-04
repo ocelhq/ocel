@@ -291,6 +291,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 	}
 
 	if urlAuth == functionurl.AuthNone {
+		previous := pulumi.Resource(url)
 		for _, permission := range functionurl.Public() {
 			args := &lambda.PermissionArgs{
 				Action:      pulumi.String(permission.Action),
@@ -304,9 +305,11 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 			if permission.ViaURL {
 				args.InvokedViaFunctionUrl = pulumi.Bool(true)
 			}
-			if _, err := lambda.NewPermission(ctx, urlPermissionName(name, permission), args); err != nil {
+			granted, err := lambda.NewPermission(ctx, urlPermissionName(name, permission), args, pulumi.DependsOn([]pulumi.Resource{previous}))
+			if err != nil {
 				return none, err
 			}
+			previous = granted
 		}
 	}
 
