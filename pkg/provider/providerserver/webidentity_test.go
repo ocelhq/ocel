@@ -3,6 +3,7 @@ package providerserver_test
 import (
 	"context"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -84,9 +85,37 @@ func TestConfigureStatesTheWebIdentityTheProviderTakes(t *testing.T) {
 	if taken.GetVendor() != string(fake.Vendor) {
 		t.Errorf("WebIdentity.Vendor = %q, want %q", taken.GetVendor(), fake.Vendor)
 	}
+	if got := strings.Join(taken.GetCredentialEnvVars(), ","); got != "FAKE_ACCESS_KEY,FAKE_PROFILE" {
+		t.Errorf("WebIdentity.CredentialEnvVars = %q, want the variables that name the provider's own credential", got)
+	}
 
 	_, facts = configuredProvider(t, "1.2.3", fake.NewProvider(fake.Options{}))
 	if facts.GetWebIdentity() != nil {
 		t.Errorf("WebIdentity = %v for a provider that takes none, want none", facts.GetWebIdentity())
+	}
+}
+
+func TestConfigureTakesAWebIdentityTheProviderPutsInItsOwnCredentialVariables(t *testing.T) {
+	t.Setenv("FAKE_ACCESS_KEY", "")
+	t.Setenv("FAKE_PROFILE", "")
+	p := takingWebIdentity(fake.NewProvider(fake.Options{}))
+	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
+		Version: "test",
+		New: func(_ context.Context, settings provider.Settings) (provider.Provider, error) {
+			if err := os.Setenv("FAKE_PROFILE", settings.WebIdentity.Principal); err != nil {
+				return nil, err
+			}
+			return p, nil
+		},
+	}))
+	t.Cleanup(server.Close)
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+
+	_, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{
+		ProjectDir:  t.TempDir(),
+		WebIdentity: &contractv1.WebIdentity{TokenFile: "/tmp/token", IdentityProvider: "issuer", Principal: "deploy"},
+	}})
+	if err != nil {
+		t.Fatalf("Configure() = %v, want the web identity taken: the run named no credential of its own", err)
 	}
 }

@@ -14,9 +14,14 @@ import (
 )
 
 type ProviderRequests struct {
-	mu     sync.Mutex
-	bodies map[string][][]byte
-	order  []string
+	mu       sync.Mutex
+	bodies   map[string][][]byte
+	order    []string
+	sessions *fakeSessions
+}
+
+func (r *ProviderRequests) OpenSessions() int {
+	return r.sessions.countOpen()
 }
 
 func (r *ProviderRequests) record(next http.Handler) http.Handler {

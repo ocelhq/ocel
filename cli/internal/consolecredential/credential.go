@@ -18,6 +18,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const (
@@ -67,6 +68,10 @@ func (e *refusedIssue) Error() string { return "the console issued no credential
 
 func (c Console) IsRequested() bool {
 	return c.Getenv != nil && githubactions.IsRunning(c.Getenv) && c.Getenv(console.ProjectIDEnvVar) != ""
+}
+
+func (c Console) IsWantedBy(taken *contractv1.WebIdentityFacts) bool {
+	return taken != nil && len(provider.WebIdentityFacts{CredentialEnvVars: taken.GetCredentialEnvVars()}.FindOwnCredentialEnvVars(c.Getenv)) == 0
 }
 
 func (c Console) Issue(ctx context.Context, req Request, warn func(string)) (*Credential, error) {

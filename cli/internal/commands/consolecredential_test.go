@@ -98,8 +98,12 @@ func TestAPipelineDeploysWithTheCredentialTheConsoleIssuesForItsTier(t *testing.
 		issued[0].GetProjectId() != clitest.FixtureConsoleProjectID {
 		t.Errorf("IssueCredential got %v, want one request for the project's production tier", issued)
 	}
-	if configures := clitest.RequestsTo[*contractv1.ConfigureRequest](t, run.project.Requests, "/provider.contract.v1.ProviderService/Configure"); len(configures) != 1 {
-		t.Errorf("the provider was configured %d times, want once", len(configures))
+	configures := clitest.RequestsTo[*contractv1.ConfigureRequest](t, run.project.Requests, "/provider.contract.v1.ProviderService/Configure")
+	if len(configures) != 2 || configures[0].GetConfig().GetWebIdentity() != nil {
+		t.Errorf("the provider was configured %d times, want twice: first with the environment's credentials to read which variables name its own", len(configures))
+	}
+	if open := run.project.Requests.OpenSessions(); open != 1 {
+		t.Errorf("%d provider sessions are open, want only the one holding the console's credential", open)
 	}
 	identity := configured.GetConfig().GetWebIdentity()
 	if identity.GetPrincipal() != "deploy-production" || identity.GetIdentityProvider() != "console-issuer" || identity.GetSessionName() != "ocel-production-1" {
@@ -155,15 +159,56 @@ func TestAConsoleRefusingTheCredentialStopsTheCommandWithItsReason(t *testing.T)
 	}
 }
 
-func TestARunNamingItsOwnCredentialAndAConsoleProjectIsRefusedRatherThanGuessed(t *testing.T) {
+func TestARunNamingItsOwnCredentialAndAConsoleProjectDeploysWithItsOwnCredentialWithoutAskingTheConsole(t *testing.T) {
 	run := newConsoleCredentialRun(t)
+	run.console.CredentialRefusal = connect.NewError(connect.CodePermissionDenied, errors.New("This run may not get credentials for the project: the project trusts no pipeline"))
+	run.env[fakeCredentialEnvVar] = "AKIAEXAMPLE"
 	t.Setenv(fakeCredentialEnvVar, "AKIAEXAMPLE")
+
+	configured, closeProvider, err := run.open(t)
+	defer closeProvider()
+
+	if err != nil {
+		t.Fatalf("OpenProvider: %v", err)
+	}
+	if issued := run.console.IssuedCredentials(); len(issued) != 0 {
+		t.Errorf("IssueCredential got %v, want no request from a run that names its own credential", issued)
+	}
+	if configured.GetConfig().GetWebIdentity() != nil {
+		t.Errorf("the provider was configured with web identity %v, want the run's own credential", configured.GetConfig().GetWebIdentity())
+	}
+}
+
+func TestAProviderTakingNoWebIdentityDeploysWithoutAskingTheConsole(t *testing.T) {
+	run := newConsoleCredentialRun(t)
+	run.project.Provider.WithFacts(func(facts *provider.Facts) { facts.WebIdentity = nil })
+
+	configured, closeProvider, err := run.open(t)
+	defer closeProvider()
+
+	if err != nil {
+		t.Fatalf("OpenProvider: %v", err)
+	}
+	if issued := run.console.IssuedCredentials(); len(issued) != 0 {
+		t.Errorf("IssueCredential got %v, want no request for a provider that takes no web identity", issued)
+	}
+	if configured.GetConfig().GetWebIdentity() != nil {
+		t.Errorf("the provider was configured with web identity %v, want the environment's credentials", configured.GetConfig().GetWebIdentity())
+	}
+}
+
+func TestAPipelineTheConsoleRefusesCredentialsStopsTheCommandWithTheConsolesReasonAndNoProviderOpen(t *testing.T) {
+	run := newConsoleCredentialRun(t)
+	run.console.CredentialRefusal = connect.NewError(connect.CodePermissionDenied, errors.New("This run may not get credentials for the project: the project trusts no pipeline"))
 
 	_, closeProvider, err := run.open(t)
 	defer closeProvider()
 
-	if err == nil || !strings.Contains(err.Error(), fakeCredentialEnvVar) {
-		t.Fatalf("OpenProvider err = %v, want a refusal naming %s", err, fakeCredentialEnvVar)
+	if err == nil || !strings.HasSuffix(err.Error(), "This run may not get credentials for the project: the project trusts no pipeline") {
+		t.Fatalf("OpenProvider err = %v, want the console's reason", err)
+	}
+	if open := run.project.Requests.OpenSessions(); open != 0 {
+		t.Errorf("%d provider sessions are open, want none", open)
 	}
 }
 

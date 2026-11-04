@@ -71,6 +71,7 @@ func ServeFake(t *testing.T, p *fake.Provider) *ProviderRequests {
 		t.Fatalf("listen for fake provider sessions: %v", err)
 	}
 	sessions := &fakeSessions{dir: dir, provider: p, requests: &ProviderRequests{}}
+	sessions.requests.sessions = sessions
 	server := &http.Server{Handler: http.HandlerFunc(sessions.open)}
 	go server.Serve(control)
 	t.Cleanup(func() {
@@ -94,6 +95,19 @@ type fakeSessions struct {
 
 	mu      sync.Mutex
 	servers []*http.Server
+	sockets []string
+}
+
+func (s *fakeSessions) countOpen() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	open := 0
+	for _, socket := range s.sockets {
+		if _, err := os.Stat(socket); err == nil {
+			open++
+		}
+	}
+	return open
 }
 
 func (s *fakeSessions) open(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +155,7 @@ func (s *fakeSessions) serve(clientPEM string) (string, error) {
 		},
 	}))}
 	s.servers = append(s.servers, server)
+	s.sockets = append(s.sockets, path)
 	go func() {
 		if err := server.Serve(tls.NewListener(ln, config)); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			fmt.Fprintln(os.Stderr, "fake provider session:", err)
