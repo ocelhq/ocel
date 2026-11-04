@@ -88,6 +88,14 @@ export function hasExposure<T extends object>(target: T): target is T & Exposure
   return typeof (target as Partial<Exposure>).readExposed === "function";
 }
 
+export interface AppLogs {
+  readAppLogs(cell: CellUnderTest): Promise<string>;
+}
+
+export function hasAppLogs<T extends object>(target: T): target is T & AppLogs {
+  return typeof (target as Partial<AppLogs>).readAppLogs === "function";
+}
+
 export interface RequestLog {
   countOriginRequests(cell: CellUnderTest, urlFragment: string): Promise<number>;
   readReleaseFile(cell: CellUnderTest, app: string, path: string): Promise<Uint8Array>;

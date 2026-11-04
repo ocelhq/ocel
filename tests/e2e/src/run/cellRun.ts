@@ -24,6 +24,7 @@ import type { StackCheck } from "../stacks";
 import { namespaceOfSlug } from "../targets/aws/namespace";
 import {
   type Deployment,
+  hasAppLogs,
   hasCommands,
   hasExposure,
   hasPreviews,
@@ -34,6 +35,8 @@ import {
   type PreviewRelease,
   type Target,
 } from "../targets/types";
+
+const APP_LOGS = "app-logs.txt";
 
 const LIVE_CLOCK: Clock = {
   fetch: globalThis.fetch,
@@ -255,8 +258,20 @@ export class CellRun {
       throw leak;
     }
     if (failure) {
+      await this.keepAppLogs(phase);
       throw failure.error;
     }
+  }
+
+  private async keepAppLogs(phase: Phase): Promise<void> {
+    const target = this.target;
+    if (!hasAppLogs(target)) {
+      return;
+    }
+    const logs = await target
+      .readAppLogs(this)
+      .catch((unread: unknown) => `the app logs could not be read: ${messageOf(unread)}\n`);
+    await this.evidence.write(phase, APP_LOGS, logs).catch(() => undefined);
   }
 
   private async runInEnvironment(command: string[]): Promise<string> {

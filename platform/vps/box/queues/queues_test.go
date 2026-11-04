@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -256,6 +258,64 @@ func TestAQueueNoLongerRecordedIsClosedAndServedNoMore(t *testing.T) {
 	}
 	if _, _, found := host.Served(tier, "shop", "prod"); found {
 		t.Error("a removed queue is still served")
+	}
+}
+
+func shortDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "q")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+func TestAQueueWhoseSocketPathIsTooLongForAUnixAddressIsOpenedThroughAShortLinkRemovedWithTheQueue(t *testing.T) {
+	t.Parallel()
+
+	sockets := filepath.Join(t.TempDir(), strings.Repeat("v", 60), "j-41060372902-sdk-next-dockerfile-prod-ocel-queue-9e0e7e-sockets", "_data")
+	if err := os.MkdirAll(sockets, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	store := fake.NewKeyValues()
+	record(t, store, boxapi.QueueDatabaseKey(tier, "shop", "prod"), boxapi.QueueDatabase{Container: "shop-prod-ocel-queue-a12aaa", Stack: "prod--infra"})
+	opened := &engines{}
+	host := aHost(store, opened)
+	host.Mounts = mounted{"shop-prod-ocel-queue-a12aaa": sockets}
+	host.Links = shortDir(t)
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	if err := host.Reconcile(ctx); err != nil {
+		t.Fatalf("Reconcile() = %v", err)
+	}
+	if len(opened.opened) != 1 {
+		t.Fatalf("%d engines were opened, want one for shop's prod queue", len(opened.opened))
+	}
+	server, err := url.Parse(opened.opened[0].config.ServerURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reached := server.Query().Get("host")
+	if socket := filepath.Join(reached, ".s.PGSQL.5432"); len(socket) >= 108 {
+		t.Errorf("the engine opened the socket %s, %d bytes, and a unix address holds at most 107", socket, len(socket))
+	}
+	resolved, err := filepath.EvalSymlinks(reached)
+	if err != nil {
+		t.Fatalf("the engine opened %s, which leads nowhere: %v", reached, err)
+	}
+	if want, _ := filepath.EvalSymlinks(sockets); resolved != want {
+		t.Errorf("the engine opened %s, which leads to %s, want the queue database's sockets at %s", reached, resolved, want)
+	}
+
+	if err := records.Forget(ctx, store, boxapi.QueueDatabaseKey(tier, "shop", "prod")); err != nil {
+		t.Fatal(err)
+	}
+	if err := host.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(reached); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the link %s outlived the queue it reached (Lstat() = %v)", reached, err)
 	}
 }
 
