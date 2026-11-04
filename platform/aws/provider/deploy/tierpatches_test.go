@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -46,7 +48,7 @@ func runNetworkWith(t *testing.T, tier environment.Tier, pass transform.Pass) (*
 	}
 	rec := &inputRecorder{}
 	run := func(program func(*pulumi.Context) error) {
-		if err := pulumi.RunErr(program, pulumi.WithMocks(network.Slug, "production--infra", rec)); err != nil {
+		if err := pulumi.RunErr(program, pulumi.WithMocks(sharedparts.NetworkSlug, "production--infra", rec)); err != nil {
 			t.Fatalf("run: %v", err)
 		}
 	}

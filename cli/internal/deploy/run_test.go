@@ -1684,6 +1684,38 @@ export default {
 	})
 }
 
+func TestAPreviewDeploySyncsItsEnvSourceIntoItsOwnEnvironmentAndNothingTierWide(t *testing.T) {
+	fixture, dependencies := setUpPreviewVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+	writeConfig(t, fixture.Root, `  envSource: { preview: { exec: { command: ["sh", "-c", "printf 'PAGE_ID=page_from_exec'"], format: "dotenv" } } },
+`)
+	got := captureBuildVariables(&dependencies)
+
+	if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging", persistent: true}); err != nil {
+		t.Fatalf("runPreviewUp err = %v; output=%s", err, out)
+	}
+
+	scope := variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierPreview}
+	listed, err := valueStore(fixture).List(context.Background(), scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var where []string
+	for _, value := range listed {
+		where = append(where, value.Coordinate.String()+" from "+value.Provenance.EnvSource)
+	}
+	if want := []string{"PAGE_ID for staging from exec"}; !slices.Equal(where, want) {
+		t.Errorf("preview values = %q, want %q: a preview deploy writes the env source into its own environment and nothing tier-wide", where, want)
+	}
+	if len(*got) == 0 {
+		t.Fatal("no app was built, so nothing resolved a value")
+	}
+	for app, built := range *got {
+		if built.Env["PAGE_ID"] != "page_from_exec" {
+			t.Errorf("%s built with PAGE_ID=%q, want the value the preview's sync wrote", app, built.Env["PAGE_ID"])
+		}
+	}
+}
+
 func stubAppBuildRecorder(dependencies *Dependencies, built *bool) {
 	stubRecordedBuildIDs(dependencies)
 	dependencies.BuildApps = func(_ context.Context, cfg *project.Project, _ map[string]build.AppVariables, _ map[string]string, _ build.HostedWorkers, _ build.Host, _ build.Log) (build.Output, error) {

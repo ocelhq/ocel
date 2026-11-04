@@ -14,7 +14,7 @@ func TestADeclaredBucketCarriesItsTiersTagOnceHoweverOftenItIsProvisioned(t *tes
 	ctx := context.Background()
 	p, _ := servingStorage(t)
 	tags := googletest.NewTieredTags(t)
-	tags.Tagged(p.resolved)
+	tags.Tagged(p.Clients)
 
 	var name string
 	for range 2 {
@@ -24,7 +24,7 @@ func TestADeclaredBucketCarriesItsTiersTagOnceHoweverOftenItIsProvisioned(t *tes
 		}
 		name = binding.Properties[provider.PropertyBucket]
 	}
-	if got := tags.Bound(p.resolved.BucketTagged(name).Name); !slices.Equal(got, []string{tags.ValueOf(environment.TierProduction)}) {
+	if got := tags.Bound(p.Clients.BucketTagged(name).Name); !slices.Equal(got, []string{tags.ValueOf(environment.TierProduction)}) {
 		t.Errorf("the declared bucket %s carries %v, want the production value once", name, got)
 	}
 }

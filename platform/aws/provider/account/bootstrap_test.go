@@ -472,3 +472,24 @@ func TestStackWaitersPollFarSoonerThanTheSDKDefault(t *testing.T) {
 		}
 	}
 }
+
+func TestAReleaseIntoATierWithNoBootstrapSaysSoRatherThanThatPartOfItIsMissing(t *testing.T) {
+	err := Deployed{}.RefuseUnbootstrapped(environment.TierPreview)
+
+	if err == nil || !strings.Contains(err.Error(), "the preview tier has no Ocel bootstrap") || strings.Contains(err.Error(), "partial rollback") {
+		t.Errorf("requireBootstrapped() of a tier with no bootstrap = %v, want it to say the tier has none", err)
+	}
+}
+
+func TestBootstrapReadyWithoutAVariablesKey(t *testing.T) {
+	deployed := Deployed{
+		Present:        true,
+		StateTable:     "state-table",
+		VariablesTable: "variables-table",
+		Buckets:        naming.Buckets{naming.StorageState: "state", naming.StorageArtifacts: "artifacts", naming.StorageEdge: "edge", naming.StorageCache: "cache"},
+	}
+
+	if err := deployed.RefuseUnbootstrapped(environment.TierProduction); err != nil {
+		t.Errorf("requireBootstrapped() = %v, want a bootstrap with no key ready: a release with no sealed value needs none", err)
+	}
+}

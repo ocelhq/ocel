@@ -16,6 +16,13 @@ import (
 
 var previewKeyAssociatedData = seal.Bind("preview key")
 
+func ownerOfPreviewKey(bound seal.AssociatedData) (records.Owner, bool) {
+	if bound.Purpose() == previewKeyAssociatedData.Purpose() {
+		return records.Owner{Shared: true}, true
+	}
+	return records.Owner{}, false
+}
+
 type openedPreviewKeys struct {
 	mu       sync.Mutex
 	bySealed map[string]edge.PreviewKey

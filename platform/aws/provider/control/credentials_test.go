@@ -200,3 +200,21 @@ func TestABootstrapHandsTheConsoleTrustThePoliciesTheDeployCredentialPrints(t *t
 		}
 	}
 }
+
+func TestACredentialConditionNamingAValueByPolicyVariableUsesAStringOperator(t *testing.T) {
+	t.Parallel()
+
+	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
+		for _, statement := range bootstrapStatements(scopeOf(defaultNamespace, tier, "")) {
+			for operator, operands := range statement.Condition {
+				encoded, err := json.Marshal(operands)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if strings.Contains(string(encoded), "${") && !strings.Contains(operator, "String") {
+					t.Errorf("%v grants %v under %s %s: IAM refuses an ARN operator over a policy variable as failing legacy parsing, so a value named by variable needs a String operator", statement.Resources, statement.Actions, operator, encoded)
+				}
+			}
+		}
+	}
+}

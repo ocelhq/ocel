@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
@@ -19,7 +20,7 @@ const productionFence = "on the condition !resource.hasTagKey('acme-prod/ocel-ti
 
 func renderedDeploy(t *testing.T, tier environment.Tier) []string {
 	t.Helper()
-	document, err := Credentials{Project: Named("acme-prod"), Namespace: "ocel", Region: "europe-west1"}.Permissions(edge.PurposeDeploy, tier)
+	document, err := control.Credentials{Project: control.Named("acme-prod"), Namespace: "ocel", Region: "europe-west1"}.Permissions(edge.PurposeDeploy, tier)
 	if err != nil {
 		t.Fatalf("Permissions(deploy, %s) = %v", tier, err)
 	}
@@ -42,7 +43,7 @@ func TestTheCredentialsPortNamesTheRolesEachPurposeIsGranted(t *testing.T) {
 			t.Errorf("Permissions(deploy) =\n%s\nwant the line %s", strings.Join(lines, "\n"), want)
 		}
 	}
-	document, err := Credentials{Project: Named("acme-prod"), Namespace: "ocel"}.Permissions(edge.PurposeBootstrap, environment.TierProduction)
+	document, err := control.Credentials{Project: control.Named("acme-prod"), Namespace: "ocel"}.Permissions(edge.PurposeBootstrap, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(bootstrap) = %v", err)
 	}
@@ -56,7 +57,7 @@ func TestTheCredentialsPortNamesTheRolesEachPurposeIsGranted(t *testing.T) {
 func TestEveryGrantOfADeployCredentialSaysWhatItReachesAndWhyWhenItIsTheWholeProject(t *testing.T) {
 	t.Parallel()
 
-	document, err := Credentials{Project: Named("acme-prod"), Namespace: "ocel", Region: "europe-west1"}.Permissions(edge.PurposeDeploy, environment.TierPreview)
+	document, err := control.Credentials{Project: control.Named("acme-prod"), Namespace: "ocel", Region: "europe-west1"}.Permissions(edge.PurposeDeploy, environment.TierPreview)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +76,7 @@ func TestADeployCredentialIsRenderedForATierAndNoOtherWord(t *testing.T) {
 	t.Parallel()
 
 	var refused refusal.Refusal
-	_, err := Credentials{Project: Named("acme-prod"), Namespace: "ocel"}.Permissions(edge.PurposeDeploy, "staging")
+	_, err := control.Credentials{Project: control.Named("acme-prod"), Namespace: "ocel"}.Permissions(edge.PurposeDeploy, "staging")
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Permissions(deploy, staging) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}

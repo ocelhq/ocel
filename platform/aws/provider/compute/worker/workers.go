@@ -160,7 +160,7 @@ func (w *Stack) Declare(ctx *pulumi.Context) error {
 		return nil
 	}
 	schedulerAt := w.coordinate(naming.KindRole, schedulerRoleWord)
-	scheduler, err := component.PhysicalName(w.names.Namespace, schedulerAt, component.MaxRoleNameLen)
+	scheduler, err := schedulerAt.TaggedResourceName(w.names.Namespace).Fit(component.MaxRoleNameLen)
 	if err != nil {
 		return err
 	}
@@ -214,7 +214,7 @@ func consumptionPolicy(workers []provider.WorkerSpec, topics topic.Topics, regio
 
 func (w *Stack) declareWorker(ctx *pulumi.Context, worker provider.WorkerSpec, roleARN pulumi.StringInput, granted []pulumi.Resource) (*lambda.Function, error) {
 	at := w.coordinate(naming.KindWorker, worker.Name)
-	physical, err := component.PhysicalName(w.names.Namespace, at, component.MaxLambdaNameLen)
+	physical, err := at.TaggedResourceName(w.names.Namespace).Fit(component.MaxLambdaNameLen)
 	if err != nil {
 		return nil, err
 	}

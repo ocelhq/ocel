@@ -180,7 +180,7 @@ func TestADeployThatStopsBindingABucketTakesTheAppsGrantOnItAway(t *testing.T) {
 	existingBuckets(buckets, uploads, avatars)
 	spec := appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
-	p.records = recordingBucketStacks(t, spec, bindingBucket(t, c, "uploads"), bindingBucket(t, c, "avatars"))
+	p.Records = recordingBucketStacks(t, spec, bindingBucket(t, c, "uploads"), bindingBucket(t, c, "avatars"))
 	spec.App.Values.Bindings = []provider.Binding{bindingBucket(t, c, "uploads"), bindingBucket(t, c, "avatars")}
 	account, _, err := ensureAccount(p, context.Background(), c, spec, nil)
 	if err != nil {
@@ -206,7 +206,7 @@ func TestADeployThatStopsBindingABucketAlreadyDeletedIsNotRefused(t *testing.T) 
 	p, c, _, _ := servingAccountsAndBuckets(t)
 	spec := appNamed("web", functionStackDeclaring(environment.TierProduction, "production", provider.AppValues{}))
 	spec.Ref.Name = stackOf(stackrecords.ProductionEnv, "web", "r1")
-	p.records = recordingBucketStacks(t, spec, bindingBucket(t, c, "uploads"))
+	p.Records = recordingBucketStacks(t, spec, bindingBucket(t, c, "uploads"))
 
 	if _, _, err := ensureAccount(p, context.Background(), c, spec, nil); err != nil {
 		t.Errorf("ensureAppAccount() with a recorded bucket already deleted = %v, want nothing to revoke", err)

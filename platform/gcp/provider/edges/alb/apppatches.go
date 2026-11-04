@@ -9,13 +9,14 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/progress"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 func (s *stack) applyAppPatches(ctx context.Context, progress progress.Log) error {
-	if s.e.deps.ReadApps == nil {
-		return nil
+	evaluated, err := s.e.deps.Engine.ReadApps(ctx, s.state.Tier, s.state.Slug)
+	if err != nil {
+		return err
 	}
-	evaluated := s.e.deps.ReadApps(s.state.Tier, s.state.Slug)
 	recorded := s.recorded.Patches
 	next := maps.Clone(recorded)
 	if next == nil {
@@ -45,7 +46,7 @@ func (s *stack) applyAppPatches(ctx context.Context, progress progress.Log) erro
 		s.keep()
 		return nil
 	}
-	progress.Say(fmt.Sprintf("Applying the transforms that patch the %s edge resources of %s: they differ from the ones they were provisioned with", Kind, strings.Join(changed, ", ")))
+	progress.Say(fmt.Sprintf("Applying the transforms that patch the %s edge resources of %s: they differ from the ones they were provisioned with", albresources.Kind, strings.Join(changed, ", ")))
 	if err := s.raise(ctx, s.recorded.Hosts); err != nil {
 		s.recorded.Patches = recorded
 		return errors.Join(err, s.raise(ctx, s.recorded.Hosts))

@@ -80,3 +80,24 @@ func TestABindingNamesItsProjectOnlyWhenMadeForOne(t *testing.T) {
 		t.Errorf("Bind(gates).Project() = %q, true, and a tier-wide binding names no project", project)
 	}
 }
+
+func TestAssociatedDataParsesBackFromTheBytesItBinds(t *testing.T) {
+	for _, bound := range []seal.AssociatedData{
+		seal.BindToProject("shop", "variable", "preview", "pr-7", "/", "KEY"),
+		seal.Bind("gates"),
+		seal.BindToProject("shop", "release secrets", "web", "", "r1"),
+	} {
+		parsed, err := seal.ParseAssociatedData(bound.Bytes())
+		if err != nil {
+			t.Fatalf("ParseAssociatedData(%q) = %v", bound.Bytes(), err)
+		}
+		if string(parsed.Bytes()) != string(bound.Bytes()) || parsed.Purpose() != bound.Purpose() {
+			t.Errorf("ParseAssociatedData(%q) = %+v, want what bound it", bound.Bytes(), parsed)
+		}
+	}
+	for _, malformed := range []string{"", "5:gates,", "x:y,", "3:abc", "1:a,"} {
+		if _, err := seal.ParseAssociatedData([]byte(malformed)); err == nil {
+			t.Errorf("ParseAssociatedData(%q) = nil, want it refused", malformed)
+		}
+	}
+}

@@ -8,14 +8,13 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/gateplugin"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 const (
@@ -53,12 +52,12 @@ type writtenPublication struct {
 	publication gatePublication
 }
 
-func (e *Edge) gateTarget(tier environment.Tier) Target {
-	return Target{Tier: tier, Gate: true}
+func (e *Edge) gateStack(tier environment.Tier) albresources.Stack {
+	return albresources.Stack{Tier: tier, Gate: true}
 }
 
 func (e *Edge) publishGates(ctx context.Context, tier environment.Tier, proof gateProof, log progress.Log) error {
-	image, err := e.deps.Images.Ensure(ctx, tier, e.deps.GatePlugin)
+	image, err := e.deps.Engine.Images.Ensure(ctx, tier, e.deps.Engine.GatePlugin)
 	if err != nil {
 		return err
 	}
@@ -101,11 +100,11 @@ func (e *Edge) runsRecordedGate(ctx context.Context, tier environment.Tier, slug
 }
 
 func (e *Edge) refuseOversizedConfig(tier environment.Tier, config string) error {
-	if total := len(e.deps.GatePlugin) + len(config); total > gateplugin.PackageLimitBytes {
+	if total := len(e.deps.Engine.GatePlugin) + len(config); total > gateplugin.PackageLimitBytes {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the keys that gate the %s tier take %d bytes, and Google allows a load balancer plugin and its config %d together, of which the plugin takes %d. "+
 				"Revoke bypass secrets with `%s`, or turn protection.%s off for projects that no longer need a gate",
-			tier, len(config), gateplugin.PackageLimitBytes, len(e.deps.GatePlugin), revokeBypassCommand(tier), tier)
+			tier, len(config), gateplugin.PackageLimitBytes, len(e.deps.Engine.GatePlugin), revokeBypassCommand(tier), tier)
 	}
 	return nil
 }
@@ -119,20 +118,20 @@ func revokeBypassCommand(tier environment.Tier) string {
 
 func (e *Edge) raiseGate(ctx context.Context, tier environment.Tier, image string, log progress.Log) error {
 	var written writtenPublication
-	program := Program{Run: func(ctx *pulumi.Context, project string) error {
-		publication, entry, err := e.recordGatePublication(ctx.Context(), tier, image, !ctx.DryRun())
+	publish := func(ctx context.Context, write bool) (albresources.GateSpec, error) {
+		publication, entry, err := e.recordGatePublication(ctx, tier, image, write)
 		if err != nil {
-			return err
+			return albresources.GateSpec{}, err
 		}
 		written = writtenPublication{entry: entry, publication: publication}
-		return gateProgram(gateSpec{
-			Names:  loadBalancerNames(e.deps.Namespace, tier),
+		return albresources.GateSpec{
+			Names:  albresources.LoadBalancerNames(e.deps.Namespace, tier),
 			Main:   publication.Main,
 			Before: publication.Before,
-		}).Run(ctx, project)
-	}}
+		}, nil
+	}
 	for attempt := 1; ; attempt++ {
-		_, err := e.deps.Stacks.Up(ctx, e.gateTarget(tier), program, log)
+		_, err := e.deps.Engine.Stacks.UpGate(ctx, tier, publish, log)
 		if err == nil {
 			break
 		}
@@ -170,20 +169,20 @@ func (e *Edge) recordGatePublication(ctx context.Context, tier environment.Tier,
 		}
 	}
 	return gatePublication{}, records.Entry{}, refusal.Refuse(refusal.CodeBusy,
-		"what the gate plugin of the %s edge's %s load balancer runs was rewritten between every read of it and the write that followed: run this again once other deploys have finished", Kind, tier)
+		"what the gate plugin of the %s edge's %s load balancer runs was rewritten between every read of it and the write that followed: run this again once other deploys have finished", albresources.Kind, tier)
 }
 
-func listRunnableVersions(recorded gatePublication, next gateVersion) []gateVersion {
-	candidates := []gateVersion{recorded.Main}
+func listRunnableVersions(recorded gatePublication, next albresources.GateVersion) []albresources.GateVersion {
+	candidates := []albresources.GateVersion{recorded.Main}
 	if !recorded.Confirmed {
 		candidates = append(candidates, recorded.Before...)
 	}
-	var runnable []gateVersion
+	var runnable []albresources.GateVersion
 	for _, version := range candidates {
 		if len(runnable) == maxOlderGateVersions {
 			break
 		}
-		if version.ID != next.ID && !slices.ContainsFunc(runnable, func(kept gateVersion) bool { return kept.ID == version.ID }) {
+		if version.ID != next.ID && !slices.ContainsFunc(runnable, func(kept albresources.GateVersion) bool { return kept.ID == version.ID }) {
 			runnable = append(runnable, version)
 		}
 	}

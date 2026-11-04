@@ -29,7 +29,7 @@ type Backend struct {
 }
 
 type BackendSource interface {
-	Read() (Backend, error)
+	Read(ctx context.Context) (Backend, error)
 }
 
 type Service struct {
@@ -38,10 +38,10 @@ type Service struct {
 
 type FixedBackend Backend
 
-func (s FixedBackend) Read() (Backend, error) { return Backend(s), nil }
+func (s FixedBackend) Read(context.Context) (Backend, error) { return Backend(s), nil }
 
-func (h *Service) values(requested environmentv1.Tier) (variablestore.Store, environment.Tier, error) {
-	backend, err := h.Source.Read()
+func (h *Service) values(ctx context.Context, requested environmentv1.Tier) (variablestore.Store, environment.Tier, error) {
+	backend, err := h.Source.Read(ctx)
 	if err != nil {
 		return variablestore.Store{}, "", err
 	}
@@ -64,8 +64,8 @@ func decodeTier(tier environmentv1.Tier) (environment.Tier, error) {
 	}
 }
 
-func (h *Service) scoped(requested environmentv1.Tier, slug string) (variablestore.Store, variablestore.Scope, error) {
-	store, tier, err := h.values(requested)
+func (h *Service) scoped(ctx context.Context, requested environmentv1.Tier, slug string) (variablestore.Store, variablestore.Scope, error) {
+	store, tier, err := h.values(ctx, requested)
 	if err != nil {
 		return variablestore.Store{}, variablestore.Scope{}, err
 	}
@@ -102,7 +102,7 @@ func (h *Service) addressable(ctx context.Context, tier environmentv1.Tier, at *
 }
 
 func (h *Service) namedEnvironments(ctx context.Context, slug string) ([]string, error) {
-	backend, err := h.Source.Read()
+	backend, err := h.Source.Read(ctx)
 	if err != nil {
 		return nil, err
 	}

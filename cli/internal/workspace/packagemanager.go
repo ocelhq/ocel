@@ -123,7 +123,7 @@ func byName(command func(Location) string) func(Location) string {
 	}
 }
 
-func detect(root string) PackageManager {
+func Detect(root string) PackageManager {
 	declared := declaredManager(root)
 	present := map[PackageManager]bool{}
 	for manager, m := range behaviours {

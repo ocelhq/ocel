@@ -2,6 +2,8 @@ package console
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 
@@ -19,7 +21,7 @@ const (
 	NeverConnected Liveness = "never"
 )
 
-func LivenessOf(registered *consolev1.Connector) Liveness {
+func LivenessOf(registered *consolev1.Endpoint) Liveness {
 	switch {
 	case registered.GetConnectedAt() == nil:
 		return NeverConnected
@@ -58,44 +60,50 @@ func computeKindOf(name string) (consolev1.ComputeKind, bool) {
 	}
 }
 
-func (c *Client) connectors(accessToken string) consolev1connect.ConnectorServiceClient {
-	return consolev1connect.NewConnectorServiceClient(c.http, c.baseURL+connectRoute, c.withSessionHeaders(accessToken))
+func (c *Client) connectors(accessToken string) consolev1connect.EndpointServiceClient {
+	return consolev1connect.NewEndpointServiceClient(c.http, c.baseURL+connectRoute, c.withSessionHeaders(accessToken))
 }
 
-func (c *Client) ListConnectors(ctx context.Context, accessToken string) ([]*consolev1.Connector, error) {
-	listed, err := c.connectors(accessToken).List(ctx, &consolev1.ListConnectorsRequest{})
+func (c *Client) ListConnectors(ctx context.Context, accessToken string) ([]*consolev1.Endpoint, error) {
+	listed, err := c.connectors(accessToken).List(ctx, &consolev1.ListEndpointsRequest{})
 	if err != nil {
 		return nil, err
 	}
-	return listed.GetConnectors(), nil
+	return listed.GetEndpoints(), nil
 }
 
-func (c *Client) FindConnector(ctx context.Context, accessToken, target string) (*consolev1.Connector, error) {
+func (c *Client) FindConnector(ctx context.Context, accessToken, target string) (*consolev1.Endpoint, error) {
 	listed, err := c.ListConnectors(ctx, accessToken)
 	if err != nil {
 		return nil, err
 	}
-	at := slices.IndexFunc(listed, func(row *consolev1.Connector) bool { return row.GetTarget() == target })
+	at := slices.IndexFunc(listed, func(row *consolev1.Endpoint) bool { return row.GetTarget() == target })
 	if at < 0 {
 		return nil, nil
 	}
 	return listed[at], nil
 }
 
-func (c *Client) UpsertConnector(ctx context.Context, accessToken, target, vendor string) (*consolev1.Connector, error) {
-	registered, err := c.connectors(accessToken).Upsert(ctx, &consolev1.UpsertConnectorRequest{
+func (c *Client) UpsertConnector(ctx context.Context, accessToken, name, target, vendor string) (*consolev1.Endpoint, error) {
+	registered, err := c.connectors(accessToken).Upsert(ctx, &consolev1.UpsertEndpointRequest{
+		Name:   name,
 		Target: target,
 		Vendor: vendor,
-		Reach:  consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
+		Reach:  consolev1.EndpointReach_ENDPOINT_REACH_DIAL,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return registered.GetConnector(), nil
+	return registered.GetEndpoint(), nil
 }
 
-func (c *Client) SetConnectorAddress(ctx context.Context, accessToken, id string, address ConnectorAddress) (*consolev1.Connector, error) {
-	request := &consolev1.SetConnectorAddressRequest{Id: id, Url: address.URL}
+func ConnectorNameOf(target string) string {
+	sum := sha256.Sum256([]byte(target))
+	return "connector-" + hex.EncodeToString(sum[:5])
+}
+
+func (c *Client) SetConnectorAddress(ctx context.Context, accessToken, id string, address ConnectorAddress) (*consolev1.Endpoint, error) {
+	request := &consolev1.SetEndpointAddressRequest{Id: id, Url: address.URL}
 	if address.PublicKey != "" {
 		request.PublicKey = proto.String(address.PublicKey)
 	}
@@ -110,10 +118,10 @@ func (c *Client) SetConnectorAddress(ctx context.Context, accessToken, id string
 	if err != nil {
 		return nil, err
 	}
-	return registered.GetConnector(), nil
+	return registered.GetEndpoint(), nil
 }
 
 func (c *Client) RemoveConnector(ctx context.Context, accessToken, id string) error {
-	_, err := c.connectors(accessToken).Remove(ctx, &consolev1.RemoveConnectorRequest{Id: id})
+	_, err := c.connectors(accessToken).Remove(ctx, &consolev1.RemoveEndpointRequest{Id: id})
 	return err
 }

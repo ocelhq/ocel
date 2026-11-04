@@ -62,18 +62,50 @@ type Work struct {
 }
 
 type RecordedSpec struct {
-	Name     string
-	Summary  string
-	Shape    func(tier environment.Tier) []pricing.Shaped
-	Work     func(ctx context.Context, tier environment.Tier) (Work, error)
-	Remove   func(ctx context.Context, tier environment.Tier, recorded []provider.PhysicalResource) error
-	IsUsedBy func(uses []buildoutput.Uses, front edge.Kind) bool
-	Wildcard edge.Kind
+	Name      string
+	Summary   string
+	Inventory func(tier environment.Tier) []pricing.Resource
+	Work      func(ctx context.Context, tier environment.Tier) (Work, error)
+	Remove    func(ctx context.Context, tier environment.Tier, recorded []provider.PhysicalResource) error
+	IsUsedBy  func(uses []buildoutput.Uses, front edge.Kind) bool
+	Wildcard  edge.Kind
+}
+
+type Description struct {
+	Name      string
+	Summary   string
+	Inventory func(tier environment.Tier) []pricing.Resource
+	Digest    func(ctx context.Context, tier environment.Tier) (string, error)
+	Wildcard  edge.Kind
+}
+
+func Described(r Records, d Description) Part {
+	return Part{
+		Name:    d.Name,
+		Summary: d.Summary,
+		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+			return r.describe(ctx, tier, d)
+		},
+		Inventory: d.Inventory,
+	}
+}
+
+func (spec RecordedSpec) description() Description {
+	return Description{
+		Name:      spec.Name,
+		Summary:   spec.Summary,
+		Inventory: spec.Inventory,
+		Digest: func(ctx context.Context, tier environment.Tier) (string, error) {
+			work, err := spec.Work(ctx, tier)
+			return work.Digest, err
+		},
+		Wildcard: spec.Wildcard,
+	}
 }
 
 func Recorded(r Records, spec RecordedSpec) Part {
-	if spec.Shape == nil || spec.Work == nil || spec.Remove == nil {
-		panic(fmt.Sprintf("the recorded tier part %q must shape, make and remove what it holds", spec.Name))
+	if spec.Inventory == nil || spec.Work == nil || spec.Remove == nil {
+		panic(fmt.Sprintf("the recorded tier part %q must take inventory of, make and remove what it holds", spec.Name))
 	}
 	removal := r.Removal(spec.Name, spec.Remove)
 	planRemoval := removal.Plan
@@ -92,10 +124,10 @@ func Recorded(r Records, spec RecordedSpec) Part {
 		Name:    spec.Name,
 		Summary: spec.Summary,
 		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
-			return r.describe(ctx, tier, spec)
+			return r.describe(ctx, tier, spec.description())
 		},
-		Shape:   spec.Shape,
-		Removal: removal,
+		Inventory: spec.Inventory,
+		Removal:   removal,
 		Teardown: &Removal{
 			Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
 				return r.planDeletion(ctx, tier, spec.Name, "the bootstrap it belongs to is being removed")
@@ -156,8 +188,8 @@ func (r Records) Read(ctx context.Context, tier environment.Tier, name string) (
 	return record, present, nil
 }
 
-func (r Records) Shape(resources []pricing.Shaped) *provider.PartShape {
-	return &provider.PartShape{Vendor: awsports.Vendor, Region: r.Region, Resources: resources}
+func (r Records) Inventory(resources []pricing.Resource) *provider.PartInventory {
+	return &provider.PartInventory{Vendor: awsports.Vendor, Region: r.Region, Resources: resources}
 }
 
 func (r Records) Removal(name string, remove func(ctx context.Context, tier environment.Tier, recorded []provider.PhysicalResource) error) *Removal {
@@ -252,33 +284,33 @@ func (r Records) plan(ctx context.Context, tier environment.Tier, spec RecordedS
 	if present {
 		group.Action, group.Reason = provider.ActionUpdate, "this build moves the "+string(tier)+" tier's "+spec.Name+" forward"
 	}
-	for _, shaped := range spec.Shape(tier) {
-		group.Changes = append(group.Changes, provider.Change{Kind: shaped.Type, Name: shaped.Name, Action: group.Action})
+	for _, resource := range spec.Inventory(tier) {
+		group.Changes = append(group.Changes, provider.Change{Kind: resource.Type, Name: resource.Name, Action: group.Action})
 	}
 	return group, nil
 }
 
-func (r Records) describe(ctx context.Context, tier environment.Tier, spec RecordedSpec) (provider.BootstrapPart, bool, error) {
-	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, r.KeyValues, tier, spec.Name)
+func (r Records) describe(ctx context.Context, tier environment.Tier, d Description) (provider.BootstrapPart, bool, error) {
+	recorded, present, err := stackrecords.ReadBootstrapPart(ctx, r.KeyValues, tier, d.Name)
 	if err != nil || !present {
 		return provider.BootstrapPart{}, false, err
 	}
-	work, err := spec.Work(ctx, tier)
+	digest, err := d.Digest(ctx, tier)
 	if err != nil {
 		return provider.BootstrapPart{}, false, err
 	}
-	users, err := r.usersOf(ctx, tier, spec.Name, spec.Wildcard)
+	users, err := r.usersOf(ctx, tier, d.Name, d.Wildcard)
 	if err != nil {
 		return provider.BootstrapPart{}, false, err
 	}
 	return provider.BootstrapPart{
-		Name:      spec.Name,
-		Summary:   spec.Summary,
-		Current:   recorded.CurrentFor(string(r.WrittenBy), work.Digest),
+		Name:      d.Name,
+		Summary:   d.Summary,
+		Current:   recorded.CurrentFor(string(r.WrittenBy), digest),
 		Digest:    recorded.Digest,
 		Resources: recorded.Resources,
 		UsedBy:    users,
-		Shape:     r.Shape(spec.Shape(tier)),
+		Inventory: r.Inventory(d.Inventory(tier)),
 	}, true, nil
 }
 

@@ -56,9 +56,16 @@ type deployRun struct {
 	span         *run.Span
 }
 
+func jobInput(dependencies Dependencies) *jobinput.Answers {
+	if job := dependencies.Job(); job != nil {
+		return job.Input
+	}
+	return nil
+}
+
 func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project, process *providerprocess.Provider, env *environmentv1.Environment, facts preflightFacts, infra *infraProvisioning, policy consent.Policy, opts Options, browser bool) *deployRun {
 	scope := variables.ScopeOf(cfg, env.GetTier(), env.GetIdentity())
-	scope.Browser, scope.Job = browser, dependencies.JobAnswers != nil
+	scope.Browser, scope.Job = browser, dependencies.Job() != nil
 	return &deployRun{
 		dependencies:   dependencies,
 		cfg:            cfg,
@@ -79,7 +86,7 @@ func newDeployRun(dependencies Dependencies, target Target, cfg *project.Project
 		prebuilt:       opts.Prebuilt,
 		dry:            opts.Dry,
 		browser:        browser,
-		job:            dependencies.JobAnswers,
+		job:            jobInput(dependencies),
 	}
 }
 
@@ -197,7 +204,7 @@ func (d *deployRun) valueStore() variables.Store {
 }
 
 func (d *deployRun) readDeclarations(ctx context.Context) (*variables.Declarations, error) {
-	synced, err := d.valueStore().SyncEnvSource(ctx)
+	synced, err := d.valueStore().SyncEnvSourceInto(ctx, d.scope.Environment)
 	if problems := variables.CredentialProblems(err); len(problems) > 0 {
 		declarations := d.newDeclarations(variables.ConfiguredEnvSource(d.cfg, d.tier()))
 		return declarations, declarations.RefuseCredentials(problems)
@@ -227,11 +234,11 @@ func (d *deployRun) fills(refusal *variables.MissingError) bool {
 }
 
 func (d *deployRun) fill(ctx context.Context, declarations *variables.Declarations, refusal *variables.MissingError) error {
-	if d.job != nil {
-		return d.fillOnCloud(ctx, declarations, refusal)
-	}
 	if err := d.ensureVariablesKey(ctx, refusal); err != nil {
 		return err
+	}
+	if d.job != nil {
+		return d.fillOnCloud(ctx, declarations, refusal)
 	}
 	editor, err := d.dependencies.ServeVariableEditor(ctx, d.cfg, d.provider, d.tier(), declarations, d.recovery(refusal))
 	if err != nil {
@@ -317,7 +324,7 @@ func (e *abandonedRefusal) Unwrap() []error {
 	return []error{e.refusal, variableeditor.ErrAbandoned}
 }
 
-const unresolvedMessage = "Ocel Cloud resumed the job without the values."
+const unresolvedMessage = "The console resumed the job without the values."
 
 type unresolvedRefusal struct {
 	refusal *variables.MissingError

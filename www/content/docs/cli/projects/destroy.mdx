@@ -26,6 +26,7 @@ An automated caller that must tear a project down unattended passes `--yes`, or 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry` | `bool` | `false` | Print what would be destroyed and stop, destroying nothing |
+| `--remote` | `bool` | `false` | Run this as a job on the runner the console binds to the project's tier: upload the source, start the job and follow it |
 | `--tier` | `string` |  | Destroy only the project's production or preview |
 | `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
 

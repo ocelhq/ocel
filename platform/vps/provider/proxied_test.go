@@ -16,7 +16,7 @@ func refusingReach(t *testing.T, resources []provider.Resource, grants []provide
 	proxied := func(kind provider.BindingType) bool {
 		return bindings.Proxied(provider.ProtoBindingType(kind)) || kind == provider.BindingType("queue")
 	}
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "box.example", User: "ocel-deploy"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "box.example", User: "ocel-deploy"}})
 	return providerserver.RefuseUnservedProxiedBindings(p.Facts().Vendor, p.Facts().Bindings, proxied, resources, grants)
 }
 

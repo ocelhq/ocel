@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/containerimage"
+	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -54,7 +55,7 @@ func fixtureBinary(t *testing.T, arch string) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := host.ContainerRuntime(arch)
+	runtime, err := host.ContainerRuntime(vps.TestAssets, arch)
 	if err != nil {
 		t.Fatal(err)
 	}

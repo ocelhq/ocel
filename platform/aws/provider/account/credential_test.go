@@ -64,6 +64,7 @@ var actionsAWSGivesNoScopingKey = []string{
 	"cloudfront:UpdateCachePolicy",
 	"cloudfront:UpdateOriginAccessControl",
 	"cloudfront:UpdateResponseHeadersPolicy",
+	"cloudfront-keyvaluestore:UpdateKeys",
 	"ecs:DeregisterTaskDefinition",
 	"rds-db:connect",
 }
@@ -187,6 +188,9 @@ func readOnly(action string) bool {
 	_, verb, ok := strings.Cut(action, ":")
 	if !ok {
 		return false
+	}
+	if verb == "GET" {
+		return true
 	}
 	for _, prefix := range []string{"Describe", "Get", "List"} {
 		if strings.HasPrefix(verb, prefix) {
@@ -338,6 +342,24 @@ func TestCredentialsNameActionsRatherThanGlobbingThem(t *testing.T) {
 	}
 }
 
+var actionsOnRecordsInZonesTheUserOwns = map[string]string{
+	"route53:ChangeResourceRecordSets": "route53:ChangeResourceRecordSetsRecordTypes",
+}
+
+func scopesTheRecordsItChanges(actions []string, condition map[string]any) bool {
+	for _, action := range actions {
+		key, onUserZones := actionsOnRecordsInZonesTheUserOwns[action]
+		if !onUserZones {
+			return false
+		}
+		operands, ok := condition["ForAllValues:StringEquals"].(map[string]any)
+		if !ok || operands[key] == nil {
+			return false
+		}
+	}
+	return true
+}
+
 func TestEveryMutatingGrantHasAnOcelScope(t *testing.T) {
 	for purpose, document := range bothCredentials(t) {
 		for _, statement := range parsePolicy(t, document).Statement {
@@ -348,7 +370,7 @@ func TestEveryMutatingGrantHasAnOcelScope(t *testing.T) {
 			if len(mutating) == 0 {
 				continue
 			}
-			if conditionScopes(actions, statement.Condition) {
+			if conditionScopes(actions, statement.Condition) || scopesTheRecordsItChanges(mutating, statement.Condition) {
 				continue
 			}
 			for _, resource := range stringsOf(t, statement.Resource, "Resource") {
@@ -613,7 +635,7 @@ func operandValues(t *testing.T, operand any) []string {
 func operatorAdmits(t *testing.T, operator, pattern, value string) bool {
 	t.Helper()
 	switch operator {
-	case "StringEquals", "Bool", "ForAnyValue:StringEquals":
+	case "StringEquals", "Bool", "ForAnyValue:StringEquals", "ForAllValues:StringEquals":
 		return pattern == value
 	case "StringLike", "ArnEquals", "ArnLike":
 		return conditionAdmits("StringLike", pattern, value)

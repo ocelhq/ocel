@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/seal"
@@ -25,7 +26,7 @@ func openProjectLedger(p provider.Provider, tier environment.Tier, slug string) 
 }
 
 func (l projectLedger) newSecretsAssociatedData(app, release string) seal.AssociatedData {
-	return seal.BindToProject(l.slug, "release secrets", app, release)
+	return seal.BindToProject(l.slug, releaseSecretsPurpose, app, release)
 }
 
 func (l projectLedger) putStaged(ctx context.Context, record router.ReleaseRecord) error {
@@ -79,4 +80,14 @@ func (l projectLedger) openSecrets(ctx context.Context, record router.ReleaseRec
 		return router.ReleaseSecrets{}, fmt.Errorf("read the secrets the ledger keeps for %s/%s: %w", record.App, record.Release, err)
 	}
 	return secrets, nil
+}
+
+const releaseSecretsPurpose = "release secrets"
+
+func ownerOfReleaseSecrets(bound seal.AssociatedData) (records.Owner, bool) {
+	project, named := bound.Project()
+	if bound.Purpose() == releaseSecretsPurpose && named && len(bound.Values()) == 2 {
+		return records.Owner{Project: project, EnvironmentInValue: true}, true
+	}
+	return records.Owner{}, false
 }

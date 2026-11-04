@@ -67,3 +67,14 @@ func TestTheHostKeyDigestFitsInATarget(t *testing.T) {
 		t.Errorf("fingerprint = %q, want the digest to appear as one segment", fingerprint)
 	}
 }
+
+func TestAConnectorTargetNamedByAnAddressNamesNoHostnameAndRefusesNothing(t *testing.T) {
+	t.Parallel()
+
+	if got := connectorHostname("203.0.113.10"); got != "" {
+		t.Errorf("connectorHostname(address) = %q, want none", got)
+	}
+	if got := connectorHostname("box.example.com"); got != "box.example.com" {
+		t.Errorf("connectorHostname(hostname) = %q", got)
+	}
+}

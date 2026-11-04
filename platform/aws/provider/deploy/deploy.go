@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/function"
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/worker"
+	"github.com/ocelhq/ocel/platform/aws/provider/quotas"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -28,6 +29,8 @@ import (
 )
 
 type Config struct {
+	CredentialEnv map[string]string
+
 	Namespace     string
 	Region        string
 	BackendURL    string
@@ -45,7 +48,7 @@ type Config struct {
 	WrittenBy provider.WrittenBy
 	Rules     container.RulesAPI
 	Network   component.NetworkAPI
-	Quotas    component.QuotasAPI
+	Quotas    quotas.API
 
 	AccountID string
 

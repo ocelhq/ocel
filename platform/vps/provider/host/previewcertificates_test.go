@@ -24,7 +24,7 @@ func refusePreviewCertificatesDeployingTo(t *testing.T, state boxapi.RoutingTabl
 	table := string(mustWrite(t, state))
 	b := newBench(nil)
 	b.answer = servesProxy(b, &table)
-	h := New(ssh.NewBox(b.dial, nil), "shop", Keys{}, pins, fronting)
+	h := New(ssh.NewBox(b.dial, nil), testAssets, "shop", Keys{}, pins, fronting)
 	return h.RefusePerHostnamePreviewCertificates(context.Background(), destination)
 }
 

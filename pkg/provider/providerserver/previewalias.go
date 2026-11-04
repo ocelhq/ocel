@@ -26,7 +26,7 @@ func (h *handlers) EnsurePreviewAlias(ctx context.Context, req *contractv1.Ensur
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	key, err := openOrEnsurePreviewKey(ctx, p, &h.session.previewKeys, req.GetDry())
+	key, err := openOrEnsurePreviewKey(ctx, p, &h.session.previewKeys, req.GetSlug(), req.GetDry())
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -85,11 +85,12 @@ func refuseOverlongAliases(site edge.PreviewSite, env string, apps []string) err
 	return nil
 }
 
-func openOrEnsurePreviewKey(ctx context.Context, p provider.Provider, opened *openedPreviewKeys, dry bool) (edge.PreviewKey, error) {
+func openOrEnsurePreviewKey(ctx context.Context, p provider.Provider, opened *openedPreviewKeys, slug string, dry bool) (edge.PreviewKey, error) {
 	if dry {
 		return openPreviewKey(ctx, p, opened)
 	}
-	return ensurePreviewKey(ctx, p, opened)
+	key, err := ensurePreviewKey(ctx, p, opened)
+	return key, stackrecords.RecordWantedPart(ctx, p.KeyValues(), environment.TierPreview, slug, err)
 }
 
 func readAliasToken(ctx context.Context, p provider.Provider, slug, env string) (string, error) {

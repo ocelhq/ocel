@@ -23,9 +23,10 @@ ocel preview [flags]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--dry` | `bool` | `false` | Build, then print every change this would make to your account and stop without applying any of it |
-| `--no-wait` | `bool` | `false` | On Ocel Cloud, start the job, print its link and return without waiting for it to end |
+| `--no-wait` | `bool` | `false` | On a runner, start the job, print its link and return without waiting for it to end |
 | `--persistent` | `bool` | `false` | Deploy a persistent preview: a confirmation before it is torn down |
 | `--prebuilt` | `bool` | `false` | Deploy the existing .ocel/output instead of building first (produce it with ocel build) |
+| `--remote` | `bool` | `false` | Run this as a job on the runner the console binds to the project's tier: upload the source, start the job and follow it |
 | `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
 
 Every command also takes the [global flags](/docs/cli#global-flags).

@@ -30,7 +30,7 @@ type Component struct {
 	Sweep        func(ctx context.Context, at Stack, kept []provider.Resource) error
 	Teardown     *Teardown
 	Transform    func(at Stack, declared provider.Resource) (Transformable, error)
-	Shape        func(cost CostTree, scope string, at Stack, declared []provider.Resource) error
+	Inventory    func(cost CostTree, scope string, at Stack, declared []provider.Resource) error
 }
 
 type Teardown struct {

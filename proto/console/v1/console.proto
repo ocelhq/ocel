@@ -4,6 +4,7 @@ package console.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1";
 
 import "buf/validate/validate.proto";
+import "common/scope/v1/scope.proto";
 import "google/protobuf/timestamp.proto";
 
 message CloudOffer {
@@ -12,6 +13,8 @@ message CloudOffer {
   string provider_url = 2;
 
   string audience = 3;
+
+  string version = 4;
 }
 
 message DescribeRequest {
@@ -25,28 +28,24 @@ message DescribeResponse {
   CloudOffer cloud = 3;
 }
 
-message IssueCloudTokenRequest {
-  repeated string scopes = 1 [(buf.validate.field).repeated = {
-    min_items: 1
-    max_items: 32
-    unique: true
-    items: {
-      string: {
-        min_len: 1
-        max_len: 64
-        pattern: "^[a-z0-9._:-]+$"
-      }
-    }
-  }];
-
-  string organization_id = 2 [(buf.validate.field).string = {
+message IssueEndpointTokenRequest {
+  string organization_id = 1 [(buf.validate.field).string = {
     min_len: 1
     max_len: 128
     pattern: "^[A-Za-z0-9_-]+$"
   }];
+
+  string endpoint_id = 2 [(buf.validate.field).string.pattern = "^(ocel-cloud|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"];
+
+  repeated common.scope.v1.Scope scopes = 3 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 16
+    unique: true
+    items: {enum: {defined_only: true, not_in: [0]}}
+  }];
 }
 
-message IssueCloudTokenResponse {
+message IssueEndpointTokenResponse {
   string token = 1 [debug_redact = true];
 
   google.protobuf.Timestamp expires_at = 2;
@@ -55,5 +54,5 @@ message IssueCloudTokenResponse {
 service ConsoleService {
   rpc Describe(DescribeRequest) returns (DescribeResponse);
 
-  rpc IssueCloudToken(IssueCloudTokenRequest) returns (IssueCloudTokenResponse);
+  rpc IssueEndpointToken(IssueEndpointTokenRequest) returns (IssueEndpointTokenResponse);
 }

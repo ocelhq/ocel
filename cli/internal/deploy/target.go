@@ -75,8 +75,8 @@ func resolvePreviewEnvironment(ctx context.Context, dependencies Dependencies, c
 		}
 	}
 	env, err := previewid.ResolveEnvironment(ctx, cwd, name, lifecycle, dependencies.ReadGitBranch, dependencies.DiscoverPRNumber)
-	if err == nil && name != "" && dependencies.BuilderJob != nil {
-		env.Label = dependencies.BuilderJob.PreviewLabel
+	if job := dependencies.Job(); err == nil && name != "" && job != nil {
+		env.Label = job.PreviewLabel
 	}
 	return env, err
 }

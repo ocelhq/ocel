@@ -48,18 +48,26 @@ func (h *handlers) GetProject(ctx context.Context, req *contractv1.GetProjectReq
 	if err != nil {
 		return nil, err
 	}
-	got, err := getProject(ctx, vendor.KeyValues(), req.GetSlug())
+	tiers := make([]environment.Tier, 0, len(req.GetTiers()))
+	for _, tier := range req.GetTiers() {
+		decoded, err := decodeRequiredTier(tier)
+		if err != nil {
+			return nil, err
+		}
+		tiers = append(tiers, decoded)
+	}
+	got, err := getProject(ctx, vendor.KeyValues(), req.GetSlug(), tiers)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	return got, nil
 }
 
-func getProject(ctx context.Context, store records.Store, slug string) (*contractv1.GetProjectResponse, error) {
+func getProject(ctx context.Context, store records.Store, slug string, tiers []environment.Tier) (*contractv1.GetProjectResponse, error) {
 	if slug == "" {
 		return nil, errUnnamedProject
 	}
-	project, found, err := readRecordedProject(ctx, store, slug)
+	project, found, err := readRecordedProject(ctx, store, slug, tiers)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +102,7 @@ func (h *handlers) describeProject(ctx context.Context, vendor provider.Provider
 		return nil, errUnnamedProject
 	}
 	store := vendor.KeyValues()
-	project, found, err := readRecordedProject(ctx, store, req.GetSlug())
+	project, found, err := readRecordedProject(ctx, store, req.GetSlug(), projectTiers)
 	if err != nil {
 		return nil, err
 	}

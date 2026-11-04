@@ -3,52 +3,25 @@ package alb
 import (
 	"context"
 
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
-	ocelpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
-type Program struct {
-	Run     func(ctx *pulumi.Context, project string) error
-	Patches *ocelpulumi.Patches
-}
-
-type Target struct {
-	Tier environment.Tier
-	Slug string
-	Gate bool
-}
-
-func (t Target) Name() string {
-	switch {
-	case t.Gate:
-		return GateStack(t.Tier)
-	case t.Slug != "":
-		return BindingStack(t.Slug, t.Tier)
-	}
-	return LoadBalancerStack(t.Tier)
-}
-
-func (t Target) Prefix() string {
-	if t.Slug == "" {
-		return t.Name()
-	}
-	return dashed(string(Kind), "project", naming.Sanitize(t.Slug))
-}
-
 type Stacks interface {
-	Up(ctx context.Context, target Target, program Program, progress progress.Log) (map[string]string, error)
+	UpLoadBalancer(ctx context.Context, spec albresources.LoadBalancerSpec, progress progress.Log) (map[string]string, error)
 
-	Destroy(ctx context.Context, target Target, progress progress.Log) error
+	UpBinding(ctx context.Context, spec albresources.BindingSpec, progress progress.Log) (map[string]string, error)
 
-	Outputs(ctx context.Context, target Target) (map[string]string, error)
+	UpGate(ctx context.Context, tier environment.Tier, publish func(ctx context.Context, write bool) (albresources.GateSpec, error), progress progress.Log) (map[string]string, error)
+
+	Destroy(ctx context.Context, stack albresources.Stack, progress progress.Log) error
+
+	Outputs(ctx context.Context, stack albresources.Stack) (map[string]string, error)
 }
 
 type Routes interface {
-	Route(ctx context.Context, urlMap, hostname, backend string, routes *StaticRoutes) error
+	Route(ctx context.Context, urlMap, hostname, backend string, routes *albresources.StaticRoutes) error
 
 	ServeNotFound(ctx context.Context, urlMap, hostname string) error
 
@@ -83,28 +56,12 @@ func (f LoadBalancer) provisioned() bool {
 	return f.Address != "" && f.CertificateMap != "" && f.URLMap != "" && f.NotFound != ""
 }
 
-const (
-	outputAddress        = "address"
-	outputCertificateMap = "certificateMap"
-	outputURLMap         = "urlMap"
-	outputNotFound       = "notFound"
-	outputAssetsBackend  = "assetsBackend"
-)
-
 func loadBalancerOf(outputs map[string]string) LoadBalancer {
 	return LoadBalancer{
-		Address:        outputs[outputAddress],
-		CertificateMap: outputs[outputCertificateMap],
-		URLMap:         outputs[outputURLMap],
-		NotFound:       outputs[outputNotFound],
-		AssetsBackend:  outputs[outputAssetsBackend],
+		Address:        outputs[albresources.OutputAddress],
+		CertificateMap: outputs[albresources.OutputCertificateMap],
+		URLMap:         outputs[albresources.OutputURLMap],
+		NotFound:       outputs[albresources.OutputNotFound],
+		AssetsBackend:  outputs[albresources.OutputAssetsBackend],
 	}
-}
-
-func LoadBalancerStack(tier environment.Tier) string {
-	return dashed(string(Kind), "front", naming.TierWord(tier))
-}
-
-func BindingStack(slug string, tier environment.Tier) string {
-	return dashed(string(Kind), naming.TierWord(tier), naming.Sanitize(slug))
 }

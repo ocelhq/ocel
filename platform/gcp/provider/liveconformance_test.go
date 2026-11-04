@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 )
 
@@ -34,6 +34,6 @@ func TestLiveGCPProviderConformsWithItsProjectBehindIt(t *testing.T) {
 		Server:       providerserver.Config{Version: "test", New: gcp.New},
 		Options:      provider.Options{"project": liveProject(), "region": liveRegion()},
 		Binary:       buildProvider(t),
-		Certificates: &conformance.CertificateChecks{Kind: alb.Kind},
+		Certificates: &conformance.CertificateChecks{Kind: albresources.Kind},
 	})
 }

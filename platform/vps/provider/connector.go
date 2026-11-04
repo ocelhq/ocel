@@ -48,6 +48,13 @@ func hostKeyDigest(offered ssh.HostKey) (string, error) {
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
+func connectorHostname(written string) string {
+	if dialable(written) != nil {
+		return ""
+	}
+	return written
+}
+
 type connector struct{ *Provider }
 
 func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error) {
@@ -68,17 +75,13 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 	if err != nil {
 		return provider.ConnectorTarget{}, err
 	}
-	hostname := live.Destination().Written
-	if err := dialable(hostname); err != nil {
-		return provider.ConnectorTarget{}, err
-	}
 	arch, err := p.host.Arch(ctx)
 	if err != nil {
 		return provider.ConnectorTarget{}, err
 	}
 	described := provider.ConnectorTarget{
 		Fingerprint: fingerprint,
-		Hostname:    hostname,
+		Hostname:    connectorHostname(live.Destination().Written),
 		OS:          connectorOS,
 		Arch:        arch,
 	}
@@ -113,6 +116,9 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
+	if err := p.jobs().Reconcile(ctx, hostname, install.Version, install.Runner, progress); err != nil {
+		return provider.ConnectorAddress{}, err
+	}
 	return provider.ConnectorAddress{
 		URL:       "https://" + hostname + boxapi.ConnectorPath,
 		PublicKey: installed.PublicKey,
@@ -124,5 +130,12 @@ func (p connector) Remove(ctx context.Context, progress progress.Log) error {
 	if _, err := p.Session(ctx); err != nil {
 		return err
 	}
+	if err := p.jobs().Remove(ctx, progress); err != nil {
+		return err
+	}
 	return host.NewConnector(p.host).Remove(ctx, progress)
+}
+
+func (p connector) jobs() connectorJobs {
+	return connectorJobs{runner: p.host.Runner(), arch: p.host.Arch}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -55,7 +56,7 @@ func live(t *testing.T) *gcp.Provider {
 		t.Fatalf("no floci-gcp emulator in the environment and %s names no project; run under `scripts/floci.sh --cloud gcp run <name> -- go test ./...`, or name a real project to run against",
 			liveProjectVariable)
 	}
-	return newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
+	return newProvider(t, control.Options{Project: liveProject(), Region: liveRegion()})
 }
 
 func liveNames(t *testing.T) names.Names {
@@ -110,7 +111,7 @@ func TestLiveTheCipherSealsAsEveryCipherMust(t *testing.T) {
 func TestLiveSealingInATierNeverBootstrappedSaysWhatToRun(t *testing.T) {
 	live(t)
 
-	nowhere := newProvider(t, gcp.Options{Project: "floci-nowhere", Region: liveRegion()})
+	nowhere := newProvider(t, control.Options{Project: "floci-nowhere", Region: liveRegion()})
 	var refused refusal.Refusal
 	_, err := nowhere.Cipher().Seal(context.Background(), environment.TierProduction, seal.BindToProject("shop", "variable", "DATABASE_URL"), []byte("postgres://example"))
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
@@ -138,7 +139,7 @@ func TestLiveArtifactStore(t *testing.T) {
 func TestLiveArtifactsWhereNoBucketExistsSayWhatToRun(t *testing.T) {
 	live(t)
 
-	nowhere := newProvider(t, gcp.Options{Project: "floci-nowhere", Region: liveRegion()})
+	nowhere := newProvider(t, control.Options{Project: "floci-nowhere", Region: liveRegion()})
 	ref := provider.ArtifactRef{Tier: environment.TierProduction, Key: "assets/conformance/prod/web/r1a2b3c4d/bundle.js"}
 
 	var refused refusal.Refusal

@@ -12,6 +12,17 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 )
 
+func DescribedPart(c Clients, namespace, region string) tier.Part {
+	return tier.Part{
+		Name:    Part,
+		Summary: Summary,
+		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
+			return describe(ctx, c, namespace, region, tier)
+		},
+		Inventory: func(at environment.Tier) []pricing.Resource { return inventory(namespace, at) },
+	}
+}
+
 func NewPart(c Clients, namespace, region string, release func(context.Context, environment.Tier, progress.Log) error) tier.Part {
 	return tier.Part{
 		Name:    Part,
@@ -19,7 +30,7 @@ func NewPart(c Clients, namespace, region string, release func(context.Context, 
 		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
 			return describe(ctx, c, namespace, region, tier)
 		},
-		Shape: func(at environment.Tier) []pricing.Shaped { return shape(namespace, at) },
+		Inventory: func(at environment.Tier) []pricing.Resource { return inventory(namespace, at) },
 		Removal: &tier.Removal{
 			Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
 				return planDeletion(ctx, c, namespace, tier, "this run removes it; the next port forward adds it again")
@@ -56,8 +67,8 @@ func planDeletion(ctx context.Context, c Clients, namespace string, at environme
 	return tier.Deletion(Part, why, resources), nil
 }
 
-func shape(namespace string, at environment.Tier) []pricing.Shaped {
-	return []pricing.Shaped{{Name: NameFor(namespace, at), Type: "aws_ecs_cluster", Properties: map[string]any{}}}
+func inventory(namespace string, at environment.Tier) []pricing.Resource {
+	return []pricing.Resource{{Name: NameFor(namespace, at), Type: "aws_ecs_cluster", Properties: map[string]any{}}}
 }
 
 func describe(ctx context.Context, c Clients, namespace, region string, tier environment.Tier) (provider.BootstrapPart, bool, error) {
@@ -70,6 +81,6 @@ func describe(ctx context.Context, c Clients, namespace, region string, tier env
 		Summary:   Summary,
 		Current:   true,
 		Resources: resources,
-		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: shape(namespace, tier)},
+		Inventory: &provider.PartInventory{Vendor: awsports.Vendor, Region: region, Resources: inventory(namespace, tier)},
 	}, true, nil
 }

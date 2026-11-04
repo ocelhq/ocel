@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"sync"
 
 	"google.golang.org/api/googleapi"
 	runv2 "google.golang.org/api/run/v2"
@@ -38,7 +39,15 @@ const (
 	realtimeImagePath = "/realtime-gateway"
 )
 
-var realtimeImageTag = run.BinaryImageTag(payloads.RealtimeGateway)
+var realtimeTag struct {
+	once sync.Once
+	tag  string
+}
+
+func realtimeImageTag() string {
+	realtimeTag.once.Do(func() { realtimeTag.tag = run.BinaryImageTag(payloads.RealtimeGateway)() })
+	return realtimeTag.tag
+}
 
 func realtimeGatewayServing(named names.Names, ref provider.StackRef, service, host, image, inlineKeys, pubsubEndpoint string) (run.Serving, error) {
 	labels, err := names.StackLabels(named, ref)

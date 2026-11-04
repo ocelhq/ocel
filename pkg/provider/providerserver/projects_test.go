@@ -3,6 +3,7 @@ package providerserver_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"slices"
 	"sync"
@@ -413,9 +414,12 @@ func TestDescribeProjectNamesTheBootstrapPartsTheProjectShares(t *testing.T) {
 	}
 }
 
-func getProject(t *testing.T, client contractv1connect.ProviderServiceClient, slug string) *contractv1.GetProjectResponse {
+func getProject(t *testing.T, client contractv1connect.ProviderServiceClient, slug string, tiers ...environmentv1.Tier) *contractv1.GetProjectResponse {
 	t.Helper()
-	got, err := client.GetProject(context.Background(), &contractv1.GetProjectRequest{Slug: slug})
+	if len(tiers) == 0 {
+		tiers = []environmentv1.Tier{productionTier, previewTier}
+	}
+	got, err := client.GetProject(context.Background(), &contractv1.GetProjectRequest{Slug: slug, Tiers: tiers})
 	if err != nil {
 		t.Fatalf("GetProject(%s) error = %v", slug, err)
 	}
@@ -474,6 +478,62 @@ func TestGetProjectReadsTheRecordOfNoOtherProject(t *testing.T) {
 
 	if got := getProject(t, client, "shop"); !slices.Equal(got.GetTiers(), []environmentv1.Tier{productionTier}) {
 		t.Errorf("GetProject(shop) tiers = %v, want production", got.GetTiers())
+	}
+}
+
+type tierDeniedStore struct {
+	records.Store
+	denied environment.Tier
+}
+
+func (s tierDeniedStore) refuseDenied(tier environment.Tier) error {
+	if tier == s.denied {
+		return errors.New("AccessDenied: the credential reaches no " + string(tier) + " bootstrap")
+	}
+	return nil
+}
+
+func (s tierDeniedStore) Read(ctx context.Context, key records.Key) (records.Entry, error) {
+	if err := s.refuseDenied(key.Partition.Tier); err != nil {
+		return records.Entry{}, err
+	}
+	return s.Store.Read(ctx, key)
+}
+
+func (s tierDeniedStore) List(ctx context.Context, in records.Partition, under ...string) ([]records.Entry, error) {
+	if err := s.refuseDenied(in.Tier); err != nil {
+		return nil, err
+	}
+	return s.Store.List(ctx, in, under...)
+}
+
+type tierDeniedProvider struct {
+	*fake.Provider
+	store tierDeniedStore
+}
+
+func (p tierDeniedProvider) KeyValues() records.Store { return p.store }
+
+func TestGetProjectReadsOnlyTheTiersItIsAskedFor(t *testing.T) {
+	t.Parallel()
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	writeProject(t, vendor.KeyValues(), environment.TierProduction, "shop", relayProject)
+	writeProject(t, vendor.KeyValues(), environment.TierPreview, "shop", relayProject)
+	client := servedProvider(t, "1.0.0", tierDeniedProvider{Provider: vendor, store: tierDeniedStore{Store: vendor.KeyValues(), denied: environment.TierPreview}})
+
+	if got := getProject(t, client, "shop", productionTier); !slices.Equal(got.GetTiers(), []environmentv1.Tier{productionTier}) {
+		t.Errorf("GetProject(shop, production) tiers = %v, want production, read without touching preview", got.GetTiers())
+	}
+}
+
+func TestGetProjectNamingNoTierIsRefused(t *testing.T) {
+	t.Parallel()
+	client, _ := contractServed(t, "1.0.0")
+
+	_, err := client.GetProject(context.Background(), &contractv1.GetProjectRequest{Slug: "shop"})
+
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("GetProject() naming no tier = %v, want it refused as invalid", err)
 	}
 }
 

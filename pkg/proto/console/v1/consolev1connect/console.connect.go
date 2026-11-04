@@ -35,15 +35,15 @@ const (
 const (
 	// ConsoleServiceDescribeProcedure is the fully-qualified name of the ConsoleService's Describe RPC.
 	ConsoleServiceDescribeProcedure = "/console.v1.ConsoleService/Describe"
-	// ConsoleServiceIssueCloudTokenProcedure is the fully-qualified name of the ConsoleService's
-	// IssueCloudToken RPC.
-	ConsoleServiceIssueCloudTokenProcedure = "/console.v1.ConsoleService/IssueCloudToken"
+	// ConsoleServiceIssueEndpointTokenProcedure is the fully-qualified name of the ConsoleService's
+	// IssueEndpointToken RPC.
+	ConsoleServiceIssueEndpointTokenProcedure = "/console.v1.ConsoleService/IssueEndpointToken"
 )
 
 // ConsoleServiceClient is a client for the console.v1.ConsoleService service.
 type ConsoleServiceClient interface {
 	Describe(context.Context, *v1.DescribeRequest) (*v1.DescribeResponse, error)
-	IssueCloudToken(context.Context, *v1.IssueCloudTokenRequest) (*v1.IssueCloudTokenResponse, error)
+	IssueEndpointToken(context.Context, *v1.IssueEndpointTokenRequest) (*v1.IssueEndpointTokenResponse, error)
 }
 
 // NewConsoleServiceClient constructs a client for the console.v1.ConsoleService service. By
@@ -63,10 +63,10 @@ func NewConsoleServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(consoleServiceMethods.ByName("Describe")),
 			connect.WithClientOptions(opts...),
 		),
-		issueCloudToken: connect.NewClient[v1.IssueCloudTokenRequest, v1.IssueCloudTokenResponse](
+		issueEndpointToken: connect.NewClient[v1.IssueEndpointTokenRequest, v1.IssueEndpointTokenResponse](
 			httpClient,
-			baseURL+ConsoleServiceIssueCloudTokenProcedure,
-			connect.WithSchema(consoleServiceMethods.ByName("IssueCloudToken")),
+			baseURL+ConsoleServiceIssueEndpointTokenProcedure,
+			connect.WithSchema(consoleServiceMethods.ByName("IssueEndpointToken")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -74,8 +74,8 @@ func NewConsoleServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // consoleServiceClient implements ConsoleServiceClient.
 type consoleServiceClient struct {
-	describe        *connect.Client[v1.DescribeRequest, v1.DescribeResponse]
-	issueCloudToken *connect.Client[v1.IssueCloudTokenRequest, v1.IssueCloudTokenResponse]
+	describe           *connect.Client[v1.DescribeRequest, v1.DescribeResponse]
+	issueEndpointToken *connect.Client[v1.IssueEndpointTokenRequest, v1.IssueEndpointTokenResponse]
 }
 
 // Describe calls console.v1.ConsoleService.Describe.
@@ -87,9 +87,9 @@ func (c *consoleServiceClient) Describe(ctx context.Context, req *v1.DescribeReq
 	return nil, err
 }
 
-// IssueCloudToken calls console.v1.ConsoleService.IssueCloudToken.
-func (c *consoleServiceClient) IssueCloudToken(ctx context.Context, req *v1.IssueCloudTokenRequest) (*v1.IssueCloudTokenResponse, error) {
-	response, err := c.issueCloudToken.CallUnary(ctx, connect.NewRequest(req))
+// IssueEndpointToken calls console.v1.ConsoleService.IssueEndpointToken.
+func (c *consoleServiceClient) IssueEndpointToken(ctx context.Context, req *v1.IssueEndpointTokenRequest) (*v1.IssueEndpointTokenResponse, error) {
+	response, err := c.issueEndpointToken.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -99,7 +99,7 @@ func (c *consoleServiceClient) IssueCloudToken(ctx context.Context, req *v1.Issu
 // ConsoleServiceHandler is an implementation of the console.v1.ConsoleService service.
 type ConsoleServiceHandler interface {
 	Describe(context.Context, *v1.DescribeRequest) (*v1.DescribeResponse, error)
-	IssueCloudToken(context.Context, *v1.IssueCloudTokenRequest) (*v1.IssueCloudTokenResponse, error)
+	IssueEndpointToken(context.Context, *v1.IssueEndpointTokenRequest) (*v1.IssueEndpointTokenResponse, error)
 }
 
 // NewConsoleServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -115,18 +115,18 @@ func NewConsoleServiceHandler(svc ConsoleServiceHandler, opts ...connect.Handler
 		connect.WithSchema(consoleServiceMethods.ByName("Describe")),
 		connect.WithHandlerOptions(opts...),
 	)
-	consoleServiceIssueCloudTokenHandler := connect.NewUnaryHandlerSimple(
-		ConsoleServiceIssueCloudTokenProcedure,
-		svc.IssueCloudToken,
-		connect.WithSchema(consoleServiceMethods.ByName("IssueCloudToken")),
+	consoleServiceIssueEndpointTokenHandler := connect.NewUnaryHandlerSimple(
+		ConsoleServiceIssueEndpointTokenProcedure,
+		svc.IssueEndpointToken,
+		connect.WithSchema(consoleServiceMethods.ByName("IssueEndpointToken")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/console.v1.ConsoleService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ConsoleServiceDescribeProcedure:
 			consoleServiceDescribeHandler.ServeHTTP(w, r)
-		case ConsoleServiceIssueCloudTokenProcedure:
-			consoleServiceIssueCloudTokenHandler.ServeHTTP(w, r)
+		case ConsoleServiceIssueEndpointTokenProcedure:
+			consoleServiceIssueEndpointTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -140,6 +140,6 @@ func (UnimplementedConsoleServiceHandler) Describe(context.Context, *v1.Describe
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("console.v1.ConsoleService.Describe is not implemented"))
 }
 
-func (UnimplementedConsoleServiceHandler) IssueCloudToken(context.Context, *v1.IssueCloudTokenRequest) (*v1.IssueCloudTokenResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("console.v1.ConsoleService.IssueCloudToken is not implemented"))
+func (UnimplementedConsoleServiceHandler) IssueEndpointToken(context.Context, *v1.IssueEndpointTokenRequest) (*v1.IssueEndpointTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("console.v1.ConsoleService.IssueEndpointToken is not implemented"))
 }

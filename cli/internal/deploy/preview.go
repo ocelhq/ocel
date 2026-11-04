@@ -20,12 +20,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/progress"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 )
 
 func refuseMissingPreviewDomain(cfg *project.Project, wildcard *contractv1.PreviewWildcard, id *contractv1.Identity, hostnameRequired bool, check *run.Span) error {
@@ -83,7 +84,13 @@ func checkGlobalPreviewDomain(wildcard *contractv1.PreviewWildcard, id *contract
 	return nil
 }
 
-func RemovePreview(ctx context.Context, dependencies Dependencies, cwd, name string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
+type RemoveOptions struct {
+	Yes    bool
+	Remote bool
+}
+
+func RemovePreview(ctx context.Context, dependencies Dependencies, cwd, name string, opts RemoveOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+	yes := opts.Yes
 	target, err := dependencies.ResolveTarget(ctx, cwd)
 	if err != nil {
 		return err
@@ -94,11 +101,20 @@ func RemovePreview(ctx context.Context, dependencies Dependencies, cwd, name str
 	if err != nil {
 		return err
 	}
+	if target.IsRemote(opts.Remote) {
+		return dependencies.RunRemote(ctx, target, stdin, commands.RemoteRun{
+			Command: "ocel preview rm",
+			Tiers:   []environmentv1.Tier{environmentv1.Tier_TIER_PREVIEW},
+			Kind:    runnerv1.JobCommand_JOB_COMMAND_PREVIEW_RM,
+			Preview: &runnerv1.PreviewTarget{Name: env.GetIdentity(), Label: env.GetLabel()},
+			Yes:     yes,
+		})
+	}
 
-	policy := consent.NewPolicy("ocel preview rm", yes, dependencies.CanAsk(stdin), stdout, stdin)
+	policy := dependencies.Policy("ocel preview rm", yes, stdout, stdin)
 
 	var removed *consolev1.EnvironmentEvent
-	err = dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}, ConsoleCredential: true}, func(ctx context.Context, p commands.ProviderRun) error {
+	err = dependencies.WithProvider(ctx, cfg, "ocel preview rm", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, ConsoleCredential: true}, func(ctx context.Context, p commands.ProviderRun) error {
 		running, check, provider := p.Run, p.Check, p.Provider
 		readingCtx, reading := check.Child(ctx, cfg.Slug, progress.Reading.Title("preview "+env.GetIdentity()))
 		recorded, err := readPreview(readingCtx, provider, cfg.Slug, env)
@@ -224,12 +240,12 @@ func PrunePreview(ctx context.Context, dependencies Dependencies, cwd, name stri
 	}
 	cfg := target.Project
 
-	policy := consent.NewPlanPolicy("ocel preview prune", yes, dependencies.CanAsk(stdin), stdout, stdin)
+	policy := dependencies.PlanPolicy("ocel preview prune", yes, stdout, stdin)
 	if err := policy.Refuse(); err != nil {
 		return err
 	}
 
-	return dependencies.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}, ConsoleCredential: true}, func(ctx context.Context, p commands.ProviderRun) error {
+	return dependencies.WithProvider(ctx, cfg, policy.Command, commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PREVIEW, Cloud: target.Cloud, CloudScopes: []scopev1.Scope{scopev1.Scope_SCOPE_APPS_WRITE}, ConsoleCredential: true}, func(ctx context.Context, p commands.ProviderRun) error {
 		p.Check.End(nil)
 		plan := p.Run.Phase(progressv1.Phase_PHASE_PLAN)
 		plan.Say(fmt.Sprintf("This will delete every deployment of preview %s but the newest %d and the live one; none of them can be rolled back to afterwards", env.GetIdentity(), keep))

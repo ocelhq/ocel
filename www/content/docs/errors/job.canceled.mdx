@@ -1,0 +1,10 @@
+---
+title: job.canceled
+description: The job running the command on a runner was canceled.
+---
+
+The command ran as a job on a runner, because it was run with `--remote` or the project names no provider, and the job was canceled before it finished. Stopping the CLI never cancels a job; someone canceled it in the console, or a newer job replaced it.
+
+## Fix
+
+Run the command again to start a new job.

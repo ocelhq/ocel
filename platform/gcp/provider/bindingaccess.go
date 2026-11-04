@@ -31,7 +31,7 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 		}
 		targets = append(targets, net.JoinHostPort(host, port))
 	}
-	c, err := p.openClients(ctx)
+	c, err := p.OpenClients(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (p *Provider) ForwardPorts(ctx context.Context, req provider.PortForwardReq
 	if err != nil {
 		return nil, err
 	}
-	opened, err := bastion.New(c, p.services(), p.pushBinary).ForwardPorts(ctx, req.Tier, reach, targets, progress, req.ReportFailure)
+	opened, err := bastion.New(c, p.Services(), p.pushBinary).ForwardPorts(ctx, req.Tier, reach, targets, progress, req.ReportFailure)
 	if err != nil {
 		return nil, err
 	}
@@ -67,11 +67,11 @@ func refuseElsewhere(ctx context.Context, c *gcloud.Clients, tier environment.Ti
 
 func (p *Provider) ServeBindingProxy(ctx context.Context, req provider.BindingProxyRequest, _ progress.Log) (provider.BindingProxy, error) {
 	return buildproxy.Serve(ctx, req, []provider.BindingType{provider.BindingBucket}, func(ctx context.Context, grants []provider.BindingGrant) (provider.BindingProxy, error) {
-		c, err := p.openClients(ctx)
+		c, err := p.OpenClients(ctx)
 		if err != nil {
 			return provider.BindingProxy{}, err
 		}
-		store, err := bucket.Open(ctx, c.Endpoint, c.QuotaProject())
+		store, err := bucket.Open(ctx, c.Credentials, c.Endpoint, c.QuotaProject())
 		if err != nil {
 			return provider.BindingProxy{}, err
 		}

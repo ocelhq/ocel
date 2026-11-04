@@ -16,8 +16,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
@@ -25,7 +25,7 @@ import (
 )
 
 func deployingBehindALB(slug string) provider.DeployPreflight {
-	return provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: environment.TierProduction, Slug: slug}, Edge: alb.Kind}
+	return provider.DeployPreflight{Deploy: provider.DeploySpec{Tier: environment.TierProduction, Slug: slug}, Edge: albresources.Kind}
 }
 
 func TestTheFirstDeployBehindTheALBAddsItsLoadBalancerOnceAndEveryProjectBehindItUsesIt(t *testing.T) {
@@ -51,7 +51,7 @@ func TestTheFirstDeployBehindTheALBAddsItsLoadBalancerOnceAndEveryProjectBehindI
 	if at < 0 {
 		t.Fatalf("listDescribedParts() = %+v, want the %s part", parts, albpart.PartName)
 	}
-	if got := parts[at]; !got.RetiresWithLastUser || !slices.Equal(got.UsedBy, []string{"blog", "shop"}) || got.Shape == nil || len(got.Shape.Resources) == 0 {
+	if got := parts[at]; !got.RetiresWithLastUser || !slices.Equal(got.UsedBy, []string{"blog", "shop"}) || got.Inventory == nil || len(got.Inventory.Resources) == 0 {
 		t.Errorf("the %s part = %+v, want it used by blog and shop, priced, and retiring with its last user", albpart.PartName, got)
 	}
 }

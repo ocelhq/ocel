@@ -22,7 +22,7 @@ func TestAGoogleRESTCallIsASpanNamedForTheAPIMethodItCalls(t *testing.T) {
 	}{
 		{
 			send: func(ctx context.Context) error {
-				topics, err := ports.NewRESTService(ctx, pubsub.NewService, "", "")
+				topics, err := ports.NewRESTService(ctx, ports.Credentials{}, pubsub.NewService, "", "")
 				if err != nil {
 					return err
 				}
@@ -33,7 +33,7 @@ func TestAGoogleRESTCallIsASpanNamedForTheAPIMethodItCalls(t *testing.T) {
 		},
 		{
 			send: func(ctx context.Context) error {
-				services, err := ports.NewRESTService(ctx, run.NewService, "", "")
+				services, err := ports.NewRESTService(ctx, ports.Credentials{}, run.NewService, "", "")
 				if err != nil {
 					return err
 				}
@@ -44,7 +44,7 @@ func TestAGoogleRESTCallIsASpanNamedForTheAPIMethodItCalls(t *testing.T) {
 		},
 		{
 			send: func(ctx context.Context) error {
-				services, err := ports.NewRESTService(ctx, run.NewService, "", "")
+				services, err := ports.NewRESTService(ctx, ports.Credentials{}, run.NewService, "", "")
 				if err != nil {
 					return err
 				}
@@ -55,7 +55,7 @@ func TestAGoogleRESTCallIsASpanNamedForTheAPIMethodItCalls(t *testing.T) {
 		},
 		{
 			send: func(ctx context.Context) error {
-				services, err := ports.NewRESTService(ctx, run.NewService, "", "")
+				services, err := ports.NewRESTService(ctx, ports.Credentials{}, run.NewService, "", "")
 				if err != nil {
 					return err
 				}
@@ -66,7 +66,7 @@ func TestAGoogleRESTCallIsASpanNamedForTheAPIMethodItCalls(t *testing.T) {
 		},
 		{
 			send: func(ctx context.Context) error {
-				services, err := ports.NewRESTService(ctx, runv1.NewService, "", "", option.WithEndpoint("https://europe-west1-run.googleapis.com/"))
+				services, err := ports.NewRESTService(ctx, ports.Credentials{}, runv1.NewService, "", "", option.WithEndpoint("https://europe-west1-run.googleapis.com/"))
 				if err != nil {
 					return err
 				}

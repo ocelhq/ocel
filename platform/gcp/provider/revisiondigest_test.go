@@ -30,7 +30,7 @@ func TestARevisionAnotherReleaseMadeUnderThisOneIsRefused(t *testing.T) {
 	theirs.Image = shopWebImage + "two"
 	server.ReleasedUnder = desiredOf(t, theirs).Template
 
-	_, err := providerServing(server, t).services().DeployService(context.Background(), ours, nil)
+	_, err := providerServing(server, t).Services().DeployService(context.Background(), ours, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Errorf("DeployService() whose latest revision another release made = %v, want a %s refusal: this release would route traffic to the other release's image", err, refusal.CodeBusy)
@@ -44,7 +44,7 @@ func TestPruningARevisionCloudRunReportsByDigestUntagsTheTagItsReleaseRan(t *tes
 	first := functionRelease("d1", shopWebImage+"one")
 	one := released.provision(t, first)
 	active := released.provision(t, functionRelease("d2", shopWebImage+"two"))
-	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+	if _, err := p.Services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 
@@ -79,7 +79,7 @@ func TestPruningARevisionCloudRunReportsByDigestLeavesAnImageADeployInFlightReco
 	first := functionRelease("d1", image)
 	one := released.provision(t, first)
 	active := released.provision(t, functionRelease("d2", fake.RegistryServer+"/acme/shop.web-checkout:sha256-two"))
-	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+	if _, err := p.Services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 	recordStartingImage(t, p, aPreviewOfTheSameApp(), image)
@@ -112,7 +112,7 @@ func TestARevisionWithoutAnnotationThatRunsAnotherImageIsRefused(t *testing.T) {
 	theirs.Image = shopWebImage + "two"
 	server.ReleasedUnder = desiredOf(t, theirs).Template
 
-	_, err := providerServing(server, t).services().DeployService(context.Background(), ours, nil)
+	_, err := providerServing(server, t).Services().DeployService(context.Background(), ours, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Errorf("DeployService() whose latest revision another release made = %v, want a %s refusal: this release would route traffic to the other release's image", err, refusal.CodeBusy)
@@ -126,7 +126,7 @@ func TestPruningARevisionWithoutAnnotationUntagsTheTagItRan(t *testing.T) {
 	first := functionRelease("d1", shopWebImage+"one")
 	one := released.provision(t, first)
 	active := released.provision(t, functionRelease("d2", shopWebImage+"two"))
-	if _, err := p.services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
+	if _, err := p.Services().Pin(context.Background(), active.Physical, active.Revision, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", active.Revision, err)
 	}
 

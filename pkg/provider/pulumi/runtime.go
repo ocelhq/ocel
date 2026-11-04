@@ -18,7 +18,10 @@ import (
 
 const PinnedVersion = "3.259.0"
 
-const cacheDirName = ".ocel"
+const (
+	cacheDirName     = ".ocel"
+	pulumiHomeEnvVar = "PULUMI_HOME"
+)
 
 var pinned installation
 
@@ -41,6 +44,10 @@ func install(ctx context.Context, progress progress.Log) (_ auto.PulumiCommand, 
 		return nil, fmt.Errorf("parse pinned Pulumi version: %w", err)
 	}
 
+	if command, ok := shipped(version); ok {
+		span.SetAttributes(attribute.Bool("pulumi.shipped", true))
+		return command, nil
+	}
 	root, err := installRoot(version)
 	if err != nil {
 		return nil, err
@@ -91,4 +98,27 @@ func installRoot(version semver.Version) (string, error) {
 		return "", fmt.Errorf("create Pulumi runtime dir: %w", err)
 	}
 	return root, nil
+}
+
+func shipped(version semver.Version) (auto.PulumiCommand, bool) {
+	home := os.Getenv(pulumiHomeEnvVar)
+	if home == "" {
+		return nil, false
+	}
+	command, err := auto.NewPulumiCommand(&auto.PulumiCommandOptions{Version: version, Root: home})
+	if err != nil || !command.Version().Equals(version) {
+		return nil, false
+	}
+	return command, true
+}
+
+func pulumiHome() (string, error) {
+	if home := os.Getenv(pulumiHomeEnvVar); home != "" {
+		return home, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return filepath.Join(home, ".pulumi"), nil
 }

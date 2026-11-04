@@ -12,8 +12,8 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
-	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 func componentNamed(t *testing.T, est *costv1.Estimate, resource, name string) *costv1.CostComponent {
@@ -51,13 +51,13 @@ func estimateOfType(t *testing.T, est *costv1.Estimate, set *costv1.ResourceSet,
 func TestPriceOfAProductionDeployBehindTheLoadBalancer(t *testing.T) {
 	client, costs := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
-		Edge:        &contractv1.EdgeSelection{Kind: string(alb.Kind)},
+		Edge:        &contractv1.EdgeSelection{Kind: string(albresources.Kind)},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
@@ -94,19 +94,19 @@ func TestPriceOfAProductionDeployBehindTheLoadBalancer(t *testing.T) {
 		}
 	}
 	if cov := est.GetCoverage(); cov.GetUnsupported() != 0 || cov.GetNoPrice() != 0 {
-		t.Errorf("coverage = %v, want everything the shape lists priced or free", cov)
+		t.Errorf("coverage = %v, want everything the inventory lists priced or free", cov)
 	}
 }
 
 func TestPriceOfADirectDeployBillsEgressOnTheService(t *testing.T) {
 	client, costs := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: costv1.Profile_PROFILE_HEAVY}})
 	if err != nil {
@@ -184,12 +184,12 @@ func TestPriceOfAServiceBilledPerRequestChargesItsMinimumInstancesAtTheIdleRate(
 func TestTheEnvSourceSyncBillsOnlyTheRequestsItsScheduleSends(t *testing.T) {
 	client, costs := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	const (
 		sync     = "project:shop/shared:production/google_cloud_run_v2_service:ocel-prod-env-sync"
@@ -244,17 +244,17 @@ func realtimeManifest() *contractv1.Manifest {
 	return manifest
 }
 
-func TestARealtimeIsShapedAsItsEnvironmentsGatewayTopicKeysAndSigningKey(t *testing.T) {
+func TestARealtimeIsInventoriedAsItsEnvironmentsGatewayTopicKeysAndSigningKey(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    realtimeManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	names := namesOf(t, newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"}))
 	want := map[string]bool{
 		"google_cloud_run_v2_service:" + gatewayOf(t, names, "shop", "prod"):                                         true,
 		"google_pubsub_topic:" + gatewayOf(t, names, "shop", "prod"):                                                 true,
@@ -263,35 +263,35 @@ func TestARealtimeIsShapedAsItsEnvironmentsGatewayTopicKeysAndSigningKey(t *test
 		"google_secret_manager_secret:" + must(names.RealtimeSigningSecret("shop", "prod", "app")):                   true,
 	}
 	for _, resource := range set.GetResources() {
-		shaped := resource.GetType() + ":" + resource.GetName()
-		if want[shaped] {
+		inventoried := resource.GetType() + ":" + resource.GetName()
+		if want[inventoried] {
 			if resource.GetScope() != "project:shop/environment:prod" {
-				t.Errorf("%s is shaped under %s, want it under the environment", shaped, resource.GetScope())
+				t.Errorf("%s is inventoried under %s, want it under the environment", inventoried, resource.GetScope())
 			}
-			delete(want, shaped)
+			delete(want, inventoried)
 		}
 	}
 	if len(want) > 0 {
-		t.Errorf("the shape leaves out %v", want)
+		t.Errorf("the inventory leaves out %v", want)
 	}
 }
 
 func TestPriceOfARealtimeGatewayBillsEveryConnectedHourAtTheRequestRate(t *testing.T) {
 	client, costs := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    realtimeManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)
 	}
 	var gateway string
-	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	names := namesOf(t, newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"}))
 	for _, resource := range set.GetResources() {
 		if resource.GetName() == gatewayOf(t, names, "shop", "prod") {
 			gateway = resource.GetId()
@@ -304,6 +304,6 @@ func TestPriceOfARealtimeGatewayBillsEveryConnectedHourAtTheRequestRate(t *testi
 		t.Errorf("memory = %s, want 6.57 (730 connected hours of 1 GiB at 0.0000025 a second)", got)
 	}
 	if cov := est.GetCoverage(); cov.GetUnsupported() != 0 || cov.GetNoPrice() != 0 {
-		t.Errorf("coverage = %v, want everything the shape lists priced or free", cov)
+		t.Errorf("coverage = %v, want everything the inventory lists priced or free", cov)
 	}
 }

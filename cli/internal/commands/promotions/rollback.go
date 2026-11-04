@@ -11,16 +11,15 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/readiness"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -67,7 +66,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	}
 	cfg := target.Project
 
-	policy := consent.NewPlanPolicy("ocel rollback", opts.yes, invocation.CanAsk(stdin), stdout, stdin)
+	policy := invocation.PlanPolicy("ocel rollback", opts.yes, stdout, stdin)
 	policy.DryRun = opts.dry
 	if err := policy.Refuse(); err != nil {
 		return err
@@ -80,7 +79,7 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 	}
 
 	var report *consolev1.Deployment
-	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun, Cloud: target.Cloud, CloudScopes: []cloudv1.Scope{cloudv1.Scope_SCOPE_APPS_WRITE}, ConsoleCredential: true}, func(ctx context.Context, p commands.ProviderRun) (err error) {
+	err = invocation.WithProvider(ctx, cfg, "ocel rollback", commands.OpenOptions{Intent: commands.UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION, Policy: policy, DryRun: policy.DryRun, Cloud: target.Cloud, CloudScopes: []scopev1.Scope{scopev1.Scope_SCOPE_APPS_WRITE}, ConsoleCredential: true}, func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider := p.Run, p.Check, p.Provider
 		var attempt *deployreport.Attempt
 		var succeeded *consolev1.Deployment

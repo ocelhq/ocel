@@ -12,18 +12,18 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/jobinput"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 )
 
 type holds struct {
 	mu      sync.Mutex
 	waiting []*streamv1.WaitingEvent
 	resumed []string
-	asked   chan *cloudv1.JobInput
+	asked   chan *runnerv1.JobInput
 }
 
-func newHolds() *holds { return &holds{asked: make(chan *cloudv1.JobInput, 4)} }
+func newHolds() *holds { return &holds{asked: make(chan *runnerv1.JobInput, 4)} }
 
 func (h *holds) Hold(waiting *streamv1.WaitingEvent) func(string) {
 	h.mu.Lock()
@@ -37,7 +37,7 @@ func (h *holds) Hold(waiting *streamv1.WaitingEvent) func(string) {
 	}
 }
 
-func (h *holds) next(t *testing.T) *cloudv1.JobInput {
+func (h *holds) next(t *testing.T) *runnerv1.JobInput {
 	t.Helper()
 	select {
 	case input := <-h.asked:
@@ -93,7 +93,7 @@ func TestMissingVariablesAreHeldAsAJobInputAndResolvedByTheLineNamingItsID(t *te
 	h := newHolds()
 	answering(t, h, write, func(id string) string { return fmt.Sprintf(`{"input_id":%q,"resolved":true}`, id) })
 
-	needed := &cloudv1.VariablesNeeded{Tier: environmentv1.Tier_TIER_PRODUCTION, Variables: []*cloudv1.NeededVariable{{Key: "DATABASE_URL", Secret: true}}}
+	needed := &runnerv1.VariablesNeeded{Tier: environmentv1.Tier_TIER_PRODUCTION, Variables: []*runnerv1.NeededVariable{{Key: "DATABASE_URL", Secret: true}}}
 	missing := &streamv1.MissingVariables{Cells: []*streamv1.MissingVariable{{Key: "DATABASE_URL", Reason: "no value"}}}
 	resolved, err := jobinput.New(stdin).Resolve(context.Background(), h, needed, missing)
 	if err != nil || !resolved {

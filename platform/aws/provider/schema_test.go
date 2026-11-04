@@ -5,12 +5,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/configdoc/schematest"
+	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 )
 
 func TestProviderSchemaIsCommitted(t *testing.T) {
-	generated, err := configdoc.ProviderSchema(string(Vendor), Options{}, edges.SupportedEdges(), dns.Kinds())
+	generated, err := configdoc.ProviderSchema(string(control.Vendor), control.Options{}, edges.SupportedEdges(), dns.Kinds())
 	if err != nil {
 		t.Fatalf("provider schema: %v", err)
 	}

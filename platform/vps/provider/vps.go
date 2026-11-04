@@ -38,6 +38,7 @@ import (
 const Vendor provider.Vendor = "vps"
 
 type Provider struct {
+	assets     host.Assets
 	options    Options
 	project    string
 	host       *host.Host
@@ -62,25 +63,45 @@ type Provider struct {
 
 	dial       sync.Mutex
 	sshSession *ssh.Session
+	login      *certificateLogin
 
 	liveness.Net
 }
 
-func New(_ context.Context, settings provider.Settings) (provider.Provider, error) {
-	decoded, err := provider.Decode[Options](Vendor, settings.Options)
+func decodeOptions(options provider.Options) (Options, error) {
+	decoded, err := provider.Decode[Options](Vendor, options)
+	if err != nil {
+		return Options{}, err
+	}
+	if strings.TrimSpace(decoded.SSH.Alias) == "" && strings.TrimSpace(decoded.SSH.Host) == "" {
+		return Options{}, refusal.Refuse(refusal.CodeInvalid, "option %q names no machine: give it an ssh_config alias or an object with a host", "ssh")
+	}
+	if port := decoded.SSH.Port; port != 0 && (port < 1 || port > 65535) {
+		return Options{}, refusal.Refuse(refusal.CodeInvalid, "option %q names port %d, which is outside 1-65535", "ssh", port)
+	}
+	if err := decoded.Proxy.RefuseUnusable(decoded.Certificates); err != nil {
+		return Options{}, err
+	}
+	return decoded, nil
+}
+
+func New(assets host.Assets) func(context.Context, provider.Settings) (provider.Provider, error) {
+	return func(_ context.Context, settings provider.Settings) (provider.Provider, error) {
+		return newWith(assets, settings)
+	}
+}
+
+func newWith(assets host.Assets, settings provider.Settings) (provider.Provider, error) {
+	decoded, err := decodeOptions(settings.Options)
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(decoded.SSH.Alias) == "" && strings.TrimSpace(decoded.SSH.Host) == "" {
-		return nil, refusal.Refuse(refusal.CodeInvalid, "option %q names no machine: give it an ssh_config alias or an object with a host", "ssh")
+	p := &Provider{options: decoded, project: settings.Slug, now: time.Now, assets: assets}
+	if settings.WebIdentity != nil {
+		if p.login, err = newCertificateLogin(*settings.WebIdentity, strings.TrimSpace(decoded.SSH.Destination()), decoded.SSH.Port); err != nil {
+			return nil, err
+		}
 	}
-	if port := decoded.SSH.Port; port != 0 && (port < 1 || port > 65535) {
-		return nil, refusal.Refuse(refusal.CodeInvalid, "option %q names port %d, which is outside 1-65535", "ssh", port)
-	}
-	if err := decoded.Proxy.RefuseUnusable(decoded.Certificates); err != nil {
-		return nil, err
-	}
-	p := &Provider{options: decoded, project: settings.Slug, now: time.Now}
 	p.onHost(p.conn)
 	if len(settings.Transforms) > 0 {
 		p.transform = nodePass(settings.ProjectDir, settings.Transforms)
@@ -88,13 +109,13 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 	return p, nil
 }
 
-func NewProvider(options Options) *Provider {
-	p := &Provider{options: options, now: time.Now}
+func NewProvider(assets host.Assets, options Options) *Provider {
+	p := &Provider{options: options, now: time.Now, assets: assets}
 	return p.onHost(p.conn)
 }
 
-func newProvider(options Options, dial ssh.Dial) *Provider {
-	return (&Provider{options: options, now: time.Now}).onHost(dial)
+func newProvider(assets host.Assets, options Options, dial ssh.Dial) *Provider {
+	return (&Provider{options: options, now: time.Now, assets: assets}).onHost(dial)
 }
 
 func (p *Provider) Facts() provider.Facts {
@@ -112,6 +133,8 @@ func (p *Provider) Facts() provider.Facts {
 		RunsTunnels:              true,
 		RetainsContainerReleases: true,
 		WorkerCeilings:           []provider.WorkerCeiling{{Compute: provider.ComputeContainer, Unbounded: true}},
+		WebIdentity:              &provider.WebIdentityFacts{},
+		ConnectorRunsJobs:        true,
 	}
 }
 
@@ -135,7 +158,7 @@ func (p *Provider) resourceHooks() resources.Hooks {
 		Bucket:     component.Hooks(p.buckets()),
 		KV:         component.Hooks(kv.New(p.components())),
 		Topic:      component.Hooks(topic.New(p.components(), &p.queues)),
-		Realtime:   component.Hooks(realtime.New(p.components())),
+		Realtime:   component.Hooks(realtime.New(p.components(), p.assets.RealtimeBinarySum)),
 		Containers: &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
 		Retention:  &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},
 
@@ -146,13 +169,13 @@ func (p *Provider) resourceHooks() resources.Hooks {
 func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	box := elevating{Bootstrap: host.NewBootstrap(p.host, Vendor, p.project), elevated: p.elevated}
 	if kind == edge.None {
-		return exposed{elevating: box, refuseClosedPorts: p.refuseServingPortsClosedFromOutside}, nil
+		return p.addConsoleTrust(exposed{elevating: box, refuseClosedPorts: p.refuseServingPortsClosedFromOutside}), nil
 	}
 	front, err := edges{provider: p}.Open(kind, nil)
 	if err != nil {
 		return nil, err
 	}
-	return fronted{elevating: box, front: front}, nil
+	return p.addConsoleTrust(fronted{elevating: box, front: front}), nil
 }
 
 func (p *Provider) Stacks() provider.Stacks {

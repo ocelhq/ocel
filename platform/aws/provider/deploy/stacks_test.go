@@ -37,7 +37,7 @@ func (unlistableStore) List(context.Context, records.Partition, ...string) ([]re
 	return nil, errors.New("listed a partition")
 }
 
-func TestStackResourcesNameEveryResourceThePulumiStateHoldsByItsCloudFormationType(t *testing.T) {
+func TestAStacksRecordedResourcesNameEveryResourceThePulumiStateHoldsByItsCloudFormationType(t *testing.T) {
 	t.Parallel()
 
 	stacks, _, spec := inventoriedStacks(t, nil)
@@ -46,6 +46,8 @@ func TestStackResourcesNameEveryResourceThePulumiStateHoldsByItsCloudFormationTy
 		{Type: "aws:iam/role:Role", ID: "shop-prod-web-role"},
 		{Type: "ocel:index:AssetSet", ID: "shop-prod-web-assets"},
 	}}
+
+	recordResourcesOf(t, stacks, spec.Ref)
 
 	listed, err := stacks.Resources(context.Background(), provider.StackResources{Ref: spec.Ref})
 	if err != nil {
@@ -62,7 +64,7 @@ func TestStackResourcesNameEveryResourceThePulumiStateHoldsByItsCloudFormationTy
 	}
 }
 
-func TestStackResourcesOfAStackNeverProvisionedAreNone(t *testing.T) {
+func TestStackResourcesOfAStackNeverRecordedAreNone(t *testing.T) {
 	t.Parallel()
 
 	stacks, _, spec := inventoriedStacks(t, map[string][]pulumi.ExportedResource{
@@ -88,6 +90,8 @@ func TestStackResourcesOfTheNewestReleaseNameTheStackHoldingItsAppsWorkers(t *te
 	worker := pulumi.ExportedResource{Type: "aws:lambda/function:Function", ID: "ocel-app-shop-prod-web-media"}
 	stacks.engine.(*mockedEngine).exported = map[string][]pulumi.ExportedResource{workersRef(newer).Name.String(): {worker}}
 	ctx := context.Background()
+	recordResourcesOf(t, stacks, newer)
+	recordResourcesOf(t, stacks, older)
 
 	ofNewer, err := stacks.Resources(ctx, provider.StackResources{Ref: newer, NewestRelease: true})
 	if err != nil {
@@ -104,5 +108,16 @@ func TestStackResourcesOfTheNewestReleaseNameTheStackHoldingItsAppsWorkers(t *te
 	}
 	if slices.Contains(ofOlder, held) {
 		t.Errorf("Resources(older) = %+v, want no workers: they are named once, under the newest release", ofOlder)
+	}
+}
+
+func recordResourcesOf(t *testing.T, stacks *Stacks, ref provider.StackRef) {
+	t.Helper()
+	opened, err := stacks.at(context.Background(), ref, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := opened.recordResources(context.Background(), ref); err != nil {
+		t.Fatalf("recordResources(%s) = %v", ref.Name, err)
 	}
 }

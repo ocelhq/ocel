@@ -27,7 +27,7 @@ func (p containerRuntime) Arch(ctx context.Context, app, declared string) (strin
 }
 
 func (p containerRuntime) Binary(_ context.Context, arch string) ([]byte, error) {
-	return host.ContainerRuntime(arch)
+	return host.ContainerRuntime(p.assets, arch)
 }
 
 func (p containerRuntime) FunctionBase(ctx context.Context, framework buildoutput.Framework) (v1.Image, error) {
@@ -43,7 +43,7 @@ func (p containerRuntime) FunctionFiles(_ context.Context, framework buildoutput
 	if err != nil {
 		return nil, err
 	}
-	return host.NextContainerRuntime(goarch)
+	return host.NextContainerRuntime(p.assets, goarch)
 }
 
 func (p containerRuntime) FunctionBuildPaths(buildoutput.Framework) []string {

@@ -28,6 +28,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -404,7 +405,7 @@ func TestASignatureAskedForOffGoogleCloudSaysOnlyTheDeployedAppCanSign(t *testin
 	t.Cleanup(metadataServer.Close)
 	t.Setenv("GCE_METADATA_HOST", strings.TrimPrefix(metadataServer.URL, "http://"))
 
-	store, err := Open(context.Background(), "http://storage.invalid", "")
+	store, err := Open(context.Background(), ports.Credentials{}, "http://storage.invalid", "")
 	if err != nil {
 		t.Fatalf("Open() = %v", err)
 	}
@@ -428,7 +429,7 @@ func TestTheAccountAnAppSignsAsIsAskedAgainAfterTheMetadataServerFailedAndKeptOn
 	t.Cleanup(metadataServer.Close)
 	t.Setenv("GCE_METADATA_HOST", strings.TrimPrefix(metadataServer.URL, "http://"))
 
-	store, err := Open(context.Background(), "http://storage.invalid", "")
+	store, err := Open(context.Background(), ports.Credentials{}, "http://storage.invalid", "")
 	if err != nil {
 		t.Fatalf("Open() = %v", err)
 	}
@@ -509,7 +510,7 @@ func billedProjectOfAStoreOpenedWith(t *testing.T, quotaProject string, credenti
 	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", path)
 	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "")
 
-	store, err := Open(context.Background(), "", quotaProject)
+	store, err := Open(context.Background(), ports.Credentials{}, "", quotaProject)
 	if err != nil {
 		t.Fatal(err)
 	}

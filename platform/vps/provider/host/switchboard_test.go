@@ -408,7 +408,7 @@ func TestASwitchboardRestoredIsTheOneBootstrapRunsWithTheBinaryTheBoxHas(t *test
 		if err := b.fronted(front).CheckProxy(context.Background()); err != nil {
 			t.Fatalf("%s: CheckProxy() = %v, want the switchboard restored", what, err)
 		}
-		bootstrapped := switchboardBox(switchboardBinary(ssh.AMD64), front)
+		bootstrapped := switchboardBox(switchboardBinary(testAssets, ssh.AMD64), front)
 		want := slices.Clone(bootstrapped.Create())
 		labelled := slices.Index(want, docker.ConfigLabel+"="+bootstrapped.Config)
 		want[labelled] = docker.ConfigLabel + "=" + sum

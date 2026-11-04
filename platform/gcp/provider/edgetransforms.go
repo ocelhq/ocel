@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 func (p *Provider) evaluateFront(ctx context.Context, tier environment.Tier) (transform.Result, error) {
@@ -26,7 +27,7 @@ func (p *Provider) evaluateAppEdge(ctx context.Context, spec provider.StackSpec)
 }
 
 func (p *Provider) recordAppEdge(spec provider.StackSpec, evaluated transform.Result) {
-	if spec.App == nil || spec.Edge == nil || spec.Edge.Kind() != alb.Kind {
+	if spec.App == nil || spec.Edge == nil || spec.Edge.Kind() != albresources.Kind {
 		return
 	}
 	p.appEdges.Set(spec.Ref.Tier, spec.Ref.Project, spec.App.App, evaluated)

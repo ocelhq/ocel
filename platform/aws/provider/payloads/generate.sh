@@ -64,3 +64,15 @@ pack "$stage/realtime-authorizer" "$dist/realtime-authorizer.zip"
 for fn in $functions; do
   cp "$root/platform/aws/functions/$fn/dist/$fn.zip" "$dist/$fn.zip"
 done
+
+sha256_of() {
+  if command -v sha256sum >/dev/null; then
+    sha256sum "$1"
+  else
+    shasum -a 256 "$1"
+  fi | cut -d ' ' -f 1
+}
+
+for payload in "$dist"/*.zip "$dist"/container-runtime-*; do
+  sha256_of "$payload" >"$payload.sha256"
+done

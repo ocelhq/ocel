@@ -120,7 +120,7 @@ func readPostgres(resource provider.Resource) (postgresSpec, error) {
 	return postgresSpec{version: version}, nil
 }
 
-func shapeProperties(region string, instance *sqladmin.DatabaseInstance) map[string]any {
+func pricedProperties(region string, instance *sqladmin.DatabaseInstance) map[string]any {
 	settings := settingsOf(instance)
 	return map[string]any{
 		"region":           region,
@@ -782,9 +782,15 @@ func New(openClients func(ctx context.Context) (*gcloud.Clients, error), store r
 	return &Postgres{openClients: openClients, records: store, cipher: cipher, skipChecks: skipChecks}
 }
 
+var bindingTypes = []provider.BindingType{provider.BindingPostgres}
+
+func (p *Postgres) Listing() component.Component {
+	return component.Component{Types: bindingTypes, ListResources: p.ListResources}
+}
+
 func (p *Postgres) Component() component.Component {
 	return component.Component{
-		Types:         []provider.BindingType{provider.BindingPostgres},
+		Types:         bindingTypes,
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
 		Egress:        true,
@@ -793,30 +799,30 @@ func (p *Postgres) Component() component.Component {
 			_, err := readPostgres(resource)
 			return err
 		},
-		Shape:      shapePostgres,
+		Inventory:  inventoryPostgres,
 		Transforms: map[provider.BindingType]*component.Transform{provider.BindingPostgres: transformTarget()},
 	}
 }
 
-func shapePostgres(shape component.Shape, declared []provider.Resource) error {
-	tier := shape.Request.Deploy.Tier
+func inventoryPostgres(inventory component.Inventory, declared []provider.Resource) error {
+	tier := inventory.Request.Deploy.Tier
 	for _, resource := range declared {
 		spec, err := readPostgres(resource)
 		if err != nil {
 			return err
 		}
-		instance, err := shape.Names.UntaggedPostgresInstance(shape.Request.Deploy.Slug, shape.Request.Deploy.Env, resource.Name)
+		instance, err := inventory.Names.UntaggedPostgresInstance(inventory.Request.Deploy.Slug, inventory.Request.Deploy.Env, resource.Name)
 		if err != nil {
 			return err
 		}
-		result := shape.Transforms.For(transformKind, resource.Name)
+		result := inventory.Transforms.For(transformKind, resource.Name)
 		known, unknown := instanceSurface.SplitOutputs(result.Patches[transformSurface])
-		own := newInstance(spec, tier, shape.Region, shape.Names.Project(), shape.Names.NetworkPath(tier), nil)
+		own := newInstance(spec, tier, inventory.Region, inventory.Names.Project(), inventory.Names.NetworkPath(tier), nil)
 		patched, err := instanceSurface.Patch("postgres "+resource.Name, *own, known, nil, surface.Recorded{})
 		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.SQLInstanceType, instance, shape.Region, shapeProperties(shape.Region, &patched.Desired), surface.ListPriced(unknown, pricedSettings)...)
+		inventory.Tree.Add(inventory.Environment, inventory.Vendor, cost.SQLInstanceType, instance, inventory.Region, pricedProperties(inventory.Region, &patched.Desired), surface.ListPriced(unknown, pricedSettings)...)
 	}
 	return nil
 }

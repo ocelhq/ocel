@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
 
@@ -33,7 +33,7 @@ func (c checkpoint) String() string { return c.project + "/" + c.stack }
 
 func (b Engine) RefuseProjectStacks(ctx context.Context, read Survey) error {
 	bucket := read.Buckets[naming.StorageState]
-	live, found, err := b.findCheckpoint(ctx, bucket, alb.ListTierProjects(read.Tier))
+	live, found, err := b.findCheckpoint(ctx, bucket, albresources.ListTierProjects(read.Tier))
 	if err != nil || !found {
 		return err
 	}

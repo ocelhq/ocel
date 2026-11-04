@@ -11,19 +11,19 @@ import (
 const registryUser = "oauth2accesstoken"
 
 func (p *Provider) EnsureImageRegistry(ctx context.Context, tier environment.Tier) (provider.RegistryTarget, error) {
-	if p.emulated() {
+	if p.Emulated() {
 		return provider.RegistryTarget{}, nil
 	}
 	named, err := p.Names(ctx)
 	if err != nil {
 		return provider.RegistryTarget{}, err
 	}
-	token, err := p.tokens.Token(ctx)
+	token, err := p.Tokens.Token(ctx)
 	if err != nil {
 		return provider.RegistryTarget{}, err
 	}
 	return provider.RegistryTarget{
-		Server:    p.options.Region + names.DockerRegistryHost,
+		Server:    p.Options.Region + names.DockerRegistryHost,
 		Namespace: named.Project() + "/" + named.Repository(tier),
 		Username:  registryUser,
 		Password:  token,

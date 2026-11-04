@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/machine"
 	"github.com/ocelhq/ocel/platform/vps/provider/routing"
@@ -273,5 +275,58 @@ func TestASurfaceThatClaimsNothingStillAnswersNothing(t *testing.T) {
 		if upstream, ok := answer(hostname, "/"); ok {
 			t.Errorf("%q is answered from %q, and an app claiming no hostname is a route nothing should reach", hostname, upstream)
 		}
+	}
+}
+
+func TestTheDeployLoginReadsTheInstalledConnectorWithoutRoot(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("reads the connector as a login that is not root")
+	}
+	dir := t.TempDir()
+	binary, config := filepath.Join(dir, "connector"), filepath.Join(dir, "config.json")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\ncase \"$*\" in --version) echo 1.2.3 ;; *--print-public-key*) echo ZmFrZQ== ;; esac\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, connectorConfig(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := exec.Command("/bin/sh", "-c", surveyConnectorAt(binary, config)).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := readConnectorState(string(rendered))
+	if err != nil {
+		t.Fatalf("readConnectorState(%q) = %v, want the deploy login to read the connector it runs", rendered, err)
+	}
+	if !state.Installed || state.Version != "1.2.3" || state.PublicKey != "ZmFrZQ==" {
+		t.Errorf("state = %+v", state)
+	}
+}
+
+func TestAConnectorIsRoutedBeforeItsUnitStartsAndRestartedWhenTheRouteIsNew(t *testing.T) {
+	t.Parallel()
+
+	box := &claimBench{bench: newBench(nil), recorded: string(mustWrite(t, routed()))}
+	absent := ""
+	box.answer = servesPair(box.bench, &box.recorded, &absent)
+	if _, err := NewConnector(box.host()).Install(context.Background(), "box.example.com", []byte("a connector"), connectorConfig(), progress.Discard()); err != nil {
+		t.Fatalf("Install() = %v", err)
+	}
+	commands := box.commands()
+	routedAt := slices.IndexFunc(commands, func(command string) bool {
+		return strings.Contains(command, "mktemp "+shell.Quote(boxapi.RoutingTablePath+".XXXXXX"))
+	})
+	startedAt := slices.IndexFunc(commands, func(command string) bool {
+		return strings.HasPrefix(command, "install ") && strings.Contains(command, shell.Quote(connectorUnitFile))
+	})
+	if routedAt < 0 || startedAt < 0 || routedAt > startedAt {
+		t.Errorf("the route was written at command %d and the unit started at %d, want the route first so the connector reads it when it starts", routedAt, startedAt)
+	}
+	if !slices.ContainsFunc(commands, func(command string) bool {
+		return strings.Contains(command, "systemctl try-restart "+shell.Quote(ConnectorUnit))
+	}) {
+		t.Error("a connector whose route is new is never restarted, and keeps serving without it")
 	}
 }

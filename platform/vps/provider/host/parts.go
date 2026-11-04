@@ -47,11 +47,11 @@ func (h *Host) parts() []Part {
 		tierPart{host: h},
 		storagePart{},
 		enginePart{host: h},
-		itemsPart(func(read Reading) []machine.Item { return LiveItems(read.Arch) }),
+		itemsPart(func(read Reading) []machine.Item { return LiveItems(read.Assets, read.Arch) }),
 		itemsPart(func(read Reading) []machine.Item { return DockerAccessItems(read.Front) }),
-		itemsPart(func(read Reading) []machine.Item { return EnvSourceSyncItems(read.Tier, read.Arch) }),
+		itemsPart(func(read Reading) []machine.Item { return EnvSourceSyncItems(read.Assets, read.Tier, read.Arch) }),
 		proxyPart{host: h},
-		itemsPart(func(read Reading) []machine.Item { return RealtimeItems(read.Arch) }),
+		itemsPart(func(read Reading) []machine.Item { return RealtimeItems(read.Assets, read.Arch) }),
 		itemsPart(func(Reading) []machine.Item { return BackupItems() }),
 	}
 }
@@ -78,7 +78,7 @@ func (p tierPart) Apply(ctx context.Context, step *Step) error {
 type storagePart struct{}
 
 func (storagePart) Items(read Reading) []machine.Item {
-	return StorageItems(read.Tier, read.Keys, read.Arch)
+	return StorageItems(read.Assets, read.Tier, read.Keys, read.Arch)
 }
 
 func (p storagePart) Apply(ctx context.Context, step *Step) error {
@@ -120,7 +120,7 @@ func (p enginePart) Apply(ctx context.Context, step *Step) error {
 type proxyPart struct{ host *Host }
 
 func (proxyPart) Items(read Reading) []machine.Item {
-	return append(ProxyItems(read.Arch, read.Front), read.recorded...)
+	return append(ProxyItems(read.Assets, read.Arch, read.Front), read.recorded...)
 }
 
 func (p proxyPart) Apply(ctx context.Context, step *Step) error {
@@ -134,7 +134,7 @@ func (p proxyPart) Apply(ctx context.Context, step *Step) error {
 	if err := read.move.removeOldFront(ctx, step.progress); err != nil {
 		return err
 	}
-	if err := step.Write(ctx, ProxyItems(read.Arch, read.Front)); err != nil {
+	if err := step.Write(ctx, ProxyItems(read.Assets, read.Arch, read.Front)); err != nil {
 		return err
 	}
 	placeRoutes := p.host.routing.Rerender

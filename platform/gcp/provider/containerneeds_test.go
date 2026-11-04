@@ -10,16 +10,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 var nextContainerNeeds = []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming, edge.NeedRevalidation}
 
 func TestANextContainerBehindTheLoadBalancerServingPrerendersDeploysWithNoWaiver(t *testing.T) {
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 
-	verdict, err := conformance.CheckContainerNeeds(t, p, alb.Kind, nextContainerNeeds)
+	verdict, err := conformance.CheckContainerNeeds(t, p, albresources.Kind, nextContainerNeeds)
 	if err != nil {
 		t.Fatalf("the need check = %v, want it to pass: Cloud CDN stores and purges a Next container's tagged pages", err)
 	}
@@ -29,7 +29,7 @@ func TestANextContainerBehindTheLoadBalancerServingPrerendersDeploysWithNoWaiver
 }
 
 func TestANextContainerServedByCloudRunDirectlyNeedsAWaiverForTheEdgeCache(t *testing.T) {
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 
 	_, err := conformance.CheckContainerNeeds(t, p, edge.None, nextContainerNeeds)
 	if unsupported := (*providerserver.UnsupportedNeedError)(nil); !errors.As(err, &unsupported) || unsupported.Need != edge.NeedEdgeCache {
@@ -42,12 +42,12 @@ func TestANextContainerServedByCloudRunDirectlyNeedsAWaiverForTheEdgeCache(t *te
 
 func TestTheCloudflareWorkerDispatchesANextContainerOnGoogleCloudAndNoOtherFrontRunsItsCode(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
-	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	p := newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"})
 
 	if dispatched := conformance.ListDispatchedComputes(t, p, cloudflare.Kind); !slices.Contains(dispatched, provider.ComputeContainer) {
 		t.Errorf("computes Cloudflare dispatches = %v, want %s: the Worker's router serves a container app as it serves a function", dispatched, provider.ComputeContainer)
 	}
-	for _, front := range []edge.Kind{edge.None, alb.Kind} {
+	for _, front := range []edge.Kind{edge.None, albresources.Kind} {
 		if dispatched := conformance.ListDispatchedComputes(t, p, front); slices.Contains(dispatched, provider.ComputeContainer) {
 			t.Errorf("computes %q dispatches = %v, want no %s: it runs no code", front, dispatched, provider.ComputeContainer)
 		}

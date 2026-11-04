@@ -10,6 +10,7 @@ import (
 
 type ReleaseRecord struct {
 	App                     string              `json:"app"`
+	Environment             string              `json:"environment,omitempty"`
 	Framework               string              `json:"framework"`
 	Release                 string              `json:"release"`
 	BuildID                 string              `json:"buildId"`

@@ -70,7 +70,7 @@ func TestAPublishBeforeTheProjectsFirstDeployIsKeptWithItsPublisher(t *testing.T
 	if url := listed["DATABASE_URL"]; url.GetPublisher() != infraPublisher || url.GetPublishedSecret() {
 		t.Errorf("DATABASE_URL = %+v, want it published plain by %s", url, infraPublisher)
 	}
-	got, err := variables.GetValue(context.Background(), &variablestorev1.GetValueRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Coordinate: cell("API_KEY"), Reveal: true})
+	got, err := revealOne(context.Background(), variables, environmentv1.Tier_TIER_PRODUCTION, cell("API_KEY"))
 	if err != nil || got.GetValue() != "k3y" {
 		t.Fatalf("GetValue(API_KEY) = %q, %v, want the published value", got.GetValue(), err)
 	}
@@ -99,7 +99,7 @@ func TestARepublishRewritesItsValuesAndRemovesTheOnesItNoLongerLists(t *testing.
 	if _, kept := listed["LOG_LEVEL"]; !kept {
 		t.Error("LOG_LEVEL, set by hand, was removed by a publisher that never wrote it")
 	}
-	got, err := variables.GetValue(context.Background(), &variablestorev1.GetValueRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Coordinate: cell("API_KEY"), Reveal: true})
+	got, err := revealOne(context.Background(), variables, environmentv1.Tier_TIER_PRODUCTION, cell("API_KEY"))
 	if err != nil || got.GetValue() != "two" {
 		t.Fatalf("GetValue(API_KEY) = %q, %v, want the republished value", got.GetValue(), err)
 	}
@@ -228,7 +228,7 @@ func TestUnpublishingAValueTheProgramWroteAgainSinceLeavesItInPlace(t *testing.T
 	if removed := resp.GetRemoved(); len(removed) != 0 {
 		t.Errorf("removed = %v, want nothing: the value was written again since", removed)
 	}
-	got, err := variables.GetValue(context.Background(), &variablestorev1.GetValueRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Coordinate: cell("API_KEY"), Reveal: true})
+	got, err := revealOne(context.Background(), variables, environmentv1.Tier_TIER_PRODUCTION, cell("API_KEY"))
 	if err != nil || got.GetValue() != "k3y" || got.GetMetadata().GetPublisher() != infraPublisher {
 		t.Fatalf("GetValue(API_KEY) = %q by %q, %v, want the rewritten value kept", got.GetValue(), got.GetMetadata().GetPublisher(), err)
 	}

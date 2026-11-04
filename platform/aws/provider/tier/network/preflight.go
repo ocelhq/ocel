@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -14,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/quotas"
 )
 
 var VPCOriginUnsupportedZones = []string{"use1-az3", "usw1-az2", "apne1-az3", "cac1-az3"}
@@ -47,12 +50,12 @@ func PickZones(ctx context.Context, api ZonesAPI) ([]string, error) {
 		}
 	}
 	slices.Sort(reachable)
-	if len(reachable) < Zones {
+	if len(reachable) < sharedparts.NetworkZones {
 		return nil, refusal.Refuse(refusal.CodeUnsupported,
 			"this region has %d availability zones a CloudFront VPC origin reaches (%s), and ocel spreads a tier's network across %d",
-			len(reachable), strings.Join(reachable, ", "), Zones)
+			len(reachable), strings.Join(reachable, ", "), sharedparts.NetworkZones)
 	}
-	return reachable[:Zones], nil
+	return reachable[:sharedparts.NetworkZones], nil
 }
 
 type Placement struct {
@@ -73,7 +76,7 @@ type otherVPCs struct {
 	blocks []heldBlock
 }
 
-func Place(ctx context.Context, region RegionAPI, quotas component.QuotasAPI, at Placement) (Layout, error) {
+func Place(ctx context.Context, region RegionAPI, limits quotas.API, at Placement) (Layout, error) {
 	others, err := readOtherVPCs(ctx, region, at)
 	if err != nil {
 		return Layout{}, err
@@ -82,7 +85,7 @@ func Place(ctx context.Context, region RegionAPI, quotas component.QuotasAPI, at
 	if err != nil {
 		return Layout{}, err
 	}
-	if err := component.RefuseFullQuota(ctx, quotas, component.VPCQuota, at.Region, others.owned, 1, "the "+string(at.Tier)+" tier's network"); err != nil {
+	if err := quotas.RefuseFull(ctx, limits, quotas.VPC, at.Region, others.owned, 1, "the "+string(at.Tier)+" tier's network"); err != nil {
 		return Layout{}, err
 	}
 	return NewLayout(cidr)

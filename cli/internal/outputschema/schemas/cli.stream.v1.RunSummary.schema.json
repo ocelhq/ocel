@@ -100,54 +100,6 @@
       "title": "Assumption",
       "type": "object"
     },
-    "cli.stream.v1.CloudJob.jsonschema.json": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "properties": {
-        "error": {
-          "$ref": "#/$defs/cloud.v1.JobError.jsonschema.json"
-        },
-        "id": {
-          "default": "",
-          "type": "string"
-        },
-        "result": {
-          "$ref": "#/$defs/cloud.v1.JobResult.jsonschema.json"
-        },
-        "state": {
-          "anyOf": [
-            {
-              "pattern": "^JOB_STATE_UNSPECIFIED$",
-              "type": "string"
-            },
-            {
-              "enum": [
-                "JOB_STATE_QUEUED",
-                "JOB_STATE_RUNNING",
-                "JOB_STATE_INPUT_REQUIRED",
-                "JOB_STATE_SUCCEEDED",
-                "JOB_STATE_FAILED",
-                "JOB_STATE_CANCELED"
-              ],
-              "type": "string"
-            },
-            {
-              "maximum": 2147483647,
-              "minimum": -2147483648,
-              "type": "integer"
-            }
-          ],
-          "default": 0,
-          "title": "Job State"
-        },
-        "url": {
-          "default": "",
-          "type": "string"
-        }
-      },
-      "title": "Cloud Job",
-      "type": "object"
-    },
     "cli.stream.v1.MissingGroup.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -244,6 +196,58 @@
       "title": "Party",
       "type": "object"
     },
+    "cli.stream.v1.RemoteJob.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/runner.v1.JobError.jsonschema.json"
+        },
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/runner.v1.JobResult.jsonschema.json"
+        },
+        "runner": {
+          "default": "",
+          "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "pattern": "^JOB_STATE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "JOB_STATE_QUEUED",
+                "JOB_STATE_RUNNING",
+                "JOB_STATE_INPUT_REQUIRED",
+                "JOB_STATE_SUCCEEDED",
+                "JOB_STATE_FAILED",
+                "JOB_STATE_CANCELED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Job State"
+        },
+        "url": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Remote Job",
+      "type": "object"
+    },
     "cli.stream.v1.RunError.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -284,9 +288,6 @@
           "default": false,
           "type": "boolean"
         },
-        "^(cloud_job)$": {
-          "$ref": "#/$defs/cli.stream.v1.CloudJob.jsonschema.json"
-        },
         "^(deployment_report)$": {
           "$ref": "#/$defs/console.v1.Deployment.jsonschema.json"
         },
@@ -309,6 +310,12 @@
         "^(promotion_id)$": {
           "default": "",
           "type": "string"
+        },
+        "^(remote_jobs)$": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.RemoteJob.jsonschema.json"
+          },
+          "type": "array"
         },
         "^(url_notes)$": {
           "items": {
@@ -333,9 +340,6 @@
         "changeStarted": {
           "default": false,
           "type": "boolean"
-        },
-        "cloudJob": {
-          "$ref": "#/$defs/cli.stream.v1.CloudJob.jsonschema.json"
         },
         "deploymentReport": {
           "$ref": "#/$defs/console.v1.Deployment.jsonschema.json"
@@ -384,6 +388,12 @@
         "propagation": {
           "$ref": "#/$defs/common.progress.v1.Propagation.jsonschema.json"
         },
+        "remoteJobs": {
+          "items": {
+            "$ref": "#/$defs/cli.stream.v1.RemoteJob.jsonschema.json"
+          },
+          "type": "array"
+        },
         "success": {
           "default": false,
           "type": "boolean"
@@ -418,74 +428,6 @@
         }
       },
       "title": "Run Summary",
-      "type": "object"
-    },
-    "cloud.v1.AppBuild.jsonschema.json": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "patternProperties": {
-        "^(build_id)$": {
-          "default": "",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "app": {
-          "default": "",
-          "type": "string"
-        },
-        "buildId": {
-          "default": "",
-          "type": "string"
-        }
-      },
-      "title": "App Build",
-      "type": "object"
-    },
-    "cloud.v1.JobError.jsonschema.json": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "properties": {
-        "code": {
-          "default": "",
-          "type": "string"
-        },
-        "message": {
-          "default": "",
-          "type": "string"
-        }
-      },
-      "title": "Job Error",
-      "type": "object"
-    },
-    "cloud.v1.JobResult.jsonschema.json": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "additionalProperties": false,
-      "patternProperties": {
-        "^(deployment_id)$": {
-          "default": "",
-          "type": "string"
-        }
-      },
-      "properties": {
-        "builds": {
-          "items": {
-            "$ref": "#/$defs/cloud.v1.AppBuild.jsonschema.json"
-          },
-          "type": "array"
-        },
-        "deploymentId": {
-          "default": "",
-          "type": "string"
-        },
-        "urls": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "title": "Job Result",
       "type": "object"
     },
     "common.environment.v1.Environment.jsonschema.json": {
@@ -2259,6 +2201,64 @@
         }
       },
       "title": "Status",
+      "type": "object"
+    },
+    "runner.v1.AppBuild.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(build_id)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "app": {
+          "default": "",
+          "type": "string"
+        },
+        "buildId": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "App Build",
+      "type": "object"
+    },
+    "runner.v1.JobError.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "default": "",
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Job Error",
+      "type": "object"
+    },
+    "runner.v1.JobResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "builds": {
+          "items": {
+            "$ref": "#/$defs/runner.v1.AppBuild.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Job Result",
       "type": "object"
     }
   },

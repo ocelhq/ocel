@@ -115,7 +115,7 @@ func TestCreateReportsTheReasonCloudFormationGaveThroughTheRollbackThatFollowedI
 		},
 	}
 
-	err := Create(context.Background(), api, "ocel-bootstrap-cloudfront-edge", "{}", nil, nil, nil)
+	err := Create(context.Background(), api, "ocel-bootstrap-cloudfront-edge", TemplateSource{Body: "{}"}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("Create over a stack that failed to create = nil, want the waiter failure")
 	}
@@ -151,7 +151,7 @@ func TestUpdateReportsTheReasonThisRunFailedOnRatherThanAnOlderOne(t *testing.T)
 		},
 	}
 
-	err := Update(context.Background(), api, changeSetName, "ocel-bootstrap", "{}", nil, nil, nil, nil)
+	err := Update(context.Background(), api, changeSetName, "ocel-bootstrap", TemplateSource{Body: "{}"}, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("Update over a stack that rolled the update back = nil, want the waiter failure")
 	}
@@ -200,12 +200,12 @@ func (f *stackScopedChangeSets) DeleteChangeSet(_ context.Context, in *cloudform
 func TestUpdateNamesTheStackOnEveryCallThatReachesItsChangeSet(t *testing.T) {
 	api := &stackScopedChangeSets{failedStack: failedStack{status: cfntypes.StackStatusUpdateComplete}}
 
-	if err := Update(context.Background(), api, changeSetName, "ocel-bootstrap", "{}", nil, nil, nil, nil); err != nil {
+	if err := Update(context.Background(), api, changeSetName, "ocel-bootstrap", TemplateSource{Body: "{}"}, nil, nil, nil, nil); err != nil {
 		t.Fatalf("Update against an API that finds a change set only within its stack = %v, want nil", err)
 	}
 
 	refused := errors.New("refused")
-	err := Update(context.Background(), api, changeSetName, "ocel-bootstrap", "{}", nil, nil, nil,
+	err := Update(context.Background(), api, changeSetName, "ocel-bootstrap", TemplateSource{Body: "{}"}, nil, nil, nil,
 		func(string, []cfntypes.ResourceChange) error { return refused })
 	if !errors.Is(err, refused) {
 		t.Fatalf("Update with a review that refuses = %v, want the refusal", err)
@@ -247,7 +247,7 @@ func TestCreateKeepsAReasonThatMerelySaysCancelled(t *testing.T) {
 		},
 	}
 
-	err := Create(context.Background(), api, "ocel-bootstrap", "{}", nil, nil, nil)
+	err := Create(context.Background(), api, "ocel-bootstrap", TemplateSource{Body: "{}"}, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), reason) {
 		t.Errorf("Create = %v, want the reason CloudFormation gave rather than nothing because it contains the word cancelled", err)
 	}
@@ -280,7 +280,7 @@ func TestCreateFollowsAnEmbeddedStackToTheResourceThatActuallyFailed(t *testing.
 		}},
 	}
 
-	err := Create(context.Background(), api, "ocel-bootstrap", "{}", nil, nil, nil)
+	err := Create(context.Background(), api, "ocel-bootstrap", TemplateSource{Body: "{}"}, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), reason) {
 		t.Errorf("Create = %v, want the reason the embedded stack gave rather than only that it was not successfully created", err)
 	}
@@ -292,7 +292,7 @@ func TestCreateSaysWhatItCanWhenNoEventNamesAReason(t *testing.T) {
 		events: []cfntypes.StackEvent{stackEvent(thisStack, "ocel-bootstrap", cfntypes.ResourceStatusCreateInProgress, "User Initiated")},
 	}
 
-	err := Create(context.Background(), api, "ocel-bootstrap", "{}", nil, nil, nil)
+	err := Create(context.Background(), api, "ocel-bootstrap", TemplateSource{Body: "{}"}, nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "ocel-bootstrap") {
 		t.Fatalf("Create = %v, want the waiter failure naming the stack", err)
 	}

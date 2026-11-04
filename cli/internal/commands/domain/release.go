@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/commands"
-	"github.com/ocelhq/ocel/cli/internal/consent"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/pkg/progress"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -27,7 +26,7 @@ func runDomainRelease(ctx context.Context, invocation commands.Invocation, cwd s
 	if err != nil {
 		return err
 	}
-	policy := consent.NewPlanPolicy("ocel domain release", opts.yes, invocation.CanAsk(stdin), stdout, stdin)
+	policy := invocation.PlanPolicy("ocel domain release", opts.yes, stdout, stdin)
 	if err := policy.Refuse(); err != nil {
 		return err
 	}

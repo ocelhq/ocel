@@ -48,6 +48,9 @@ func (r *deployRun) promote(ctx context.Context, promotion router.Promotion) err
 				progress.Warn(unretiredWarning(promotion.PromotionID, err))
 			}
 			r.pruneInlineBindings(ctx, progress)
+			if err := r.recordDeployedSettings(ctx); err != nil {
+				progress.Warn(fmt.Sprintf("Promotion %s serves, but recording its settings failed, so control calls without a session need a runner until the next deploy: %v", promotion.PromotionID, err))
+			}
 			return r.recordPromotedEnvironment(ctx, superseded)
 		})
 	})

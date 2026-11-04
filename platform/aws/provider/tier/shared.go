@@ -14,7 +14,7 @@ type SharedSpec struct {
 	RefuseInUse   func(environment.Tier, []string) error
 	Summary       string
 	RemovalReason string
-	Shape         func(tier environment.Tier) []pricing.Shaped
+	Inventory     func(tier environment.Tier) []pricing.Resource
 	Describe      func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error)
 	Remove        func(ctx context.Context, tier environment.Tier, progress progress.Log) error
 }
@@ -28,10 +28,10 @@ func Shared(spec SharedSpec) Part {
 		return spec.Remove(ctx, tier, progress)
 	}
 	return Part{
-		Name:     spec.Part,
-		Summary:  spec.Summary,
-		Describe: spec.Describe,
-		Shape:    spec.Shape,
+		Name:      spec.Part,
+		Summary:   spec.Summary,
+		Describe:  spec.Describe,
+		Inventory: spec.Inventory,
 		Teardown: &Removal{
 			Plan: func(ctx context.Context, tier environment.Tier) (*provider.ChangeGroup, error) {
 				part, present, err := spec.Describe(ctx, tier)

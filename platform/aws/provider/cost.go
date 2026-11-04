@@ -8,66 +8,62 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
-	"github.com/ocelhq/ocel/platform/aws/provider/cost"
+	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 )
 
 const tfDataTransfer = "aws_data_transfer"
 
-func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
+func (p *Provider) InventoryDeploy(ctx context.Context, req provider.InventoryRequest) (*costv1.ResourceSet, error) {
 	tree := &pricing.Tree{}
 	project := tree.Scope("", pricing.ScopeProject, req.Deploy.Slug)
 	shared := tree.Scope(project, pricing.ScopeShared, string(req.Deploy.Tier))
 	environment := tree.Scope(project, pricing.ScopeEnvironment, req.Deploy.Env)
 
-	var options []account.ShapeOption
-	if p.options.VariablesKey != "" {
-		options = append(options, account.WithVariablesKey(p.options.VariablesKey))
+	var options []account.InventoryOption
+	if p.Options.VariablesKey != "" {
+		options = append(options, account.WithVariablesKey(p.Options.VariablesKey))
 	}
-	shaped := req.Parts
-	if !slices.Contains(shaped, provider.VariablesKeyPart) {
-		shaped = append(slices.Clone(shaped), provider.VariablesKeyPart)
+	parts := req.Parts
+	if !slices.Contains(parts, provider.VariablesKeyPart) {
+		parts = append(slices.Clone(parts), provider.VariablesKeyPart)
 	}
-	bootstrapShape, err := account.Shape(p.namespace, req.Deploy.Tier, shaped, options...)
+	bootstrapResources, err := account.Inventory(p.Namespace, req.Deploy.Tier, parts, options...)
 	if err != nil {
 		return nil, err
 	}
-	tree.AddShaped(shared, string(Vendor), p.aws.Region, bootstrapShape)
-	for _, part := range p.tierParts(p.partRecords()) {
+	tree.AddResources(shared, string(control.Vendor), p.Config.Region, bootstrapResources)
+	for _, part := range p.tierParts(p.PartRecords()) {
 		if part.Use != nil && part.Use.IsUsedBy(req.Uses, req.Edge) {
-			tree.AddShaped(shared, string(Vendor), p.aws.Region, part.Shape(req.Deploy.Tier))
+			tree.AddResources(shared, string(control.Vendor), p.Config.Region, part.Inventory(req.Deploy.Tier))
 		}
 	}
 
-	if err := deploy.Shape(ctx, p.transformPass(), string(p.namespace), p.aws.Region, req, tree, deploy.ShapeScopes{
+	if err := deploy.Inventory(ctx, p.transformPass(), string(p.Namespace), p.Config.Region, req, tree, deploy.InventoryScopes{
 		Environment: environment,
 		Shared:      shared,
 	}); err != nil {
 		return nil, err
 	}
 
-	front, err := p.edges().Open(req.Edge, nil)
+	front, err := p.Edges().Open(req.Edge, nil)
 	if err != nil {
 		return nil, err
 	}
-	site := pricing.EdgeSite{Slug: req.Deploy.Slug, Tier: req.Deploy.Tier, Region: p.aws.Region}
+	site := pricing.EdgeSite{Slug: req.Deploy.Slug, Tier: req.Deploy.Tier, Region: p.Config.Region}
 	for _, app := range req.Deploy.Apps {
 		site.Apps = append(site.Apps, pricing.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
 	}
-	shape, err := edges.Shape(front.Kind(), p.namespace, site)
+	inventory, err := edges.Inventory(front.Kind(), p.Namespace, site)
 	if err != nil {
 		return nil, err
 	}
-	tree.AddEdge(pricing.EdgeScopes{Shared: shared, Environment: environment}, shape)
-	if !shape.BillsEgress {
+	tree.AddEdge(pricing.EdgeScopes{Shared: shared, Environment: environment}, inventory)
+	if !inventory.BillsEgress {
 		for _, app := range req.Deploy.Apps {
-			tree.Add(tree.Scope(environment, pricing.ScopeApp, app.App), string(Vendor), tfDataTransfer, app.App, p.aws.Region, map[string]any{})
+			tree.Add(tree.Scope(environment, pricing.ScopeApp, app.App), string(control.Vendor), tfDataTransfer, app.App, p.Config.Region, map[string]any{})
 		}
 	}
 	return tree.Set(provider.CostSource)
-}
-
-func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	return cost.Price(req, edges.Rates...)
 }

@@ -1,9 +1,13 @@
 package gcp
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
+)
 
 func TestAGCPTargetProvesItsIdentityAsItsOwnServiceAccount(t *testing.T) {
-	p, err := NewProvider(Options{Project: "acme-prod", Region: "europe-west1"})
+	p, err := NewProvider(control.Options{Project: "acme-prod", Region: "europe-west1"})
 	if err != nil {
 		t.Fatal(err)
 	}

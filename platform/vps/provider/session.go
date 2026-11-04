@@ -2,6 +2,7 @@ package vps
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/ssh"
 )
@@ -12,7 +13,15 @@ func (p *Provider) Session(ctx context.Context) (*ssh.Session, error) {
 	if p.sshSession != nil {
 		return p.sshSession, nil
 	}
-	live, err := ssh.Open(ctx, p.options.SSH.session())
+	target := p.options.SSH.session()
+	if p.login != nil {
+		certified, err := p.login.target(ctx)
+		if err != nil {
+			return nil, err
+		}
+		target = certified
+	}
+	live, err := ssh.Open(ctx, target)
 	if err != nil {
 		return nil, err
 	}
@@ -33,8 +42,12 @@ func (p *Provider) Close() error {
 	defer p.dial.Unlock()
 	live := p.sshSession
 	p.sshSession = nil
-	if live == nil {
-		return nil
+	var closed error
+	if live != nil {
+		closed = live.Close()
 	}
-	return live.Close()
+	if p.login != nil {
+		closed = errors.Join(closed, p.login.close())
+	}
+	return closed
 }

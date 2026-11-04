@@ -26,7 +26,7 @@ type Deps struct {
 
 var constructors = map[string]func(Deps, string) (edge.DNSRecords, error){
 	KindRoute53: func(deps Deps, zone string) (edge.DNSRecords, error) {
-		return NewRoute53(route53.NewFromConfig(deps.AWS), zone), nil
+		return NewRoute53(newRoute53Calls(route53.NewFromConfig(deps.AWS)), zone), nil
 	},
 	KindCloudflare: func(deps Deps, zone string) (edge.DNSRecords, error) {
 		return cloudflare.NewDNS(zone, deps.Cloudflare), nil

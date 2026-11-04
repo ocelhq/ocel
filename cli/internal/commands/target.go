@@ -106,6 +106,13 @@ func NotOnCloud(command string) error {
 	}
 }
 
+func RefuseRemote(command string) error {
+	return &clierror.Error{
+		Code:  clierror.CodeJobUnsupported,
+		Cause: fmt.Errorf("`%s` runs only here, and this runs as a job on a runner, as --remote or a project that names no provider does: drop the flag", command),
+	}
+}
+
 func (i Invocation) cloudTarget(ctx context.Context) (*CloudTarget, error) {
 	if i.Console.LoadCredentials == nil || i.CloudOffer == nil {
 		return nil, nil

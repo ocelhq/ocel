@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/auth"
+	"cloud.google.com/go/auth/credentials"
 	"cloud.google.com/go/auth/credentials/idtoken"
-	"golang.org/x/oauth2/google"
 
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
@@ -25,13 +25,10 @@ const (
 	tokenTimeout      = time.Minute
 )
 
-func ProveIdentity(ctx context.Context, audience string) (envsource.IdentityProof, error) {
-	credentials, err := idtoken.NewCredentials(&idtoken.Options{
-		Audience: audience,
-		Client:   newTokenClient(),
-	})
+func (c Credentials) ProveIdentity(ctx context.Context, audience string) (envsource.IdentityProof, error) {
+	credentials, err := c.idTokens(audience)
 	if err != nil {
-		if isUserLogin(ctx) {
+		if c.isUserLogin(ctx) {
 			return envsource.IdentityProof{}, fmt.Errorf("this credential is a user's own login, and Google issues an identity token with an audience of ocel's choosing only to a service account: "+
 				"deploy with a service account key, or run `gcloud auth application-default login --impersonate-service-account=<email>`: %w", err)
 		}
@@ -42,6 +39,14 @@ func ProveIdentity(ctx context.Context, audience string) (envsource.IdentityProo
 		return envsource.IdentityProof{}, fmt.Errorf("issue a Google identity token for %s: %w", audience, err)
 	}
 	return envsource.IdentityProof{IDToken: token.Value}, nil
+}
+
+func (c Credentials) idTokens(audience string) (*auth.Credentials, error) {
+	options := &idtoken.Options{Audience: audience, Client: newTokenClient()}
+	if c.externalAccount == nil {
+		return idtoken.NewCredentials(options)
+	}
+	return idtoken.NewCredentialsFromJSON(credentials.ExternalAccount, c.externalAccount.JSON, options)
 }
 
 func issued(ctx context.Context, credentials *auth.Credentials) (*auth.Token, error) {
@@ -123,8 +128,8 @@ func retryAfter(resp *http.Response) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-func isUserLogin(ctx context.Context) bool {
-	found, err := google.FindDefaultCredentials(ctx)
+func (c Credentials) isUserLogin(ctx context.Context) bool {
+	found, err := c.Find(ctx)
 	if err != nil || len(found.JSON) == 0 {
 		return false
 	}

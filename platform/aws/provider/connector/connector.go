@@ -11,12 +11,20 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	logstypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
+	"github.com/ocelhq/ocel/pkg/endpoint"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -38,7 +46,11 @@ const (
 	memory  = 256
 	timeout = 30
 
+	codeBucketID        = "CodeBucket"
+	functionID          = "ConnectorFunction"
+	logGroupPrefix      = "/aws/lambda/"
 	reservedConcurrency = 10
+	unreservedMinimum   = 100
 	codePayload         = "connector"
 	codeAbort           = 7
 
@@ -65,8 +77,27 @@ type Wake struct {
 
 const WakeHeartbeat = "heartbeat"
 
-func reviewing(ns account.Namespace, progress progress.Log) cfn.ChangeReview {
-	return account.AdmitReplacements(ns, false, progress)
+var installCapabilities = []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
+
+func reviewing(progress progress.Log) cfn.ChangeReview {
+	return func(stackName string, changes []cfntypes.ResourceChange) error {
+		for _, change := range changes {
+			if aws.ToString(change.LogicalResourceId) != codeBucketID {
+				continue
+			}
+			if change.Replacement == cfntypes.ReplacementTrue || change.Replacement == cfntypes.ReplacementConditional {
+				return fmt.Errorf("writing %s would replace %s, the bucket the connector's code is staged in, and the function's code would go with it: delete the connector and add it again", stackName, codeBucketID)
+			}
+		}
+		if progress != nil {
+			for _, change := range changes {
+				if change.Replacement == cfntypes.ReplacementTrue {
+					progress.Say(fmt.Sprintf("Replacing %s, which holds nothing but what this install writes again", aws.ToString(change.LogicalResourceId)))
+				}
+			}
+		}
+		return nil
+	}
 }
 
 type APIs struct {
@@ -74,6 +105,47 @@ type APIs struct {
 	Buckets cfn.BucketEmptierAPI
 	Objects payloads.ObjectStore
 	SSM     KeyStore
+	Lambda  AccountSettingsAPI
+	Logs    LogGroupsAPI
+	Region  string
+}
+
+type LogGroupsAPI interface {
+	DeleteLogGroup(ctx context.Context, in *cloudwatchlogs.DeleteLogGroupInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.DeleteLogGroupOutput, error)
+}
+
+type AccountSettingsAPI interface {
+	GetAccountSettings(ctx context.Context, in *lambda.GetAccountSettingsInput, optFns ...func(*lambda.Options)) (*lambda.GetAccountSettingsOutput, error)
+}
+
+func reservationFor(ctx context.Context, api AccountSettingsAPI) (int32, error) {
+	settings, err := api.GetAccountSettings(ctx, &lambda.GetAccountSettingsInput{})
+	if err != nil {
+		return 0, fmt.Errorf("read the account's Lambda concurrency: %w", err)
+	}
+	if settings.AccountLimit == nil || settings.AccountLimit.UnreservedConcurrentExecutions == nil {
+		return 0, nil
+	}
+	if *settings.AccountLimit.UnreservedConcurrentExecutions-reservedConcurrency < unreservedMinimum {
+		return 0, nil
+	}
+	return reservedConcurrency, nil
+}
+
+func stagedTemplate(ctx context.Context, apis APIs, bucket, body string) (cfn.TemplateSource, error) {
+	if len(body) <= cfn.TemplateBodyBytes {
+		return cfn.TemplateSource{Body: body}, nil
+	}
+	key := "templates/" + cfn.TemplateDigest(body) + ".json"
+	if _, err := apis.Objects.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(key),
+		Body:        strings.NewReader(body),
+		ContentType: aws.String("application/json"),
+	}); err != nil {
+		return cfn.TemplateSource{}, fmt.Errorf("stage the connector's template in %s: %w", bucket, err)
+	}
+	return cfn.TemplateSource{URL: "https://" + bucket + ".s3." + apis.Region + ".amazonaws.com/" + key}, nil
 }
 
 type KeyStore interface {
@@ -123,6 +195,7 @@ type Bundle struct {
 	Version   string
 	Config    []byte
 	PublicKey string
+	Policies  []iam.ManagedPolicy
 }
 
 func Read(ctx context.Context, api cfn.StacksAPI, ns account.Namespace) (Installation, error) {
@@ -191,13 +264,21 @@ func Install(ctx context.Context, apis APIs, ns account.Namespace, bundle Bundle
 	}
 	progress.Say(fmt.Sprintf("Stored the connector's key in parameter %s", KeyParameter(ns)))
 
-	template, err := templateFor(ns, at, bundle, keys)
+	reserved, err := reservationFor(ctx, apis.Lambda)
 	if err != nil {
 		return Installation{}, err
 	}
-	if err := cfn.Upsert(ctx, apis.CFN, ns.ChangeSetNameFor, StackName(ns), template, nil,
-		[]cfntypes.Capability{cfntypes.CapabilityCapabilityIam}, tagsFor(ns, template, writer),
-		reviewing(ns, progress)); err != nil {
+	template, err := templateFor(ns, at, bundle, keys, reserved)
+	if err != nil {
+		return Installation{}, err
+	}
+	source, err := stagedTemplate(ctx, apis, bucket, template)
+	if err != nil {
+		return Installation{}, err
+	}
+	if err := cfn.Upsert(ctx, apis.CFN, ns.ChangeSetNameFor, StackName(ns), source, nil,
+		installCapabilities, tagsFor(ns, template, writer),
+		reviewing(progress)); err != nil {
 		return Installation{}, err
 	}
 
@@ -227,14 +308,54 @@ func Remove(ctx context.Context, apis APIs, ns account.Namespace, progress progr
 		}
 		progress.Say(fmt.Sprintf("Emptied bucket %s, where the connector's code was staged", bucket))
 	}
+	function, err := readFunctionName(ctx, apis.CFN, ns)
+	if err != nil {
+		return err
+	}
 	if err := cfn.Delete(ctx, apis.CFN, StackName(ns)); err != nil {
 		return err
 	}
 	progress.Say("Deleted stack " + StackName(ns))
+	if err := deleteLogGroup(ctx, apis.Logs, function, progress); err != nil {
+		return err
+	}
 	if err := takeKey(ctx, apis.SSM, ns); err != nil {
 		return err
 	}
 	progress.Say(fmt.Sprintf("Deleted parameter %s, the connector's key", KeyParameter(ns)))
+	return nil
+}
+
+func readFunctionName(ctx context.Context, api cfn.API, ns account.Namespace) (string, error) {
+	pages := cloudformation.NewListStackResourcesPaginator(api, &cloudformation.ListStackResourcesInput{StackName: aws.String(StackName(ns))})
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
+		if err != nil {
+			return "", fmt.Errorf("read the function of stack %s: %w", StackName(ns), err)
+		}
+		for _, resource := range page.StackResourceSummaries {
+			if aws.ToString(resource.LogicalResourceId) == functionID {
+				return aws.ToString(resource.PhysicalResourceId), nil
+			}
+		}
+	}
+	return "", nil
+}
+
+func deleteLogGroup(ctx context.Context, api LogGroupsAPI, function string, progress progress.Log) error {
+	if function == "" {
+		return nil
+	}
+	group := logGroupPrefix + function
+	_, err := api.DeleteLogGroup(ctx, &cloudwatchlogs.DeleteLogGroupInput{LogGroupName: aws.String(group)})
+	var missing *logstypes.ResourceNotFoundException
+	if errors.As(err, &missing) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("delete log group %s: %w", group, err)
+	}
+	progress.Say("Deleted log group " + group)
 	return nil
 }
 
@@ -270,7 +391,7 @@ func codeBucket(ctx context.Context, apis APIs, ns account.Namespace,
 		return "", err
 	}
 	progress.Say(fmt.Sprintf("Creating stack %s to stage the connector's code in", StackName(ns)))
-	if err := cfn.Create(ctx, apis.CFN, StackName(ns), template, nil, nil,
+	if err := cfn.Create(ctx, apis.CFN, StackName(ns), cfn.TemplateSource{Body: template}, nil, nil,
 		tagsFor(ns, template, writer)); err != nil {
 		return "", err
 	}
@@ -329,7 +450,7 @@ func codeTemplate() (string, error) {
 	}.Body()
 }
 
-func templateFor(ns account.Namespace, at payloads.Placement, bundle Bundle, keys []string) (string, error) {
+func templateFor(ns account.Namespace, at payloads.Placement, bundle Bundle, keys []string, reserved int32) (string, error) {
 	if len(bundle.Config) == 0 {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"this install ships no connector config, so nothing would name the console the function trusts")
@@ -346,18 +467,34 @@ func templateFor(ns account.Namespace, at payloads.Placement, bundle Bundle, key
 	if err != nil {
 		return "", err
 	}
-	functionARN := cfn.GetAtt("ConnectorFunction", "Arn")
-	resources := []cfn.Resource{
-		codeBucketResource(),
+	functionARN := cfn.GetAtt(functionID, "Arn")
+	managed := []any{iam.LambdaBasicExecutionPolicyARN}
+	resources := []cfn.Resource{codeBucketResource()}
+	for i, policy := range bundle.Policies {
+		id := "ConnectorPolicy" + strconv.Itoa(i+1)
+		managed = append(managed, cfn.Ref(id))
+		resources = append(resources, cfn.Resource{
+			ID:   id,
+			Type: "AWS::IAM::ManagedPolicy",
+			Metadata: cfn.Metadata{
+				Description: "What the control calls the connector serves reach, scoped as the deploy credential scopes them.",
+			},
+			Properties: map[string]any{
+				"ManagedPolicyName": policy.PolicyName,
+				"PolicyDocument":    policy.PolicyDocument,
+			},
+		})
+	}
+	resources = append(resources, []cfn.Resource{
 		{
 			ID:   "ConnectorRole",
 			Type: "AWS::IAM::Role",
 			Metadata: cfn.Metadata{
-				Description: "What the connector may reach: the variable records and the key they are sealed under, and nothing a deploy would need.",
+				Description: "What the connector may reach: the variable records, the key they are sealed under, and its control policies.",
 			},
 			Properties: map[string]any{
 				"AssumeRolePolicyDocument": iam.AssumeRoleDocument(iam.LambdaPrincipal),
-				"ManagedPolicyArns":        []string{iam.LambdaBasicExecutionPolicyARN},
+				"ManagedPolicyArns":        managed,
 				"Policies": []any{map[string]any{
 					"PolicyName":     ns.PolicyName("connector"),
 					"PolicyDocument": iam.Document(grants(ns, keys)),
@@ -365,27 +502,26 @@ func templateFor(ns account.Namespace, at payloads.Placement, bundle Bundle, key
 			},
 		},
 		{
-			ID:   "ConnectorFunction",
+			ID:   functionID,
 			Type: "AWS::Lambda::Function",
 			Metadata: cfn.Metadata{
 				Description: "The connector itself. The console dials it over its function url and authenticates with a short-lived token the connector verifies before any call runs.",
 			},
-			Properties: map[string]any{
+			Properties: functionProperties(reserved, map[string]any{
 				"Architectures": []string{Arch},
-				"Code":          map[string]any{"S3Bucket": cfn.Ref("CodeBucket"), "S3Key": at.Key},
+				"Code":          map[string]any{"S3Bucket": cfn.Ref(codeBucketID), "S3Key": at.Key},
 				"Environment": map[string]any{"Variables": map[string]any{
-					provider.NamespaceEnvVar:       string(ns),
-					RegionEnvVar:                   cfn.Ref("AWS::Region"),
-					provider.ConnectorConfigEnvVar: string(bundle.Config),
-					KeyParameterEnvVar:             KeyParameter(ns),
+					provider.NamespaceEnvVar: string(ns),
+					RegionEnvVar:             cfn.Ref("AWS::Region"),
+					endpoint.ConfigEnvVar:    string(bundle.Config),
+					KeyParameterEnvVar:       KeyParameter(ns),
 				}},
-				"Handler":                      handler,
-				"MemorySize":                   memory,
-				"ReservedConcurrentExecutions": reservedConcurrency,
-				"Role":                         cfn.GetAtt("ConnectorRole", "Arn"),
-				"Runtime":                      runtime,
-				"Timeout":                      timeout,
-			},
+				"Handler":    handler,
+				"MemorySize": memory,
+				"Role":       cfn.GetAtt("ConnectorRole", "Arn"),
+				"Runtime":    runtime,
+				"Timeout":    timeout,
+			}),
 		},
 		{
 			ID:   "ConnectorUrl",
@@ -424,9 +560,9 @@ func templateFor(ns account.Namespace, at payloads.Placement, bundle Bundle, key
 				"SourceArn":    cfn.GetAtt("ConnectorHeartbeat", "Arn"),
 			},
 		},
-	}
+	}...)
 	return cfn.Template{
-		Description: "Ocel connector - the function the console reads this account's variables through, the role it runs under and the url it answers on. It is separate from every bootstrap stack and has no deploy rights.",
+		Description: "Ocel connector - the function the console reaches this account through, the role and policies it runs under and the url it answers on. It is separate from every bootstrap stack.",
 		Resources:   append(resources, urlPermissions(functionARN)...),
 		Outputs: []cfn.Output{
 			codeBucketOutput(),
@@ -446,7 +582,7 @@ func templateFor(ns account.Namespace, at payloads.Placement, bundle Bundle, key
 				Value:       bundle.PublicKey,
 			},
 		},
-	}.Body()
+	}.CompactBody()
 }
 
 func urlPermissionID(permission functionurl.Permission) string {
@@ -474,7 +610,7 @@ func urlPermissions(functionARN cfn.Intrinsic) []cfn.Resource {
 
 func codeBucketResource() cfn.Resource {
 	return cfn.Resource{
-		ID:   "CodeBucket",
+		ID:   codeBucketID,
 		Type: "AWS::S3::Bucket",
 		Metadata: cfn.Metadata{
 			Description: "Stores the connector's own code archive, keyed by its digest. Emptying it leaves the deployed function running and the next install re-uploads.",
@@ -535,4 +671,11 @@ func grants(ns account.Namespace, keys []string) []iam.Statement {
 			Resources: []string{iam.AnyResource},
 		},
 	}
+}
+
+func functionProperties(reserved int32, properties map[string]any) map[string]any {
+	if reserved > 0 {
+		properties["ReservedConcurrentExecutions"] = reserved
+	}
+	return properties
 }

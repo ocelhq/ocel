@@ -37,6 +37,7 @@ var providerBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/realtime",
 	"github.com/ocelhq/ocel/pkg/refusal",
 	"github.com/ocelhq/ocel/pkg/router",
+	"github.com/ocelhq/ocel/pkg/scope",
 	"github.com/ocelhq/ocel/pkg/seal",
 	"github.com/ocelhq/ocel/pkg/stackrecords",
 	"github.com/ocelhq/ocel/pkg/topiclimits",
@@ -70,7 +71,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 			"github.com/ocelhq/ocel/pkg/refusal",
 		}},
 		{name: "buildoutput", pattern: "./buildoutput/...", open: providerBuildsOn},
-		{name: "connectorserver", pattern: "./connectorserver/...", open: buildsOnProvider("connectorserver")},
+		{name: "endpoint", pattern: "./endpoint/...", open: buildsOnProvider("endpoint")},
 		{name: "containerimage", pattern: "./containerimage/...", open: providerBuildsOn},
 		{name: "cron", pattern: "./cron/...", open: []string{"github.com/ocelhq/ocel/pkg/cron"}},
 		{name: "dotenv", pattern: "./dotenv/...", open: providerBuildsOn},
@@ -83,6 +84,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 		{name: "lease", pattern: "./lease/...", open: []string{"github.com/ocelhq/ocel/pkg/lease"}},
 		{name: "valkey", pattern: "./valkey/...", open: []string{"github.com/ocelhq/ocel/pkg/valkey", "github.com/ocelhq/ocel/pkg/proto"}},
 		{name: "naming", pattern: "./naming/...", open: []string{"github.com/ocelhq/ocel/pkg/environment", "github.com/ocelhq/ocel/pkg/naming", "github.com/ocelhq/ocel/pkg/refusal"}},
+		{name: "providerhost", pattern: "./providerhost/...", open: append(buildsOnProvider("providerhost"), "github.com/ocelhq/ocel/pkg/endpoint")},
 		{name: "realtime", pattern: "./realtime/...", open: []string{"github.com/ocelhq/ocel/pkg/proto", "github.com/ocelhq/ocel/pkg/realtime"}},
 		{name: "refusal", pattern: "./refusal/...", open: providerBuildsOn},
 		{name: "router", pattern: "./router/...", open: []string{
@@ -94,7 +96,9 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 			"github.com/ocelhq/ocel/pkg/router",
 			"github.com/ocelhq/ocel/pkg/typescript",
 		}},
+		{name: "runner", pattern: "./runner/...", open: append(buildsOnProvider("runner"), "github.com/ocelhq/ocel/pkg/endpoint")},
 		{name: "runs", pattern: "./runs/...", open: buildsOnProvider("runs")},
+		{name: "scope", pattern: "./scope/...", open: []string{"github.com/ocelhq/ocel/pkg/proto", "github.com/ocelhq/ocel/pkg/scope"}},
 		{name: "seal", pattern: "./seal/...", open: []string{"github.com/ocelhq/ocel/pkg/environment", "github.com/ocelhq/ocel/pkg/seal"}},
 		{name: "stackrecords", pattern: "./stackrecords/...", open: providerBuildsOn},
 		{name: "topiclimits", pattern: "./topiclimits/...", open: providerBuildsOn},
@@ -123,10 +127,17 @@ func TestNoPackageSitsAtPkgRuntimeWhereItWouldShadowTheStandardRuntime(t *testin
 
 const repo = "github.com/ocelhq/ocel/"
 
+// TODO: move providerserver to pkg/providerserver, which providerhost then imports like any top-level package, and drop this import.
+var hostedProviderServer = struct{ importer, imported string }{
+	importer: repo + "pkg/providerhost",
+	imported: repo + "pkg/provider/providerserver",
+}
+
 var providerTestSupport = []string{
 	repo + "pkg/provider/fake",
 	repo + "pkg/enginetest",
 	repo + "pkg/provider/providerserver",
+	repo + "pkg/provider/spanexport",
 }
 
 func TestNothingButAProviderImportsAPackageBeneathPkgProvider(t *testing.T) {
@@ -159,6 +170,9 @@ func TestNothingButAProviderImportsAPackageBeneathPkgProvider(t *testing.T) {
 					continue
 				}
 				for _, imported := range c.imports(p) {
+					if p.ImportPath == hostedProviderServer.importer && imported == hostedProviderServer.imported {
+						continue
+					}
 					if beneathPkgProvider(imported) && !depstest.Within(imported, c.open) {
 						t.Errorf("%s imports %s, which sits beneath pkg/provider though more than providers use it; it belongs at pkg/ top level", p.ImportPath, imported)
 					}

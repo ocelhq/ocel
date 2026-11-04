@@ -112,7 +112,7 @@ func TestAServiceAccountKeyIssuesATokenForTheIdentityInfisicalNames(t *testing.T
 	defer server.Close()
 	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", serviceAccountKey(t, home, server.URL))
 
-	proof, err := ProveIdentity(context.Background(), "identity-1234")
+	proof, err := Credentials{}.ProveIdentity(context.Background(), "identity-1234")
 	if err != nil {
 		t.Fatalf("ProveIdentity() = %v", err)
 	}
@@ -157,7 +157,7 @@ func TestAThrottledOrFailingTokenEndpointIsAskedAgainAndARefusalIsNot(t *testing
 			defer server.Close()
 			t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", serviceAccountKey(t, home, server.URL))
 
-			proof, err := ProveIdentity(context.Background(), "identity-1234")
+			proof, err := Credentials{}.ProveIdentity(context.Background(), "identity-1234")
 			if tc.refusing && err == nil {
 				t.Errorf("ProveIdentity() = %+v, want the refusal Google answered", proof)
 			}
@@ -231,7 +231,7 @@ func TestTheMetadataServerIssuesAFullTokenForTheIdentityInfisicalNames(t *testin
 	defer server.Close()
 	t.Setenv("GCE_METADATA_HOST", strings.TrimPrefix(server.URL, "http://"))
 
-	proof, err := ProveIdentity(context.Background(), "identity-1234")
+	proof, err := Credentials{}.ProveIdentity(context.Background(), "identity-1234")
 	if err != nil {
 		t.Fatalf("ProveIdentity() = %v", err)
 	}
@@ -256,7 +256,7 @@ func TestAUserLoginIsRefusedWithWhatToDeployAsInstead(t *testing.T) {
 	}
 	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", path)
 
-	_, err := ProveIdentity(context.Background(), "identity-1234")
+	_, err := Credentials{}.ProveIdentity(context.Background(), "identity-1234")
 	if err == nil || !strings.Contains(err.Error(), "service account") || !strings.Contains(err.Error(), "--impersonate-service-account") {
 		t.Fatalf("ProveIdentity() under a user login = %v, want a refusal naming a service account to deploy as", err)
 	}

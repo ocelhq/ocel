@@ -15,11 +15,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
+	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
 	"github.com/ocelhq/ocel/pkg/router/routerconformance"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 func balancing(t *testing.T) (*Edge, *world) {
@@ -28,7 +30,6 @@ func balancing(t *testing.T) (*Edge, *world) {
 	return New(Deps{
 		Namespace: "ocel",
 		KeyValues: fake.NewKeyValues(),
-		Stacks:    w,
 		Routes:    w,
 		Entries:   w,
 		Pins:      w,
@@ -36,15 +37,26 @@ func balancing(t *testing.T) (*Edge, *world) {
 		Project:   "acme-prod",
 		Region:    "europe-west1",
 
-		Cipher:     fake.NewCipher(),
-		GatePlugin: gatePluginBytes,
-		Images:     w,
-		ProbeGate:  w.probeGate,
+		Cipher:    fake.NewCipher(),
+		ProbeGate: w.probeGate,
 
 		WaitBeforeRetry:    w.waitBeforeRetry,
 		CopyImmutableFiles: w.copyImmutableFiles,
-		ReadAssetsBucket: func(context.Context, environment.Tier) (AssetsBucket, error) {
+		ReadAssetsBucket: func(context.Context, environment.Tier) (albresources.AssetsBucket, error) {
 			return tierAssets, nil
+		},
+
+		Engine: Engine{
+			Stacks:     w,
+			Images:     w,
+			GatePlugin: gatePluginBytes,
+			FrontPart:  FrontPart{Claim: holdNoFront, Release: holdNoFront},
+			EvaluateFront: func(context.Context, environment.Tier) (transform.Result, error) {
+				return transform.Result{}, nil
+			},
+			ReadApps: func(context.Context, environment.Tier, string) (map[string]transform.Result, error) {
+				return nil, nil
+			},
 		},
 	}), w
 }
@@ -128,7 +140,7 @@ func TestBindingAHostnameRaisesTheProjectsStackAndRoutesItThroughTheTierUrlMap(t
 		t.Fatalf("BindDomain = %v", err)
 	}
 
-	want := BindingStack("shop", environment.TierProduction)
+	want := albresources.BindingStack("shop", environment.TierProduction)
 	if got := w.raised(); !slices.Contains(got, want) {
 		t.Errorf("the bind raised %v, want %q among them: a hostname's certificate, neg and backend are one stack per project and tier", got, want)
 	}
@@ -151,7 +163,7 @@ func TestBindingAHostnameTheUrlMapHasNoHostRuleLeftForIsRefusedBeforeAnythingIsR
 	if !errors.As(err, &refused) {
 		t.Fatalf("BindDomain onto a url map with %d host rules = %v, want a refusal", maxHostRules, err)
 	}
-	if got := w.raised(); slices.Contains(got, BindingStack("shop", environment.TierProduction)) {
+	if got := w.raised(); slices.Contains(got, albresources.BindingStack("shop", environment.TierProduction)) {
 		t.Errorf("the refused bind raised %v, want nothing: Compute refuses the host rule only after the neg and backend service exist", got)
 	}
 }
@@ -166,7 +178,7 @@ func TestBindingAHostnameTheProjectHasNoBackendServiceQuotaLeftForIsRefusedBefor
 	if !errors.As(err, &refused) {
 		t.Fatalf("BindDomain with every backend service the quota allows in use = %v, want a refusal", err)
 	}
-	if got := w.raised(); slices.Contains(got, BindingStack("shop", environment.TierProduction)) {
+	if got := w.raised(); slices.Contains(got, albresources.BindingStack("shop", environment.TierProduction)) {
 		t.Errorf("the refused bind raised %v, want nothing: Compute refuses the backend service only after the neg exists", got)
 	}
 }
@@ -279,7 +291,7 @@ func TestUnbindingTheLastHostnameTakesTheProjectsStackDownRatherThanLeavingItInP
 		t.Fatalf("UnbindDomain = %v", err)
 	}
 
-	want := BindingStack("shop", environment.TierProduction)
+	want := albresources.BindingStack("shop", environment.TierProduction)
 	if got := w.torn(); !slices.Contains(got, want) {
 		t.Errorf("unbinding the last hostname destroyed %v, want %q among them: bytes a deploy leaves behind after teardown must be zero", got, want)
 	}
@@ -318,7 +330,7 @@ func TestAProjectReconciledBeforeItsTierHasALoadBalancerIsToldToBootstrapIt(t *t
 	t.Parallel()
 
 	balancer, w := balancing(t)
-	delete(w.outputs, LoadBalancerStack(environment.TierProduction))
+	delete(w.outputs, albresources.LoadBalancerStack(environment.TierProduction))
 
 	var refused refusal.Refusal
 	_, err := balancer.Reconcile(context.Background(),
@@ -355,13 +367,13 @@ func TestThePreviewWildcardEntersItsCertificateAndRoutesNoHostnameOfItsOwn(t *te
 		t.Errorf("the tier url map routes %v, want nothing: a preview is answered by the exact host rule its promotion writes, "+
 			"and a wildcard rule would reach whatever Cloud Run service a hostname's label names", routed)
 	}
-	resources := w.declarations(LoadBalancerStack(environment.TierPreview))
+	resources := w.declarations(albresources.LoadBalancerStack(environment.TierPreview))
 	for name, declared := range resources {
 		if cloudRunMask(declared) != "" {
 			t.Errorf("the preview balancer declares %s with the url mask %q, want none: a mask reaches every service in the project by name", name, cloudRunMask(declared))
 		}
 	}
-	if _, entered := resources[must(previewEntryName("ocel", previewBase))]; !entered {
+	if _, entered := resources[must(albresources.PreviewEntryName("ocel", previewBase))]; !entered {
 		t.Errorf("the preview balancer declares %v, want a certificate map entry: nothing terminates TLS for %s without one",
 			keys(resources), edge.PreviewWildcard(previewBase))
 	}
@@ -412,8 +424,8 @@ func TestRaisingTheTierLoadBalancerAgainKeepsTheWildcardCertificateEntered(t *te
 		t.Fatalf("Bootstrap = %v", err)
 	}
 
-	resources := w.declarations(LoadBalancerStack(environment.TierPreview))
-	if _, declared := resources[must(previewEntryName("ocel", previewBase))]; !declared {
+	resources := w.declarations(albresources.LoadBalancerStack(environment.TierPreview))
+	if _, declared := resources[must(albresources.PreviewEntryName("ocel", previewBase))]; !declared {
 		t.Errorf("the balancer raised again declares %v, and the wildcard's certificate is gone from it: a bootstrap that reruns would "+
 			"take every preview in the tier down", keys(resources))
 	}
@@ -431,11 +443,11 @@ func TestDestroyingThePreviewWildcardTakesItsCertificateAndLeavesTheLoadBalancer
 		t.Fatalf("DestroyPreviewWildcard = %v", err)
 	}
 
-	resources := w.declarations(LoadBalancerStack(environment.TierPreview))
-	if _, declared := resources[must(previewEntryName("ocel", previewBase))]; declared {
+	resources := w.declarations(albresources.LoadBalancerStack(environment.TierPreview))
+	if _, declared := resources[must(albresources.PreviewEntryName("ocel", previewBase))]; declared {
 		t.Errorf("the balancer still declares %v after the wildcard was released: bytes a release leaves behind must be zero", keys(resources))
 	}
-	if slices.Contains(w.torn(), LoadBalancerStack(environment.TierPreview)) {
+	if slices.Contains(w.torn(), albresources.LoadBalancerStack(environment.TierPreview)) {
 		t.Error("releasing the wildcard destroyed the tier balancer, which every project in the tier is answered by")
 	}
 	owner, err := balancer.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
@@ -452,7 +464,7 @@ func TestAWildcardWhoseLoadBalancerFailsToRiseIsOwnedByNothing(t *testing.T) {
 
 	ctx := context.Background()
 	balancer, w := balancing(t)
-	w.breakUp(LoadBalancerStack(environment.TierPreview), errors.New("the preview balancer would not rise"))
+	w.breakUp(albresources.LoadBalancerStack(environment.TierPreview), errors.New("the preview balancer would not rise"))
 
 	if _, err := balancer.ReconcilePreviewWildcard(ctx, previewWildcard()); err == nil {
 		t.Fatal("ReconcilePreviewWildcard = nil, want the failure the balancer reported")
@@ -473,7 +485,7 @@ func TestAWildcardWhoseTeardownFailsIsStillOwnedSoTheRetryStillTearsItDown(t *te
 	if _, err := balancer.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard = %v", err)
 	}
-	w.breakUp(LoadBalancerStack(environment.TierPreview), errors.New("the preview balancer would not rise"))
+	w.breakUp(albresources.LoadBalancerStack(environment.TierPreview), errors.New("the preview balancer would not rise"))
 
 	if err := balancer.DestroyPreviewWildcard(ctx, previewBase); err == nil {
 		t.Fatal("DestroyPreviewWildcard = nil, want the failure the balancer reported")
@@ -529,11 +541,11 @@ func TestAPreviewAliasIsAnsweredOnAnExactHostRuleOntoItsAppsService(t *testing.T
 		t.Fatalf("MovePointer(pr-7) = %v", err)
 	}
 
-	backend := must(backendName("ocel", "shop", environment.TierPreview, aliasHost))
+	backend := must(albresources.BackendName("ocel", "shop", environment.TierPreview, aliasHost))
 	if got := w.hosts(tierRoutes)[aliasHost]; got != backend {
 		t.Errorf("%s is routed to %q, want its own backend %q", aliasHost, got, backend)
 	}
-	neg := w.declarations(BindingStack("shop", environment.TierPreview))[must(negName("ocel", "shop", environment.TierPreview, aliasHost))]
+	neg := w.declarations(albresources.BindingStack("shop", environment.TierPreview))[must(albresources.NegName("ocel", "shop", environment.TierPreview, aliasHost))]
 	run, _ := neg.Args["cloudRun"].(map[string]any)
 	if run["service"] != previewService || run["tag"] != nil {
 		t.Errorf("the alias's neg points at %v, want service %s and no tag: the alias follows the service's traffic, which the promotion pins", run, previewService)
@@ -553,8 +565,8 @@ func TestAProjectsOwnPreviewWildcardEntersItsCertificateAndEachPreviewIsRoutedEx
 		t.Fatalf("BindDomain(%s) = %v", wildcard, err)
 	}
 
-	declared := w.declarations(BindingStack("shop", environment.TierPreview))
-	entry, entered := declared[must(entryName("ocel", "shop", environment.TierPreview, wildcard))]
+	declared := w.declarations(albresources.BindingStack("shop", environment.TierPreview))
+	entry, entered := declared[must(albresources.EntryName("ocel", "shop", environment.TierPreview, wildcard))]
 	if !entered || entry.Args["hostname"] != wildcard {
 		t.Fatalf("the binding declares %v, want a certificate map entry for %s: it is what terminates TLS for every preview under it", keys(declared), wildcard)
 	}
@@ -569,7 +581,7 @@ func TestAProjectsOwnPreviewWildcardEntersItsCertificateAndEachPreviewIsRoutedEx
 	if err := stack.MovePointer(ctx, aliasMove("p1", alias, record), progress.Discard()); err != nil {
 		t.Fatalf("MovePointer(pr-7) = %v", err)
 	}
-	if got := w.hosts(tierRoutes)[alias]; got != must(backendName("ocel", "shop", environment.TierPreview, alias)) {
+	if got := w.hosts(tierRoutes)[alias]; got != must(albresources.BackendName("ocel", "shop", environment.TierPreview, alias)) {
 		t.Errorf("%s is routed to %q, want its own backend", alias, got)
 	}
 	if routed, ruled := w.hosts(tierRoutes)[wildcard]; ruled {
@@ -634,7 +646,7 @@ func servedOnPreview(t *testing.T, balancer *Edge, slug, base string) {
 	if err != nil {
 		t.Fatalf("Reconcile(%s) = %v", slug, err)
 	}
-	state := stackrecords.EdgeState{Kind: Kind, Edge: stack.State()}
+	state := stackrecords.EdgeState{Kind: albresources.Kind, Edge: stack.State()}
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		t.Fatal(err)
@@ -698,7 +710,7 @@ func TestTheLoadBalancerComesDownOnceNothingIsBoundToIt(t *testing.T) {
 	if err := balancer.Teardown(context.Background(), environment.TierProduction); err != nil {
 		t.Fatalf("Teardown = %v", err)
 	}
-	if want := LoadBalancerStack(environment.TierProduction); !slices.Contains(w.torn(), want) {
+	if want := albresources.LoadBalancerStack(environment.TierProduction); !slices.Contains(w.torn(), want) {
 		t.Errorf("the teardown destroyed %v, want %q among them", w.torn(), want)
 	}
 }
@@ -721,7 +733,7 @@ func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
 		t.Fatalf("Promote = %v", err)
 	}
 
-	want := must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))
+	want := must(albresources.BackendName("ocel", "shop", environment.TierProduction, "shop.example.com"))
 	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != want {
 		t.Errorf("the tier url map routes shop.example.com onto %q, want the project's own backend %q: the bind served the hostname a 404 "+
 			"because the app had released nothing, and the release that gives it a service is what takes it live", got, want)
@@ -771,7 +783,7 @@ func TestAHostnameBoundAfterAReleaseIsRoutedToThePromotedService(t *testing.T) {
 		t.Fatalf("BindDomain = %v", err)
 	}
 
-	want := must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))
+	want := must(albresources.BackendName("ocel", "shop", environment.TierProduction, "shop.example.com"))
 	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != want {
 		t.Errorf("the tier url map routes shop.example.com onto %q, want the project's own backend %q: the release was promoted before the bind, "+
 			"and no later promotion comes to take the hostname live", got, want)
@@ -824,7 +836,7 @@ func TestAHostnameBoundToAPromotedFunctionAppIsRoutedToItsEntryFunctionsService(
 	promoted(t, stack, progress.Discard(), "p1", "", map[string]string{"web": "b1"})
 	bound(t, stack, "shop.example.com", "web")
 
-	if got, want := w.hosts("ocel-alb-production-routes")["shop.example.com"], must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com")); got != want {
+	if got, want := w.hosts("ocel-alb-production-routes")["shop.example.com"], must(albresources.BackendName("ocel", "shop", environment.TierProduction, "shop.example.com")); got != want {
 		t.Errorf("shop.example.com is routed to %q, want %q", got, want)
 	}
 	if got := hostOf(stack, "shop.example.com").Service; got != "ocel-shop-prod-web" {
@@ -939,17 +951,17 @@ func TestThePreviewWildcardIsAUserOfTheLoadBalancerPartFromBeforeItRaisesItUntil
 	ctx := context.Background()
 	balancer, w := balancing(t)
 	var claimed, released []string
-	balancer.deps.FrontPart = &FrontPart{
+	balancer.deps.Engine.FrontPart = FrontPart{
 		Claim: func(_ context.Context, tier environment.Tier, user string) error {
 			claimed = append(claimed, string(tier)+"/"+user)
-			if declared := w.declarations(LoadBalancerStack(environment.TierPreview)); len(declared) != 0 {
+			if declared := w.declarations(albresources.LoadBalancerStack(environment.TierPreview)); len(declared) != 0 {
 				t.Errorf("the wildcard claimed the load balancer part after raising it with %v, want the part to add the load balancer", keys(declared))
 			}
 			return nil
 		},
 		Release: func(_ context.Context, tier environment.Tier, user string) error {
 			released = append(released, string(tier)+"/"+user)
-			if _, declared := w.declarations(LoadBalancerStack(environment.TierPreview))[must(previewEntryName("ocel", previewBase))]; declared {
+			if _, declared := w.declarations(albresources.LoadBalancerStack(environment.TierPreview))[must(albresources.PreviewEntryName("ocel", previewBase))]; declared {
 				t.Error("the wildcard released the load balancer part while its certificate is still entered on it")
 			}
 			return nil
@@ -970,3 +982,5 @@ func TestThePreviewWildcardIsAUserOfTheLoadBalancerPartFromBeforeItRaisesItUntil
 		t.Errorf("releasing the wildcard released %v, want the load balancer part released by %s: it may be the last user", released, user)
 	}
 }
+
+func holdNoFront(context.Context, environment.Tier, string) error { return nil }

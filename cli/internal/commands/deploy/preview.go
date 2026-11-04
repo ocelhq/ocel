@@ -63,7 +63,7 @@ func NewPreviewCommand(dependencies deploy.Dependencies) *cobra.Command {
 	}
 	addPreviewUpFlags(upCmd, &up)
 
-	var removeYes bool
+	var remove deploy.RemoveOptions
 	rm := &cobra.Command{
 		Use:   "rm [name]",
 		Short: "Tear down a preview",
@@ -79,10 +79,11 @@ func NewPreviewCommand(dependencies deploy.Dependencies) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("determine working directory: %w", err)
 			}
-			return deploy.RemovePreview(cmd.Context(), dependencies, cwd, readPreviewNameArgument(args), removeYes, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return deploy.RemovePreview(cmd.Context(), dependencies, cwd, readPreviewNameArgument(args), remove, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		},
 	}
-	commands.AddYesFlag(rm, &removeYes)
+	commands.AddYesFlag(rm, &remove.Yes)
+	commands.AddRemoteFlag(rm, &remove.Remote)
 
 	ls := &cobra.Command{
 		Use:     "ls",
@@ -135,6 +136,7 @@ func addPreviewUpFlags(cmd *cobra.Command, up *previewUpFlags) {
 	commands.AddDryFlag(cmd, &up.opts.Dry, dryFlagUsage)
 	commands.AddYesFlag(cmd, &up.opts.Yes)
 	commands.AddNoWaitFlag(cmd, &up.opts.NoWait)
+	commands.AddRemoteFlag(cmd, &up.opts.Remote)
 }
 
 func previewUpRunE(dependencies deploy.Dependencies, up *previewUpFlags) func(cmd *cobra.Command, args []string) error {

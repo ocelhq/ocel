@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -135,7 +136,7 @@ func TestAnEmulatedBootstrapMakesNoCustomRole(t *testing.T) {
 func TestABootstrapCredentialMayKeepTheCustomRoleItMakes(t *testing.T) {
 	t.Parallel()
 
-	document, err := Credentials{Project: Named("acme-prod"), Namespace: "ocel"}.Permissions(edge.PurposeBootstrap, environment.TierProduction)
+	document, err := control.Credentials{Project: control.Named("acme-prod"), Namespace: "ocel"}.Permissions(edge.PurposeBootstrap, environment.TierProduction)
 	if err != nil {
 		t.Fatalf("Permissions(bootstrap) = %v", err)
 	}

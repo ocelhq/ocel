@@ -24,6 +24,14 @@ func SanitizeLogText(raw string) string {
 	return EscapeControls(strings.TrimRight(ansi.Strip(raw), "\r\n"))
 }
 
+func EscapeControlLines(text string) string {
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	for i, line := range lines {
+		lines[i] = EscapeControls(line)
+	}
+	return strings.Join(lines, "\n")
+}
+
 func EscapeControls(text string) string {
 	var b strings.Builder
 	for _, r := range text {

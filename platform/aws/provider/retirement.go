@@ -23,6 +23,6 @@ func (p *Provider) Retire(ctx context.Context, live provider.LiveApps, progress 
 }
 
 func (p *Provider) holdsBootstrap(ctx context.Context, tier environment.Tier) (bool, error) {
-	deployed, err := p.bootstrapped(ctx, tier)
+	deployed, err := p.ReadDeployed(ctx, tier)
 	return deployed.Present, err
 }

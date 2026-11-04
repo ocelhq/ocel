@@ -158,6 +158,20 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 	})
 }
 
+func (s *edgeSession) reclaimRemovedPreview(ctx context.Context, lease provider.Lease, req *contractv1.RemoveEnvironmentRequest, pointer string, removed router.PruneResult, progress progress.Log) error {
+	if err := s.releasePointerHostnames(ctx, pointer, progress); err != nil {
+		return err
+	}
+	if err := s.checkpoint(ctx); err != nil {
+		return err
+	}
+	if err := retire(ctx, s.provider, noAppLive(req.GetSlug(), environment.TierPreview, pointer, lease), progress); err != nil {
+		return err
+	}
+	teardown := provider.StackDestroy{Images: removalImages(ctx, s.provider, req.GetProjectRegistry(), progress), Lease: lease}
+	return ReclaimPreview(ctx, s.provider, teardown, req.GetSlug(), pointer, removed, progress)
+}
+
 func (h *handlers) removePreview(ctx context.Context, lease provider.Lease, req *contractv1.RemoveEnvironmentRequest, pointer string, progress progress.Log) error {
 	session, err := h.openEdgeSession(ctx, environment.TierPreview, req.GetSlug(), req.GetEdge())
 	if err != nil {
@@ -174,24 +188,17 @@ func (h *handlers) removePreview(ctx context.Context, lease provider.Lease, req 
 		return err
 	}
 	progress.Say(fmt.Sprintf("Removing the routing pointer of %s", environmentPhrase(environment.TierPreview, pointer)))
-	removed, err := session.removePointer(ctx, removal, progress)
+	removed, dropped, err := session.removePointer(ctx, removal, progress)
 	if err != nil {
 		return err
 	}
-	if err := session.releasePointerHostnames(ctx, pointer, progress); err != nil {
-		return err
-	}
-	if err := session.checkpoint(ctx); err != nil {
-		return err
-	}
-	if err := retire(ctx, session.provider, noAppLive(req.GetSlug(), environment.TierPreview, pointer, lease), progress); err != nil {
-		return err
-	}
-	teardown := provider.StackDestroy{Images: removalImages(ctx, session.provider, req.GetProjectRegistry(), progress), Lease: lease}
-	if err := ReclaimPreview(ctx, session.provider, teardown, req.GetSlug(), pointer, removed, progress); err != nil {
-		return err
+	if err := session.reclaimRemovedPreview(ctx, lease, req, pointer, removed, progress); err != nil {
+		return session.keepPreviewReclaimPending(ctx, pointer, dropped, err)
 	}
 	if err := removeOcelOwnedBindings(ctx, session.provider, req.GetSlug(), pointer); err != nil {
+		return err
+	}
+	if err := forgetEnvSourceCopies(ctx, session.provider, req.GetSlug(), pointer); err != nil {
 		return err
 	}
 	if err := records.Forget(ctx, session.provider.KeyValues(), stackrecords.EnvironmentKey(environment.TierPreview, req.GetSlug(), pointer)); err != nil {
@@ -295,6 +302,15 @@ func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, pre
 	}
 	if _, err := store.RemoveBindings(ctx, scope, preview, kept); err != nil {
 		return fmt.Errorf("remove the records kept for preview %s: %w", preview, err)
+	}
+	return nil
+}
+
+func forgetEnvSourceCopies(ctx context.Context, p provider.Provider, slug, preview string) error {
+	store := variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
+	scope := variablestore.Scope{Project: slug, Tier: environment.TierPreview}
+	if err := store.ForgetEnvSourceCopies(ctx, scope, preview); err != nil {
+		return fmt.Errorf("forget the values preview %s's env source sync copied there: %w", preview, err)
 	}
 	return nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
 func TestAProtectedProductionHostIsInTheProductionPluginAndProvenGatedBeforeItIsRouted(t *testing.T) {
@@ -27,7 +28,7 @@ func TestAProtectedProductionHostIsInTheProductionPluginAndProvenGatedBeforeItIs
 	stage(t, shop, staticRecord("b1"))
 	promote(t, shop, "p1", "b1")
 
-	if hosts := w.gatedHosts(GateStack(environment.TierProduction)); !slices.Equal(hosts, []string{"shop.example.com"}) {
+	if hosts := w.gatedHosts(albresources.GateStack(environment.TierProduction)); !slices.Equal(hosts, []string{"shop.example.com"}) {
 		t.Errorf("the production plugin gates %v, want shop.example.com", hosts)
 	}
 	events := w.happened()
@@ -68,7 +69,7 @@ func TestAProjectsProductionAndPreviewGatesNeverShareAPluginOrARecord(t *testing
 	reconcileGatedOn(t, balancer, environment.TierPreview, "shop", &shopGate)
 	reconcileGatedOn(t, balancer, environment.TierProduction, "shop", &productionGate)
 
-	production, preview := w.gateConfig(GateStack(environment.TierProduction)), w.gateConfig(GateStack(environment.TierPreview))
+	production, preview := w.gateConfig(albresources.GateStack(environment.TierProduction)), w.gateConfig(albresources.GateStack(environment.TierPreview))
 	if !strings.Contains(production, productionGate.Key) || strings.Contains(production, shopGate.Key) {
 		t.Errorf("the production plugin runs\n%s\nwant the production key alone: a preview password must never open production", production)
 	}
@@ -95,10 +96,10 @@ func TestTurningProductionProtectionOffOpensProductionAlone(t *testing.T) {
 
 	reconcileGatedOn(t, balancer, environment.TierProduction, "shop", nil)
 
-	if config := w.gateConfig(GateStack(environment.TierProduction)); strings.Contains(config, productionGate.Key) {
+	if config := w.gateConfig(albresources.GateStack(environment.TierProduction)); strings.Contains(config, productionGate.Key) {
 		t.Errorf("the production plugin still runs shop's gate after protection.production was turned off:\n%s", config)
 	}
-	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
+	if config := w.gateConfig(albresources.GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
 		t.Errorf("the preview plugin lost shop's gate when production was opened:\n%s", config)
 	}
 	if _, found, err := balancer.readGateRecord(ctx, environment.TierPreview, "shop"); err != nil || !found {
@@ -117,10 +118,10 @@ func TestPublishingAProductionGateSendsItToTheProductionPluginAlone(t *testing.T
 		t.Fatalf("PublishGate = %v", err)
 	}
 
-	if config := w.gateConfig(GateStack(environment.TierProduction)); !strings.Contains(config, productionGate.Key) {
+	if config := w.gateConfig(albresources.GateStack(environment.TierProduction)); !strings.Contains(config, productionGate.Key) {
 		t.Errorf("the production plugin runs %q, want the published gate", config)
 	}
-	if config := w.gateConfig(GateStack(environment.TierPreview)); strings.Contains(config, productionGate.Key) {
+	if config := w.gateConfig(albresources.GateStack(environment.TierPreview)); strings.Contains(config, productionGate.Key) {
 		t.Errorf("the preview plugin runs the production gate:\n%s", config)
 	}
 }
@@ -136,7 +137,7 @@ func TestDestroyingAProtectedProductionProjectRemovesItsGateFromTheProductionPlu
 		t.Fatalf("Destroy = %v", err)
 	}
 
-	if config := w.gateConfig(GateStack(environment.TierProduction)); strings.Contains(config, productionGate.Key) {
+	if config := w.gateConfig(albresources.GateStack(environment.TierProduction)); strings.Contains(config, productionGate.Key) {
 		t.Errorf("the production plugin still holds the destroyed project's keys:\n%s", config)
 	}
 }
@@ -164,9 +165,9 @@ func withPreviewOnlyGateRecords(t *testing.T) (*Edge, *world) {
 	t.Helper()
 	balancer, w := balancing(t)
 	partition := stackrecords.EdgeStacksPartition(environment.TierPreview)
-	recordSealedFor(t, balancer, partition.Key(string(Kind), "gate-publication"),
+	recordSealedFor(t, balancer, partition.Key(string(albresources.Kind), "gate-publication"),
 		seal.Bind("alb preview gate publication"), gatePublication{Confirmed: true})
-	recordSealedFor(t, balancer, partition.Key(string(Kind), "gates", "blog"),
+	recordSealedFor(t, balancer, partition.Key(string(albresources.Kind), "gates", "blog"),
 		seal.Bind("alb preview gate", "blog"), gateRecord{Gate: blogGate})
 	return balancer, w
 }
@@ -189,7 +190,7 @@ func TestBootstrappingAPreviewTierWhoseGateRecordsWereSealedForPreviewsAloneAtta
 	}
 	reconcileGated(t, balancer, "shop", &shopGate)
 
-	if config := w.gateConfig(GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
+	if config := w.gateConfig(albresources.GateStack(environment.TierPreview)); !strings.Contains(config, shopGate.Key) {
 		t.Errorf("the preview plugin holds %s, want the protected preview's keys", config)
 	}
 }
@@ -200,11 +201,11 @@ func TestDestroyingAProjectReleasesTheLoadBalancerOnlyOnceItsHostsAreUnrouted(t 
 	ctx := context.Background()
 	balancer, w := gatedEdge(t)
 	var released []string
-	balancer.deps.FrontPart = &FrontPart{
+	balancer.deps.Engine.FrontPart = FrontPart{
 		Claim: func(context.Context, environment.Tier, string) error { return nil },
 		Release: func(_ context.Context, tier environment.Tier, slug string) error {
 			released = append(released, string(tier)+"/"+slug)
-			if hosts := w.hosts(loadBalancerNames("ocel", tier).URLMap); len(hosts) != 0 {
+			if hosts := w.hosts(albresources.LoadBalancerNames("ocel", tier).URLMap); len(hosts) != 0 {
 				t.Errorf("the load balancer was released while it still routes %v", hosts)
 			}
 			return nil

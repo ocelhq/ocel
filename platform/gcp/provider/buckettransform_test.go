@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
@@ -261,54 +262,54 @@ func TestRemovingABucketForgetsWhatItsTransformsPatched(t *testing.T) {
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	for key := range p.records.(*fake.KeyValues).Snapshot() {
+	for key := range p.Records.(*fake.KeyValues).Snapshot() {
 		if strings.Contains(key, "patches") {
 			t.Errorf("%s is left behind, want every record a bucket's patches wrote removed with it", key)
 		}
 	}
 }
 
-func shapedBucket(t *testing.T, pass transform.Pass) *costv1.Resource {
+func inventoriedBucket(t *testing.T, pass transform.Pass) *costv1.Resource {
 	t.Helper()
 	p := pushing(t, "")
 	p.transforms = pass
-	set, err := p.ShapeCost(context.Background(), provider.ShapeRequest{
+	set, err := p.InventoryDeploy(context.Background(), provider.InventoryRequest{
 		Deploy:    provider.DeploySpec{Slug: "shop", Tier: environment.TierProduction, Env: "prod"},
 		Resources: bucketStack().Resources,
 	})
 	if err != nil {
-		t.Fatalf("ShapeCost() = %v", err)
+		t.Fatalf("InventoryDeploy() = %v", err)
 	}
 	for _, resource := range set.GetResources() {
 		if resource.GetType() == "google_storage_bucket" && strings.Contains(resource.GetName(), "uploads") {
 			return resource
 		}
 	}
-	t.Fatalf("ShapeCost() shaped %v, want the uploads bucket", set.GetResources())
+	t.Fatalf("InventoryDeploy() inventoried %v, want the uploads bucket", set.GetResources())
 	return nil
 }
 
 func TestABucketIsPricedAtTheStorageClassItsTransformSets(t *testing.T) {
-	shaped := shapedBucket(t, &patching{patches: transform.Patches{"bucket": {"storageClass": "ARCHIVE", "versioning": map[string]any{"enabled": true}}}})
+	inventoried := inventoriedBucket(t, &patching{patches: transform.Patches{"bucket": {"storageClass": "ARCHIVE", "versioning": map[string]any{"enabled": true}}}})
 
-	properties := shaped.GetProperties().AsMap()
+	properties := inventoried.GetProperties().AsMap()
 	if properties["storage_class"] != "ARCHIVE" || properties["versioning"].(map[string]any)["enabled"] != true {
 		t.Errorf("the bucket is priced as %v, want the ARCHIVE class with versioning the transform sets", properties)
 	}
 }
 
 func TestABucketWhoseStorageClassABindingFillsIsPricedAsUnknown(t *testing.T) {
-	shaped := shapedBucket(t, &patching{patches: transform.Patches{"bucket": {
+	inventoried := inventoriedBucket(t, &patching{patches: transform.Patches{"bucket": {
 		"storageClass": map[string]any{"$ocelOutput": map[string]any{"type": "custom", "name": "tiers", "property": "class"}},
 	}}})
 
-	if !slices.Contains(shaped.GetUnknown(), "storage_class") {
-		t.Errorf("the bucket is priced with unknown %v, want its storage class unknown until the deploy reads the record", shaped.GetUnknown())
+	if !slices.Contains(inventoried.GetUnknown(), "storage_class") {
+		t.Errorf("the bucket is priced with unknown %v, want its storage class unknown until the deploy reads the record", inventoried.GetUnknown())
 	}
 }
 
 func TestAProjectListingTransformsIsServedOnGoogleCloud(t *testing.T) {
-	if !(&Provider{}).Facts().RendersTransforms {
+	if !newProvider(&control.Provider{}).Facts().RendersTransforms {
 		t.Error("a project listing a transform is refused on Google Cloud, which now patches what it provisions")
 	}
 }

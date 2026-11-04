@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -37,7 +39,7 @@ func (r *interceptedRecords) List(ctx context.Context, in records.Partition, und
 }
 
 func listConsumers(ctx context.Context, store records.Store) ([]records.Entry, error) {
-	consumers := containers.Shared.ConsumersPrefix(environment.TierProduction)
+	consumers := sharedparts.ConsumersPrefix(environment.TierProduction, containers.Shared.Slug)
 	return store.List(ctx, consumers.Partition, consumers.Path...)
 }
 
@@ -72,7 +74,7 @@ func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItM
 	blog.Ref = provider.StackRef{Project: "blog", Tier: environment.TierProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	claimed := false
 	store.afterList = func(under records.Key) {
-		if claimed || under.String() != containers.Shared.ConsumersPrefix(environment.TierProduction).String() {
+		if claimed || under.String() != sharedparts.ConsumersPrefix(environment.TierProduction, containers.Shared.Slug).String() {
 			return
 		}
 		claimed = true
@@ -191,7 +193,7 @@ func TestAFailedTakedownLeavesTheContainersPartForItsRemovalToTakeDown(t *testin
 	if err == nil || !strings.Contains(err.Error(), "ocel bootstrap production --remove containers") {
 		t.Fatalf("Destroy(shop) = %v, want the failed takedown to name the command that takes it down again", err)
 	}
-	part, present, err := containers.ReadPart(ctx, shared, "ocel", "us-east-1", environment.TierProduction)
+	part, present, err := sharedparts.ReadContainersPart(ctx, shared, "ocel", "us-east-1", environment.TierProduction)
 	if err != nil || !present || len(part.UsedBy) != 0 {
 		t.Fatalf("containers part = %+v, %v, %v, want it still recorded and used by nobody", part, present, err)
 	}
@@ -202,7 +204,7 @@ func TestAFailedTakedownLeavesTheContainersPartForItsRemovalToTakeDown(t *testin
 	if torn := engine.torn(); !slices.Equal(torn, []string{shop.Ref.Name.String(), infra}) {
 		t.Errorf("torn down = %v, want the removal to take the container infrastructure down", torn)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, shared, environment.TierProduction, containers.Part); err != nil || present {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, shared, environment.TierProduction, sharedparts.ContainersPart); err != nil || present {
 		t.Errorf("containers record present %v (%v) after its removal, want it forgotten", present, err)
 	}
 }

@@ -4,10 +4,10 @@ package cli.stream.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1;streamv1";
 
 import "buf/validate/validate.proto";
-import "cloud/v1/job.proto";
 import "common/environment/v1/environment.proto";
 import "common/progress/v1/progress.proto";
 import "console/v1/deployment.proto";
+import "runner/v1/runner.proto";
 
 message RunEvent {
   common.progress.v1.OperationEvent operation = 1;
@@ -45,7 +45,7 @@ message WaitingEvent {
 
   MissingVariables missing = 3;
 
-  cloud.v1.JobInput input = 4;
+  runner.v1.JobInput input = 4;
 }
 
 message InputAnswer {
@@ -127,21 +127,23 @@ message RunSummary {
 
   repeated Assumption assumed = 17;
 
-  CloudJob cloud_job = 18;
+  repeated RemoteJob remote_jobs = 18;
 
   console.v1.Deployment deployment_report = 19;
 }
 
-message CloudJob {
+message RemoteJob {
   string id = 1;
 
   string url = 2;
 
-  cloud.v1.JobState state = 3;
+  runner.v1.JobState state = 3;
 
-  cloud.v1.JobResult result = 4;
+  runner.v1.JobResult result = 4;
 
-  cloud.v1.JobError error = 5;
+  runner.v1.JobError error = 5;
+
+  string runner = 6;
 }
 
 message RunError {

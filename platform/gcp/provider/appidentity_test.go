@@ -81,11 +81,11 @@ func TestAnAppPatchedToRunAsAnAccountOfItsOwnRunsAsItAndOcelMakesNoAccount(t *te
 	if len(server.Iam.Created) != 0 {
 		t.Errorf("created the accounts %+v, want none: the app runs as an account its own infrastructure owns", server.Iam.Created)
 	}
-	held := holdings(server.Iam, p.resolved, ownedMember)
+	held := holdings(server.Iam, p.Clients, ownedMember)
 	if len(held) == 0 {
 		t.Errorf("the patched account holds nothing, want ocel's grants on its own records and key to reach it")
 	}
-	if own := holdings(server.Iam, p.resolved, appMember(p.resolved, spec.Ref, "api")); len(own) != 0 {
+	if own := holdings(server.Iam, p.Clients, appMember(p.Clients, spec.Ref, "api")); len(own) != 0 {
 		t.Errorf("ocel's own account for the app holds %q, want nothing", own)
 	}
 }
@@ -122,7 +122,7 @@ func TestAnAppPatchedToRunAsAnAccountSignsItsDelayedMessagesAsThatAccount(t *tes
 	}
 
 	pinned := googletest.EnvOf(server.Created[0].Template.Containers[0])[manifest.EnvVar]
-	if !strings.Contains(pinned, ownedAccount) || strings.Contains(pinned, p.resolved.AppAccountEmail("shop", "production", "api")) {
+	if !strings.Contains(pinned, ownedAccount) || strings.Contains(pinned, p.Clients.AppAccountEmail("shop", "production", "api")) {
 		t.Errorf("the app is told to sign its delayed messages per %s, want as %s, the account it runs as", pinned, ownedAccount)
 	}
 }
@@ -249,7 +249,7 @@ func TestAnAccountTheDeployCredentialMayNotActAsIsRefusedUnlessChecksAreSkipped(
 		server := appAccountsOnly()
 		server.AccountPermissions = map[string][]string{ownedAccount: nil}
 		p, c := ensuringAccounts(t, server)
-		p.skipChecks = skipped
+		p.SkipChecks = skipped
 
 		_, err := ensureRunningAs(t, p, c, functionStackDeclaring(environment.TierProduction, "production", openingASecret), runningAs(ownedAccount), nil)
 
@@ -404,14 +404,14 @@ func TestAReleaseSwitchedToAPatchedAccountLeavesTheReleaseBeforeItItsGrantsUntil
 	server := &googletest.Run{Iam: appAccountsOnly()}
 	p := servingTransformed(t, server, &patching{})
 	before, _ := provisionReleasesSwitching(t, p, &patching{}, runningAs(ownedAccount))
-	own := appMember(p.resolved, before.Ref, "api")
+	own := appMember(p.Clients, before.Ref, "api")
 
-	if len(holdings(server.Iam, p.resolved, own)) == 0 {
+	if len(holdings(server.Iam, p.Clients, own)) == 0 {
 		t.Fatalf("ocel's account holds nothing once r2 runs as %s, want its grants kept: r1 still runs as it", ownedAccount)
 	}
-	removeStack(t, p, p.resolved, before.Ref)
+	removeStack(t, p, p.Clients, before.Ref)
 
-	if got := holdings(server.Iam, p.resolved, own); len(got) != 0 {
+	if got := holdings(server.Iam, p.Clients, own); len(got) != 0 {
 		t.Errorf("ocel's account holds %q once r1 is removed, want nothing: no release runs as it", got)
 	}
 }
@@ -421,15 +421,15 @@ func TestAReleaseSwitchedBackToOcelsAccountLeavesThePatchedOneItsGrantsUntilTheR
 	p := servingTransformed(t, server, &patching{})
 	before, after := provisionReleasesSwitching(t, p, runningAs(ownedAccount), &patching{})
 
-	if len(holdings(server.Iam, p.resolved, ownedMember)) == 0 {
+	if len(holdings(server.Iam, p.Clients, ownedMember)) == 0 {
 		t.Fatalf("the patched account holds nothing once r2 runs as ocel's, want its grants kept: r1 still runs as it")
 	}
-	removeStack(t, p, p.resolved, before.Ref)
+	removeStack(t, p, p.Clients, before.Ref)
 
-	if got := holdings(server.Iam, p.resolved, ownedMember); len(got) != 0 {
+	if got := holdings(server.Iam, p.Clients, ownedMember); len(got) != 0 {
 		t.Errorf("the patched account holds %q once r1 is removed, want nothing: no release runs as it", got)
 	}
-	if _, err := ensureRunningAs(t, p, p.resolved, appNamed("web", after), runningAs(ownedAccount), nil); err != nil {
+	if _, err := ensureRunningAs(t, p, p.Clients, appNamed("web", after), runningAs(ownedAccount), nil); err != nil {
 		t.Errorf("EnsureAccount(web as the freed account) = %v, want the account free for another app", err)
 	}
 }
@@ -451,14 +451,14 @@ func TestRemovingTheLastReleaseThatRanAsOcelsAccountDeletesIt(t *testing.T) {
 		t.Fatalf("ProvisionFunctions(r2) = %v", err)
 	}
 	recordStackFunctions(t, p, after, deployed)
-	ownPath := accountPathOf(p.resolved, before.Ref, "api")
+	ownPath := accountPathOf(p.Clients, before.Ref, "api")
 
-	removeStack(t, p, p.resolved, before.Ref)
+	removeStack(t, p, p.Clients, before.Ref)
 
 	if !slices.Contains(server.Iam.DeletedAccounts, ownPath) {
 		t.Errorf("deleted the accounts %q, want %s: the release left runs as the patched account, and nothing runs as ocel's any more", server.Iam.DeletedAccounts, ownPath)
 	}
-	if len(holdings(server.Iam, p.resolved, ownedMember)) == 0 {
+	if len(holdings(server.Iam, p.Clients, ownedMember)) == 0 {
 		t.Errorf("the patched account holds nothing after the old release was removed, want its grants kept for the release that runs as it")
 	}
 }
@@ -487,17 +487,17 @@ func TestRemovingTheNewestReleaseFreesThePatchedAccountItAloneRanAs(t *testing.T
 		}
 	}
 
-	if err := p.release().DeleteUnusedAccount(context.Background(), p.resolved, after.Ref, going, nil, &fake.Log{}); err != nil {
+	if err := p.release().DeleteUnusedAccount(context.Background(), p.Clients, after.Ref, going, nil, &fake.Log{}); err != nil {
 		t.Fatalf("DeleteUnusedAccount(r2) = %v", err)
 	}
 
-	if got := holdings(server.Iam, p.resolved, ownedMember); len(got) != 0 {
+	if got := holdings(server.Iam, p.Clients, ownedMember); len(got) != 0 {
 		t.Errorf("the patched account holds %q once r2 is reclaimed, want nothing: r1 runs as ocel's account", got)
 	}
-	if len(holdings(server.Iam, p.resolved, appMember(p.resolved, before.Ref, "api"))) == 0 {
+	if len(holdings(server.Iam, p.Clients, appMember(p.Clients, before.Ref, "api"))) == 0 {
 		t.Errorf("ocel's account holds nothing once r2 is reclaimed, want its grants kept: r1 runs as it")
 	}
-	if _, err := ensureRunningAs(t, p, p.resolved, appNamed("web", after), runningAs(ownedAccount), nil); err != nil {
+	if _, err := ensureRunningAs(t, p, p.Clients, appNamed("web", after), runningAs(ownedAccount), nil); err != nil {
 		t.Errorf("EnsureAccount(web as the freed account) = %v, want the account free for another app", err)
 	}
 }

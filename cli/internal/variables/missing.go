@@ -9,7 +9,7 @@ import (
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 )
 
 type MissingError struct {
@@ -54,11 +54,11 @@ func (r *MissingError) Variables() *streamv1.MissingVariables {
 	return &streamv1.MissingVariables{Cells: cells, Remedy: r.remedy(), Groups: groups}
 }
 
-func (r *MissingError) Needed() *cloudv1.VariablesNeeded {
+func (r *MissingError) Needed() *runnerv1.VariablesNeeded {
 	missing := r.Variables()
-	needed := &cloudv1.VariablesNeeded{Tier: r.Scope.Tier}
+	needed := &runnerv1.VariablesNeeded{Tier: r.Scope.Tier}
 	for _, cell := range missing.GetCells() {
-		needed.Variables = append(needed.Variables, &cloudv1.NeededVariable{
+		needed.Variables = append(needed.Variables, &runnerv1.NeededVariable{
 			Key:         cell.GetKey(),
 			Folder:      cell.GetFolder(),
 			Secret:      r.definition(cell.GetKey()).GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
@@ -68,7 +68,7 @@ func (r *MissingError) Needed() *cloudv1.VariablesNeeded {
 		})
 	}
 	for _, group := range missing.GetGroups() {
-		needed.Groups = append(needed.Groups, &cloudv1.NeededGroup{Key: group.GetKey(), Description: group.GetDescription()})
+		needed.Groups = append(needed.Groups, &runnerv1.NeededGroup{Key: group.GetKey(), Description: group.GetDescription()})
 	}
 	return needed
 }

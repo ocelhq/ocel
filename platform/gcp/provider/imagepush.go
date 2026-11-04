@@ -34,7 +34,7 @@ func (p *Provider) pushImage(ctx context.Context, tier environment.Tier, app, re
 }
 
 func (p *Provider) imageStore(ctx context.Context, tier environment.Tier) (provider.ImageStore, error) {
-	if p.emulated() {
+	if p.Emulated() {
 		return p.OpenDirectImages(ctx)
 	}
 	at, err := p.EnsureImageRegistry(ctx, tier)

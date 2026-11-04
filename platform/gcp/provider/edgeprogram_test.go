@@ -10,11 +10,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/originsecret"
 	"github.com/ocelhq/ocel/pkg/refusal"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 )
 
 func programming(h *offersHarness) *Provider {
-	return &Provider{namespace: "ocel", resolved: h.clients, records: h.records}
+	return newProvider(&control.Provider{Namespace: "ocel", Clients: h.clients, Records: h.records})
 }
 
 func (h *offersHarness) keyAssets(t *testing.T, tier environment.Tier) {
@@ -132,7 +133,7 @@ func TestProgrammingAnEntryWorkerOnATierWithNoOriginSecretIsNotReady(t *testing.
 
 func TestTheProviderHandsTheEntryWorkerProgramToItsHooks(t *testing.T) {
 	t.Parallel()
-	if (&Provider{}).Hooks().ProgramEdge == nil {
+	if newProvider(&control.Provider{}).Hooks().ProgramEdge == nil {
 		t.Error("Hooks().ProgramEdge is unset, so no edge that runs code gets a program")
 	}
 }

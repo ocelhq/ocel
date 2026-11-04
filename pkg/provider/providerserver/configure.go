@@ -9,15 +9,25 @@ import (
 )
 
 func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
-	settings := provider.Settings{
-		Options:    provider.Options(req.GetConfig().GetOptions().AsMap()),
-		Transforms: req.GetConfig().GetTransforms(),
-		Slug:       req.GetConfig().GetSlug(),
-		ProjectDir: req.GetConfig().GetProjectDir(),
-		WrittenBy:  h.session.writer,
-
-		WebIdentity: webIdentityOf(req.GetConfig().GetWebIdentity()),
+	facts, err := h.configure(ctx, DecodeSettings(req.GetConfig()), req.GetEdge())
+	if err != nil {
+		return nil, err
 	}
+	return &contractv1.ConfigureResponse{Facts: facts}, nil
+}
+
+func DecodeSettings(config *contractv1.ProviderConfig) provider.Settings {
+	return provider.Settings{
+		Options:     provider.Options(config.GetOptions().AsMap()),
+		Transforms:  config.GetTransforms(),
+		Slug:        config.GetSlug(),
+		ProjectDir:  config.GetProjectDir(),
+		WebIdentity: webIdentityOf(config.GetWebIdentity()),
+	}
+}
+
+func (h *handlers) configure(ctx context.Context, settings provider.Settings, edge *contractv1.EdgeSelection) (*contractv1.ProviderFacts, error) {
+	settings.WrittenBy = h.session.writer
 	if err := h.session.configure(ctx, settings); err != nil {
 		return nil, err
 	}
@@ -25,7 +35,7 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 	if err != nil {
 		return nil, err
 	}
-	front, err := h.edgeFor(p, req.GetEdge())
+	front, err := h.edgeFor(p, edge)
 	if err != nil {
 		return nil, err
 	}
@@ -36,18 +46,19 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 		return nil, err
 	}
 	facts.Edge.DispatchedComputes = provider.ComputeNames(dispatched)
-	return &contractv1.ConfigureResponse{Facts: facts}, nil
+	return facts, nil
 }
 
 func factsProto(p provider.Provider) *contractv1.ProviderFacts {
 	facts := p.Facts()
 	return &contractv1.ProviderFacts{
-		PricesDeploys:    p.Hooks().Cost != nil,
-		Computes:         provider.ComputeNames(facts.Computes),
-		WorkerCeilings:   provider.WorkerCeilingMessages(facts.WorkerCeilings),
-		MaxFunctionBytes: facts.MaxFunctionBytes,
-		ForwardsPorts:    p.Hooks().BindingAccess != nil,
-		WebIdentity:      webIdentityFactsProto(facts),
+		PricesDeploys:     p.Hooks().Cost != nil,
+		Computes:          provider.ComputeNames(facts.Computes),
+		WorkerCeilings:    provider.WorkerCeilingMessages(facts.WorkerCeilings),
+		MaxFunctionBytes:  facts.MaxFunctionBytes,
+		ForwardsPorts:     p.Hooks().BindingAccess != nil,
+		WebIdentity:       webIdentityFactsProto(facts),
+		ConnectorRunsJobs: facts.ConnectorRunsJobs,
 	}
 }
 

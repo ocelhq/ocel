@@ -48,4 +48,8 @@ const (
 	RestAPIsARN           = "arn:aws:apigateway:*::/restapis"
 	RestAPIResourcesARN   = "arn:aws:apigateway:*::/restapis/*"
 	APIGatewayTagsARN     = "arn:aws:apigateway:*::/tags/*"
+	DomainNamesARN        = "arn:aws:apigateway:*::/domainnames"
+	DomainNameARN         = "arn:aws:apigateway:*::/domainnames/*"
+	DomainRoutingRulesARN = "arn:aws:apigateway:*:*:/domainnames/*/routingrules/*"
+	HostedZoneARN         = "arn:aws:route53:::hostedzone/*"
 )

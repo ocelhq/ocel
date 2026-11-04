@@ -119,6 +119,14 @@ func shippedRuntime(label string) map[string]payloads.Payload {
 	return shipped
 }
 
+func digestsOf(shipped map[string]payloads.Payload) map[string]string {
+	digests := map[string]string{}
+	for architecture, payload := range shipped {
+		digests[architecture] = payload.SHA256
+	}
+	return digests
+}
+
 const fixtureStateTable = "ocel-state-table"
 
 type fakeRecords struct {
@@ -252,7 +260,7 @@ func TestEnsureRuntimeLayers(t *testing.T) {
 				t.Errorf("the first Ocel version's %s runtime %s no longer resolves after the second deployed", architecture, first[architecture])
 			}
 		}
-		reread, err := readRuntimeLayers(context.Background(), layers, defaultNamespace, environment.TierProduction, shippedRuntime("ocel v1"))
+		reread, err := readRuntimeLayers(context.Background(), layers, defaultNamespace, environment.TierProduction, digestsOf(shippedRuntime("ocel v1")))
 		if err != nil {
 			t.Fatalf("readRuntimeLayers: %v", err)
 		}
@@ -448,9 +456,9 @@ func TestTheRuntimeLayersPartHoldsEveryVersionOfTheLayersItsTierRecordedAndIsPri
 	if part.Name != RuntimeLayersPart || !part.Current || !part.UsedByEveryProject {
 		t.Errorf("runtime-layers = %+v, want it current and used by every project", part)
 	}
-	shapes, err := ShapeParts(defaultNamespace, environment.TierProduction, nil)
-	if err != nil || len(shapes[RuntimeLayersPart]) == 0 {
-		t.Errorf("ShapeParts() = %v, %v, want the runtime layers shaped to be priced", shapes, err)
+	inventories, err := InventoryParts(defaultNamespace, environment.TierProduction, nil)
+	if err != nil || len(inventories[RuntimeLayersPart]) == 0 {
+		t.Errorf("InventoryParts() = %v, %v, want the runtime layers inventoried to be priced", inventories, err)
 	}
 }
 
@@ -517,7 +525,7 @@ func TestADryPlanBootsThroughTheRuntimeLayerTheDeployWouldPublish(t *testing.T) 
 	published := runtimeLayerName(defaultNamespace, environment.TierProduction, arch.X8664, shipped[arch.X8664].SHA256)
 	layers.seed(published, 2)
 
-	got, err := readRuntimeLayersToPlan(context.Background(), layers, defaultNamespace, environment.TierProduction, shipped)
+	got, err := readRuntimeLayersToPlan(context.Background(), layers, defaultNamespace, environment.TierProduction, digestsOf(shipped))
 	if err != nil {
 		t.Fatalf("readRuntimeLayersToPlan: %v", err)
 	}

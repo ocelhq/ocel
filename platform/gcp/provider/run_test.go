@@ -198,7 +198,7 @@ func released(t *testing.T, server *googletest.Run, s run.Serving) (string, stri
 	if s.Image == "" {
 		s.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:abc"
 	}
-	deployed, err := providerServing(server, t).services().DeployService(context.Background(), s, nil)
+	deployed, err := providerServing(server, t).Services().DeployService(context.Background(), s, nil)
 	if err != nil {
 		t.Fatalf("deployService(%s) = %v", s.Service, err)
 	}
@@ -226,7 +226,7 @@ func TestAReleaseOntoADeployedServiceLeavesItsTrafficOnTheRevisionItServed(t *te
 	server := &googletest.Run{}
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
-	if _, err := providerServing(server, t).services().Pin(context.Background(), first.Service, one, nil); err != nil {
+	if _, err := providerServing(server, t).Services().Pin(context.Background(), first.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 
@@ -244,7 +244,7 @@ func TestAPinWhosePromotionWasDisplacedWhileTheServiceMovedPinsNothing(t *testin
 	first := serves("ocel-shop-prod-app")
 	_, one := released(t, server, first)
 	p := providerServing(server, t)
-	if _, err := p.services().Pin(context.Background(), first.Service, one, nil); err != nil {
+	if _, err := p.Services().Pin(context.Background(), first.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 	second := first
@@ -261,12 +261,12 @@ func TestAPinWhosePromotionWasDisplacedWhileTheServiceMovedPinsNothing(t *testin
 			return displaced
 		}
 		raced = true
-		if _, err := p.services().Pin(ctx, first.Service, three, nil); err != nil {
+		if _, err := p.Services().Pin(ctx, first.Service, three, nil); err != nil {
 			t.Fatalf("the racing Pin(%s) = %v", three, err)
 		}
 		return nil
 	}
-	if _, err := p.services().Pin(context.Background(), first.Service, two, stillActive); !errors.Is(err, displaced) {
+	if _, err := p.Services().Pin(context.Background(), first.Service, two, stillActive); !errors.Is(err, displaced) {
 		t.Fatalf("Pin(%s) raced by a pin that landed after its promotion was checked = %v, want that displacement", two, err)
 	}
 	if service := server.Serving(); !run.ServedBy(service.Traffic, three) {
@@ -287,7 +287,7 @@ func TestPinningTrafficKeepsEveryTagTheServiceCarries(t *testing.T) {
 		{Type: run.TrafficByRevision, Revision: two, Tag: "r00000002"},
 	}
 
-	if _, err := providerServing(server, t).services().Pin(context.Background(), first.Service, two, nil); err != nil {
+	if _, err := providerServing(server, t).Services().Pin(context.Background(), first.Service, two, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", two, err)
 	}
 
@@ -315,11 +315,11 @@ func TestTheTagOfARevisionIsReadFromTheServiceAndAnUntaggedRevisionIsRefused(t *
 	_, two := released(t, server, untagged)
 	p := providerServing(server, t)
 
-	if tag, err := p.services().ReadTag(context.Background(), tagged.Service, one); err != nil || tag != "r1a2b3c4d" {
+	if tag, err := p.Services().ReadTag(context.Background(), tagged.Service, one); err != nil || tag != "r1a2b3c4d" {
 		t.Errorf("ReadTag(%s) = %q, %v, want r1a2b3c4d", one, tag, err)
 	}
 	var refused refusal.Refusal
-	if _, err := p.services().ReadTag(context.Background(), tagged.Service, two); !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
+	if _, err := p.Services().ReadTag(context.Background(), tagged.Service, two); !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Errorf("ReadTag(%s) of a revision no release tagged = %v, want a %s refusal", two, err, refusal.CodeNotReady)
 	}
 }
@@ -330,12 +330,12 @@ func TestUntaggingTakesTheTagOffItsRevisionAndLeavesTheTrafficWhereItWas(t *test
 	first.Tag = "r00000001"
 	_, one := released(t, server, first)
 	p := providerServing(server, t)
-	if _, err := p.services().Pin(context.Background(), first.Service, one, nil); err != nil {
+	if _, err := p.Services().Pin(context.Background(), first.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 
 	for range 2 {
-		if err := p.services().Untag(context.Background(), first.Service, "r00000001"); err != nil {
+		if err := p.Services().Untag(context.Background(), first.Service, "r00000001"); err != nil {
 			t.Fatalf("Untag() = %v", err)
 		}
 	}
@@ -356,16 +356,16 @@ func TestWhatAServicePinsIsTheRevisionTakingAllOfItsTraffic(t *testing.T) {
 	p := providerServing(server, t)
 	ctx := context.Background()
 
-	if pinned, err := p.services().ReadServing(ctx, first.Service); err != nil || pinned != one {
+	if pinned, err := p.Services().ReadServing(ctx, first.Service); err != nil || pinned != one {
 		t.Errorf("ReadServing() of a service following its latest revision = %q, %v, want %s, the revision it serves", pinned, err, one)
 	}
 	second := first
 	second.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 	_, two := released(t, server, second)
-	if _, err := p.services().Pin(ctx, first.Service, two, nil); err != nil {
+	if _, err := p.Services().Pin(ctx, first.Service, two, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", two, err)
 	}
-	if pinned, err := p.services().ReadServing(ctx, first.Service); err != nil || pinned != two {
+	if pinned, err := p.Services().ReadServing(ctx, first.Service); err != nil || pinned != two {
 		t.Errorf("ReadServing() = %q, %v, want %s", pinned, err, two)
 	}
 }
@@ -424,7 +424,7 @@ func TestAReleaseOntoAPinnedServiceTagsTheRevisionItCreated(t *testing.T) {
 	first := serves("ocel-shop-prod-app")
 	first.Tag = "r00000001"
 	_, one := released(t, server, first)
-	if _, err := providerServing(server, t).services().Pin(context.Background(), first.Service, one, nil); err != nil {
+	if _, err := providerServing(server, t).Services().Pin(context.Background(), first.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 
@@ -527,7 +527,7 @@ func TestAServiceThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever
 	ctx := deadlineAt(2)
 	server.OnConflict = func(*runv2.GoogleCloudRunV2Service) { ctx.conflicted() }
 	before := server.Tries()
-	_, err := providerServing(server, t).services().DeployService(ctx, serves("ocel-shop-prod-app"), nil)
+	_, err := providerServing(server, t).Services().DeployService(ctx, serves("ocel-shop-prod-app"), nil)
 	if err == nil || errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("deployService() over a service that never stops changing = %v, want the release refused before the run's deadline", err)
 	}
@@ -545,13 +545,13 @@ func TestARunSaysWhichCloudRunServiceItCreatesReleasesAndDeletesAndInWhichRegion
 	progress := &fake.Log{}
 	ctx := context.Background()
 
-	if _, err := p.services().DeployService(ctx, serves("ocel-shop-prod-app"), progress); err != nil {
+	if _, err := p.Services().DeployService(ctx, serves("ocel-shop-prod-app"), progress); err != nil {
 		t.Fatalf("deployService() = %v", err)
 	}
-	if _, err := p.services().DeployService(ctx, serves("ocel-shop-prod-app"), progress); err != nil {
+	if _, err := p.Services().DeployService(ctx, serves("ocel-shop-prod-app"), progress); err != nil {
 		t.Fatalf("deployService() again = %v", err)
 	}
-	if err := p.services().TearDown(ctx, "ocel-shop-prod-app", progress); err != nil {
+	if err := p.Services().TearDown(ctx, "ocel-shop-prod-app", progress); err != nil {
 		t.Fatalf("tearDown() = %v", err)
 	}
 
@@ -572,10 +572,10 @@ func TestAServiceNoPromotionPinsServesEachRevisionItsReleaseMakes(t *testing.T) 
 	first, again := serves("ocel-connector"), serves("ocel-connector")
 	again.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
 
-	if _, err := p.services().DeployAndRoute(ctx, first, nil); err != nil {
+	if _, err := p.Services().DeployAndRoute(ctx, first, nil); err != nil {
 		t.Fatalf("deployAndRoute() = %v", err)
 	}
-	ran, err := p.services().DeployAndRoute(ctx, again, nil)
+	ran, err := p.Services().DeployAndRoute(ctx, again, nil)
 	if err != nil {
 		t.Fatalf("deployAndRoute() again = %v", err)
 	}
@@ -599,7 +599,7 @@ func TestABrandNewAppServiceAnswersNobodyUntilItsFirstPromotion(t *testing.T) {
 	if server.Serving().InvokerIamDisabled {
 		t.Fatal("a service its first release created answers anyone before a promotion pinned it, and the ledger names nothing it serves")
 	}
-	if _, err := providerServing(server, t).services().Pin(context.Background(), app.Service, one, nil); err != nil {
+	if _, err := providerServing(server, t).Services().Pin(context.Background(), app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 	if !server.Serving().InvokerIamDisabled {
@@ -619,13 +619,13 @@ func TestClosingAServiceAnotherPromotionRepinnedSinceLeavesItOpen(t *testing.T) 
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
 	p := providerServing(server, t)
-	if _, err := p.services().Pin(context.Background(), app.Service, one, nil); err != nil {
+	if _, err := p.Services().Pin(context.Background(), app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 	writes := len(server.Patched)
 	repinned := errors.New("another promotion pinned this service since")
 
-	err := p.services().Close(context.Background(), app.Service, func(context.Context) error { return repinned })
+	err := p.Services().Close(context.Background(), app.Service, func(context.Context) error { return repinned })
 
 	if !errors.Is(err, repinned) {
 		t.Fatalf("Close() = %v, want the error that says the promotion is no longer the one pinned", err)
@@ -643,12 +643,12 @@ func TestClosingAPromotedServiceTurnsItsInvokerCheckBackOn(t *testing.T) {
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
 	p := providerServing(server, t)
-	if _, err := p.services().Pin(context.Background(), app.Service, one, nil); err != nil {
+	if _, err := p.Services().Pin(context.Background(), app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 
 	for range 2 {
-		if err := p.services().Close(context.Background(), app.Service, nil); err != nil {
+		if err := p.Services().Close(context.Background(), app.Service, nil); err != nil {
 			t.Fatalf("Close() = %v", err)
 		}
 	}
@@ -667,11 +667,11 @@ func TestClosingAnOpenServiceNoPromotionOpenedTurnsItsInvokerCheckBackOn(t *test
 	app.Public = true
 	_, one := released(t, server, app)
 	p := providerServing(server, t)
-	if _, err := p.services().Pin(context.Background(), app.Service, one, nil); err != nil {
+	if _, err := p.Services().Pin(context.Background(), app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 
-	if err := p.services().Close(context.Background(), app.Service, nil); err != nil {
+	if err := p.Services().Close(context.Background(), app.Service, nil); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
 
@@ -686,11 +686,11 @@ func TestPinReportsWhetherItOpenedTheService(t *testing.T) {
 	_, one := released(t, server, app)
 	p := providerServing(server, t)
 
-	opened, err := p.services().Pin(context.Background(), app.Service, one, nil)
+	opened, err := p.Services().Pin(context.Background(), app.Service, one, nil)
 	if err != nil || !opened {
 		t.Errorf("the first Pin(%s) = %v, %v, want it to say it opened the service: a promotion that fails later has to close it again", one, opened, err)
 	}
-	opened, err = p.services().Pin(context.Background(), app.Service, one, nil)
+	opened, err = p.Services().Pin(context.Background(), app.Service, one, nil)
 	if err != nil || opened {
 		t.Errorf("Pin(%s) of an open service = %v, %v, want it to say it opened nothing", one, opened, err)
 	}
@@ -702,7 +702,7 @@ func TestAPinWhoseOperationFailsStillReportsItOpenedTheService(t *testing.T) {
 	_, one := released(t, server, app)
 	p := providerServing(server, t)
 
-	opened, err := p.services().Pin(context.Background(), app.Service, one, nil)
+	opened, err := p.Services().Pin(context.Background(), app.Service, one, nil)
 
 	if err == nil {
 		t.Fatal("Pin = nil, want the failed operation")
@@ -721,7 +721,7 @@ func TestPinningBackWithoutOpeningLeavesAClosedServiceClosed(t *testing.T) {
 	released(t, server, second)
 	p := providerServing(server, t)
 
-	if err := p.services().Restore(context.Background(), app.Service, one, nil); err != nil {
+	if err := p.Services().Restore(context.Background(), app.Service, one, nil); err != nil {
 		t.Fatalf("Restore(%s) = %v", one, err)
 	}
 
@@ -739,16 +739,16 @@ func TestARollbackIsNotRecordedOnTheRevisionTheServiceServes(t *testing.T) {
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
 	p := providerServing(server, t)
-	if _, err := p.services().Pin(ctx, app.Service, one, nil); err != nil {
+	if _, err := p.Services().Pin(ctx, app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
 
-	err := p.services().RecordRollback(ctx, app.Service, one, pin.Rollback{Previous: "x"})
+	err := p.Services().RecordRollback(ctx, app.Service, one, pin.Rollback{Previous: "x"})
 
 	if !errors.Is(err, pin.ErrRevisionServed) {
 		t.Errorf("RecordRollback(%s) = %v, want %v: the service serves it", one, err, pin.ErrRevisionServed)
 	}
-	if _, found, err := p.services().ReadRollback(ctx, app.Service, one); err != nil || found {
+	if _, found, err := p.Services().ReadRollback(ctx, app.Service, one); err != nil || found {
 		t.Errorf("ReadRollback(%s) = found %v, %v, want nothing recorded for the revision the service serves", one, found, err)
 	}
 }
@@ -764,23 +764,23 @@ func TestARecordedRollbackIsReadBackUntilARevisionIsPinnedAgain(t *testing.T) {
 	p := providerServing(server, t)
 
 	recorded := pin.Rollback{Previous: one, Opened: true}
-	if err := p.services().RecordRollback(ctx, app.Service, two, recorded); err != nil {
+	if err := p.Services().RecordRollback(ctx, app.Service, two, recorded); err != nil {
 		t.Fatalf("RecordRollback(%s) = %v", two, err)
 	}
 	third := app
 	third.Image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:three"
 	released(t, server, third)
-	if got, found, err := p.services().ReadRollback(ctx, app.Service, two); err != nil || !found || got != recorded {
+	if got, found, err := p.Services().ReadRollback(ctx, app.Service, two); err != nil || !found || got != recorded {
 		t.Fatalf("ReadRollback(%s) after another release = %+v, %v, %v, want %+v: a release keeps what rollbacks the service records", two, got, found, err, recorded)
 	}
-	if _, found, err := p.services().ReadRollback(ctx, app.Service, one); err != nil || found {
+	if _, found, err := p.Services().ReadRollback(ctx, app.Service, one); err != nil || found {
 		t.Errorf("ReadRollback(%s) = found %v, %v, want nothing recorded for a revision no promotion rolled back", one, found, err)
 	}
 
-	if _, err := p.services().Pin(ctx, app.Service, two, nil); err != nil {
+	if _, err := p.Services().Pin(ctx, app.Service, two, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", two, err)
 	}
-	if _, found, err := p.services().ReadRollback(ctx, app.Service, two); err != nil || found {
+	if _, found, err := p.Services().ReadRollback(ctx, app.Service, two); err != nil || found {
 		t.Errorf("ReadRollback(%s) after a promotion pinned it again = found %v, %v, want nothing: a promotion that lands on it makes it what the service serves",
 			two, found, err)
 	}
@@ -799,11 +799,11 @@ func TestARollbackRecordThatCannotBeDecodedIsReportedRatherThanReadAsNothing(t *
 	server.Service.Annotations = map[string]string{run.RollbacksAnnotation: "{not json"}
 	server.Mu.Unlock()
 
-	if _, found, err := p.services().ReadRollback(ctx, app.Service, one); err == nil || found {
+	if _, found, err := p.Services().ReadRollback(ctx, app.Service, one); err == nil || found {
 		t.Errorf("ReadRollback(%s) = found %v, %v, want an error: the record cannot be decoded", one, found, err)
 	}
 
-	if _, err := p.services().Pin(ctx, app.Service, two, nil); err != nil {
+	if _, err := p.Services().Pin(ctx, app.Service, two, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v, want a pin to replace a record it cannot decode", two, err)
 	}
 	server.Mu.Lock()
@@ -821,7 +821,7 @@ func TestAPinThatFindsTheServiceOpenedOnItsRetryDoesNotClaimToHaveOpenedIt(t *te
 	server.PatchConflicts = 1
 	server.OnConflict = func(s *runv2.GoogleCloudRunV2Service) { s.InvokerIamDisabled = true }
 
-	opened, err := providerServing(server, t).services().Pin(context.Background(), app.Service, one, nil)
+	opened, err := providerServing(server, t).Services().Pin(context.Background(), app.Service, one, nil)
 	if err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
@@ -845,7 +845,7 @@ func TestAPinWhoseRetryFailsBeforeItsPatchLandsDoesNotClaimToHaveOpenedTheServic
 		return nil
 	}
 
-	opened, err := providerServing(server, t).services().Pin(context.Background(), app.Service, one, stillActive)
+	opened, err := providerServing(server, t).Services().Pin(context.Background(), app.Service, one, stillActive)
 
 	if !errors.Is(err, displaced) {
 		t.Fatalf("Pin(%s) = %v, want the displacement its retry found", one, err)
@@ -863,7 +863,7 @@ func TestAPinThatKeepsConflictingUntilItGivesUpDoesNotClaimToHaveOpenedTheServic
 	ctx := deadlineAt(1)
 	server.OnConflict = func(*runv2.GoogleCloudRunV2Service) { ctx.conflicted() }
 
-	opened, err := providerServing(server, t).services().Pin(ctx, app.Service, one, nil)
+	opened, err := providerServing(server, t).Services().Pin(ctx, app.Service, one, nil)
 
 	if err == nil {
 		t.Fatal("Pin = nil, want it to give up on the conflicts")
@@ -879,10 +879,10 @@ func TestPinningAServiceNoPromotionOpensLeavesItsInvokerCheckOn(t *testing.T) {
 	_, one := released(t, server, worker)
 
 	p := providerServing(server, t)
-	if _, err := p.services().Pin(context.Background(), worker.Service, one, nil); err != nil {
+	if _, err := p.Services().Pin(context.Background(), worker.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
-	if err := p.services().Close(context.Background(), worker.Service, nil); err != nil {
+	if err := p.Services().Close(context.Background(), worker.Service, nil); err != nil {
 		t.Fatalf("Close() = %v", err)
 	}
 
@@ -902,7 +902,7 @@ func TestWarmingAPromotedRevisionAsksItsOwnUrlOnTheAppsHealthPath(t *testing.T) 
 	_, one := released(t, server, open)
 	server.Service.TrafficStatuses = []*runv2.GoogleCloudRunV2TrafficTargetStatus{{Type: run.TrafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
 
-	if err := providerServing(server, t).services().Warm(context.Background(), open.Service, one, "/healthz"); err != nil {
+	if err := providerServing(server, t).Services().Warm(context.Background(), open.Service, one, "/healthz"); err != nil {
 		t.Fatalf("Warm() = %v", err)
 	}
 
@@ -943,7 +943,7 @@ func TestAWarmTheServiceTurnsAwayOrFailsToServeIsReportedAndAnAnswerFromTheAppIs
 			_, one := released(t, server, open)
 			server.Service.TrafficStatuses = []*runv2.GoogleCloudRunV2TrafficTargetStatus{{Type: run.TrafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
 
-			err := providerServing(server, t).services().Warm(context.Background(), open.Service, one, "/healthz")
+			err := providerServing(server, t).Services().Warm(context.Background(), open.Service, one, "/healthz")
 
 			if (err != nil) != tc.wantErr {
 				t.Errorf("Warm() = %v against a %d answer, want an error: %v", err, tc.status, tc.wantErr)
@@ -964,7 +964,7 @@ func TestARevisionOnlyTheLoadBalancerReachesIsNotAskedToWarm(t *testing.T) {
 	_, one := released(t, server, behind)
 	server.Service.TrafficStatuses = []*runv2.GoogleCloudRunV2TrafficTargetStatus{{Type: run.TrafficByRevision, Revision: one, Tag: "r00000001", Uri: app.URL}}
 
-	if err := providerServing(server, t).services().Warm(context.Background(), behind.Service, one, "/"); err != nil {
+	if err := providerServing(server, t).Services().Warm(context.Background(), behind.Service, one, "/"); err != nil {
 		t.Fatalf("Warm() = %v", err)
 	}
 	if len(asked) != 0 {
@@ -978,10 +978,10 @@ func TestAReleaseRetriedAfterAConflictKeepsOnlyTheRollbacksTheServiceRecordsOnTh
 	app := promotable("ocel-shop-prod-app")
 	_, one := released(t, server, app)
 	p := providerServing(server, t)
-	if _, err := p.services().Pin(ctx, app.Service, one, nil); err != nil {
+	if _, err := p.Services().Pin(ctx, app.Service, one, nil); err != nil {
 		t.Fatalf("Pin(%s) = %v", one, err)
 	}
-	if err := p.services().RecordRollback(ctx, app.Service, "rev-x", pin.Rollback{Previous: one}); err != nil {
+	if err := p.Services().RecordRollback(ctx, app.Service, "rev-x", pin.Rollback{Previous: one}); err != nil {
 		t.Fatalf("RecordRollback(rev-x) = %v", err)
 	}
 	server.PatchConflicts = 1

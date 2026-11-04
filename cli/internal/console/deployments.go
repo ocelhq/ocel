@@ -32,3 +32,8 @@ func (c *Client) RecordEnvironmentEvent(ctx context.Context, accessToken, projec
 	_, err := c.deployments(accessToken).RecordEnvironmentEvent(ctx, &consolev1.RecordEnvironmentEventRequest{ProjectId: projectID, Event: event})
 	return err
 }
+
+func (c *Client) StartDeployment(ctx context.Context, accessToken, projectID string, start *consolev1.DeploymentStart) error {
+	_, err := c.deployments(accessToken).Start(ctx, &consolev1.StartRequest{ProjectId: projectID, Deployment: start})
+	return err
+}

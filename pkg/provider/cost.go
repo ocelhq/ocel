@@ -8,7 +8,7 @@ import (
 
 const CostSource = "ocel"
 
-type ShapeRequest struct {
+type InventoryRequest struct {
 	Deploy     DeploySpec
 	Edge       edge.Kind
 	Parts      []string

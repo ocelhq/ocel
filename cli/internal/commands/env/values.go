@@ -17,10 +17,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 )
 
 func envValues(provider *providerprocess.Provider, cfg *project.Project, opts envOptions) variables.Store {
@@ -49,7 +50,7 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 	if len(pairs) > 0 {
 		key = pairs[0].key
 	}
-	return withEnvProviderOfferingVariablesKey(ctx, dependencies, cwd, opts, "ocel env set", []cloudv1.Scope{cloudv1.Scope_SCOPE_VARIABLES_WRITE}, stdin, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
+	return withEnvProviderOfferingVariablesKey(ctx, dependencies, cwd, opts, "ocel env set", []scopev1.Scope{scopev1.Scope_SCOPE_VARIABLES_WRITE}, stdin, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
 		definitions, groups, err := declaredVariables(ctx, dependencies, cfg, provider, key, opts, run)
 		if err != nil {
 			return err
@@ -143,7 +144,6 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 		req := &variablestorev1.GetValueRequest{
 			Tier:       opts.tier(),
 			Coordinate: wireCoordinate(cfg.Slug, key, opts),
-			Reveal:     opts.reveal,
 		}
 		var resp *variablestorev1.GetValueResponse
 		err = runInSpan(ctx, run, progressv1.Phase_PHASE_CHECK, cfg, progress.Reading.Title(describeValues([]string{key}, opts)), func(ctx context.Context) (err error) {
@@ -157,17 +157,21 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 			return fmt.Errorf("no value is set for %s; set one with `ocel env set %s=<VALUE>`%s", describeCell(key, opts), key, wording.DescriptionLine(descriptions(definitions)[key]))
 		}
 
+		var revealed *variablestorev1.RevealedValue
 		if opts.reveal {
 			if err := consentToReveal(definitions, key, opts, run.Phase(progressv1.Phase_PHASE_CHECK).Warn); err != nil {
 				return err
 			}
+			if revealed, err = revealValue(ctx, variableStore, req); err != nil {
+				return err
+			}
 		}
 		if dependencies.Presentation(stdout).Format == terminal.FormatJSON {
-			return writeEnvGetJSON(stdout, req, resp)
+			return writeEnvGetJSON(stdout, req, resp, revealed)
 		}
 		m := resp.GetMetadata()
-		if opts.reveal {
-			fmt.Fprintln(stdout, resp.GetValue())
+		if revealed != nil {
+			fmt.Fprintln(stdout, revealed.GetValue())
 			return nil
 		}
 		if target := m.GetTarget(); target != nil {
@@ -206,7 +210,7 @@ func consentToReveal(definitions []*resourcesv1.VariableDefinition, key string, 
 }
 
 func runEnvRemove(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env rm", []cloudv1.Scope{cloudv1.Scope_SCOPE_VARIABLES_WRITE}, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
+	return withEnvProvider(ctx, dependencies, cwd, opts, "ocel env rm", []scopev1.Scope{scopev1.Scope_SCOPE_VARIABLES_WRITE}, stderr, func(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, status *contractv1.PreflightResponse) error {
 		variableStore, err := provider.VariableStore()
 		if err != nil {
 			return err
@@ -238,7 +242,22 @@ func runEnvRemove(ctx context.Context, dependencies Dependencies, cwd, key strin
 	})
 }
 
-func writeEnvGetJSON(stdout io.Writer, req *variablestorev1.GetValueRequest, resp *variablestorev1.GetValueResponse) error {
+func revealValue(ctx context.Context, variableStore variablestorev1connect.VariableStoreServiceClient, req *variablestorev1.GetValueRequest) (*variablestorev1.RevealedValue, error) {
+	revealed, err := variableStore.RevealValues(ctx, &variablestorev1.RevealValuesRequest{
+		Tier:  req.GetTier(),
+		Slug:  req.GetCoordinate().GetSlug(),
+		Cells: []*variablestorev1.Coordinate{req.GetCoordinate()},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(revealed.GetValues()) == 0 {
+		return nil, fmt.Errorf("the variable store revealed no value for %s, which it found a moment ago", describeCoordinate(req.GetCoordinate()))
+	}
+	return revealed.GetValues()[0], nil
+}
+
+func writeEnvGetJSON(stdout io.Writer, req *variablestorev1.GetValueRequest, resp *variablestorev1.GetValueResponse, revealed *variablestorev1.RevealedValue) error {
 	m := resp.GetMetadata()
 	result := &resultv1.EnvGetResult{
 		Tier:       req.GetTier(),
@@ -247,11 +266,11 @@ func writeEnvGetJSON(stdout io.Writer, req *variablestorev1.GetValueRequest, res
 		Size:       m.GetSize(),
 		UpdatedAt:  terminal.EpochRFC3339(m.GetUpdatedAt()),
 		Target:     newResultCoordinate(m.GetTarget()),
-		Revealed:   req.GetReveal(),
+		Revealed:   revealed != nil,
 		Publisher:  m.GetPublisher(),
 	}
-	if req.GetReveal() {
-		value := resp.GetValue()
+	if revealed != nil {
+		value := revealed.GetValue()
 		result.Value = &value
 	}
 	return terminal.WriteResultJSON(stdout, result)

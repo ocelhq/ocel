@@ -1,13 +1,16 @@
 package alb
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albprogram"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 )
 
-func binding(hosts map[string]Host) (Program, error) {
-	return bindingProgram(bindingSpec{
+func binding(hosts map[string]albresources.BindingHost) (albprogram.Program, error) {
+	return albprogram.Binding(albresources.BindingSpec{
 		Namespace:      "ocel",
 		Region:         "europe-west1",
 		Slug:           "shop",
@@ -20,7 +23,7 @@ func binding(hosts map[string]Host) (Program, error) {
 func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(frontSpec()))
+	seen, err := declared(albprogram.LoadBalancer(frontSpec()))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}
@@ -52,9 +55,9 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 	if got := routes.Args["defaultService"]; got == nil {
 		t.Error("the url map names no default service, and a hostname no project claimed would reach whichever backend answered first")
 	}
-	if got := abortedBy(routes.Args["defaultRouteAction"]); got != float64(notFoundStatus) {
+	if got := abortedBy(routes.Args["defaultRouteAction"]); got != float64(http.StatusNotFound) {
 		t.Errorf("the url map answers an unclaimed hostname with %v, want %d: the not-found backend it defaults to has no backends, "+
-			"so anything that reaches it is answered 502 rather than refused", got, notFoundStatus)
+			"so anything that reaches it is answered 502 rather than refused", got, http.StatusNotFound)
 	}
 	if got := routes.Args["hostRules"]; got != nil {
 		t.Errorf("the url map declares host rules %v, and a bind writes them: the stack that owns the map must leave them alone", got)
@@ -72,10 +75,10 @@ func TestTheFrontendProvisionsOneLoadBalancerForTheWholeTier(t *testing.T) {
 	}
 }
 
-func frontSpec() loadBalancerSpec {
-	return loadBalancerSpec{
+func frontSpec() albresources.LoadBalancerSpec {
+	return albresources.LoadBalancerSpec{
 		Namespace: "ocel",
-		Names:     loadBalancerNames("ocel", environment.TierProduction),
+		Names:     albresources.LoadBalancerNames("ocel", environment.TierProduction),
 		Assets:    &tierAssets,
 	}
 }
@@ -83,7 +86,7 @@ func frontSpec() loadBalancerSpec {
 func TestTheFrontendServesTheTiersAssetsFromACachedBackendBucket(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(frontSpec()))
+	seen, err := declared(albprogram.LoadBalancer(frontSpec()))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}
@@ -107,7 +110,7 @@ func TestTheFrontendServesTheTiersAssetsFromACachedBackendBucket(t *testing.T) {
 func TestTheLoadBalancersServiceAgentListsTheTiersEdgeBucketAndReadsOnlyItsStaticFiles(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(loadBalancerProgram(frontSpec()))
+	seen, err := declared(albprogram.LoadBalancer(frontSpec()))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}
@@ -149,19 +152,19 @@ func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T
 	t.Parallel()
 
 	seen, err := declared(binding(
-		map[string]Host{
+		map[string]albresources.BindingHost{
 			"shop.example.com": {
 				App:         "web",
 				Certificate: "projects/acme-prod/locations/global/certificates/shop",
 				Service:     "ocel-shop-prod-web",
-				Backend:     must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com")),
+				Backend:     must(albresources.BackendName("ocel", "shop", environment.TierProduction, "shop.example.com")),
 			},
 		}))
 	if err != nil {
 		t.Fatalf("the binding program = %v", err)
 	}
 
-	entry, declaredEntry := seen[must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))+"-cert"]
+	entry, declaredEntry := seen[must(albresources.BackendName("ocel", "shop", environment.TierProduction, "shop.example.com"))+"-cert"]
 	if !declaredEntry {
 		t.Fatalf("the binding declares no certificate map entry; the balancer would serve shop.example.com no certificate. Declared: %v", seen)
 	}
@@ -172,7 +175,7 @@ func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T
 		t.Errorf("the certificate map entry lands in %v, want the tier's own map", got)
 	}
 
-	neg, declaredNEG := seen[must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))+"-neg"]
+	neg, declaredNEG := seen[must(albresources.BackendName("ocel", "shop", environment.TierProduction, "shop.example.com"))+"-neg"]
 	if !declaredNEG {
 		t.Fatalf("the binding declares no serverless neg; nothing would route a request from the load balancer to Cloud Run")
 	}
@@ -184,7 +187,7 @@ func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T
 		t.Errorf("the neg points at %v, want the Cloud Run service the pointer's active record named", neg.Args["cloudRun"])
 	}
 
-	backend, declaredBackend := seen[must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))]
+	backend, declaredBackend := seen[must(albresources.BackendName("ocel", "shop", environment.TierProduction, "shop.example.com"))]
 	if !declaredBackend {
 		t.Fatalf("the binding declares no backend service; Cloud CDN is a backend-service setting and there is nothing to set it on")
 	}
@@ -201,16 +204,16 @@ func TestAHostnameBoundBeforeAnythingWasDeployedDeclaresNoBackendToRouteNowhere(
 	t.Parallel()
 
 	seen, err := declared(binding(
-		map[string]Host{
+		map[string]albresources.BindingHost{
 			"shop.example.com": {Certificate: "projects/acme-prod/locations/global/certificates/shop"},
 		}))
 	if err != nil {
 		t.Fatalf("the binding program = %v", err)
 	}
-	if _, backed := seen[must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))]; backed {
+	if _, backed := seen[must(albresources.BackendName("ocel", "shop", environment.TierProduction, "shop.example.com"))]; backed {
 		t.Error("the binding declares a backend for a hostname whose app has released no service, and a neg needs one to point at")
 	}
-	if _, certified := seen[must(backendName("ocel", "shop", environment.TierProduction, "shop.example.com"))+"-cert"]; !certified {
+	if _, certified := seen[must(albresources.BackendName("ocel", "shop", environment.TierProduction, "shop.example.com"))+"-cert"]; !certified {
 		t.Error("the binding declares no certificate for a hostname it can already certify: the certificate outlives the release the backend waits on")
 	}
 }

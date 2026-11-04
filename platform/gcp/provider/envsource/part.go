@@ -112,8 +112,8 @@ func ensureSyncAccount(ctx context.Context, b bootstrap.Engine, tier environment
 	return b.MakeAccount(ctx, bootstrap.Survey{Tier: tier, Names: b.Clients.Names}, account)
 }
 
-func Shape(name, region string) []pricing.Shaped {
-	return []pricing.Shaped{
+func Inventory(name, region string) []pricing.Resource {
+	return []pricing.Resource{
 		{Name: name, Type: cost.CloudRunServiceType, Properties: ServiceProperties(region)},
 		{Name: name, Type: cost.SchedulerJobType, Properties: map[string]any{"region": region, "schedule": syncSchedule}},
 	}
@@ -135,7 +135,7 @@ func describeEnvSourceSyncPart(ctx context.Context, b bootstrap.Engine, tier env
 		Digest:    recorded.Digest,
 		Resources: syncResources(b, tier),
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: string(gcloud.Vendor), Region: b.Clients.Region, Resources: Shape(b.Clients.EnvSourceSync(tier), b.Clients.Region)},
+		Inventory: &provider.PartInventory{Vendor: string(gcloud.Vendor), Region: b.Clients.Region, Resources: Inventory(b.Clients.EnvSourceSync(tier), b.Clients.Region)},
 	}, true, nil
 }
 

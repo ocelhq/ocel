@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -252,9 +253,9 @@ func TestRemovingThePartIsRefusedByItsPlanAndItsApplyWhileAProjectIsServedBehind
 	t.Parallel()
 
 	b, registry := fronting(t)
-	serveBehind(t, b.Records, environment.TierProduction, "shop", alb.Kind)
+	serveBehind(t, b.Records, environment.TierProduction, "shop", albresources.Kind)
 	serveBehind(t, b.Records, environment.TierProduction, "blog", "cloudfront")
-	serveBehind(t, b.Records, environment.TierPreview, "docs", alb.Kind)
+	serveBehind(t, b.Records, environment.TierPreview, "docs", albresources.Kind)
 	req := provider.BootstrapRequest{Tier: environment.TierProduction, Remove: []string{bootstrap.CloudflareOriginPart}}
 
 	for what, err := range map[string]error{
@@ -493,7 +494,7 @@ func TestABootstrapPlanNamesWhatTheEdgesFrontInstallsAndWhatRemovingItTakes(t *t
 	}
 
 	for what, groups := range map[string][]provider.ChangeGroup{"installs": installs, "removes": removes} {
-		if len(groups) != 1 || groups[0].Name != edge.EdgeGroupName(alb.Kind) || len(groups[0].Changes) != 1 || groups[0].Changes[0].Name != "ocel-releases-store" {
+		if len(groups) != 1 || groups[0].Name != edge.EdgeGroupName(albresources.Kind) || len(groups[0].Changes) != 1 || groups[0].Changes[0].Name != "ocel-releases-store" {
 			t.Errorf("%s = %+v, want one edge group carrying the front's planned worker", what, groups)
 		}
 	}
@@ -551,7 +552,7 @@ func TestTheLoadBalancerBehindTheALBEdgeIsAPartNoBootstrapRequires(t *testing.T)
 	t.Parallel()
 
 	offered := composed(bootstrap.Engine{}).Parts()
-	for _, kind := range []edge.Kind{alb.Kind, edge.None} {
+	for _, kind := range []edge.Kind{albresources.Kind, edge.None} {
 		required := bootstrapplan.RequiredParts(offered, kind)
 		if len(required) != 0 {
 			t.Errorf("a bootstrap fronted by %q requires %v, want nothing: the first deploy behind the alb adds its load balancer", kind, required)
@@ -592,8 +593,8 @@ func TestTheCloudflareOriginPartHoldsNoLoadBalancerAndOnlyTheCloudflareEdgePulls
 	if proxied := bootstrapplan.RequiredParts(offered, "cloudflare"); !slices.Contains(proxied, bootstrap.CloudflareOriginPart) {
 		t.Errorf("a cloudflare bootstrap requires %v, want %q", proxied, bootstrap.CloudflareOriginPart)
 	}
-	if fronted := bootstrapplan.RequiredParts(offered, alb.Kind); slices.Contains(fronted, bootstrap.CloudflareOriginPart) {
-		t.Errorf("an %q bootstrap requires %v, and nothing it binds reads the Cloudflare edge's origin secret", alb.Kind, fronted)
+	if fronted := bootstrapplan.RequiredParts(offered, albresources.Kind); slices.Contains(fronted, bootstrap.CloudflareOriginPart) {
+		t.Errorf("an %q bootstrap requires %v, and nothing it binds reads the Cloudflare edge's origin secret", albresources.Kind, fronted)
 	}
 	for _, permission := range bootstrap.PermissionsFor([]string{bootstrap.CloudflareOriginPart}) {
 		for _, service := range []string{"compute.", "certificatemanager.", "networksecurity."} {
@@ -606,8 +607,8 @@ func TestTheCloudflareOriginPartHoldsNoLoadBalancerAndOnlyTheCloudflareEdgePulls
 	read := surveyed(bootstrap.CloudflareOriginPart)
 	stack := provider.BootstrapStack{Name: read.Project + "/" + string(read.Tier) + "/" + bootstrap.CloudflareOriginPart, Part: bootstrap.CloudflareOriginPart, Present: true}
 	for _, part := range bootstrap.SurveyedParts(b, read, []provider.BootstrapStack{stack}) {
-		if part.Name == bootstrap.CloudflareOriginPart && part.Shape != nil {
-			t.Errorf("the described %q part is shaped as %+v, want no priced load balancer", bootstrap.CloudflareOriginPart, part.Shape)
+		if part.Name == bootstrap.CloudflareOriginPart && part.Inventory != nil {
+			t.Errorf("the described %q part is inventoried as %+v, want no priced load balancer", bootstrap.CloudflareOriginPart, part.Inventory)
 		}
 	}
 }

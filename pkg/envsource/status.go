@@ -166,3 +166,13 @@ func forgetUnshared(ctx context.Context, store records.Store, tier environment.T
 	}
 	return records.Forget(ctx, store, statusKey(tier, dedupeKey))
 }
+
+func ownerOfStatus(path []string) (records.Owner, bool) {
+	switch {
+	case len(path) == 1:
+		return records.Owner{Shared: true}, true
+	case len(path) == 3 && path[1] == sharersSegment:
+		return records.Owner{Project: path[2]}, true
+	}
+	return records.Owner{}, false
+}

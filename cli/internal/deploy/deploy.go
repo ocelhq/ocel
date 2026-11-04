@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/build"
@@ -18,10 +19,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/variableeditor"
 	"github.com/ocelhq/ocel/cli/internal/variables"
-	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
+	runnerv1 "github.com/ocelhq/ocel/pkg/proto/runner/v1"
 )
 
 type Dependencies struct {
@@ -31,7 +32,6 @@ type Dependencies struct {
 	ReadPrebuilt            func(ctx context.Context, cfg *project.Project, archs map[string]string) (build.Output, error)
 	BuildID                 func(projectDir, app string) (string, error)
 	CollectDeclarations     func(ctx context.Context, cfg *project.Project, declarations *variables.Declarations, stdout, stderr io.Writer) ([]declaration.Resource, error)
-	OpenBrowser             func(ctx context.Context, url string) error
 	ServeVariableEditor     func(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
 	ReadGitBranch           func(ctx context.Context, dir string) (string, error)
 	DiscoverPRNumber        func() string
@@ -42,6 +42,7 @@ type Options struct {
 	Dry      bool
 	Prebuilt bool
 	NoWait   bool
+	Remote   bool
 }
 
 func To(ctx context.Context, dependencies Dependencies, cwd string, target Target, opts Options, stdout, stderr io.Writer, stdin io.Reader) error {
@@ -52,14 +53,14 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 	if err != nil {
 		return err
 	}
-	if resolved.IsCloud() {
-		return toCloud(ctx, dependencies, cwd, resolved, target, opts, stderr, stdin)
+	if resolved.IsRemote(opts.Remote) {
+		return toRemote(ctx, dependencies, cwd, resolved, target, opts, stdin)
 	}
 	if opts.NoWait {
 		return commands.RefuseNoWait()
 	}
-	if opts.Yes && dependencies.JobAnswers != nil {
-		return &clierror.Error{Code: clierror.CodeUsage, Cause: fmt.Errorf("`%s` runs inside an Ocel Cloud job, where the console answers every confirmation, so --yes would consent for a person nobody asked: drop it", target.command())}
+	if opts.Yes && dependencies.Job() != nil {
+		return &clierror.Error{Code: clierror.CodeUsage, Cause: fmt.Errorf("`%s` runs inside a job, where the console answers every confirmation, so --yes would consent for a person nobody asked: drop it", target.command())}
 	}
 	cfg := resolved.Project
 	env, err := target.environment(ctx, dependencies, cwd)
@@ -75,6 +76,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 
 	deployTelemetry := watchDeploy(dependencies.Events, cfg, target.telemetryTarget(), opts.Dry)
 	var report *consolev1.Deployment
+	var starting sync.WaitGroup
 	err = dependencies.WithProvider(ctx, cfg, target.command(), commands.OpenOptions{Intent: commands.Deploy, Tier: target.tier, Policy: policy, DryRun: policy.DryRun, ConsoleCredential: true}, func(ctx context.Context, p commands.ProviderRun) (err error) {
 		run, check, provider := p.Run, p.Check, p.Provider
 		var attempt *deployreport.Attempt
@@ -87,6 +89,8 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		facts, err := runPreflight(ctx, dependencies, policy, check, provider, p.Project, p.Preflight, opts.Prebuilt, env)
 		if err == nil && !facts.declined && !opts.Dry {
 			attempt = p.NewAttempt(ctx, check, target.kind(), facts.project, env, dependencies.DiscoverPRNumber())
+			start := attempt.Start()
+			starting.Go(func() { dependencies.Console.StartDeployment(ctx, cfg.Dir, start) })
 		}
 		check.End(err)
 		if err != nil {
@@ -99,6 +103,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		cfg := facts.project
 		infra := newInfraProvisioning(provider, env, facts)
 		defer func() { err = errors.Join(err, infra.release(ctx, run, cfg.Slug)) }()
+		defer run.BeforeForcedStop(func() { infra.abandonBeforeForcedStop(ctx, cfg.Slug) })()
 
 		d := newDeployRun(dependencies, target, cfg, provider, env, facts, infra, policy, opts, dependencies.IsBrowserReachable(stdin))
 		phase := run.Phase(progressv1.Phase_PHASE_BUILD)
@@ -150,30 +155,26 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		return nil
 	})
 	deployTelemetry.record(dependencies.RecordEvent, err)
+	starting.Wait()
 	dependencies.Console.ReportDeployment(ctx, cfg.Dir, report, stderr)
 	return err
 }
 
-func toCloud(ctx context.Context, dependencies Dependencies, cwd string, resolved commands.Target, target Target, opts Options, stderr io.Writer, stdin io.Reader) error {
+func toRemote(ctx context.Context, dependencies Dependencies, cwd string, resolved commands.Target, target Target, opts Options, stdin io.Reader) error {
 	switch {
 	case opts.Dry:
-		return commands.NotOnCloud(target.command() + " --dry")
+		return commands.RefuseRemote(target.command() + " --dry")
 	case opts.Prebuilt:
-		return commands.NotOnCloud(target.command() + " --prebuilt")
-	case opts.Yes:
-		return &clierror.Error{Code: clierror.CodeCloudUnsupported, Cause: fmt.Errorf("`%s --yes` does not run on Ocel Cloud: a job asks each confirmation on its page in the console, so --yes has nothing here to consent to — drop it, and answer there", target.command())}
+		return commands.RefuseRemote(target.command() + " --prebuilt")
 	}
-	job := commands.CloudJob{Command: target.command(), Tier: target.tier, Kind: cloudv1.JobCommand_JOB_COMMAND_DEPLOY, Tag: target.tag, NoWait: opts.NoWait, Stderr: stderr}
+	remote := commands.RemoteRun{Command: target.command(), Tiers: []environmentv1.Tier{target.tier}, Kind: runnerv1.JobCommand_JOB_COMMAND_DEPLOY, Tag: target.tag, NoWait: opts.NoWait, Yes: opts.Yes}
 	if target.isPreview() {
 		env, err := target.environment(ctx, dependencies, cwd)
 		if err != nil {
 			return err
 		}
-		job.Kind = cloudv1.JobCommand_JOB_COMMAND_PREVIEW_UP
-		job.Preview = &cloudv1.PreviewTarget{Name: env.GetIdentity(), Label: env.GetLabel(), Persistent: target.persistent}
+		remote.Kind = runnerv1.JobCommand_JOB_COMMAND_PREVIEW_UP
+		remote.Preview = &runnerv1.PreviewTarget{Name: env.GetIdentity(), Label: env.GetLabel(), Persistent: target.persistent}
 	}
-	if dependencies.IsBrowserReachable(stdin) {
-		job.OpenBrowser = dependencies.OpenBrowser
-	}
-	return dependencies.RunOnCloud(ctx, resolved, job)
+	return dependencies.RunRemote(ctx, resolved, stdin, remote)
 }

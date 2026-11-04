@@ -69,7 +69,7 @@ func onYourNetwork(t *testing.T) yourNetwork {
 	if err := os.WriteFile(filepath.Join(routedDir, filepath.Base(boxapi.RoutingTablePath)), routingTable(nil).Content, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	binary := switchboardBinary(arch)
+	binary := switchboardBinary(testAssets, arch)
 	runnable(t, filepath.Join(switching, boxapi.Switchboard), binary, 0o755)
 	here := strings.NewReplacer(
 		unprivilegedHere(t), "",

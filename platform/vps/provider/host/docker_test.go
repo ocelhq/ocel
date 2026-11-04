@@ -221,7 +221,7 @@ func TestADaemonSystemdDoesNotRunIsRefusedRatherThanInstalledOver(t *testing.T) 
 	if _, present := observed[unitItem().ID()]; present {
 		t.Errorf("the probe read %s on a host whose docker binary has no unit file", unitItem().ID())
 	}
-	read := Reading{Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: observed, Engine: engineRead(t, fake)}
+	read := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: observed, Engine: engineRead(t, fake)}
 	if !read.observed(machine.KindEngine, dockerEngine) {
 		t.Fatalf("the probe read no engine on a host with a docker binary, and an apply would fetch %s and run it as root over an install that is already there", dockerSource)
 	}
@@ -244,7 +244,7 @@ func TestAnInstallLeftHalfDoneIsInstalledAgainRatherThanRefused(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			read := Reading{Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: probed(t, fake), Engine: engineRead(t, fake)}
+			read := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: probed(t, fake), Engine: engineRead(t, fake)}
 			if err := read.runnableEngine("ada@ocelbox"); err != nil {
 				t.Fatalf("runnableEngine() = %v, and an install interrupted before docker.service landed could never be finished by ocel", err)
 			}
@@ -275,7 +275,7 @@ func TestAnInstalledEngineWhoseDaemonIsIdleIsProbedAsInstalledAndNotCurrent(t *t
 			if observed[engineItem().ID()] != engineItem().Digest() {
 				t.Error("the probe calls an installed engine absent, and the plan would fetch the install script over a host that already has one")
 			}
-			read := Reading{Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: observed}
+			read := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: observed}
 			if !read.observed(machine.KindUnit, dockerUnit) {
 				t.Fatalf("the probe read no unit on a host whose docker.service is %s", name)
 			}
@@ -291,7 +291,7 @@ func TestAnInstalledEngineIsAdoptedAndAnIdleDaemonPlansTheUnitAlone(t *testing.T
 
 	tier := environment.TierProduction
 	idle := machine.DigestOf(machine.KindUnit, dockerUnit, 0, machine.RootOwner, machine.ContentSum([]byte("active=inactive\nenabled=disabled\n")))
-	read := Reading{Arch: ssh.AMD64, Tier: tier, Engine: InstalledEngine{Kind: engineStandard, Version: "28.3.1"}, Observed: map[string]string{
+	read := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: tier, Engine: InstalledEngine{Kind: engineStandard, Version: "28.3.1"}, Observed: map[string]string{
 		engineItem().ID(): engineItem().Digest(),
 		unitItem().ID():   idle,
 	}}
@@ -322,7 +322,7 @@ func TestAnInstalledEngineIsAdoptedAndAnIdleDaemonPlansTheUnitAlone(t *testing.T
 func TestTheEngineCanOnlyEverBePresentOrAbsent(t *testing.T) {
 	t.Parallel()
 
-	read := Reading{Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: map[string]string{
+	read := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: map[string]string{
 		engineItem().ID(): engineItem().Digest(),
 	}}
 	if !read.current(engineItem()) {
@@ -346,7 +346,7 @@ func TestTheDocumentSaysWhereTheDaemonTheDeployLoginDrivesCameFrom(t *testing.T)
 	if claim.Name == "" {
 		t.Fatal("the deploy login drives docker and the document claims no grant for it")
 	}
-	if written(Items(tier, nil, ssh.AMD64, front.Proxy{}), machine.KindEngine, dockerEngine).Name == "" {
+	if written(Items(testAssets, tier, nil, ssh.AMD64, front.Proxy{}), machine.KindEngine, dockerEngine).Name == "" {
 		t.Fatal("the document names the daemon bootstrap installs and bootstrap installs no engine at all")
 	}
 	if !strings.Contains(claim.Detail, dockerSource) {
@@ -366,7 +366,7 @@ func TestTheDocumentSaysWhereTheDaemonTheDeployLoginDrivesCameFrom(t *testing.T)
 func TestAHostWithNoEngineHasTheInstallPlannedLastAndNamed(t *testing.T) {
 	t.Parallel()
 
-	changes := planned(Reading{Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: map[string]string{}})
+	changes := planned(Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: map[string]string{}})
 	engine := planFor(changes, engineItem().ID())
 	if engine.Action != provider.ActionCreate {
 		t.Fatalf("a host with no engine plans %q for it, want the install shown as a change to consent to", engine.Action)
@@ -386,11 +386,11 @@ func TestDestroyKeepsTheEngineWhicheverTierIsTheLastOne(t *testing.T) {
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	keys := []byte(aKey + "\n")
-	destroyed := Reading{Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(production, keys, ssh.AMD64, front.Proxy{}))}
+	destroyed := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: production, Keys: keys, Observed: machine.DigestsOf(Items(testAssets, production, keys, ssh.AMD64, front.Proxy{}))}
 
 	for name, sibling := range map[string]Reading{
 		"the last tier on the host": {Tier: preview, Observed: map[string]string{}},
-		"a tier beside its sibling": {Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(preview, keys, ssh.AMD64, front.Proxy{}))},
+		"a tier beside its sibling": {Tier: preview, Keys: keys, Observed: machine.DigestsOf(Items(testAssets, preview, keys, ssh.AMD64, front.Proxy{}))},
 	} {
 		taken := removing(destroyed, sibling, appsPresent{})
 		kept := removalOf(taken, dockerEngine)
@@ -417,7 +417,7 @@ func TestAHostWithNothingButTheEngineHasNothingToDestroy(t *testing.T) {
 
 	production, preview := environment.TierProduction, environment.TierPreview
 	engine := machine.DigestsOf(EngineItems())
-	taken := removing(Reading{Arch: ssh.AMD64, Tier: production, Observed: engine}, Reading{Arch: ssh.AMD64, Tier: preview, Observed: engine}, appsPresent{})
+	taken := removing(Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: production, Observed: engine}, Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: preview, Observed: engine}, appsPresent{})
 	if len(taken) != 0 {
 		t.Errorf("a machine with nothing but docker plans %d removals, want a destroy with nothing to say", len(taken))
 	}
@@ -500,7 +500,7 @@ func TestAnEngineOcelCannotRunOnIsRefusedWithWhatToDoAboutIt(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			read := Reading{Tier: environment.TierProduction, Engine: tc.found}
+			read := Reading{Assets: testAssets, Tier: environment.TierProduction, Engine: tc.found}
 			if refused := refusalOf(t, read.runnableEngine("ada@ocelbox"), refusal.CodeNotReady); refused.Message != tc.want {
 				t.Errorf("the refusal reads\n%s\nwant\n%s", refused.Message, tc.want)
 			}
@@ -519,11 +519,11 @@ func TestAnEngineAtOrPastTheFloorAndNoEngineAtAllAreLetThrough(t *testing.T) {
 		{Kind: engineStandard, Version: "29.8.0"},
 		{Kind: engineStandard, Version: "30.0.0-rc.1"},
 	} {
-		if err := (Reading{Tier: environment.TierProduction, Engine: allowed}).runnableEngine("ada@ocelbox"); err != nil {
+		if err := (Reading{Assets: testAssets, Tier: environment.TierProduction, Engine: allowed}).runnableEngine("ada@ocelbox"); err != nil {
 			t.Errorf("an engine read as %+v = %v, want it let through", allowed, err)
 		}
 	}
-	if err := (Reading{Tier: environment.TierProduction, Engine: InstalledEngine{Kind: engineStandard, Version: "27.5.1"}}).runnableEngine("ada@ocelbox"); err == nil {
+	if err := (Reading{Assets: testAssets, Tier: environment.TierProduction, Engine: InstalledEngine{Kind: engineStandard, Version: "27.5.1"}}).runnableEngine("ada@ocelbox"); err == nil {
 		t.Error("docker 27.5.1 is let through, one minor release below the floor")
 	}
 }
@@ -578,7 +578,7 @@ func TestAMaskedDockerServiceStopsThePlanRatherThanWedgingItOnAnEnableThatNeverT
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			read := Reading{Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: probed(t, fake), Engine: engineRead(t, fake)}
+			read := Reading{Assets: testAssets, Arch: ssh.AMD64, Tier: environment.TierProduction, Observed: probed(t, fake), Engine: engineRead(t, fake)}
 			refused := refusalOf(t, read.runnableEngine("ada@ocelbox"), refusal.CodeNotReady)
 			if !strings.Contains(refused.Message, "systemctl unmask "+dockerUnit) {
 				t.Errorf("a masked %s is refused with %q, want the unmask to run named: apply would otherwise run `systemctl enable --now` against it on every run, forever", dockerUnit, refused.Message)

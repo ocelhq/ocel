@@ -190,6 +190,11 @@ func (a *Automation[S]) env() (map[string]string, error) {
 		"PULUMI_SKIP_CHECKPOINTS":  "true",
 		"PULUMI_SKIP_UPDATE_CHECK": "true",
 	}
+	home, err := pulumiHome()
+	if err != nil {
+		return nil, err
+	}
+	env[pulumiHomeEnvVar] = home
 	for _, key := range slices.Sorted(maps.Keys(a.config.Backend.Env)) {
 		env[key] = a.config.Backend.Env[key]
 	}

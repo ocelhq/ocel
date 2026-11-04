@@ -154,9 +154,9 @@ func TestAQuickSmallTransferDoesNotWarn(t *testing.T) {
 }
 
 func TestAProviderBuiltForADeployTimesTheImagesItSends(t *testing.T) {
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	if p.Clock() == nil {
-		t.Fatal("NewProvider() left the clock unset, so the first image sent over ssh panics timing itself")
+		t.Fatal("NewProvider(TestAssets, ) left the clock unset, so the first image sent over ssh panics timing itself")
 	}
 }
 

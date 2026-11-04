@@ -180,7 +180,7 @@ func (w *ContainerStack) declareCrons(ctx *pulumi.Context) error {
 		return err
 	}
 	schedulerAt := w.coordinate(naming.KindRole, schedulerContainerRoleWord)
-	scheduler, err := component.PhysicalName(w.names.Namespace, schedulerAt, component.MaxRoleNameLen)
+	scheduler, err := schedulerAt.TaggedResourceName(w.names.Namespace).Fit(component.MaxRoleNameLen)
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func (w *ContainerStack) declareCrons(ctx *pulumi.Context) error {
 
 func (w *ContainerStack) taskRole(ctx *pulumi.Context) (*awsiam.Role, []pulumi.Resource, error) {
 	at := w.coordinate(naming.KindRole, workerContainerRoleWord)
-	physical, err := component.PhysicalName(w.names.Namespace, at, component.MaxRoleNameLen)
+	physical, err := at.TaggedResourceName(w.names.Namespace).Fit(component.MaxRoleNameLen)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -347,7 +347,7 @@ func (w *ContainerStack) scaleOnBacklog(ctx *pulumi.Context, worker provider.Wor
 }
 
 func (w *ContainerStack) declareBacklogAlarm(ctx *pulumi.Context, worker provider.WorkerSpec, at int, queueNames []string, out *appautoscaling.Policy, tags pulumi.StringMap) error {
-	name, err := component.PhysicalName(w.names.Namespace, w.coordinate(naming.KindWorker, naming.Join(naming.WordSeparator, worker.Name, backlogWord, strconv.Itoa(at))), maxAlarmNameLen)
+	name, err := w.coordinate(naming.KindWorker, naming.Join(naming.WordSeparator, worker.Name, backlogWord, strconv.Itoa(at))).TaggedResourceName(w.names.Namespace).Fit(maxAlarmNameLen)
 	if err != nil {
 		return err
 	}

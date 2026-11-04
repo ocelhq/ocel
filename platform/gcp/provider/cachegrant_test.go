@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/api/iam/v1"
+
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -19,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
-	"google.golang.org/api/iam/v1"
 )
 
 func cachedAt(release naming.Coordinate) provider.StackSpec {

@@ -19,10 +19,10 @@ const securityPolicyUsePermission = "compute.securityPolicies.use"
 
 func (p *Provider) refuseUnusableSecurityPolicies(ctx context.Context, evaluated transform.Result) error {
 	policies := alb.SecurityPolicies(evaluated)
-	if p.skipChecks || len(policies) == 0 {
+	if p.SkipChecks || len(policies) == 0 {
 		return nil
 	}
-	c, err := p.openClients(ctx)
+	c, err := p.OpenClients(ctx)
 	if err != nil {
 		return err
 	}

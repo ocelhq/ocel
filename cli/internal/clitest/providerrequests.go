@@ -14,9 +14,22 @@ import (
 )
 
 type ProviderRequests struct {
-	mu     sync.Mutex
-	bodies map[string][][]byte
-	order  []string
+	mu         sync.Mutex
+	bodies     map[string][][]byte
+	order      []string
+	namespaces []string
+}
+
+func (r *ProviderRequests) spawnedUnder(namespace string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.namespaces = append(r.namespaces, namespace)
+}
+
+func (r *ProviderRequests) SpawnedNamespaces() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.namespaces)
 }
 
 func (r *ProviderRequests) record(next http.Handler) http.Handler {

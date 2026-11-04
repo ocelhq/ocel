@@ -14,10 +14,12 @@ ocel connector rm [flags]
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
 | `--target` | `string` |  | The fingerprint ocel connector status prints, to forget a connector whose target will not answer |
+| `-y, --yes` | `bool` | `false` | Consent in advance to any confirmation this command would ask for |
 
 Every command also takes the [global flags](/docs/cli#global-flags).
 
 ## Behaviour
 
 - Changes state.
+- Asks before it changes anything: `--yes` consents in advance.
 - Under `--json` it prints its run events as NDJSON, one per line, and `ocel schema connector rm` prints the JSON Schema of one line.

@@ -6,6 +6,7 @@ const (
 	GuardNewProject               GuardID = "new_project"
 	GuardPersistentPreviewRemoval GuardID = "persistent_preview_removal"
 	GuardBootstrapDowngrade       GuardID = "bootstrap_downgrade"
+	GuardConnectorRemoval         GuardID = "connector_removal"
 )
 
 type Guard struct {

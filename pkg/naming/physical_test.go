@@ -321,3 +321,35 @@ func TestFitUntaggedLeavesRoomForARandomTagMintedLater(t *testing.T) {
 		t.Errorf("child %q is %d characters, over the limit of 63", child, len(child))
 	}
 }
+
+func TestAResourceOutsideAnyReleaseEndsInTheHashOfItsCoordinate(t *testing.T) {
+	t.Parallel()
+
+	worker := naming.Coordinate{Project: "shop", Env: "prod", App: "web", Kind: naming.KindWorker, Name: "mailer"}
+
+	got, err := worker.TaggedResourceName("ocel").Fit(64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ocel-app-shop-prod-web-mailer-" + worker.HashTag("ocel"); got != want {
+		t.Errorf("TaggedResourceName = %q, want %q", got, want)
+	}
+}
+
+func TestANameThatCannotFitIsRefusedNamingTheResourceAndTheLimit(t *testing.T) {
+	t.Parallel()
+
+	at := naming.Coordinate{Project: "shop", Env: "prod", App: "web", Kind: naming.KindWorker, Name: strings.Repeat("m", 60)}
+
+	_, err := at.TaggedResourceName("ocel").Fit(64)
+	if err == nil {
+		t.Fatal("a worker whose declared name alone overruns Lambda's limit was named rather than refused")
+	}
+	if !strings.Contains(err.Error(), at.Name) || !strings.Contains(err.Error(), "64") {
+		t.Errorf("refusal %q, want it to name the worker and Lambda's 64 characters", err)
+	}
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
+		t.Errorf("err = %v, want an invalid-input refusal", err)
+	}
+}

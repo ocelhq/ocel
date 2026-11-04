@@ -127,7 +127,7 @@ func loginResult(email, apiURL string, offer *console.CloudOffer, offerErr error
 	case offerErr != nil:
 		result.CloudError = offerErr.Error()
 	case offer != nil:
-		result.Cloud = &consolev1.CloudOffer{ApiUrl: offer.APIURL, ProviderUrl: offer.ProviderURL, Audience: offer.Audience}
+		result.Cloud = &consolev1.CloudOffer{ApiUrl: offer.APIURL, ProviderUrl: offer.ProviderURL, Audience: offer.Audience, Version: offer.Version}
 	}
 	return result
 }

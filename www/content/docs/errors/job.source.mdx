@@ -1,0 +1,10 @@
+---
+title: job.source
+description: The runner could not unpack the job's source.
+---
+
+Before a job runs, its runner unpacks the source the CLI uploaded, or clones the commit the console named, and finds the project in it. It could not: a file of the source could not be written, a symbolic link points outside the source, or the source has no directory where the job was started for the project. The CLI reports the job as [`job.failed`](/docs/errors/job.failed), naming this code and what was wrong.
+
+## Fix
+
+Check that the project directory is inside the source the CLI uploads, and that no symbolic link in it points outside, then run the command again.

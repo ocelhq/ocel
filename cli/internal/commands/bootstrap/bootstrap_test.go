@@ -1006,3 +1006,10 @@ func TestBootstrapRemovesWhatItIsTold(t *testing.T) {
 		t.Errorf("provider was asked to apply %v, want the named removal passed through", got)
 	}
 }
+
+func TestTheBootstrapHelpNamesTheYesItsRefusalsAskFor(t *testing.T) {
+	cmd := NewCommand(commands.Invocation{})
+	if !strings.Contains(cmd.Long, "--yes") {
+		t.Errorf("ocel bootstrap --help says %q, and a refusal asks for --yes", cmd.Long)
+	}
+}

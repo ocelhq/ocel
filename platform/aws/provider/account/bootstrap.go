@@ -380,7 +380,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 		return err
 	}
 	coreTags := stampTags(target.ns, target.tier, Stamp{Digest: cfn.TemplateDigest(core.body), WrittenBy: req.Writer.String()})
-	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, target.stackName, core.body, nil, namedIAM, coreTags, review); err != nil {
+	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, target.stackName, cfn.TemplateSource{Body: core.body}, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
 	deployed, refs, _, err := readCore(ctx, apis.CFN, target.ns, target.tier)
@@ -458,7 +458,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress prog
 					return fmt.Errorf("%s: %w", name, err)
 				}
 				tags := stampTags(target.ns, target.tier, Stamp{Digest: cfn.TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
-				if err := cfn.Upsert(gctx, apis.CFN, target.ns.ChangeSetNameFor, stackName, stack.body, stack.params, namedIAM, tags, review); err != nil {
+				if err := cfn.Upsert(gctx, apis.CFN, target.ns.ChangeSetNameFor, stackName, cfn.TemplateSource{Body: stack.body}, stack.params, namedIAM, tags, review); err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}
 				progress.Say("Applied stack " + stackName)
@@ -736,4 +736,30 @@ func stateTableOutputs() []cfn.Output {
 			Value:       cfn.GetAtt("StateTable", "StreamArn"),
 		},
 	}
+}
+
+func (d Deployed) RefuseUnbootstrapped(tier environment.Tier) error {
+	command := provider.BootstrapCommand(tier)
+	if !d.Present {
+		return refusal.Refuse(refusal.CodeNotReady, "the %s tier has no Ocel bootstrap; run `%s`", tier, command)
+	}
+	for _, class := range BootstrapStorageClasses {
+		if d.Buckets[class] == "" {
+			return refusal.Refuse(refusal.CodeNotReady,
+				"account bootstrap is present but its %s bucket is missing (a partial rollback?); re-run `%s`", class, command)
+		}
+	}
+	for _, missing := range []struct {
+		value string
+		what  string
+	}{
+		{d.StateTable, "state table"},
+		{d.VariablesTable, "variable store"},
+	} {
+		if missing.value == "" {
+			return refusal.Refuse(refusal.CodeNotReady,
+				"account bootstrap is present but its %s is missing (a partial rollback?); re-run `%s`", missing.what, command)
+		}
+	}
+	return nil
 }

@@ -79,7 +79,7 @@ func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *tes
 	if len(manifest.Keys) != 2 || manifest.Keys[0].Key != "DATABASE_URL" || manifest.Keys[1].Key != "SESSION_SECRET" || manifest.Keys[1].Folder != "/web" {
 		t.Errorf("manifest pins %+v, want each secret by key and folder", manifest.Keys)
 	}
-	if want := strings.Replace(p.endpoint, "127.0.0.1", "host.docker.internal", 1); manifest.Endpoint != want {
+	if want := strings.Replace(p.Emulator, "127.0.0.1", "host.docker.internal", 1); manifest.Endpoint != want {
 		t.Errorf("the manifest names the endpoint %q, want %q: the emulator runs a revision in a container of its own, which reaches the host at host.docker.internal", manifest.Endpoint, want)
 	}
 }

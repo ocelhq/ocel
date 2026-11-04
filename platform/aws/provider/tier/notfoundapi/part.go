@@ -12,9 +12,9 @@ import (
 
 func NewPart(records tier.Records, c API, namespace string, wildcard edge.Kind) tier.Part {
 	return tier.Recorded(records, tier.RecordedSpec{
-		Name:    Part,
-		Summary: Summary,
-		Shape:   func(tier environment.Tier) []pricing.Shaped { return Shape(namespace, tier) },
+		Name:      Part,
+		Summary:   Summary,
+		Inventory: func(tier environment.Tier) []pricing.Resource { return Inventory(namespace, tier) },
 		Work: func(_ context.Context, tier environment.Tier) (tier.Work, error) {
 			return Work(c, namespace, tier), nil
 		},

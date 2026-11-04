@@ -47,7 +47,7 @@ func TestALoginWithSudoLoadsImagesAsTheDeployLogin(t *testing.T) {
 	if _, err := rig.host().images.Load(context.Background(), imageRef, empty.Image, strings.NewReader("tar-bytes")); err != nil {
 		t.Fatalf("LoadImage() as a login with sudo = %v", err)
 	}
-	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" sh -c "+strings.TrimSuffix(shell.Quote("flock -x "+shell.Quote(boxapi.ImagesLock)), "'")) {
+	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" sh -c "+shell.Quote(`cd / && exec "$@"`)+" "+deployUser+" sh -c "+strings.TrimSuffix(shell.Quote("flock -x "+shell.Quote(boxapi.ImagesLock)), "'")) {
 		t.Errorf("the load ran as %q: %s is %s's and closed to every other login, so the lock is taken as %s", loaded, boxapi.StateRoot, deployUser, deployUser)
 	}
 }
@@ -58,7 +58,7 @@ func TestARootLoginLoadsImagesAsTheDeployLogin(t *testing.T) {
 	if _, err := rig.host().images.Load(context.Background(), imageRef, empty.Image, strings.NewReader("tar-bytes")); err != nil {
 		t.Fatalf("LoadImage() as root = %v", err)
 	}
-	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "runuser -u "+deployUser+" -- env PATH="+deployPath+" sh -c "+strings.TrimSuffix(shell.Quote("flock -x "+shell.Quote(boxapi.ImagesLock)), "'")) {
+	if loaded := commandWith(t, rig, "docker load"); !strings.HasPrefix(loaded, "runuser -u "+deployUser+" -- env PATH="+deployPath+" sh -c "+shell.Quote(`cd / && exec "$@"`)+" "+deployUser+" sh -c "+strings.TrimSuffix(shell.Quote("flock -x "+shell.Quote(boxapi.ImagesLock)), "'")) {
 		t.Errorf("the load ran as %q: a lock root creates under %s is one %s cannot open on its next deploy", loaded, boxapi.StateRoot, deployUser)
 	}
 }
@@ -81,7 +81,7 @@ func TestALoginWithSudoRecordsReleasesAsTheDeployLogin(t *testing.T) {
 	if err := rig.host().images.Promote(context.Background(), environment.TierProduction, "shop", "prod", "web", imageRef); err != nil {
 		t.Fatalf("Promote() as a login with sudo = %v", err)
 	}
-	if recorded := commandWith(t, rig, shell.Quote(boxapi.ReleasesHelper)); !strings.HasPrefix(recorded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" sh -c "+strings.TrimSuffix(shell.Quote(shell.Quote(boxapi.ReleasesHelper)), "'")) {
+	if recorded := commandWith(t, rig, shell.Quote(boxapi.ReleasesHelper)); !strings.HasPrefix(recorded, "sudo -n -u "+deployUser+" env PATH="+deployPath+" sh -c "+shell.Quote(`cd / && exec "$@"`)+" "+deployUser+" sh -c "+strings.TrimSuffix(shell.Quote(shell.Quote(boxapi.ReleasesHelper)), "'")) {
 		t.Errorf("the release was recorded as %q, want it written as %s, who owns %s", recorded, deployUser, boxapi.ReleasesDir)
 	}
 }

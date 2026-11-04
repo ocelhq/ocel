@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"maps"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
@@ -138,7 +140,7 @@ func (w *work) run(ctx *pulumi.Context) error {
 
 	logs, err := cloudwatch.NewLogGroup(ctx, awsports.ContainerLogGroupName(w.namespace, tier), &cloudwatch.LogGroupArgs{
 		Name:            pulumi.String(awsports.ContainerLogGroupName(w.namespace, tier)),
-		RetentionInDays: pulumi.Int(logRetentionDays),
+		RetentionInDays: pulumi.Int(sharedparts.ContainersLogRetentionDays),
 		Tags:            tags,
 	})
 	if err != nil {
@@ -186,7 +188,7 @@ func decode(outputs auto.OutputMap, private bool) (Infrastructure, error) {
 		required[outputKeyVPCOrigin] = &infra.VPCOrigin
 	}
 	for key, into := range required {
-		if *into, err = component.RequireStringField(fields, Slug, key); err != nil {
+		if *into, err = component.RequireStringField(fields, awsports.ContainersSlug, key); err != nil {
 			return Infrastructure{}, err
 		}
 	}
@@ -201,12 +203,12 @@ func decode(outputs auto.OutputMap, private bool) (Infrastructure, error) {
 	} {
 		*into, _ = fields[key].(string)
 	}
-	encoded, err := component.RequireStringField(fields, Slug, outputKeySubnets)
+	encoded, err := component.RequireStringField(fields, awsports.ContainersSlug, outputKeySubnets)
 	if err != nil {
 		return Infrastructure{}, err
 	}
 	if err := json.Unmarshal([]byte(encoded), &infra.Subnets); err != nil || len(infra.Subnets) == 0 {
-		return Infrastructure{}, fmt.Errorf("output %q for %s names no subnets to place a task in", outputKeySubnets, Slug)
+		return Infrastructure{}, fmt.Errorf("output %q for %s names no subnets to place a task in", outputKeySubnets, awsports.ContainersSlug)
 	}
 	return infra, nil
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 )
 
-type Shaped struct {
+type Resource struct {
 	Name       string
 	Type       string
 	Properties map[string]any
@@ -25,13 +25,13 @@ type EdgeApp struct {
 	Hostnames []string
 }
 
-type EdgeShape struct {
+type EdgeInventory struct {
 	Vendor      string
 	Region      string
 	BillsEgress bool
-	Shared      []Shaped
-	Environment []Shaped
-	Apps        map[string][]Shaped
+	Shared      []Resource
+	Environment []Resource
+	Apps        map[string][]Resource
 }
 
 type EdgeRates struct {
@@ -44,11 +44,11 @@ type EdgeScopes struct {
 	Environment string
 }
 
-func (t *Tree) AddEdge(scopes EdgeScopes, shape EdgeShape) {
-	t.AddShaped(scopes.Shared, shape.Vendor, shape.Region, shape.Shared)
-	t.AddShaped(scopes.Environment, shape.Vendor, shape.Region, shape.Environment)
-	for _, app := range slices.Sorted(maps.Keys(shape.Apps)) {
-		t.AddShaped(t.Scope(scopes.Environment, ScopeApp, app), shape.Vendor, shape.Region, shape.Apps[app])
+func (t *Tree) AddEdge(scopes EdgeScopes, inventory EdgeInventory) {
+	t.AddResources(scopes.Shared, inventory.Vendor, inventory.Region, inventory.Shared)
+	t.AddResources(scopes.Environment, inventory.Vendor, inventory.Region, inventory.Environment)
+	for _, app := range slices.Sorted(maps.Keys(inventory.Apps)) {
+		t.AddResources(t.Scope(scopes.Environment, ScopeApp, app), inventory.Vendor, inventory.Region, inventory.Apps[app])
 	}
 }
 

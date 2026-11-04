@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 )
 
@@ -20,10 +20,10 @@ func planningArmoredALB(t *testing.T, denied []string, skipped bool) error {
 	server := &googletest.Run{Iam: googletest.GrantedIAM()}
 	server.Iam.ProjectDeniedPermissions = denied
 	p := servingTransformed(t, server, &patchingByKind{patches: map[string]transform.Patches{
-		alb.TransformKindEdge: {"backendService": {"securityPolicy": "web-armor"}},
+		albresources.TransformKindEdge: {"backendService": {"securityPolicy": "web-armor"}},
 	}})
-	p.skipChecks = skipped
-	front, err := p.Edges().Open(alb.Kind, nil)
+	p.SkipChecks = skipped
+	front, err := p.Edges().Open(albresources.Kind, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,10 +60,10 @@ func TestADryDeployWhoseFrontPatchSetsACloudArmorPolicyTheDeployCredentialMayNot
 	server := &googletest.Run{Iam: googletest.GrantedIAM()}
 	server.Iam.ProjectDeniedPermissions = []string{securityPolicyUsePermission}
 	p := servingTransformed(t, server, &patchingByKind{patches: map[string]transform.Patches{
-		alb.TransformKindLoadBalancer: {"notFoundBackend": {"securityPolicy": "projects/acme-prod/global/securityPolicies/front-armor"}},
+		albresources.TransformKindLoadBalancer: {"notFoundBackend": {"securityPolicy": "projects/acme-prod/global/securityPolicies/front-armor"}},
 	}})
 
-	_, err := p.PlanPreflight(context.Background(), provider.DeployPreflight{Deploy: provider.DeploySpec{Slug: "shop", Tier: environment.TierProduction}, Edge: alb.Kind})
+	_, err := p.PlanPreflight(context.Background(), provider.DeployPreflight{Deploy: provider.DeploySpec{Slug: "shop", Tier: environment.TierProduction}, Edge: albresources.Kind})
 
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied || !strings.Contains(refused.Message, "front-armor") || !strings.Contains(refused.Message, "project acme-prod") {

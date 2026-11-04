@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/confirmation"
+
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
@@ -87,7 +89,8 @@ func spanOn(t *testing.T, term *terminal) *run.Span {
 }
 
 func askingPolicy(term *terminal, answer string) consent.Policy {
-	return consent.Policy{Command: "ocel test", Interactive: true, In: strings.NewReader(answer), Out: term}
+	answers := strings.NewReader(answer)
+	return consent.Policy{Command: "ocel test", Interactive: true, In: answers, Out: term, Respondent: confirmation.OnTerminal(term, answers)}
 }
 
 func TestAnInteractionHoldsTheStreamWhileItAsks(t *testing.T) {
@@ -142,6 +145,7 @@ func TestADryRunNeedsNoConsentAtAll(t *testing.T) {
 func TestAPolicyThatConfirmsThePlanTakesATerminalInPlaceOfYes(t *testing.T) {
 	g := confirmingPlan()
 	g.Interactive = true
+	g.Respondent = confirmation.OnTerminal(&bytes.Buffer{}, strings.NewReader(""))
 	if err := g.Refuse(); err != nil {
 		t.Errorf("Refuse() = %v, want a terminal to be consent enough to reach the plan", err)
 	}
@@ -223,6 +227,7 @@ func TestAConfirmationSkipsWhenThereIsNoTerminalToAskOn(t *testing.T) {
 	term := &terminal{}
 	g := askingPolicy(term, "")
 	g.Interactive = false
+	g.Respondent = confirmation.Nobody{}
 
 	granted, err := g.Confirm(context.Background(), spanOn(t, term), newProjectGuard)
 	if err != nil || !granted {
@@ -374,6 +379,7 @@ func TestASkippedConfirmationWarnsWhatItAssumedAndListsItOnTheSummary(t *testing
 	term := &terminal{}
 	g := askingPolicy(term, "")
 	g.Interactive = false
+	g.Respondent = confirmation.Nobody{}
 	span := spanOn(t, term)
 
 	if granted, err := g.Confirm(context.Background(), span, newProjectGuard); err != nil || !granted {
@@ -399,6 +405,7 @@ func TestAConfirmationGrantedByYesAssumesNothing(t *testing.T) {
 	term := &terminal{}
 	g := askingPolicy(term, "")
 	g.Interactive = false
+	g.Respondent = confirmation.Nobody{}
 	g.Yes = true
 	span := spanOn(t, term)
 
@@ -414,6 +421,7 @@ func TestADryRunAssumesNothingWhereNoTerminalCouldAnswer(t *testing.T) {
 	term := &terminal{}
 	g := askingPolicy(term, "")
 	g.Interactive = false
+	g.Respondent = confirmation.Nobody{}
 	g.DryRun = true
 	span := spanOn(t, term)
 
@@ -484,6 +492,7 @@ func TestAQuestionWithNoTerminalToAskOnIsRefusedWithConfirmationRequiredNamingYe
 	g := askingPolicy(&terminal{}, "")
 	g.Command = "ocel preview rm"
 	g.Interactive = false
+	g.Respondent = confirmation.Nobody{}
 
 	err := g.RefuseQuestion(teardown, "before it tears the preview down")
 
@@ -500,6 +509,7 @@ func TestAQuestionIsNotRefusedOnATerminalOrUnderYes(t *testing.T) {
 	onTerminal := askingPolicy(&terminal{}, "")
 	underYes := askingPolicy(&terminal{}, "")
 	underYes.Interactive = false
+	underYes.Respondent = confirmation.Nobody{}
 	underYes.Yes = true
 
 	for _, g := range []consent.Policy{onTerminal, underYes} {

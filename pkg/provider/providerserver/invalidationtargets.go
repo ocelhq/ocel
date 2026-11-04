@@ -15,7 +15,16 @@ import (
 
 func buildInvalidationTargetsKey(tier environment.Tier, kind edge.Kind, slug string) records.Key {
 	partition := records.Partition{Tier: tier, Root: stackrecords.RootRouters, Path: []string{string(kind), naming.Sanitize(slug)}}
-	return partition.Key("invalidation")
+	return partition.Key(invalidationSegment)
+}
+
+const invalidationSegment = "invalidation"
+
+func ownerOfInvalidationTargets(key records.Key) (records.Owner, bool) {
+	if key.Partition.Root == stackrecords.RootRouters && len(key.Partition.Path) == 2 && len(key.Path) == 1 && key.Path[0] == invalidationSegment {
+		return records.Owner{Project: key.Partition.Path[1]}, true
+	}
+	return records.Owner{}, false
 }
 
 func decodeInvalidationTargets(entry records.Entry) ([]string, error) {

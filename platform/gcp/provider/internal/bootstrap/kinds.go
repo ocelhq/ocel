@@ -86,16 +86,16 @@ func (k KindOps) mendOrMake(ctx context.Context, b Engine, read Survey, target R
 	return k.Make(ctx, b, read, target)
 }
 
-func (i Resource) Shape(region string) (pricing.Shaped, bool) {
+func (i Resource) Priced(region string) (pricing.Resource, bool) {
 	k := i.KindOps()
 	if k.terraform == "" {
-		return pricing.Shaped{}, false
+		return pricing.Resource{}, false
 	}
 	properties := map[string]any{}
 	if k.properties != nil {
 		properties = k.properties(region, i)
 	}
-	return pricing.Shaped{Name: i.Name, Type: k.terraform, Properties: properties}, true
+	return pricing.Resource{Name: i.Name, Type: k.terraform, Properties: properties}, true
 }
 
 func kept(target Resource, reason string) Removal {

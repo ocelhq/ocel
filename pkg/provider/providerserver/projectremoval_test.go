@@ -488,7 +488,7 @@ func TestRemoveProjectForgetsItsEnvSourceAndHowItsSyncsWent(t *testing.T) {
 		t.Fatal(err)
 	}
 	sync := &envsource.Sync{Store: store, Tier: environment.TierProduction}
-	if _, err := sync.CopyProjectFrom(ctx, registration, envsource.NewFixed("exec", nil)); err != nil {
+	if _, err := sync.CopyProjectFrom(ctx, registration, "", envsource.NewFixed("exec", nil)); err != nil {
 		t.Fatal(err)
 	}
 

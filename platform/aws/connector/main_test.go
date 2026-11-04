@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync/atomic"
 	"testing"
 
@@ -18,9 +19,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/ocelhq/ocel/pkg/connectorserver"
+	"github.com/ocelhq/ocel/pkg/endpoint"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
+	"github.com/ocelhq/ocel/pkg/providerhost"
 )
 
 type proxied struct {
@@ -49,7 +54,7 @@ func TestTheKeyReadOutOfTheParameterSignsAsTheSeedTheInstallWrote(t *testing.T) 
 	for i := range seed {
 		seed[i] = byte(i)
 	}
-	identity, err := keyed(context.Background(), parameters{"/ocel/connector/key": base64.StdEncoding.EncodeToString(seed) + "\n"}, "/ocel/connector/key")
+	identity, err := readIdentity(context.Background(), parameters{"/ocel/connector/key": base64.StdEncoding.EncodeToString(seed) + "\n"}, "/ocel/connector/key")
 	if err != nil {
 		t.Fatalf("keyed: %v", err)
 	}
@@ -57,39 +62,39 @@ func TestTheKeyReadOutOfTheParameterSignsAsTheSeedTheInstallWrote(t *testing.T) 
 	if identity.PublicKey() != want {
 		t.Errorf("the connector signs as %s, the install registered %s", identity.PublicKey(), want)
 	}
-	if _, err := keyed(context.Background(), parameters{}, "/ocel/connector/key"); err == nil {
+	if _, err := readIdentity(context.Background(), parameters{}, "/ocel/connector/key"); err == nil {
 		t.Error("a parameter that is not there yielded an identity")
 	}
-	if _, err := identityOf("not base64!"); err == nil {
+	if _, err := decodeIdentity("not base64!"); err == nil {
 		t.Error("a value that is no key yielded an identity")
 	}
 }
 
 type heartbeatCounter struct {
-	consolev1connect.UnimplementedConnectorServiceHandler
+	consolev1connect.UnimplementedEndpointServiceHandler
 	beats   *atomic.Int64
 	refusal error
 }
 
-func (c heartbeatCounter) Heartbeat(context.Context, *consolev1.HeartbeatConnectorRequest) (*consolev1.HeartbeatConnectorResponse, error) {
+func (c heartbeatCounter) Heartbeat(context.Context, *consolev1.HeartbeatEndpointRequest) (*consolev1.HeartbeatEndpointResponse, error) {
 	c.beats.Add(1)
 	if c.refusal != nil {
 		return nil, c.refusal
 	}
-	return &consolev1.HeartbeatConnectorResponse{}, nil
+	return &consolev1.HeartbeatEndpointResponse{}, nil
 }
 
 func invokedAgainst(t *testing.T, origin string) func(context.Context, json.RawMessage) (any, error) {
 	t.Helper()
-	identity, err := connectorserver.IdentityFromSeed(make([]byte, ed25519.SeedSize))
+	identity, err := endpoint.IdentityFromSeed(make([]byte, ed25519.SeedSize))
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec := connectorserver.Spec{
-		Config:   connectorserver.Config{Console: origin, ConnectorID: "0199b5c4-0000-7000-8000-00000000cafe", OrganizationID: "org-1"},
+	spec := endpoint.Spec{
+		Config:   endpoint.Config{Console: origin, EndpointID: "0199b5c4-0000-7000-8000-00000000cafe", OrganizationID: "org-1"},
 		Identity: identity,
 	}
-	return invoked(spec, &proxied{})
+	return newInvocationHandler(spec, &proxied{})
 }
 
 func TestAScheduledWakeTheConsoleRefusesSucceedsSoLambdaDoesNotRetryIt(t *testing.T) {
@@ -97,7 +102,7 @@ func TestAScheduledWakeTheConsoleRefusesSucceedsSoLambdaDoesNotRetryIt(t *testin
 
 	var beats atomic.Int64
 	mux := http.NewServeMux()
-	path, handler := consolev1connect.NewConnectorServiceHandler(heartbeatCounter{
+	path, handler := consolev1connect.NewEndpointServiceHandler(heartbeatCounter{
 		beats:   &beats,
 		refusal: connect.NewError(connect.CodeNotFound, errors.New("no such connector")),
 	})
@@ -130,20 +135,20 @@ func TestAScheduledWakeBeatsAndAnythingElseIsServedAsARequest(t *testing.T) {
 
 	var beats atomic.Int64
 	mux := http.NewServeMux()
-	path, handler := consolev1connect.NewConnectorServiceHandler(heartbeatCounter{beats: &beats})
+	path, handler := consolev1connect.NewEndpointServiceHandler(heartbeatCounter{beats: &beats})
 	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
 	console := httptest.NewServer(mux)
 	t.Cleanup(console.Close)
-	identity, err := connectorserver.IdentityFromSeed(make([]byte, ed25519.SeedSize))
+	identity, err := endpoint.IdentityFromSeed(make([]byte, ed25519.SeedSize))
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec := connectorserver.Spec{
-		Config:   connectorserver.Config{Console: console.URL, ConnectorID: "0199b5c4-0000-7000-8000-00000000cafe", OrganizationID: "org-1"},
+	spec := endpoint.Spec{
+		Config:   endpoint.Config{Console: console.URL, EndpointID: "0199b5c4-0000-7000-8000-00000000cafe", OrganizationID: "org-1"},
 		Identity: identity,
 	}
 	serve := &proxied{}
-	handle := invoked(spec, serve)
+	handle := newInvocationHandler(spec, serve)
 
 	if _, err := handle(context.Background(), json.RawMessage(`{"ocel":"heartbeat"}`)); err != nil {
 		t.Fatalf("a scheduled wake failed: %v", err)
@@ -152,14 +157,14 @@ func TestAScheduledWakeBeatsAndAnythingElseIsServedAsARequest(t *testing.T) {
 		t.Errorf("a scheduled wake beat %d times and served %d requests, want one beat and nothing served", beats.Load(), len(serve.requests))
 	}
 
-	request, err := json.Marshal(events.APIGatewayV2HTTPRequest{RawPath: "/v1/capabilities"})
+	request, err := json.Marshal(events.APIGatewayV2HTTPRequest{RawPath: "/provider.variablestore.v1.VariableStoreService/ListValues"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := handle(context.Background(), request); err != nil {
 		t.Fatalf("a request failed: %v", err)
 	}
-	if beats.Load() != 1 || len(serve.requests) != 1 || serve.requests[0].RawPath != "/v1/capabilities" {
+	if beats.Load() != 1 || len(serve.requests) != 1 || serve.requests[0].RawPath != "/provider.variablestore.v1.VariableStoreService/ListValues" {
 		t.Errorf("a request beat %d times and served %v, want it served and nothing beaten", beats.Load(), serve.requests)
 	}
 }
@@ -172,5 +177,19 @@ func TestTheConnectorProvesItsIdentityAsItsOwnRole(t *testing.T) {
 	}
 	if proof, err := prove(context.Background(), "identity-1"); err != nil || proof.SignedRequest == nil || proof.SignedRequest.URL != "https://sts.eu-west-2.amazonaws.com/" {
 		t.Fatalf("ProveIdentity() = %+v, %v, want a request signed for the connector's own region", proof, err)
+	}
+}
+
+func TestTheConnectorServesControlCallsAndVariables(t *testing.T) {
+	host, err := providerhost.New(controlHost("eu-west-2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(host.Close)
+
+	cfg := aws.Config{Region: "eu-west-2", Credentials: credentials.NewStaticCredentialsProvider("AKID", "secret", "")}
+	want := []string{contractv1connect.ProviderServiceName, costv1connect.CostServiceName, variablestorev1connect.VariableStoreServiceName}
+	if got := (endpoint.Spec{Mounts: mounts(host, cfg, nil)}).Services(); !slices.Equal(got, want) {
+		t.Errorf("the connector serves %v, want %v", got, want)
 	}
 }

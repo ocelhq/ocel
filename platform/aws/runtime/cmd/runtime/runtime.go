@@ -117,13 +117,8 @@ type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Wri
 
 func bringUp(ctx context.Context, served buildoutput.FunctionConfig, values liveValues, prefetch <-chan error, env []string, start time.Time, prime primer) (child, error) {
 	if executable(served) {
-		return bringUpChild(func() (*execChild, error) {
-			child, err := startExecutable(served.Command, containerimage.Port, env, spawnBudget(start))
-			if err != nil {
-				return nil, err
-			}
-			child.live = values
-			return child, nil
+		return bringUpExecutable(func() (*execChild, error) {
+			return startExecutable(served.Command, containerimage.Port, env, spawnBudget(start))
 		}, values, prefetch)
 	}
 	return bringUpNodeWithBytecode(ctx, startNode(entrypointPath(served)), values, prefetch, env, start, prime)
@@ -148,6 +143,18 @@ func spawnBudget(start time.Time) time.Duration {
 		return minSpawnBudget
 	}
 	return budget
+}
+
+func bringUpExecutable(start func() (*execChild, error), values liveValues, prefetch <-chan error) (*execChild, error) {
+	if err := values.Join(prefetch); err != nil {
+		return nil, fmt.Errorf("failed to resolve this deployment's live variables: %w", err)
+	}
+	child, err := start()
+	if err != nil {
+		return nil, err
+	}
+	child.live = values
+	return child, nil
 }
 
 func bringUpChild[C child](start func() (C, error), values liveValues, prefetch <-chan error) (C, error) {

@@ -427,6 +427,64 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 	}
 }
 
+func TestRemoveEnvironmentForgetsWhatThePreviewsEnvSourceSyncCopiedThereAndKeepsWhatWasSetByHand(t *testing.T) {
+	t.Parallel()
+	client, vendor := contractServed(t, "1.0.0")
+	deployed(t, vendor, environment.TierPreview, "shop")
+	seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1")
+
+	ctx := context.Background()
+	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+	scope := variablestore.Scope{Project: "shop", Tier: environment.TierPreview}
+	copied := func(environment, key, plaintext string, second int64) {
+		from := variablestore.Provenance{EnvSource: "exec", Version: plaintext, ReadAt: time.Unix(second, 0)}
+		at := variablestore.Coordinate{Cell: variablestore.Cell{Key: key}, Environment: environment}
+		current, err := store.Get(ctx, scope, at, false)
+		if err != nil && !errors.Is(err, variablestore.ErrNotFound) {
+			t.Fatal(err)
+		}
+		if _, err := store.SetFromEnvSource(ctx, scope, at, plaintext, from, current.Version); err != nil {
+			t.Fatal(err)
+		}
+	}
+	copied("pr-7", "TOKEN", "one", 1)
+	copied("pr-7", "TOKEN", "two", 2)
+	copied("pr-8", "TOKEN", "pr-8's", 1)
+	copied("", "TOKEN", "tier-wide", 1)
+	byHand := variablestore.Coordinate{Cell: variablestore.Cell{Key: "PAGE_ID"}, Environment: "pr-7"}
+	if _, err := store.Set(ctx, scope, byHand, "set for pr-7", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	stream, err := client.RemoveEnvironment(ctx, &contractv1.RemoveEnvironmentRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %v, %v", result.GetError(), err)
+	}
+
+	entries, err := vendor.KeyValues().List(ctx, variablestore.ValuesPartition(scope))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var left []string
+	for _, entry := range entries {
+		left = append(left, strings.Join(entry.Key.Path[:4], " "))
+	}
+	slices.Sort(left)
+	want := []string{
+		"cells / PAGE_ID pr-7", "cells / TOKEN *", "cells / TOKEN pr-8",
+		"history / PAGE_ID pr-7", "history / TOKEN *", "history / TOKEN pr-8",
+	}
+	if !slices.Equal(left, want) {
+		t.Errorf("values left = %q, want %q: what pr-7's sync copied goes with it, and what was set by hand stays", left, want)
+	}
+}
+
 func seedRemovablePreview(t *testing.T, vendor *fake.Provider) {
 	t.Helper()
 	deployed(t, vendor, environment.TierPreview, "shop")

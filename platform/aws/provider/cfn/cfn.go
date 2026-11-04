@@ -157,7 +157,7 @@ func Unusable(status cfntypes.StackStatus) bool {
 	}
 }
 
-func Upsert(ctx context.Context, cfn API, changeSet ChangeSetName, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review ChangeReview) error {
+func Upsert(ctx context.Context, cfn API, changeSet ChangeSetName, stackName string, template TemplateSource, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review ChangeReview) error {
 	stack, err := DescribeStack(ctx, cfn, stackName)
 	if err != nil {
 		return err
@@ -174,7 +174,7 @@ func Upsert(ctx context.Context, cfn API, changeSet ChangeSetName, stackName, te
 	return Update(ctx, cfn, changeSet, stackName, template, params, capabilities, tags, review)
 }
 
-func Update(ctx context.Context, cfn API, changeSet ChangeSetName, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review ChangeReview) error {
+func Update(ctx context.Context, cfn API, changeSet ChangeSetName, stackName string, template TemplateSource, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review ChangeReview) error {
 	id, changes, err := Plan(ctx, cfn, changeSet, stackName, template, params, capabilities, tags)
 	if err != nil {
 		return err
@@ -251,12 +251,13 @@ func SameTags(have, want []cfntypes.Tag) bool {
 	return true
 }
 
-func Plan(ctx context.Context, cfn API, changeSet ChangeSetName, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) (string, []cfntypes.ResourceChange, error) {
+func Plan(ctx context.Context, cfn API, changeSet ChangeSetName, stackName string, template TemplateSource, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) (string, []cfntypes.ResourceChange, error) {
 	out, err := cfn.CreateChangeSet(ctx, &cloudformation.CreateChangeSetInput{
 		StackName:     aws.String(stackName),
 		ChangeSetName: aws.String(changeSet(stackName)),
 		ChangeSetType: cfntypes.ChangeSetTypeUpdate,
-		TemplateBody:  aws.String(template),
+		TemplateBody:  template.body(),
+		TemplateURL:   template.url(),
 		Parameters:    params,
 		Capabilities:  capabilities,
 		Tags:          tags,
@@ -347,7 +348,7 @@ func DiscardChangeSet(ctx context.Context, cfn API, stackName, id string) {
 	_, _ = cfn.DeleteChangeSet(ctx, &cloudformation.DeleteChangeSetInput{StackName: aws.String(stackName), ChangeSetName: aws.String(id)})
 }
 
-func Create(ctx context.Context, cfn API, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) error {
+func Create(ctx context.Context, cfn API, stackName string, template TemplateSource, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) error {
 	for attempt := 0; ; attempt++ {
 		err := createOnce(ctx, cfn, stackName, template, params, capabilities, tags)
 		if err == nil {
@@ -365,10 +366,11 @@ func Create(ctx context.Context, cfn API, stackName, template string, params []c
 	}
 }
 
-func createOnce(ctx context.Context, cfn API, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) error {
+func createOnce(ctx context.Context, cfn API, stackName string, template TemplateSource, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) error {
 	if _, err := cfn.CreateStack(ctx, &cloudformation.CreateStackInput{
 		StackName:    aws.String(stackName),
-		TemplateBody: aws.String(template),
+		TemplateBody: template.body(),
+		TemplateURL:  template.url(),
 		Parameters:   params,
 		Capabilities: capabilities,
 		Tags:         tags,

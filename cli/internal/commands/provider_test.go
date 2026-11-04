@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/confirmation"
+
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/consent"
@@ -146,7 +148,8 @@ func TestWithProviderSetsUpWhatTheTierIsMissingAndChecksItAgain(t *testing.T) {
 		t.Fatalf("LoadProject: %v", err)
 	}
 	var asked strings.Builder
-	policy := consent.Policy{Interactive: true, In: strings.NewReader("y\n"), Out: &asked}
+	answers := strings.NewReader("y\n")
+	policy := consent.Policy{Interactive: true, In: answers, Out: &asked, Respondent: confirmation.OnTerminal(&asked, answers)}
 
 	worked := false
 	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: environmentv1.Tier_TIER_PREVIEW, Policy: policy}, func(_ context.Context, p commands.ProviderRun) error {
@@ -176,7 +179,8 @@ func TestWithProviderEndsADeclinedSetupAsARunThatChangedNothing(t *testing.T) {
 		t.Fatalf("LoadProject: %v", err)
 	}
 	var asked strings.Builder
-	policy := consent.Policy{Interactive: true, In: strings.NewReader("n\n"), Out: &asked}
+	answers := strings.NewReader("n\n")
+	policy := consent.Policy{Interactive: true, In: answers, Out: &asked, Respondent: confirmation.OnTerminal(&asked, answers)}
 
 	worked := false
 	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: environmentv1.Tier_TIER_PREVIEW, Policy: policy}, func(context.Context, commands.ProviderRun) error {
@@ -205,7 +209,8 @@ func TestWithProviderNamesTheReadingOfTheConfigAfterASetupUnderCheck(t *testing.
 	if err != nil {
 		t.Fatalf("LoadProject: %v", err)
 	}
-	policy := consent.Policy{Interactive: true, In: strings.NewReader("y\n"), Out: &strings.Builder{}}
+	answers, written := strings.NewReader("y\n"), &strings.Builder{}
+	policy := consent.Policy{Interactive: true, In: answers, Out: written, Respondent: confirmation.OnTerminal(written, answers)}
 
 	err = invocation.WithProvider(context.Background(), cfg, "ocel test", commands.OpenOptions{Intent: commands.UseInfrastructure, Tier: environmentv1.Tier_TIER_PREVIEW, Policy: policy}, func(context.Context, commands.ProviderRun) error {
 		return nil
@@ -234,7 +239,8 @@ func TestEnsureTargetSetsUpAMissingConfigAndLoadsIt(t *testing.T) {
 		},
 	}}
 	var asked strings.Builder
-	policy := consent.Policy{Interactive: true, In: strings.NewReader("y\n"), Out: &asked}
+	answers := strings.NewReader("y\n")
+	policy := consent.Policy{Interactive: true, In: answers, Out: &asked, Respondent: confirmation.OnTerminal(&asked, answers)}
 
 	target, err := invocation.EnsureTarget(context.Background(), dir, policy)
 	if err != nil {
@@ -245,7 +251,8 @@ func TestEnsureTargetSetsUpAMissingConfigAndLoadsIt(t *testing.T) {
 	}
 
 	t.Run("a declined setup is reported as one", func(t *testing.T) {
-		policy := consent.Policy{Interactive: true, In: strings.NewReader("n\n"), Out: &asked}
+		answers := strings.NewReader("n\n")
+		policy := consent.Policy{Interactive: true, In: answers, Out: &asked, Respondent: confirmation.OnTerminal(&asked, answers)}
 		if _, err := invocation.EnsureTarget(context.Background(), t.TempDir(), policy); !prerequisite.IsDeclined(err) {
 			t.Errorf("EnsureTarget err = %v, want the decline", err)
 		}

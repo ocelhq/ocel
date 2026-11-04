@@ -14,6 +14,7 @@ const (
 	CodeBusy          Code = "busy"
 	CodeUnknownOption Code = "unknown-option"
 	CodeUnsupported   Code = "unsupported"
+	CodeNeedsRunner   Code = "needs-runner"
 )
 
 type Refusal struct {

@@ -45,10 +45,23 @@ type Run struct {
 	propagation *progressv1.Propagation
 	headline    string
 	assumed     []*streamv1.Assumption
-	cloudJob    *streamv1.CloudJob
+	remoteJobs  []*streamv1.RemoteJob
 	report      *consolev1.Deployment
+	beforeStop  []func()
 
 	endOnce sync.Once
+}
+
+func (r *Run) BeforeForcedStop(release func()) (forget func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.beforeStop = append(r.beforeStop, release)
+	at := len(r.beforeStop) - 1
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		r.beforeStop[at] = nil
+	}
 }
 
 func (r *Run) End(errp *error) {
@@ -62,7 +75,7 @@ func (r *Run) End(errp *error) {
 		result.Apps, result.ChangeStarted, result.PromotionId = r.apps, r.changed, r.promotion
 		result.UrlNotes = r.urlNotes
 		result.Assumed = r.assumed
-		result.CloudJob = r.cloudJob
+		result.RemoteJobs = r.remoteJobs
 		result.DeploymentReport = r.report
 		result.Tier, result.Origin = r.identity.GetTier(), r.identity.GetOrigin()
 		r.mu.Unlock()
@@ -94,6 +107,14 @@ func (r *Run) StartedAt() time.Time {
 }
 
 func (r *Run) interrupt() {
+	r.mu.Lock()
+	releases := slices.Clone(r.beforeStop)
+	r.mu.Unlock()
+	for _, release := range slices.Backward(releases) {
+		if release != nil {
+			release()
+		}
+	}
 	err := context.Canceled
 	r.End(&err)
 }
@@ -142,10 +163,15 @@ func (r *Run) Succeed(headline string) {
 	r.headline = headline
 }
 
-func (r *Run) SetCloudJob(job *streamv1.CloudJob) {
+func (r *Run) SetRemoteJob(job *streamv1.RemoteJob) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.cloudJob = job
+	at := slices.IndexFunc(r.remoteJobs, func(held *streamv1.RemoteJob) bool { return held.GetId() == job.GetId() })
+	if at < 0 {
+		r.remoteJobs = append(r.remoteJobs, job)
+		return
+	}
+	r.remoteJobs[at] = job
 }
 
 func (r *Run) SetDeploymentReport(report *consolev1.Deployment) {

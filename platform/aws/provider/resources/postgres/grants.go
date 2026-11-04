@@ -4,10 +4,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres/signin"
 )
 
 func widestDBUserARN(tier environment.Tier) string {
-	return "arn:aws:rds-db:ap-southeast-5:123456789012:dbuser:cluster-ABCDEFGHIJKLMNOPQRSTUVWXYZ/" + AppRoleFor(tier)
+	return "arn:aws:rds-db:ap-southeast-5:123456789012:dbuser:cluster-ABCDEFGHIJKLMNOPQRSTUVWXYZ/" + signin.AppRoleFor(tier)
 }
 
 func dbUserARN(region, account, resourceID, username string) string {

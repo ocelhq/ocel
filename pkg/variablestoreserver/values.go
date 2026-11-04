@@ -13,7 +13,7 @@ func (h *Service) SetValue(ctx context.Context, req *variablestorev1.SetValueReq
 	if err := h.addressable(ctx, req.GetTier(), req.GetCoordinate()); err != nil {
 		return nil, err
 	}
-	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -28,7 +28,7 @@ func (h *Service) SetValue(ctx context.Context, req *variablestorev1.SetValueReq
 }
 
 func (h *Service) ListValues(ctx context.Context, req *variablestorev1.ListValuesRequest) (*variablestorev1.ListValuesResponse, error) {
-	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -44,11 +44,11 @@ func (h *Service) ListValues(ctx context.Context, req *variablestorev1.ListValue
 }
 
 func (h *Service) GetValue(ctx context.Context, req *variablestorev1.GetValueRequest) (*variablestorev1.GetValueResponse, error) {
-	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	value, err := store.Get(ctx, scope, coordinateOf(req.GetCoordinate()), req.GetReveal())
+	value, err := store.Get(ctx, scope, coordinateOf(req.GetCoordinate()), false)
 	if errors.Is(err, variablestore.ErrNotFound) {
 		return &variablestorev1.GetValueResponse{}, nil
 	}
@@ -58,12 +58,11 @@ func (h *Service) GetValue(ctx context.Context, req *variablestorev1.GetValueReq
 	return &variablestorev1.GetValueResponse{
 		Found:    true,
 		Metadata: metadataProto(scope, value.Metadata),
-		Value:    value.Plaintext,
 	}, nil
 }
 
 func (h *Service) RevealValues(ctx context.Context, req *variablestorev1.RevealValuesRequest) (*variablestorev1.RevealValuesResponse, error) {
-	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +85,7 @@ func (h *Service) RevealValues(ctx context.Context, req *variablestorev1.RevealV
 }
 
 func (h *Service) DeleteValue(ctx context.Context, req *variablestorev1.DeleteValueRequest) (*variablestorev1.DeleteValueResponse, error) {
-	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +100,7 @@ func (h *Service) DeleteValue(ctx context.Context, req *variablestorev1.DeleteVa
 }
 
 func (h *Service) ListVersions(ctx context.Context, req *variablestorev1.ListVersionsRequest) (*variablestorev1.ListVersionsResponse, error) {
-	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
 	}

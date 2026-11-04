@@ -83,7 +83,27 @@ func New(version string) (*Store, error) {
 	}, nil
 }
 
-func (s *Store) HasOverride() bool { return s.Override != "" }
+func (s *Store) overridePath(kind Kind, name string, platform Platform) string {
+	return filepath.Join(s.Override, string(kind), name, s.Version, platform.Dir(), ExecutableName(kind, name, platform.GOOS))
+}
+
+func (s *Store) overridden(kind Kind, name string, platform Platform) (string, bool) {
+	if s.Override == "" {
+		return "", false
+	}
+	path := s.overridePath(kind, name, platform)
+	if _, err := os.Stat(path); err != nil {
+		return "", false
+	}
+	return path, true
+}
+
+func (s *Store) explainUnshadowed(kind Kind, name string, platform Platform, err error) error {
+	if err == nil || s.Override == "" {
+		return err
+	}
+	return fmt.Errorf("%s is %s, which holds no %s at %s, and fetching it failed: %w", OverrideEnvVar, s.Override, ExecutableName(kind, name, platform.GOOS), s.overridePath(kind, name, platform), err)
+}
 
 func (s *Store) EnsureBinary(ctx context.Context, kind Kind, name string, platform Platform, digest string) (string, error) {
 	if err := refuseInvalidName(name); err != nil {
@@ -91,12 +111,7 @@ func (s *Store) EnsureBinary(ctx context.Context, kind Kind, name string, platfo
 	}
 	executable := ExecutableName(kind, name, platform.GOOS)
 
-	if s.Override != "" {
-		path := filepath.Join(s.Override, string(kind), name, s.Version, platform.Dir(), executable)
-		if _, err := os.Stat(path); err != nil {
-			return "", fmt.Errorf("%s is %s, which contains no %s %s %s for %s — build the binaries this CLI's own version needs, or unset %s to fetch them",
-				OverrideEnvVar, s.Override, name, kind, s.Version, platform.Dir(), OverrideEnvVar)
-		}
+	if path, ok := s.overridden(kind, name, platform); ok {
 		return path, nil
 	}
 

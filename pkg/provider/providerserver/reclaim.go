@@ -188,6 +188,33 @@ func (s *edgeSession) reclaimDropped(ctx context.Context, teardown provider.Stac
 	return s.forgetRemovedDeployments(ctx, pointer, unnamed.DeploymentRemovals)
 }
 
+func (s *edgeSession) leaveReclaimPending(ctx context.Context, promotionID string, dropped []ledger.RecordedPromotion, refused error, progress progress.Log) {
+	if code, _ := provider.RefusedCode(refused); code != refusal.CodeNeedsRunner {
+		progress.Warn(unreclaimedWarning(promotionID, refused))
+		return
+	}
+	if err := s.ledger.RecordPendingReclaims(ctx, "", dropped); err != nil {
+		progress.Warn(unreclaimedWarning(promotionID, errors.Join(refused, err)))
+		return
+	}
+	progress.Say(fmt.Sprintf("Promotion %s serves; the next deploy or `ocel promotions prune` reclaims the releases it dropped", promotionID))
+}
+
+func (s *edgeSession) keepReclaimPending(ctx context.Context, pointer string, dropped []ledger.RecordedPromotion, refused error) error {
+	if code, _ := provider.RefusedCode(refused); code != refusal.CodeNeedsRunner {
+		return refused
+	}
+	recording, stop := newRecordContext(ctx)
+	defer stop()
+	return errors.Join(refused, s.ledger.RecordPendingReclaims(recording, pointer, dropped))
+}
+
+func (s *edgeSession) keepPreviewReclaimPending(ctx context.Context, pointer string, dropped []ledger.RecordedPromotion, failed error) error {
+	recording, stop := newRecordContext(ctx)
+	defer stop()
+	return errors.Join(failed, s.ledger.RecordPendingReclaims(recording, pointer, dropped))
+}
+
 func unreclaimedWarning(promotionID string, err error) string {
 	return fmt.Sprintf("Promotion %s serves, but reclaiming the releases it dropped past the newest %d promotions failed, and what was not reclaimed stays until this environment is destroyed: %v",
 		promotionID, ledger.KeptPromotions, err)

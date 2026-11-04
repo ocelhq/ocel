@@ -19,6 +19,7 @@ type CloudOffer struct {
 	APIURL      string `json:"api_url"`
 	ProviderURL string `json:"provider_url,omitempty"`
 	Audience    string `json:"audience"`
+	Version     string `json:"version,omitempty"`
 }
 
 func (c *Client) consoleService(accessToken string) consolev1connect.ConsoleServiceClient {
@@ -41,7 +42,7 @@ func (c *Client) ReadCloudOffer(ctx context.Context) (*CloudOffer, error) {
 	if cloud == nil {
 		return nil, nil
 	}
-	return &CloudOffer{APIURL: cloud.GetApiUrl(), ProviderURL: cloud.GetProviderUrl(), Audience: cloud.GetAudience()}, nil
+	return &CloudOffer{APIURL: cloud.GetApiUrl(), ProviderURL: cloud.GetProviderUrl(), Audience: cloud.GetAudience(), Version: cloud.GetVersion()}, nil
 }
 
 type CloudOffers struct {

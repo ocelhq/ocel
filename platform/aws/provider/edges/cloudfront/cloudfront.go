@@ -109,7 +109,7 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 			return Clients{}, err
 		}
 		return Clients{
-			CloudFront:    cloudfront.NewFromConfig(global),
+			CloudFront:    newCloudFrontCalls(cloudfront.NewFromConfig(global)),
 			KeyValueStore: cloudfrontkeyvaluestore.NewFromConfig(global),
 			Dynamo:        dynamodb.NewFromConfig(awscfg),
 			SSM:           ssm.NewFromConfig(awscfg),

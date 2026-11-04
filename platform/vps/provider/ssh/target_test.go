@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -106,5 +107,42 @@ func TestAKeyAliasIsTheNameSshKeysOn(t *testing.T) {
 	}
 	if trust.KnownHostsEntry() != "ocel-vps" {
 		t.Errorf("the refusal keys on %q, want the alias the CLI must record under", trust.KnownHostsEntry())
+	}
+}
+
+func TestACertifiedTargetTrustsOnlyTheHostKeysItWasHanded(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pinned := filepath.Join(dir, "known_hosts")
+	if err := os.WriteFile(pinned, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dest, err := resolve(context.Background(), Target{
+		Host: "box.example.com", User: "ocel-deploy",
+		IdentityFile: filepath.Join(dir, "key"), CertificateFile: filepath.Join(dir, "key-cert.pub"),
+		KnownHostsFile: pinned, Config: NoConfig,
+	})
+	if err != nil {
+		t.Fatalf("resolve() = %v", err)
+	}
+	if len(dest.KnownHosts) != 1 || dest.KnownHosts[0] != pinned {
+		t.Errorf("known hosts = %v, want only %s", dest.KnownHosts, pinned)
+	}
+	if dest.Port != 22 || dest.User != "ocel-deploy" {
+		t.Errorf("resolve() = %+v, want port 22 and the certificate's principal", dest)
+	}
+}
+
+func TestACertifiedTargetOffersItsCertificateAndKeyAlone(t *testing.T) {
+	t.Parallel()
+
+	args := Target{Host: "box.example.com", IdentityFile: "/run/key", CertificateFile: "/run/key-cert.pub", KnownHostsFile: "/run/known_hosts", Config: NoConfig}.options()
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"-F none", "-i /run/key", "IdentitiesOnly=yes", "CertificateFile=/run/key-cert.pub", "UserKnownHostsFile=/run/known_hosts", "GlobalKnownHostsFile=/dev/null"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("options = %q, want %q", joined, want)
+		}
 	}
 }

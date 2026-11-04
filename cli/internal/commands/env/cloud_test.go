@@ -28,13 +28,13 @@ func TestEnvReadsAndWritesTheVariableStoreOfOcelCloudThroughTheProviderItServes(
 	if strings.TrimSpace(stdout.String()) != "debug" {
 		t.Fatalf("get = %q, want the value Ocel Cloud's store holds", stdout.String())
 	}
-	requireTokenScopes(t, project.Cloud, "cloud.apps.read", "cloud.variables.reveal")
+	requireTokenScopes(t, project.Cloud, "apps.read", "variables.read", "variables.reveal")
 
 	stdout.Reset()
 	if err := runEnvGet(context.Background(), cloudDependencies(&stderr), project.Root, "LOG_LEVEL", envOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("get err = %v; stderr=%s", err, stderr.String())
 	}
-	requireTokenScopes(t, project.Cloud, "cloud.apps.read")
+	requireTokenScopes(t, project.Cloud, "apps.read", "variables.read")
 
 	stdout.Reset()
 	if err := runEnvHistory(context.Background(), cloudDependencies(&stderr), project.Root, "LOG_LEVEL", envOptions{}, &stdout, &stderr); err != nil {
@@ -43,7 +43,7 @@ func TestEnvReadsAndWritesTheVariableStoreOfOcelCloudThroughTheProviderItServes(
 	if !strings.Contains(stdout.String(), "1") {
 		t.Fatalf("history = %q, want the version Ocel Cloud's store holds", stdout.String())
 	}
-	requireTokenScopes(t, project.Cloud, "cloud.apps.read")
+	requireTokenScopes(t, project.Cloud, "apps.read", "variables.read")
 
 	stdout.Reset()
 	if err := runEnvList(context.Background(), cloudDependencies(&stderr), project.Root, envOptions{}, &stdout, &stderr); err != nil {
@@ -52,22 +52,22 @@ func TestEnvReadsAndWritesTheVariableStoreOfOcelCloudThroughTheProviderItServes(
 	if !strings.Contains(stdout.String()+stderr.String(), "LOG_LEVEL") {
 		t.Fatalf("ls = %q, want LOG_LEVEL listed", stdout.String())
 	}
-	requireTokenScopes(t, project.Cloud, "cloud.apps.read")
+	requireTokenScopes(t, project.Cloud, "apps.read", "variables.read")
 
 	stdout.Reset()
 	if err := runEnvSet(context.Background(), cloudDependencies(&stderr), project.Root, "LOG_LEVEL", "info", envOptions{}, strings.NewReader(""), &stdout, &stderr); err != nil && !strings.Contains(err.Error(), "no app in this project declares LOG_LEVEL") {
 		t.Fatalf("set err = %v; stderr=%s", err, stderr.String())
 	}
-	requireTokenScopes(t, project.Cloud, "cloud.apps.read", "cloud.variables.write")
+	requireTokenScopes(t, project.Cloud, "apps.read", "variables.read", "variables.write")
 
 	stdout.Reset()
 	if err := runEnvRemove(context.Background(), cloudDependencies(&stderr), project.Root, "LOG_LEVEL", envOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("rm err = %v; stderr=%s", err, stderr.String())
 	}
-	requireTokenScopes(t, project.Cloud, "cloud.apps.read", "cloud.variables.write")
+	requireTokenScopes(t, project.Cloud, "apps.read", "variables.read", "variables.write")
 }
 
-func requireTokenScopes(t *testing.T, cloud *clitest.FakeOcelCloud, want ...string) {
+func requireTokenScopes(t *testing.T, cloud *clitest.FakeConsole, want ...string) {
 	t.Helper()
 	if len(cloud.TokenScopes) == 0 || slices.ContainsFunc(cloud.TokenScopes, func(got []string) bool { return !slices.Equal(got, want) }) {
 		t.Fatalf("tokens issued with scopes %v, want each with exactly %v", cloud.TokenScopes, want)

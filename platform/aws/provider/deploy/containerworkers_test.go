@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -296,9 +298,9 @@ func TestTheContainersPartIsKeptWhileAContainerWorkersStackRunsInItsCluster(t *t
 		t.Fatalf("let go of the app's own hold: %v", err)
 	}
 
-	part, present, err := containers.ReadPart(ctx, store, "ocel", "us-east-1", environment.TierProduction)
+	part, present, err := sharedparts.ReadContainersPart(ctx, store, "ocel", "us-east-1", environment.TierProduction)
 	if err != nil || !present {
-		t.Fatalf("containers.ReadPart() = %v, %v, want the containers part while the workers' services run in its cluster", present, err)
+		t.Fatalf("sharedparts.ReadContainersPart() = %v, %v, want the containers part while the workers' services run in its cluster", present, err)
 	}
 	if !slices.Equal(part.UsedBy, []string{spec.Ref.Project}) {
 		t.Errorf("containers used by %v, want %s, whose workers run there", part.UsedBy, spec.Ref.Project)
@@ -313,7 +315,7 @@ func TestTheContainersPartIsKeptWhileAContainerWorkersStackRunsInItsCluster(t *t
 	if err := stacks.RetireWorkers(ctx, provider.LiveApps{Slug: spec.Ref.Project, Tier: environment.TierProduction, Env: "prod"}, progress.Discard()); err != nil {
 		t.Fatalf("RetireWorkers() = %v", err)
 	}
-	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, containers.Part); err != nil || present {
+	if _, present, err := stackrecords.ReadBootstrapPart(ctx, store, environment.TierProduction, sharedparts.ContainersPart); err != nil || present {
 		t.Errorf("containers record present %v (%v) after the last workers stack went, want it forgotten with the infrastructure", present, err)
 	}
 }
@@ -426,7 +428,7 @@ func TestProvisioningAContainerAppThatOnlyHostsItsWorkerReturnsTheWorkerAloneAnd
 	if len(result.Containers) != 1 || result.Containers[0].Name != resources.WorkerName("web") || result.Containers[0].URL != "" {
 		t.Errorf("Containers = %+v, want the worker alone, with no URL", result.Containers)
 	}
-	part, present, err := containers.ReadPart(context.Background(), store, "ocel", "us-east-1", environment.TierProduction)
+	part, present, err := sharedparts.ReadContainersPart(context.Background(), store, "ocel", "us-east-1", environment.TierProduction)
 	if err != nil || !present || !slices.Equal(part.UsedBy, []string{spec.Ref.Project}) {
 		t.Errorf("containers part = %+v, %v, %v, want it added and used by %s: its worker's service runs in the cluster", part, present, err, spec.Ref.Project)
 	}

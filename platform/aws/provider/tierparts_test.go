@@ -3,17 +3,13 @@ package aws
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"net/http"
-	"net/http/httptest"
 	"slices"
-	"strings"
-	"sync/atomic"
 	"testing"
 
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -22,16 +18,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
-	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
-	"github.com/ocelhq/ocel/platform/aws/provider/account"
 	"github.com/ocelhq/ocel/platform/aws/provider/bastion"
+	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier"
 	cloudfrontpart "github.com/ocelhq/ocel/platform/aws/provider/tier/cloudfront"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
-	"github.com/ocelhq/ocel/platform/aws/provider/tier/functionnetwork"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/imageoptimizer"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/network"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/notfoundapi"
@@ -41,7 +35,7 @@ import (
 func TestRemovingTheLastPartInTheNetworkPlansTheNetworksTakedownToo(t *testing.T) {
 	ctx := context.Background()
 	store := fake.NewKeyValues()
-	if err := stackrecords.MarkBootstrapPartReady(ctx, store, environment.TierProduction, network.Part, stackrecords.BootstrapPart{
+	if err := stackrecords.MarkBootstrapPartReady(ctx, store, environment.TierProduction, sharedparts.NetworkPart, stackrecords.BootstrapPart{
 		WrittenBy: "1.0.0",
 		Resources: []provider.PhysicalResource{{Kind: "AWS::EC2::VPC", ID: "vpc-ocel"}},
 	}); err != nil {
@@ -52,26 +46,26 @@ func TestRemovingTheLastPartInTheNetworkPlansTheNetworksTakedownToo(t *testing.T
 			t.Fatal(err)
 		}
 	}
-	consumers := map[string]string{containers.Slug: containers.Part, functionnetwork.Slug: functionnetwork.Part, bastion.ConsumerSlug: bastion.Part}
+	consumers := map[string]string{awsports.ContainersSlug: sharedparts.ContainersPart, sharedparts.FunctionNetworkSlug: sharedparts.FunctionNetworkPart, bastion.ConsumerSlug: bastion.Part}
 
 	group, err := planNetworkRetiredWith(ctx, store, "us-east-1", consumers, environment.TierProduction, []string{bastion.Part})
 	if err != nil || group != nil {
 		t.Errorf("planNetworkRetiredWith(bastion) = %+v, %v, want nothing: the containers part still runs in the network", group, err)
 	}
-	group, err = planNetworkRetiredWith(ctx, store, "us-east-1", consumers, environment.TierProduction, []string{bastion.Part, containers.Part})
-	if err != nil || group == nil || group.Part != network.Part || group.Action != provider.ActionDelete || len(group.Changes) != 1 {
+	group, err = planNetworkRetiredWith(ctx, store, "us-east-1", consumers, environment.TierProduction, []string{bastion.Part, sharedparts.ContainersPart})
+	if err != nil || group == nil || group.Part != sharedparts.NetworkPart || group.Action != provider.ActionDelete || len(group.Changes) != 1 {
 		t.Errorf("planNetworkRetiredWith(bastion, containers) = %+v, %v, want the network's deletion: its last parts leave in this run", group, err)
 	}
 	if _, err := store.Write(ctx, records.Entry{Key: network.Shared.ConsumerAt(provider.StackRef{Project: "shop", Tier: environment.TierProduction, Name: naming.InfraStack("shop")}), Value: json.RawMessage(`{}`)}); err != nil {
 		t.Fatal(err)
 	}
-	if group, err := planNetworkRetiredWith(ctx, store, "us-east-1", consumers, environment.TierProduction, []string{bastion.Part, containers.Part}); err != nil || group != nil {
+	if group, err := planNetworkRetiredWith(ctx, store, "us-east-1", consumers, environment.TierProduction, []string{bastion.Part, sharedparts.ContainersPart}); err != nil || group != nil {
 		t.Errorf("planNetworkRetiredWith() = %+v, %v, want nothing while shop's database sits in the network", group, err)
 	}
 }
 
 func partsOver(store records.Store) tier.Parts {
-	p := NewProvider(Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
+	p := NewProvider(control.Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
 	return p.tierParts(tier.Records{KeyValues: store, WrittenBy: "1.0.0", Region: "us-east-1", Reads: &tier.Reads{}})
 }
 
@@ -145,39 +139,19 @@ func TestThePreviewWildcardUsesThePartItsEdgeServesItThrough(t *testing.T) {
 	}
 }
 
-func TestTheTagInvalidatorIsRefusedAsNotReadyOnABootstrapThatPredatesItsRole(t *testing.T) {
+func TestTheContainerInfrastructureTheFunctionNetworkAndTheBastionAreOfferedForRemovalByName(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	preview := environment.TierPreview
-	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		w.WriteHeader(http.StatusBadRequest)
-	}))
-	t.Cleanup(server.Close)
-	cfg := aws.Config{Region: "us-east-1", Credentials: credentials.NewStaticCredentialsProvider("AKID", "secret", ""), BaseEndpoint: aws.String(server.URL)}
-	p := NewProvider(Options{Region: "us-east-1"}, nil, cfg, defaultNamespace)
-	p.identity.remember(struct{}{}, &sts.GetCallerIdentityOutput{Account: aws.String("111122223333")})
-	p.deployed.remember(preview, account.Reading{Deployed: account.Deployed{
-		Present: true, StateTable: "state-table", VariablesTable: "variables",
-		StateTableStreamARN: "arn:aws:dynamodb:us-east-1:111122223333:table/state-table/stream/2026-10-16T00:00:00.000",
-		Buckets:             naming.Buckets{naming.StorageState: "state", naming.StorageArtifacts: "artifacts", naming.StorageEdge: "edge", naming.StorageCache: "cache"},
-	}})
 
-	spec, err := p.tagInvalidatorSpec(ctx, preview)
-	if err != nil {
-		t.Fatalf("tagInvalidatorSpec() = %v", err)
-	}
-	_, err = taginvalidator.Work(taginvalidator.NewClients(p.aws), spec).Make(ctx, nil, false)
-
-	var refused refusal.Refusal
-	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("make() = %v, want a not-ready refusal: the preview bootstrap holds no tag invalidator role to run the function as", err)
-	}
-	if !strings.Contains(refused.Message, "ocel bootstrap preview") {
-		t.Errorf("make() = %q, want it to name `ocel bootstrap preview`, which makes the role", refused.Message)
-	}
-	if n := calls.Load(); n != 0 {
-		t.Errorf("AWS was called %d times, want none: a function with no role to run as cannot be created", n)
+	p := NewProvider(control.Options{}, nil, aws.Config{}, defaultNamespace)
+	parts := p.tierParts(tier.Records{KeyValues: fake.NewKeyValues(), Reads: &tier.Reads{}})
+	for _, name := range []string{sharedparts.ContainersPart, sharedparts.FunctionNetworkPart, bastion.Part} {
+		each, found := parts.Named(name)
+		if !found || each.Removal == nil {
+			t.Errorf("tierParts() offers no %s for removal, want `ocel bootstrap <tier> --remove %s` to take it down", name, name)
+			continue
+		}
+		if each.Summary == "" || each.Removal.Plan == nil || each.Removal.Remove == nil {
+			t.Errorf("%s is offered as %+v, want its summary, no edge, and a way to plan and take it down", name, each.Offer())
+		}
 	}
 }

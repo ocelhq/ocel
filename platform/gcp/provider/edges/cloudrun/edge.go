@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
@@ -85,7 +85,7 @@ func unbindable(what string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
 		"with no edge in front, a project is answered on the url Cloud Run gives each service and claims no hostname of its own, so %s cannot be bound to it: "+
 			"name the %q edge, which provisions one load balancer per bootstrap tier at %s",
-		what, alb.Kind, alb.BaselineCost)
+		what, albresources.Kind, albresources.BaselineCost)
 }
 
 func (e *Edge) PlanProjectRemoval(scope edge.ProjectScope) ([]edge.PlanGroup, error) {

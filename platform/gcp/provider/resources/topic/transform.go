@@ -35,27 +35,27 @@ func (p *Topic) askedOf(ctx context.Context, in resources.ProvisionRequest, topi
 	}}, nil
 }
 
-type shapedRetention struct {
+type retentionProperties struct {
 	topic               map[string]any
 	topicUnknown        []string
 	subscription        map[string]any
 	subscriptionUnknown []string
 }
 
-func shapeRetention(shape component.Shape, resource provider.Resource) (shapedRetention, error) {
-	result := shape.Transforms.For(string(resource.Type), resource.Name)
+func pricedRetention(inventory component.Inventory, resource provider.Resource) (retentionProperties, error) {
+	result := inventory.Transforms.For(string(resource.Type), resource.Name)
 	named := string(resource.Type) + " " + resource.Name
 	known, topicUnknown := topics.TopicSurface.SplitOutputs(result.Patches[topics.TopicSurface.Name])
 	topic, err := topics.TopicSurface.Patch(named, pubsub.Topic{}, known, nil, surface.Recorded{})
 	if err != nil {
-		return shapedRetention{}, err
+		return retentionProperties{}, err
 	}
 	known, subscriptionUnknown := topics.SubscriptionSurface.SplitOutputs(result.Patches[topics.SubscriptionSurface.Name])
 	subscription, err := topics.SubscriptionSurface.Patch(named, pubsub.Subscription{}, known, nil, surface.Recorded{})
 	if err != nil {
-		return shapedRetention{}, err
+		return retentionProperties{}, err
 	}
-	shaped := shapedRetention{
+	retained := retentionProperties{
 		topic: map[string]any{},
 		subscription: map[string]any{
 			"message_retention_duration": cmp.Or(subscription.Desired.MessageRetentionDuration, topics.DefaultSubscriptionRetention),
@@ -65,9 +65,9 @@ func shapeRetention(shape component.Shape, resource provider.Resource) (shapedRe
 		subscriptionUnknown: surface.ListPriced(subscriptionUnknown, pricedPaths),
 	}
 	if retention := topic.Desired.MessageRetentionDuration; retention != "" {
-		shaped.topic["message_retention_duration"] = retention
+		retained.topic["message_retention_duration"] = retention
 	}
-	return shaped, nil
+	return retained, nil
 }
 
 var pricedPaths = map[string]string{

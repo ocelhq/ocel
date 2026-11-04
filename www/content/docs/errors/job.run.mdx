@@ -1,0 +1,10 @@
+---
+title: job.run
+description: The ocel run inside the job failed without naming an error code.
+---
+
+Each job runs `ocel` on its runner, and that run failed, or ended, without a code of its own: it crashed, or exited before it reported how it ended. A run that fails with a code reports that code instead. The CLI reports the job as [`job.failed`](/docs/errors/job.failed), naming this code and the end of the run's output.
+
+## Fix
+
+Read the end of the run's output on the deployment's page in the console, fix what it names, and run the command again.

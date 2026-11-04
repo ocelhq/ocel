@@ -48,21 +48,21 @@ func costServed(t *testing.T, p provider.Provider) (contractv1connect.ProviderSe
 	return client, costv1connect.NewCostServiceClient(server.Client(), server.URL)
 }
 
-func shapeRequest() *contractv1.ShapeRequest {
+func inventoryRequest() *contractv1.InventoryRequest {
 	req := twoAppRequest()
-	return &contractv1.ShapeRequest{
+	return &contractv1.InventoryRequest{
 		Manifest:    req.GetManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		Edge:        req.GetEdge(),
 	}
 }
 
-func TestAProviderThatPricesNothingSaysSoOnShapeAndPrice(t *testing.T) {
+func TestAProviderThatPricesNothingSaysSoOnInventoryAndPrice(t *testing.T) {
 	client, costs := costServed(t, uncosted{fake.NewProvider(fake.Options{Region: "nowhere"})})
 
-	_, err := client.Shape(context.Background(), shapeRequest())
+	_, err := client.Inventory(context.Background(), inventoryRequest())
 	if connect.CodeOf(err) != connect.CodeUnimplemented {
-		t.Fatalf("Shape() error = %v, want Unimplemented", err)
+		t.Fatalf("Inventory() error = %v, want Unimplemented", err)
 	}
 	_, err = costs.Price(context.Background(), &costv1.PriceRequest{Resources: &costv1.ResourceSet{Source: "ocel"}})
 	if connect.CodeOf(err) != connect.CodeUnimplemented {
@@ -70,12 +70,12 @@ func TestAProviderThatPricesNothingSaysSoOnShapeAndPrice(t *testing.T) {
 	}
 }
 
-func TestShapeHandsTheProviderTheDeployItWouldMake(t *testing.T) {
+func TestInventoryHandsTheProviderTheDeployItWouldMake(t *testing.T) {
 	client, _ := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
 
-	set, err := client.Shape(context.Background(), shapeRequest())
+	set, err := client.Inventory(context.Background(), inventoryRequest())
 	if err != nil {
-		t.Fatalf("Shape() error = %v", err)
+		t.Fatalf("Inventory() error = %v", err)
 	}
 	if set.GetSource() != "ocel" {
 		t.Errorf("source = %q, want ocel", set.GetSource())
@@ -94,7 +94,7 @@ func TestShapeHandsTheProviderTheDeployItWouldMake(t *testing.T) {
 	}
 }
 
-func countShapedTypes(set *costv1.ResourceSet) map[string]int {
+func countInventoriedTypes(set *costv1.ResourceSet) map[string]int {
 	types := map[string]int{}
 	for _, resource := range set.GetResources() {
 		types[resource.GetType()]++
@@ -102,68 +102,68 @@ func countShapedTypes(set *costv1.ResourceSet) map[string]int {
 	return types
 }
 
-func TestShapeOfAnEphemeralPreviewPricesTheResourcesItProvisions(t *testing.T) {
+func TestInventoryOfAnEphemeralPreviewPricesTheResourcesItProvisions(t *testing.T) {
 	client, _ := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
-	req := shapeRequest()
+	req := inventoryRequest()
 	req.Environment = &environmentv1.Environment{
 		Tier:      environmentv1.Tier_TIER_PREVIEW,
 		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL,
 		Identity:  "preview",
 	}
 
-	set, err := client.Shape(context.Background(), req)
+	set, err := client.Inventory(context.Background(), req)
 	if err != nil {
-		t.Fatalf("Shape() error = %v", err)
+		t.Fatalf("Inventory() error = %v", err)
 	}
-	types := countShapedTypes(set)
+	types := countInventoriedTypes(set)
 	if types[fake.TypePostgres] == 0 || types[fake.TypeBucket] == 0 {
-		t.Errorf("shaped types = %v, want the postgres and bucket an ephemeral preview provisions", types)
+		t.Errorf("inventoried types = %v, want the postgres and bucket an ephemeral preview provisions", types)
 	}
 	if types[fake.TypeFunction] != 2 {
-		t.Errorf("shaped types = %v, want both apps' functions still priced", types)
+		t.Errorf("inventoried types = %v, want both apps' functions still priced", types)
 	}
 }
 
-func TestShapeOfAPersistentPreviewPricesTheResourcesItProvisions(t *testing.T) {
+func TestInventoryOfAPersistentPreviewPricesTheResourcesItProvisions(t *testing.T) {
 	client, _ := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
-	req := shapeRequest()
+	req := inventoryRequest()
 	req.Environment = &environmentv1.Environment{
 		Tier:      environmentv1.Tier_TIER_PREVIEW,
 		Lifecycle: environmentv1.Lifecycle_LIFECYCLE_PERSISTENT,
 		Identity:  "staging",
 	}
 
-	set, err := client.Shape(context.Background(), req)
+	set, err := client.Inventory(context.Background(), req)
 	if err != nil {
-		t.Fatalf("Shape() error = %v", err)
+		t.Fatalf("Inventory() error = %v", err)
 	}
-	if types := countShapedTypes(set); types[fake.TypePostgres] != 1 || types[fake.TypeBucket] != 1 {
-		t.Errorf("shaped types = %v, want the postgres and the bucket its infra stack provisions", types)
+	if types := countInventoriedTypes(set); types[fake.TypePostgres] != 1 || types[fake.TypeBucket] != 1 {
+		t.Errorf("inventoried types = %v, want the postgres and the bucket its infra stack provisions", types)
 	}
 }
 
-type shapeRecorded struct {
+type inventoryRecorded struct {
 	provider.Provider
-	shaped *provider.ShapeRequest
+	inventoried *provider.InventoryRequest
 }
 
-func (s shapeRecorded) Hooks() provider.Hooks {
+func (s inventoryRecorded) Hooks() provider.Hooks {
 	hooks := s.Provider.Hooks()
-	shape := hooks.Cost.Shape
+	inventory := hooks.Cost.Inventory
 	hooks.Cost = &provider.CostHooks{
-		Shape: func(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
-			*s.shaped = req
-			return shape(ctx, req)
+		Inventory: func(ctx context.Context, req provider.InventoryRequest) (*costv1.ResourceSet, error) {
+			*s.inventoried = req
+			return inventory(ctx, req)
 		},
 		Estimate: hooks.Cost.Estimate,
 	}
 	return hooks
 }
 
-func TestShapeHandsTheProviderEachConsumerScheduleAndWorkerItWouldRun(t *testing.T) {
-	recorded := shapeRecorded{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), shaped: &provider.ShapeRequest{}}
+func TestInventoryHandsTheProviderEachConsumerScheduleAndWorkerItWouldRun(t *testing.T) {
+	recorded := inventoryRecorded{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), inventoried: &provider.InventoryRequest{}}
 	client, _ := costServed(t, recorded)
-	req := shapeRequest()
+	req := inventoryRequest()
 	req.Manifest.Workers = []*contractv1.ManifestWorker{{Name: "media", App: "admin", Compute: string(provider.ComputeServerless)}}
 	req.Manifest.Resources = append(req.Manifest.Resources, &contractv1.ManifestResource{
 		LogicalName: "task--nightly-report",
@@ -174,31 +174,31 @@ func TestShapeHandsTheProviderEachConsumerScheduleAndWorkerItWouldRun(t *testing
 		}},
 	})
 
-	if _, err := client.Shape(context.Background(), req); err != nil {
-		t.Fatalf("Shape() error = %v", err)
+	if _, err := client.Inventory(context.Background(), req); err != nil {
+		t.Fatalf("Inventory() error = %v", err)
 	}
 	var task *provider.TopicSpec
-	for _, resource := range recorded.shaped.Resources {
+	for _, resource := range recorded.inventoried.Resources {
 		if resource.Type == provider.BindingTask {
 			task = resource.Topic
 		}
 	}
 	if task == nil || task.Cron != "0 3 * * *" || len(task.Consumers) != 1 || task.Consumers[0].Worker != "media" {
-		t.Errorf("shaped task = %+v, want its schedule and its one consumer on worker media", task)
+		t.Errorf("inventoried task = %+v, want its schedule and its one consumer on worker media", task)
 	}
 	workers := map[string][]provider.WorkerSpec{}
-	for _, app := range recorded.shaped.Deploy.Apps {
+	for _, app := range recorded.inventoried.Deploy.Apps {
 		workers[app.App] = app.Workers
 	}
 	if want := []provider.WorkerSpec{{Name: "media", App: "admin", Compute: provider.ComputeServerless}}; !reflect.DeepEqual(workers["admin"], want) {
-		t.Errorf("shaped admin workers = %+v, want %+v", workers["admin"], want)
+		t.Errorf("inventoried admin workers = %+v, want %+v", workers["admin"], want)
 	}
 }
 
-func TestShapeHandsTheProviderEachRealtimeChannelAndTheTokenTTL(t *testing.T) {
-	recorded := shapeRecorded{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), shaped: &provider.ShapeRequest{}}
+func TestInventoryHandsTheProviderEachRealtimeChannelAndTheTokenTTL(t *testing.T) {
+	recorded := inventoryRecorded{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), inventoried: &provider.InventoryRequest{}}
 	client, _ := costServed(t, recorded)
-	req := shapeRequest()
+	req := inventoryRequest()
 	req.Manifest.Resources = append(req.Manifest.Resources, &contractv1.ManifestResource{
 		LogicalName: "realtime--app",
 		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_REALTIME, Name: "app"},
@@ -212,30 +212,30 @@ func TestShapeHandsTheProviderEachRealtimeChannelAndTheTokenTTL(t *testing.T) {
 		}},
 	})
 
-	if _, err := client.Shape(context.Background(), req); err != nil {
-		t.Fatalf("Shape() error = %v", err)
+	if _, err := client.Inventory(context.Background(), req); err != nil {
+		t.Fatalf("Inventory() error = %v", err)
 	}
-	var shaped *provider.RealtimeSpec
-	for _, resource := range recorded.shaped.Resources {
+	var inventoried *provider.RealtimeSpec
+	for _, resource := range recorded.inventoried.Resources {
 		if resource.Type == provider.BindingRealtime {
-			shaped = resource.Realtime
+			inventoried = resource.Realtime
 		}
 	}
 	want := &provider.RealtimeSpec{
 		TokenTTL: 2 * time.Minute,
 		Channels: []provider.ChannelSpec{{Pattern: "orders/:orderId", Subscribe: realtime.ChannelAccessPublic, Publish: realtime.ChannelAccessServer}},
 	}
-	if !reflect.DeepEqual(shaped, want) {
-		t.Errorf("shaped realtime = %+v, want %+v", shaped, want)
+	if !reflect.DeepEqual(inventoried, want) {
+		t.Errorf("inventoried realtime = %+v, want %+v", inventoried, want)
 	}
 }
 
 func TestPriceRefusesAUsageFileTheProviderCannotRead(t *testing.T) {
 	client, costs := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
 
-	set, err := client.Shape(context.Background(), shapeRequest())
+	set, err := client.Inventory(context.Background(), inventoryRequest())
 	if err != nil {
-		t.Fatalf("Shape() error = %v", err)
+		t.Fatalf("Inventory() error = %v", err)
 	}
 	override, _ := structpb.NewStruct(map[string]any{"monthly_requets": 5})
 	_, err = costs.Price(context.Background(), &costv1.PriceRequest{

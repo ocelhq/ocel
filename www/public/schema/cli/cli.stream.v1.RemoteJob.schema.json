@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "cli.stream.v1.RemoteJob.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/runner.v1.JobError.jsonschema.json"
+        },
+        "id": {
+          "default": "",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/runner.v1.JobResult.jsonschema.json"
+        },
+        "runner": {
+          "default": "",
+          "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "pattern": "^JOB_STATE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "JOB_STATE_QUEUED",
+                "JOB_STATE_RUNNING",
+                "JOB_STATE_INPUT_REQUIRED",
+                "JOB_STATE_SUCCEEDED",
+                "JOB_STATE_FAILED",
+                "JOB_STATE_CANCELED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Job State"
+        },
+        "url": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Remote Job",
+      "type": "object"
+    },
+    "runner.v1.AppBuild.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(build_id)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "app": {
+          "default": "",
+          "type": "string"
+        },
+        "buildId": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "App Build",
+      "type": "object"
+    },
+    "runner.v1.JobError.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "default": "",
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Job Error",
+      "type": "object"
+    },
+    "runner.v1.JobResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "builds": {
+          "items": {
+            "$ref": "#/$defs/runner.v1.AppBuild.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Job Result",
+      "type": "object"
+    }
+  },
+  "$id": "https://ocel.dev/schema/cli/cli.stream.v1.RemoteJob.schema.json",
+  "$ref": "#/$defs/cli.stream.v1.RemoteJob.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

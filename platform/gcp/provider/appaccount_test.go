@@ -44,11 +44,11 @@ func ensureAccount(p *Provider, ctx context.Context, c *gcloud.Clients, spec pro
 
 func provisionWorkers(p *Provider, spec provider.StackSpec, image, account string, env map[string]string, declared map[string]*provider.TopicSpec, instances provider.Instances, log progress.Log) error {
 	ctx := context.Background()
-	patches, err := p.release().ReadAppPatches(ctx, p.resolved.Project(), spec)
+	patches, err := p.release().ReadAppPatches(ctx, p.Clients.Project(), spec)
 	if err != nil {
 		return err
 	}
-	_, err = p.release().ProvisionWorkers(ctx, p.resolved, spec, patches, image, account, env, declared, instances, log)
+	_, err = p.release().ProvisionWorkers(ctx, p.Clients, spec, patches, image, account, env, declared, instances, log)
 	return err
 }
 
@@ -173,7 +173,7 @@ func TestAFunctionServiceRunsAsItsAppsOwnAccountNotTheTiers(t *testing.T) {
 			return err
 		},
 		"a worker": func(p *Provider, spec provider.StackSpec) error {
-			account, _, err := ensureAccount(p, context.Background(), p.resolved, worker, nil)
+			account, _, err := ensureAccount(p, context.Background(), p.Clients, worker, nil)
 			if err != nil {
 				return err
 			}
@@ -189,7 +189,7 @@ func TestAFunctionServiceRunsAsItsAppsOwnAccountNotTheTiers(t *testing.T) {
 			if err := deploy(p, function); err != nil {
 				t.Fatalf("deploying %s = %v", name, err)
 			}
-			want := p.resolved.AppAccountEmail("shop", "production", "api")
+			want := p.Clients.AppAccountEmail("shop", "production", "api")
 			if len(server.Created) == 0 {
 				t.Fatalf("%s created no service", name)
 			}

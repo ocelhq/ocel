@@ -1,7 +1,6 @@
 package host
 
 import (
-	"embed"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -32,19 +31,8 @@ var proxyCapabilities = []string{"NET_BIND_SERVICE", "DAC_OVERRIDE"}
 
 //go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/vps-host
 
-//go:embed dist
-var helpers embed.FS
-
-func embedded(name, arch string) []byte {
-	read, err := helpers.ReadFile("dist/" + name + "-" + arch)
-	if err != nil {
-		panic(err)
-	}
-	return read
-}
-
-func ProxyItems(arch string, fronting front.Proxy) []machine.Item {
-	binary := switchboardBinary(arch)
+func ProxyItems(assets Assets, arch string, fronting front.Proxy) []machine.Item {
+	binary := switchboardBinary(assets, arch)
 	board := switchboardBox(binary, fronting)
 	if fronting.Adopted() {
 		return append([]machine.Item{

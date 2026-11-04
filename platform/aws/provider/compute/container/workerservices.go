@@ -8,13 +8,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/containerservice"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/topic"
 )
 
 func WorkerServiceName(namespace, project, env, app, worker string) (string, error) {
-	return component.PhysicalName(namespace, naming.Coordinate{Project: project, Env: env, App: app, Kind: naming.KindWorker, Name: worker}, maxServiceNameLen)
+	return containerservice.NameAt(namespace, naming.Coordinate{Project: project, Env: env, App: app, Kind: naming.KindWorker, Name: worker})
 }
 
 func WorkerServices(namespace string, tier environment.Tier, project, env string, workers []provider.WorkerSpec) (map[string]queues.Worker, error) {

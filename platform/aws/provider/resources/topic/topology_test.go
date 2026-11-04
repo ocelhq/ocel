@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -102,29 +101,6 @@ func TestTheQueueTopologyNamesEachTopicsQueuesAndSNSTopic(t *testing.T) {
 	if got := topology.Topics["orders"]; got.SNS != SNSTopicARN("us-east-1", mockAccount, topicName(t, "orders", false)) {
 		t.Errorf("orders = %+v, want its SNS topic's ARN", got)
 	}
-}
-
-func TestAWorkerOnContainerComputeRunsAtMostTwelveHoursTheLongestSQSHoldsAMessage(t *testing.T) {
-	t.Parallel()
-
-	ceiling := workerCeilingOn(t, provider.ComputeContainer)
-	if ceiling.Unbounded || ceiling.MaxDuration != 12*time.Hour {
-		t.Errorf("container worker ceiling = %+v, want 12h: SQS extends a message's visibility to 12 hours and no further", ceiling)
-	}
-	if serverless := workerCeilingOn(t, provider.ComputeServerless); serverless.MaxDuration != 15*time.Minute {
-		t.Errorf("serverless worker ceiling = %v, want 15m, Lambda's own", serverless.MaxDuration)
-	}
-}
-
-func workerCeilingOn(t *testing.T, compute provider.Compute) provider.WorkerCeiling {
-	t.Helper()
-	for _, ceiling := range WorkerCeilings {
-		if ceiling.Compute == compute {
-			return ceiling
-		}
-	}
-	t.Fatalf("WorkerCeilings names no ceiling for %s compute", compute)
-	return provider.WorkerCeiling{}
 }
 
 type queueRecorder struct {

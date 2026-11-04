@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
@@ -116,7 +117,7 @@ func (s *stack) previewHost(ctx context.Context, move router.PointerMove, host e
 	if err != nil {
 		return Host{}, nil, err
 	}
-	backend, err := backendName(s.e.deps.Namespace, s.state.Slug, s.state.Tier, host.Hostname)
+	backend, err := albresources.BackendName(s.e.deps.Namespace, s.state.Slug, s.state.Tier, host.Hostname)
 	if err != nil {
 		return Host{}, nil, err
 	}

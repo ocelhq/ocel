@@ -46,6 +46,7 @@ var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/refusal":             true,
 	"github.com/ocelhq/ocel/pkg/router":              true,
 	"github.com/ocelhq/ocel/pkg/runtime":             true,
+	"github.com/ocelhq/ocel/pkg/scope":               true,
 	"github.com/ocelhq/ocel/pkg/seal":                true,
 	"github.com/ocelhq/ocel/pkg/stackrecords":        true,
 	"github.com/ocelhq/ocel/pkg/target":              true,

@@ -39,6 +39,9 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 }
 
 func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	if err := h.session.refuseOtherTier(environment.TierProduction); err != nil {
+		return err
+	}
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		if req.GetSlug() == "" {
 			return nil, errUnnamedProject
@@ -117,7 +120,7 @@ func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv
 		return router.Promotion{}, err
 	}
 	if err := session.reclaimDropped(leased, teardown, "", dropped, log); err != nil {
-		log.Warn(unreclaimedWarning(promoted.PromotionID, err))
+		session.leaveReclaimPending(leased, promoted.PromotionID, dropped, err, log)
 	}
 	return promoted, nil
 }
@@ -193,19 +196,19 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err != nil {
 			return err
 		}
-		pruned, err := session.ledger.Prune(ctx, int(req.GetKeepN()), pointer)
+		pruned, dropped, err := session.ledger.Prune(ctx, int(req.GetKeepN()), pointer)
 		if err != nil {
 			return err
 		}
 		if err := session.removeDeployments(ctx, pruned.DeploymentRemovals, progress); err != nil {
-			return err
+			return session.keepReclaimPending(ctx, pointer, dropped, err)
 		}
 		if err := session.checkpoint(ctx); err != nil {
 			return err
 		}
 		teardown := provider.StackDestroy{Images: removalImages(ctx, session.provider, req.GetProjectRegistry(), progress)}
 		if err := reclaimUnnamed(ctx, session.provider, teardown, session.ledger, pointer, pruned, progress); err != nil {
-			return err
+			return session.keepReclaimPending(ctx, pointer, dropped, err)
 		}
 		if err := session.forgetRemovedDeployments(ctx, pointer, pruned.DeploymentRemovals); err != nil {
 			return err

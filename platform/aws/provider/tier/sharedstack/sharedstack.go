@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
@@ -17,10 +16,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/quotas"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
 )
 
 const (
-	consumersKey  = "consumers"
 	leaseKey      = "lease"
 	leaseAttempts = 5
 
@@ -36,7 +36,7 @@ type Owner struct {
 	Namespace      string
 	Region         string
 	EC2            component.NetworkAPI
-	Quotas         component.QuotasAPI
+	Quotas         quotas.API
 	AccountID      string
 	VPCOrigins     awsports.VPCOriginsAPI
 	AppBoundaryARN string
@@ -53,12 +53,8 @@ type Stack struct {
 	RefuseInUse func(environment.Tier, []string) error
 }
 
-func (s Stack) ConsumersPrefix(tier environment.Tier) records.Key {
-	return stackrecords.StacksPartition(tier, s.Slug).Key(consumersKey)
-}
-
 func (s Stack) ConsumerAt(ref provider.StackRef) records.Key {
-	prefix := s.ConsumersPrefix(ref.Tier)
+	prefix := sharedparts.ConsumersPrefix(ref.Tier, s.Slug)
 	return prefix.Partition.Key(append(prefix.Path, ref.Project, ref.Name.String())...)
 }
 
@@ -111,22 +107,6 @@ func (s Stack) WriteLease(ctx context.Context, store records.Store, entry record
 	entry.Value = encoded
 	_, err = store.Write(ctx, entry)
 	return err
-}
-
-func (s Stack) ListUsers(ctx context.Context, store records.Store, tier environment.Tier) ([]string, error) {
-	consumers := s.ConsumersPrefix(tier)
-	entries, err := store.List(ctx, consumers.Partition, consumers.Path...)
-	if err != nil {
-		return nil, fmt.Errorf("read who uses the shared %s for the %s tier: %w", s.Subject, tier, err)
-	}
-	users := []string{}
-	for _, entry := range entries {
-		if rest, ok := entry.Key.Under(consumers.Path...); ok {
-			users = append(users, rest[0])
-		}
-	}
-	slices.Sort(users)
-	return slices.Compact(users), nil
 }
 
 func (s Stack) Raise(ctx context.Context, owner Owner, tier environment.Tier, addedBy string, raise func() ([]provider.PhysicalResource, error)) error {
@@ -212,7 +192,7 @@ func (s Stack) Release(ctx context.Context, open func(context.Context, provider.
 	if err != nil {
 		return false, err
 	}
-	consumers := s.ConsumersPrefix(ref.Tier)
+	consumers := sharedparts.ConsumersPrefix(ref.Tier, s.Slug)
 	remaining, err := store.List(ctx, consumers.Partition, consumers.Path...)
 	if err != nil {
 		return false, err
@@ -238,7 +218,7 @@ func (s Stack) ForgetConsumer(ctx context.Context, store records.Store, ref prov
 
 func (s Stack) Remove(ctx context.Context, owner Owner, tier environment.Tier, progress progress.Log) error {
 	store := owner.KeyValues
-	users, err := s.ListUsers(ctx, store, tier)
+	users, err := sharedparts.ListUsers(ctx, store, tier, s.Slug, s.Subject)
 	if err != nil {
 		return err
 	}

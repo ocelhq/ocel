@@ -1,0 +1,40 @@
+syntax = "proto3";
+package common.scope.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/common/scope/v1;scopev1";
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.EnumValueOptions {
+  string claim = 50001;
+
+  Role least_role = 50002;
+}
+
+extend google.protobuf.MethodOptions {
+  Scope required = 50003;
+}
+
+extend google.protobuf.FieldOptions {
+  bool project_slug = 50004;
+
+  bool project_tier = 50005;
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_MEMBER = 1 [(claim) = "member"];
+  ROLE_ADMIN = 2 [(claim) = "admin"];
+  ROLE_OWNER = 3 [(claim) = "owner"];
+}
+
+enum Scope {
+  SCOPE_UNSPECIFIED = 0;
+  SCOPE_APPS_READ = 1 [(claim) = "apps.read", (least_role) = ROLE_MEMBER];
+  SCOPE_APPS_WRITE = 2 [(claim) = "apps.write", (least_role) = ROLE_MEMBER];
+  SCOPE_VARIABLES_READ = 3 [(claim) = "variables.read", (least_role) = ROLE_MEMBER];
+  SCOPE_VARIABLES_WRITE = 4 [(claim) = "variables.write", (least_role) = ROLE_ADMIN];
+  SCOPE_VARIABLES_REVEAL = 5 [(claim) = "variables.reveal", (least_role) = ROLE_OWNER];
+  SCOPE_JOB = 6;
+  SCOPE_TARGET_CREDENTIAL = 7;
+}

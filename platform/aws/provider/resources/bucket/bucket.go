@@ -11,6 +11,7 @@ import (
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/credential"
 )
 
 const transformKind = "bucket"
@@ -31,12 +32,12 @@ func New(artifacts component.Artifacts) component.Component {
 		WidestGrants: func(at component.Stack, _ provider.Resource) []*variablestorev1.Grant {
 			return Grants(strings.Repeat("b", maxS3BucketNameLen), NewSessions(at.Project, at.Env, at.StateTableARN))
 		},
-		Credential: credential,
+		Credential: credential.Bucket,
 		Transform: func(at component.Stack, declared provider.Resource) (component.Transformable, error) {
 			names, err := NamesFor(at, declared.Name)
 			return component.Transformable{Kind: transformKind, Names: names.Surfaces()}, err
 		},
-		Shape: shape,
+		Inventory: inventory,
 	}
 }
 

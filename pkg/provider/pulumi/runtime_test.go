@@ -62,3 +62,70 @@ func TestTheRuntimeDownloadSaysWhichVersionAndWhereItGoes(t *testing.T) {
 		t.Errorf("install() said %q, want %q", progress.said, want)
 	}
 }
+
+func shippedRuntime(t *testing.T, version string) string {
+	t.Helper()
+	home := t.TempDir()
+	stagedRuntime(t, home, "#!/bin/sh\necho v"+version+"\n")
+	return home
+}
+
+func TestARuntimeShippedUnderPulumiHomeAtThePinnedVersionIsUsedAsItIs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PULUMI_HOME", shippedRuntime(t, PinnedVersion))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	progress := &fakeProgress{}
+
+	command, err := install(ctx, progress)
+	if err != nil {
+		t.Fatalf("install() with the pinned runtime shipped = %v, want it used without a download", err)
+	}
+	if got := command.Version().String(); got != PinnedVersion {
+		t.Errorf("install() returned runtime %s, want %s", got, PinnedVersion)
+	}
+	if len(progress.said) != 0 {
+		t.Errorf("install() said %q, want no download", progress.said)
+	}
+	if _, err := os.Stat(filepath.Join(home, cacheDirName)); !os.IsNotExist(err) {
+		t.Errorf("install() made %s beside a shipped runtime: %v", filepath.Join(home, cacheDirName), err)
+	}
+}
+
+func TestARuntimeShippedUnderPulumiHomeAtAnotherVersionIsPassedOver(t *testing.T) {
+	for _, version := range []string{"3.1.0", "3.999.0"} {
+		t.Run(version, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("PULUMI_HOME", shippedRuntime(t, version))
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			progress := &fakeProgress{}
+
+			if _, err := install(ctx, progress); err == nil {
+				t.Fatal("install() under a cancelled context = nil, want the pinned runtime downloaded in place of the shipped one")
+			}
+			want := "Downloading the Pulumi runtime " + PinnedVersion + " into " + filepath.Join(home, cacheDirName, "pulumi", PinnedVersion) + ", once for this machine"
+			if len(progress.said) != 1 || progress.said[0] != want {
+				t.Errorf("install() said %q, want %q", progress.said, want)
+			}
+		})
+	}
+}
+
+func TestTheEngineKeepsItsPluginsUnderPulumiHomeOrElseUnderHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	t.Setenv("PULUMI_HOME", "")
+	if got, err := pulumiHome(); err != nil || got != filepath.Join(home, ".pulumi") {
+		t.Errorf("pulumiHome() with no PULUMI_HOME = %q, %v, want %q", got, err, filepath.Join(home, ".pulumi"))
+	}
+
+	shipped := t.TempDir()
+	t.Setenv("PULUMI_HOME", shipped)
+	if got, err := pulumiHome(); err != nil || got != shipped {
+		t.Errorf("pulumiHome() = %q, %v, want PULUMI_HOME %q", got, err, shipped)
+	}
+}

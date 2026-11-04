@@ -14,7 +14,7 @@ import (
 
 func TestANextContainerOnABoxServingPrerendersNeedsAWaiverForTheEdgeCache(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	needs := []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming, edge.NeedRevalidation}
 
 	for _, front := range []edge.Kind{edge.None, "cloudflare"} {
@@ -30,7 +30,7 @@ func TestANextContainerOnABoxServingPrerendersNeedsAWaiverForTheEdgeCache(t *tes
 
 func TestNoFrontOfABoxDispatchesANextContainer(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
-	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	p := vps.NewProvider(vps.TestAssets, vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 
 	for _, front := range []edge.Kind{edge.None, "cloudflare"} {
 		if dispatched := conformance.ListDispatchedComputes(t, p, front); slices.Contains(dispatched, provider.ComputeContainer) {

@@ -60,13 +60,13 @@ type BootstrapPart struct {
 	UsedBy              []string
 	UsedByEveryProject  bool
 	RetiresWithLastUser bool
-	Shape               *PartShape
+	Inventory           *PartInventory
 }
 
-type PartShape struct {
+type PartInventory struct {
 	Vendor    string
 	Region    string
-	Resources []pricing.Shaped
+	Resources []pricing.Resource
 }
 
 type Part struct {

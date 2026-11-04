@@ -6,39 +6,72 @@ option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1;
 import "buf/validate/validate.proto";
 import "common/environment/v1/environment.proto";
 import "common/bindings/v1/bindings.proto";
+import "common/scope/v1/scope.proto";
 
 service VariableStoreService {
-    rpc SetValue(SetValueRequest) returns (SetValueResponse);
+    rpc SetValue(SetValueRequest) returns (SetValueResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
+    }
 
-    rpc ListValues(ListValuesRequest) returns (ListValuesResponse);
+    rpc ListValues(ListValuesRequest) returns (ListValuesResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_READ;
+    }
 
-    rpc GetValue(GetValueRequest) returns (GetValueResponse);
+    rpc GetValue(GetValueRequest) returns (GetValueResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_READ;
+    }
 
-    rpc RevealValues(RevealValuesRequest) returns (RevealValuesResponse);
+    rpc RevealValues(RevealValuesRequest) returns (RevealValuesResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_REVEAL;
+    }
 
-    rpc DeleteValue(DeleteValueRequest) returns (DeleteValueResponse);
+    rpc DeleteValue(DeleteValueRequest) returns (DeleteValueResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
+    }
 
-    rpc SetReference(SetReferenceRequest) returns (SetReferenceResponse);
+    rpc SetReference(SetReferenceRequest) returns (SetReferenceResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
+    }
 
-    rpc ListReferences(ListReferencesRequest) returns (ListReferencesResponse);
+    rpc ListReferences(ListReferencesRequest) returns (ListReferencesResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_READ;
+    }
 
-    rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
+    rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_READ;
+    }
 
-    rpc SetBinding(SetBindingRequest) returns (SetBindingResponse);
+    rpc SetBinding(SetBindingRequest) returns (SetBindingResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
+    }
 
-    rpc RemoveBinding(RemoveBindingRequest) returns (RemoveBindingResponse);
+    rpc RemoveBinding(RemoveBindingRequest) returns (RemoveBindingResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
+    }
 
-    rpc ListBindings(ListBindingsRequest) returns (ListBindingsResponse);
+    rpc ListBindings(ListBindingsRequest) returns (ListBindingsResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_READ;
+    }
 
-    rpc SyncEnvSource(SyncEnvSourceRequest) returns (SyncEnvSourceResponse);
+    rpc SyncEnvSource(SyncEnvSourceRequest) returns (SyncEnvSourceResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
+    }
 
-    rpc DescribeEnvSource(DescribeEnvSourceRequest) returns (DescribeEnvSourceResponse);
+    rpc DescribeEnvSource(DescribeEnvSourceRequest) returns (DescribeEnvSourceResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_READ;
+    }
 
-    rpc SetEnvSourceValue(SetEnvSourceValueRequest) returns (SetEnvSourceValueResponse);
+    rpc SetEnvSourceValue(SetEnvSourceValueRequest) returns (SetEnvSourceValueResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
+    }
 
-    rpc PublishValues(PublishValuesRequest) returns (PublishValuesResponse);
+    rpc PublishValues(PublishValuesRequest) returns (PublishValuesResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
+    }
 
-    rpc UnpublishValues(UnpublishValuesRequest) returns (UnpublishValuesResponse);
+    rpc UnpublishValues(UnpublishValuesRequest) returns (UnpublishValuesResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
+    }
 }
 
 message Coordinate {
@@ -116,14 +149,16 @@ message GetValueRequest {
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
   Coordinate coordinate = 2 [(buf.validate.field).required = true];
 
-  bool reveal = 3;
+  reserved 3;
+  reserved "reveal";
 }
 
 message GetValueResponse {
   bool found = 1;
   ValueMetadata metadata = 2;
 
-  string value = 3 [debug_redact = true];
+  reserved 3;
+  reserved "value";
 }
 
 message RevealValuesRequest {
@@ -453,6 +488,12 @@ message CredentialRefusal {
 }
 
 message SyncEnvSourceRequest {
+  option (buf.validate.message).cel = {
+    id: "variablestore.envsource.environment"
+    message: "production has a single environment: name a preview environment only on the preview tier"
+    expression: "this.environment == '' || this.tier == 1"
+  };
+
   common.environment.v1.Tier tier = 1 [(buf.validate.field).cel = {
     id: "variablestore.envsource.tier"
     message: "an env source is kept per deployed tier: name the preview or the production tier"
@@ -473,6 +514,15 @@ message SyncEnvSourceRequest {
     unique: true
     items: {string: {pattern: "^(/([^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.[^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.\\.[^/#\\x00-\\x1f\\x7f]+))*$"}}
   }];
+
+  string environment = 6 [
+    (buf.validate.field).string.pattern = "^[^#\\x00-\\x1f\\x7f]*$",
+    (buf.validate.field).cel = {
+      id: "variablestore.environment.tier_wide"
+      message: "\"*\" is reserved: it names the value that binds tier-wide"
+      expression: "!this.contains('*')"
+    }
+  ];
 }
 
 message RegisteredEnvSource {

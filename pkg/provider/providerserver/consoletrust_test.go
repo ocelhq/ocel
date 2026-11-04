@@ -121,3 +121,13 @@ func TestADeployWithAWebIdentityIsRefusedUntilTheTiersConsoleTrustIsCurrent(t *t
 		})
 	}
 }
+
+func TestADeployWithAWebIdentityToAProviderOfferingNoConsoleTrustHasNoDeployIdentityToBeStale(t *testing.T) {
+	vendor := takingWebIdentity(fake.NewProvider(fake.Options{Region: "nowhere"}))
+	client := webIdentityServed(t, vendor)
+	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
+
+	if _, err := preflight(context.Background(), client, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION}); err != nil {
+		t.Fatalf("Preflight() = %v, want it to proceed: the provider's bootstrap has no console trust part", err)
+	}
+}

@@ -28,6 +28,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	"github.com/ocelhq/ocel/platform/aws/provider/component"
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/containerservice"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/aws/provider/iam"
 	"github.com/ocelhq/ocel/platform/aws/provider/queues"
@@ -46,8 +47,6 @@ const (
 	Memory           = "1024"
 	Name             = "app"
 	containerPortEnv = "PORT"
-
-	containerLocalName = "container"
 
 	deregistrationSeconds = 10
 	healthGraceSeconds    = 60
@@ -69,9 +68,6 @@ const (
 	scaleOutCooldownSeconds   = 60
 	scaleInCooldownSeconds    = 300
 	requestCountPerTargetType = "ALBRequestCountPerTarget"
-
-	minInstancesTag = "ocel:min-instances"
-	maxInstancesTag = "ocel:max-instances"
 )
 
 type RulesAPI interface {
@@ -303,7 +299,7 @@ func NewDefinition(spec provider.StackSpec, at Target) (*Definition, error) {
 		namespace:        at.Namespace,
 		Variables:        reader,
 		Cache:            cache,
-		service:          serviceCoordinate(project, stack),
+		service:          containerservice.Coordinate(project, stack),
 		role:             component.AppRoleCoordinate(project, stack),
 		public:           IsRoutedPublicly(spec),
 		workerApp:        provider.IsWorkerApp(app.App, app.Workers),
@@ -354,17 +350,6 @@ func (d *Definition) definitionEnv() map[string]string {
 	maps.Copy(env, d.Env)
 	env[originguard.HealthPathVar] = d.healthPath
 	return env
-}
-
-func serviceCoordinate(project string, stack naming.StackName) naming.Coordinate {
-	return naming.Coordinate{
-		Project: project,
-		Env:     stack.Env,
-		App:     stack.App,
-		Kind:    naming.KindService,
-		Name:    containerLocalName,
-		Release: stack.Release,
-	}
 }
 
 func (d *Definition) names() (Names, error) {
@@ -542,8 +527,8 @@ func (d *Definition) declareScalableTarget(ctx *pulumi.Context, physical string,
 		return nil, fmt.Errorf("the container cluster %q is not an ECS cluster ARN, so %s's service has no scalable target to name", d.Infra.Cluster, d.App)
 	}
 	targetTags := pulumi.StringMap{
-		minInstancesTag: pulumi.String(strconv.Itoa(d.Instances.Min)),
-		maxInstancesTag: pulumi.String(strconv.Itoa(d.Instances.Max)),
+		containerservice.MinInstancesTag: pulumi.String(strconv.Itoa(d.Instances.Min)),
+		containerservice.MaxInstancesTag: pulumi.String(strconv.Itoa(d.Instances.Max)),
 	}
 	maps.Copy(targetTags, tags)
 	resourceID := pulumi.Sprintf("service/%s/%s", cluster, service.Name)

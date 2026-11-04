@@ -147,6 +147,9 @@ func Forget(ctx context.Context, store records.Store, tier environment.Tier, slu
 	if err := ForgetAppImages(ctx, store, tier, slug, stack); err != nil {
 		return err
 	}
+	if err := ForgetResources(ctx, store, tier, slug, stack); err != nil {
+		return err
+	}
 	return records.Forget(ctx, store, StackKey(tier, slug, stack))
 }
 

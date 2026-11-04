@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 )
 
@@ -28,7 +29,7 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(provider.NamespaceEnvVar, tc.namespace)
 
-			names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+			names := namesOf(t, newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"}))
 			for what, got := range map[string]string{
 				"edge bucket":       names.TierBucket(environment.TierProduction, naming.StorageEdge, "k3x9q2"),
 				"state bucket":      names.TierBucket(environment.TierPreview, naming.StorageState, "k3x9q2"),
@@ -102,7 +103,7 @@ func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 func TestTheCachePurgeRoleIDReplacesEveryDashOfTheNamespaceWithAnUnderscore(t *testing.T) {
 	t.Setenv(provider.NamespaceEnvVar, "ocel-dev")
 
-	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	names := namesOf(t, newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"}))
 
 	if got, want := names.CDNPurgeRole(), "ocel_dev_cdn_purge"; got != want {
 		t.Errorf("CDNPurgeRole() = %q, want %q: a custom role id allows no dash", got, want)
@@ -127,7 +128,7 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 			t.Setenv(provider.NamespaceEnvVar, tc.namespace)
 
 			var refused refusal.Refusal
-			p, err := gcp.NewProvider(gcp.Options{Project: tc.project, Region: "europe-west1"})
+			p, err := gcp.NewProvider(control.Options{Project: tc.project, Region: "europe-west1"})
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 				t.Fatalf("NewProvider() under namespace %q = %v, %v, want an %s refusal", tc.namespace, p, err, refusal.CodeInvalid)
 			}
@@ -141,7 +142,7 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 func TestANamespaceLongerThanAServiceAccountIsTakenByItsCompactedField(t *testing.T) {
 	t.Setenv(provider.NamespaceEnvVar, strings.Repeat("a", 30))
 
-	if _, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"}); err != nil {
+	if _, err := gcp.NewProvider(control.Options{Project: "acme-prod", Region: "europe-west1"}); err != nil {
 		t.Fatalf("NewProvider() under a 30 character namespace = %v, want it taken: every service account is named for the namespace's 12-character field", err)
 	}
 }
@@ -152,7 +153,7 @@ var accountID = regexp.MustCompile(`^[a-z]([-a-z0-9]{4,28}[a-z0-9])$`)
 
 func longNames(t *testing.T) names.Names {
 	t.Helper()
-	return namesOf(t, newProvider(t, gcp.Options{Project: "acme-production-workloads", Region: "europe-west1"}))
+	return namesOf(t, newProvider(t, control.Options{Project: "acme-production-workloads", Region: "europe-west1"}))
 }
 
 func gatewayOf(t *testing.T, named names.Names, project, env string) string {
@@ -242,7 +243,7 @@ func TestEveryRealtimeSecretSharesAPrefixNoOtherSecretOfAnyNamespaceStartsWith(t
 	}
 
 	t.Setenv(provider.NamespaceEnvVar, ours.Namespace().String()+"-realtime")
-	other := namesOf(t, newProvider(t, gcp.Options{Project: "acme-production-workloads", Region: "europe-west1"}))
+	other := namesOf(t, newProvider(t, control.Options{Project: "acme-production-workloads", Region: "europe-west1"}))
 	for _, secret := range []string{
 		ours.PassphraseSecret(production), ours.ConnectorKeySecret(),
 		other.PassphraseSecret(production), other.ConnectorKeySecret(), must(other.RealtimeSigningSecret("shop", "prod", "app")),
@@ -273,7 +274,7 @@ func TestAnAppsAccountIsNamedForItsNamespacesAppFenceAndAHashOfItsProjectEnviron
 	}
 
 	t.Setenv(provider.NamespaceEnvVar, strings.Repeat("a", 19))
-	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	names := namesOf(t, newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"}))
 
 	account := names.AppAccount("shop", stackrecords.ProductionEnv, "web")
 	if !regexp.MustCompile(`^aaaaa-[0-9a-f]{6}-app-[0-9a-f]{10}$`).MatchString(account) || !accountID.MatchString(account) {
@@ -298,7 +299,7 @@ func TestAnAppsAccountIsNamedForItsNamespacesAppFenceAndAHashOfItsProjectEnviron
 }
 
 func TestEachTierSharesADatabaseOfItsOwnAndEachProjectThatOwnsOneKeepsItApart(t *testing.T) {
-	names := namesOf(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
+	names := namesOf(t, newProvider(t, control.Options{Project: "acme-prod", Region: "europe-west1"}))
 
 	databases := map[string]string{}
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {

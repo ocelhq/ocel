@@ -16,7 +16,7 @@ func TestEachTierIsWhitelistedOnItsOwnSudoersLineNamingItsTierAlone(t *testing.T
 	t.Parallel()
 
 	for _, tier := range []environment.Tier{environment.TierProduction, environment.TierPreview} {
-		fragment := written(Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), machine.KindFile, sudoersSeal(tier))
+		fragment := written(Items(testAssets, tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), machine.KindFile, sudoersSeal(tier))
 		if fragment.Name == "" {
 			t.Fatalf("bootstrapping %s writes no sudoers line of its own", tier)
 		}
@@ -47,7 +47,7 @@ func TestEachTierIsWhitelistedOnItsOwnSudoersLineNamingItsTierAlone(t *testing.T
 func TestThePinsAreReadThroughOneSudoersLineThatNamesOnlyThePinHelper(t *testing.T) {
 	t.Parallel()
 
-	line := written(Items(environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), machine.KindFile, sudoersPins)
+	line := written(Items(testAssets, environment.TierProduction, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{}), machine.KindFile, sudoersPins)
 	if want := deployUser + " ALL=(root) NOPASSWD: " + LiveBinary + " " + boxapi.PinCommand + " *\n"; string(line.Content) != want || line.Mode != 0o440 || line.Owner != machine.RootOwner {
 		t.Fatalf("%s holds %q at %04o owned by %q, want %q at 0440 owned by root: any other command there reads %s as root", sudoersPins, line.Content, line.Mode, line.Owner, want, boxapi.PinsDir)
 	}
@@ -57,7 +57,7 @@ func TestThePinsAreReadThroughOneSudoersLineThatNamesOnlyThePinHelper(t *testing
 	if !granted {
 		t.Errorf("the grants never name %s and the line it holds", sudoersPins)
 	}
-	if adopted := written(Items(environment.TierProduction, nil, ssh.AMD64, coolifysCaddy()), machine.KindFile, sudoersPins); adopted.Name != "" {
+	if adopted := written(Items(testAssets, environment.TierProduction, nil, ssh.AMD64, coolifysCaddy()), machine.KindFile, sudoersPins); adopted.Name != "" {
 		t.Errorf("behind Coolify's Caddy bootstrap writes %s, want none: ocel's proxy is what loads %s", sudoersPins, boxapi.PinsDir)
 	}
 }
@@ -68,7 +68,7 @@ func TestTheLineThatReadsThePinsGoesWithOcelsOwnProxy(t *testing.T) {
 	takes := func(removals []machine.Removal) bool {
 		return slices.ContainsFunc(removals, func(r machine.Removal) bool { return r.Kind == machine.KindFile && r.Path == sudoersPins })
 	}
-	if !takes(removing(Reading{Tier: environment.TierProduction, Observed: map[string]string{machine.KindFile + " " + sudoersPins: ""}}, Reading{Tier: environment.TierPreview}, appsPresent{})) {
+	if !takes(removing(Reading{Assets: testAssets, Tier: environment.TierProduction, Observed: map[string]string{machine.KindFile + " " + sudoersPins: ""}}, Reading{Assets: testAssets, Tier: environment.TierPreview}, appsPresent{})) {
 		t.Errorf("destroying the last tier leaves %s behind", sudoersPins)
 	}
 	if !takes((&frontMove{from: front.Proxy{}, to: coolifysCaddy()}).listRemovals()) {

@@ -170,7 +170,10 @@ func (s dnsCutover) resolves(ctx context.Context, rec edge.Record) bool {
 			return false
 		}
 		want, err := s.lookup.CNAME(ctx, rec.Value)
-		return err == nil && strings.EqualFold(strings.TrimSuffix(got, "."), strings.TrimSuffix(want, "."))
+		if err == nil && strings.EqualFold(strings.TrimSuffix(got, "."), strings.TrimSuffix(want, ".")) {
+			return true
+		}
+		return s.sharesAnAddress(ctx, rec.Name, rec.Value)
 	}
 	want, err := netip.ParseAddr(rec.Value)
 	if err != nil {
@@ -183,6 +186,24 @@ func (s dnsCutover) resolves(ctx context.Context, rec edge.Record) bool {
 	return slices.ContainsFunc(addresses, func(address string) bool {
 		got, err := netip.ParseAddr(address)
 		return err == nil && got.Unmap() == want.Unmap()
+	})
+}
+
+func (s dnsCutover) sharesAnAddress(ctx context.Context, name, target string) bool {
+	targets, err := s.lookup.Host(ctx, target)
+	if err != nil {
+		return false
+	}
+	addresses, err := s.lookup.Host(ctx, name)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(addresses, func(address string) bool {
+		got, err := netip.ParseAddr(address)
+		return err == nil && slices.ContainsFunc(targets, func(target string) bool {
+			want, err := netip.ParseAddr(target)
+			return err == nil && got.Unmap() == want.Unmap()
+		})
 	})
 }
 

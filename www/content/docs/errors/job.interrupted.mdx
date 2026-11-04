@@ -1,0 +1,10 @@
+---
+title: job.interrupted
+description: The runner lost the job before it ended.
+---
+
+The runner's job agent never started, or stopped reporting while the job ran, so the job ended unfinished. Nothing in the project caused it. The CLI reports the job as [`job.failed`](/docs/errors/job.failed), naming this code.
+
+## Fix
+
+Run the command again.

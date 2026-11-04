@@ -1,0 +1,10 @@
+---
+title: job.timeout
+description: The job ran longer than its token allows, and was stopped.
+---
+
+A job runs under a token the console signs for it, and the runner stops a job whose token expires before it ends, waiting for input included. The CLI reports the job as [`job.failed`](/docs/errors/job.failed), naming this code.
+
+## Fix
+
+Answer a job's input sooner, or make the build or deploy shorter, and run the command again.

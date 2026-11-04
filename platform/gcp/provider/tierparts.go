@@ -11,8 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/bastion"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/control"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albpart"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/cloudflareorigin"
 	"github.com/ocelhq/ocel/platform/gcp/provider/envsource"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
@@ -40,7 +41,7 @@ func tierParts(networkPatches network.Patches) []bootstrap.RemovablePart {
 }
 
 func appDatabaseLayouts() []variables.Layout {
-	return []variables.Layout{task.RunLayout(), tagLayout()}
+	return []variables.Layout{task.RunLayout(), control.TagLayout()}
 }
 
 func tierAccounts(registry component.Registry) []bootstrap.Account {
@@ -61,7 +62,7 @@ func newDeployUse(pre provider.DeployPreflight) deployUse {
 	return deployUse{deploy: pre.Deploy, front: pre.Edge, resources: pre.Resources, usages: pre.Apps, uses: pre.Uses}
 }
 
-func newShapeUse(req provider.ShapeRequest) deployUse {
+func newInventoryUse(req provider.InventoryRequest) deployUse {
 	return deployUse{deploy: req.Deploy, front: req.Edge, resources: req.Resources, usages: req.Usages, uses: req.Uses}
 }
 
@@ -73,7 +74,7 @@ func (u deployUse) partNames(registry component.Registry) ([]string, error) {
 	for _, part := range u.parts() {
 		used = append(used, part.Name)
 	}
-	if u.front == alb.Kind {
+	if u.front == albresources.Kind {
 		used = append(used, albpart.PartName)
 	}
 	var ordered []string
@@ -100,7 +101,7 @@ func (u deployUse) parts() []component.Part {
 }
 
 func (u deployUse) seals() bool {
-	return u.deploy.Tier == environment.TierPreview || u.front == alb.Kind || isFronted(u.front) || u.sealsProjectValues()
+	return u.deploy.Tier == environment.TierPreview || u.front == albresources.Kind || isFronted(u.front) || u.sealsProjectValues()
 }
 
 func (u deployUse) sealsProjectValues() bool {
@@ -115,7 +116,7 @@ func (u deployUse) keepsProjectRecords() bool {
 }
 
 func (u deployUse) servesFromTheEdgeBucket() bool {
-	return u.front == alb.Kind || isFronted(u.front) || slices.ContainsFunc(u.deploy.Apps, servesNext)
+	return u.front == albresources.Kind || isFronted(u.front) || slices.ContainsFunc(u.deploy.Apps, servesNext)
 }
 
 func (u deployUse) caches() bool {

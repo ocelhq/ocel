@@ -29,6 +29,10 @@ func (s Store) DescribeEnvSource(ctx context.Context) (EnvSource, error) {
 }
 
 func (s Store) SyncEnvSource(ctx context.Context) (EnvSource, error) {
+	return s.SyncEnvSourceInto(ctx, "")
+}
+
+func (s Store) SyncEnvSourceInto(ctx context.Context, environment string) (EnvSource, error) {
 	descriptor := EnvSourceDescriptor(s.Project, s.Tier)
 	folders := syncedFolders(s.Project)
 	var read map[variablestore.Cell]envsource.Value
@@ -46,10 +50,11 @@ func (s Store) SyncEnvSource(ctx context.Context) (EnvSource, error) {
 		return EnvSource{}, err
 	}
 	resp, err := variableStore.SyncEnvSource(ctx, &variablestorev1.SyncEnvSourceRequest{
-		Tier:    s.Tier,
-		Slug:    s.Project.Slug,
-		From:    &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: envSourceMessage(descriptor, read)},
-		Folders: folders,
+		Tier:        s.Tier,
+		Slug:        s.Project.Slug,
+		From:        &variablestorev1.SyncEnvSourceRequest_EnvSource{EnvSource: envSourceMessage(descriptor, read)},
+		Folders:     folders,
+		Environment: environment,
 	})
 	if err != nil {
 		return EnvSource{}, err

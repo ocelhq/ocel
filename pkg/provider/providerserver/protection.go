@@ -43,9 +43,6 @@ func (h *handlers) GetProtection(ctx context.Context, req *contractv1.GetProtect
 		return resp, nil
 	}
 	resp.Recorded, resp.Enabled = true, record.Enabled
-	if req.GetRevealPassword() {
-		resp.Password = record.Password
-	}
 	for _, secret := range record.Gate.BypassSecrets {
 		resp.BypassSecretIds = append(resp.BypassSecretIds, deriveBypassSecretID(secret))
 	}
@@ -66,6 +63,26 @@ func (h *handlers) GetProtection(ctx context.Context, req *contractv1.GetProtect
 		return nil, provider.RefusalError(err)
 	}
 	return resp, nil
+}
+
+func (h *handlers) RevealProtectionPassword(ctx context.Context, req *contractv1.RevealProtectionPasswordRequest) (*contractv1.RevealProtectionPasswordResponse, error) {
+	p, err := h.session.use()
+	if err != nil {
+		return nil, err
+	}
+	tier, err := decodeRequiredTier(req.GetTier())
+	if err != nil {
+		return nil, err
+	}
+	records, err := stackrecords.ReadGates(ctx, p.KeyValues(), p.Cipher(), tier)
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	record, recorded := records[req.GetSlug()]
+	if !recorded {
+		return &contractv1.RevealProtectionPasswordResponse{}, nil
+	}
+	return &contractv1.RevealProtectionPasswordResponse{Recorded: true, Password: record.Password}, nil
 }
 
 func (h *handlers) openEdge(p provider.Provider, kind edge.Kind, sel *contractv1.EdgeSelection) edge.Edge {

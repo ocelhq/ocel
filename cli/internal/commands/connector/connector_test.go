@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/consent"
+
 	"connectrpc.com/connect"
 	connectvalidate "connectrpc.com/validate"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -33,6 +35,7 @@ import (
 	resultv1 "github.com/ocelhq/ocel/pkg/proto/cli/result/v1"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	scopev1 "github.com/ocelhq/ocel/pkg/proto/common/scope/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/proto/console/v1/consolev1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -47,53 +50,53 @@ const (
 
 type consoleServer struct {
 	*httptest.Server
-	consolev1connect.UnimplementedConnectorServiceHandler
-	rows          []*consolev1.Connector
-	upserted      []*consolev1.UpsertConnectorRequest
-	addressed     []*consolev1.SetConnectorAddressRequest
+	consolev1connect.UnimplementedEndpointServiceHandler
+	rows          []*consolev1.Endpoint
+	upserted      []*consolev1.UpsertEndpointRequest
+	addressed     []*consolev1.SetEndpointAddressRequest
 	deleted       []string
 	refuseAddress bool
 }
 
-func newConsoleServer(t *testing.T, rows ...*consolev1.Connector) *consoleServer {
+func newConsoleServer(t *testing.T, rows ...*consolev1.Endpoint) *consoleServer {
 	t.Helper()
 
 	c := &consoleServer{rows: rows}
 	mux := http.NewServeMux()
-	path, handler := consolev1connect.NewConnectorServiceHandler(c, connect.WithInterceptors(connectvalidate.NewInterceptor()))
+	path, handler := consolev1connect.NewEndpointServiceHandler(c, connect.WithInterceptors(connectvalidate.NewInterceptor()))
 	mux.Handle("/api/connect"+path, http.StripPrefix("/api/connect", handler))
 	c.Server = httptest.NewServer(mux)
 	t.Cleanup(c.Close)
 	return c
 }
 
-func (c *consoleServer) List(context.Context, *consolev1.ListConnectorsRequest) (*consolev1.ListConnectorsResponse, error) {
-	return &consolev1.ListConnectorsResponse{Connectors: c.rows}, nil
+func (c *consoleServer) List(context.Context, *consolev1.ListEndpointsRequest) (*consolev1.ListEndpointsResponse, error) {
+	return &consolev1.ListEndpointsResponse{Endpoints: c.rows}, nil
 }
 
-func (c *consoleServer) Upsert(_ context.Context, req *consolev1.UpsertConnectorRequest) (*consolev1.UpsertConnectorResponse, error) {
+func (c *consoleServer) Upsert(_ context.Context, req *consolev1.UpsertEndpointRequest) (*consolev1.UpsertEndpointResponse, error) {
 	c.upserted = append(c.upserted, req)
-	registered := &consolev1.Connector{
-		Id: registeredID, OrganizationId: "org_1", Target: req.GetTarget(), Vendor: req.GetVendor(), Reach: req.GetReach(),
+	registered := &consolev1.Endpoint{
+		Id: registeredID, OrganizationId: "org_1", Name: req.GetName(), Target: req.GetTarget(), Vendor: req.GetVendor(), Reach: req.GetReach(),
 	}
 	c.rows = append(c.rows, registered)
-	return &consolev1.UpsertConnectorResponse{Connector: registered}, nil
+	return &consolev1.UpsertEndpointResponse{Endpoint: registered}, nil
 }
 
-func (c *consoleServer) SetAddress(_ context.Context, req *consolev1.SetConnectorAddressRequest) (*consolev1.SetConnectorAddressResponse, error) {
+func (c *consoleServer) SetAddress(_ context.Context, req *consolev1.SetEndpointAddressRequest) (*consolev1.SetEndpointAddressResponse, error) {
 	if c.refuseAddress {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("nope"))
 	}
 	c.addressed = append(c.addressed, req)
-	return &consolev1.SetConnectorAddressResponse{Connector: &consolev1.Connector{
+	return &consolev1.SetEndpointAddressResponse{Endpoint: &consolev1.Endpoint{
 		Id: req.GetId(), Target: fingerprint, Vendor: "fake", Url: proto.String(req.GetUrl()),
-		Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER, Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
+		Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER, Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL,
 	}}, nil
 }
 
-func (c *consoleServer) Remove(_ context.Context, req *consolev1.RemoveConnectorRequest) (*consolev1.RemoveConnectorResponse, error) {
+func (c *consoleServer) Remove(_ context.Context, req *consolev1.RemoveEndpointRequest) (*consolev1.RemoveEndpointResponse, error) {
 	c.deleted = append(c.deleted, req.GetId())
-	return &consolev1.RemoveConnectorResponse{}, nil
+	return &consolev1.RemoveEndpointResponse{}, nil
 }
 
 func linked(t *testing.T, dir, apiURL string) {
@@ -122,7 +125,7 @@ func resolved(t *testing.T, root string) *project.Project {
 func opened(t *testing.T, srv *consoleServer) options {
 	t.Helper()
 
-	return options{write: true, apiURL: srv.URL, console: console.New(srv.URL)}
+	return options{apiURL: srv.URL, console: console.New(srv.URL), policy: consent.Policy{Command: "ocel connector rm", Yes: true}}
 }
 
 func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
@@ -144,7 +147,7 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	if len(srv.upserted) != 1 {
 		t.Fatalf("upserts = %v, want one", srv.upserted)
 	}
-	wantUpsert := &consolev1.UpsertConnectorRequest{Target: fingerprint, Vendor: "fake", Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL}
+	wantUpsert := &consolev1.UpsertEndpointRequest{Name: console.ConnectorNameOf(fingerprint), Target: fingerprint, Vendor: "fake", Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL}
 	if !proto.Equal(srv.upserted[0], wantUpsert) {
 		t.Errorf("upsert = %v, want %v", srv.upserted[0], wantUpsert)
 	}
@@ -172,15 +175,19 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	if err := json.Unmarshal(installed[0].Config, &config); err != nil {
 		t.Fatalf("the config the provider was handed is not an object: %v", err)
 	}
-	if config["console"] != srv.URL || config["connectorId"] != registeredID || config["organizationId"] != "org_1" {
+	if config["console"] != srv.URL || config["endpointId"] != registeredID || config["organizationId"] != "org_1" {
 		t.Errorf("config = %v, want it to name this console, the row it upserted and the org", config)
 	}
 	if config["target"] != fingerprint {
 		t.Errorf("config target = %v, want %q", config["target"], fingerprint)
 	}
-	grants, _ := config["grants"].([]any)
-	if len(grants) != 2 || grants[0] != "variables.read" || grants[1] != "variables.write" {
-		t.Errorf("grants = %v, want read and write and no reveal", grants)
+	grants, _ := config["allowedScopes"].([]any)
+	want := []any{"apps.read", "apps.write", "variables.read", "variables.write", "variables.reveal"}
+	if !slices.Equal(grants, want) {
+		t.Errorf("grants = %v, want every scope a person can hold: %v", grants, want)
+	}
+	if config["name"] != console.ConnectorNameOf(fingerprint) {
+		t.Errorf("config name = %v, want the name the console registered", config["name"])
 	}
 	if !strings.Contains(stdout.String(), fingerprint) {
 		t.Errorf("stdout = %q, want it to name the target it paired", stdout.String())
@@ -235,39 +242,9 @@ func TestAddRelaysWhatTheProviderSaysWhileItInstallsThroughItsRun(t *testing.T) 
 		t.Errorf("result = %v, want a success that names the paired target and leaves the grants to their own line", result)
 	}
 	if !slices.ContainsFunc(events, func(event *streamv1.RunEvent) bool {
-		return event.GetOperation().GetBody() == nil && event.GetCli() == nil && event.GetOperation().GetMessage() == "The console may use this connector for variables.read and variables.write"
+		return event.GetOperation().GetBody() == nil && event.GetCli() == nil && event.GetOperation().GetMessage() == "The console may use this connector for apps.read, apps.write, variables.read, variables.reveal and variables.write"
 	}) {
 		t.Errorf("stream = %s, want the grants said on a line of their own", stream.String())
-	}
-}
-
-func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
-	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
-	root := project.Root
-	srv := newConsoleServer(t)
-	linked(t, root, srv.URL)
-
-	dependencies := newTestDependencies()
-	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
-
-	opts := opened(t, srv)
-	opts.reveal = true
-	opts.write = false
-	if err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
-		t.Fatalf("runAdd err = %v", err)
-	}
-
-	installed := project.Provider.FakeConnector().Installed()
-	if len(installed) != 1 {
-		t.Fatalf("installed = %v, want one connector", installed)
-	}
-	var config map[string]any
-	if err := json.Unmarshal(installed[0].Config, &config); err != nil {
-		t.Fatal(err)
-	}
-	grants, _ := config["grants"].([]any)
-	if len(grants) != 2 || grants[0] != "variables.read" || grants[1] != "variables.reveal" {
-		t.Errorf("grants = %v, want read and reveal and no write", grants)
 	}
 }
 
@@ -328,9 +305,9 @@ func TestAFailedAddSaysRunningItAgainFinishesIt(t *testing.T) {
 func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
 	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	root := project.Root
-	srv := newConsoleServer(t, &consolev1.Connector{
+	srv := newConsoleServer(t, &consolev1.Endpoint{
 		Id: registeredID, Target: fingerprint, Vendor: "fake", Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
-		Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL, Capabilities: []string{"variables.read"},
+		Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL, AllowedScopes: []scopev1.Scope{scopev1.Scope_SCOPE_VARIABLES_READ},
 	})
 	linked(t, root, srv.URL)
 
@@ -355,9 +332,9 @@ func TestAnUnreachableMachineIsPointedAtRmTarget(t *testing.T) {
 	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	root := project.Root
 	project.Provider.FakeConnector().Refuse(refusal.Refuse(refusal.CodeNotReady, "this machine is not reachable"))
-	srv := newConsoleServer(t, &consolev1.Connector{
+	srv := newConsoleServer(t, &consolev1.Endpoint{
 		Id: registeredID, Target: fingerprint, Vendor: "fake", Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
-		Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
+		Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL,
 	})
 	linked(t, root, srv.URL)
 
@@ -382,9 +359,9 @@ func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
 	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	root := project.Root
 	project.Provider.FakeConnector().Refuse(refusal.Refuse(refusal.CodeNotReady, "this machine is not reachable"))
-	srv := newConsoleServer(t, &consolev1.Connector{
+	srv := newConsoleServer(t, &consolev1.Endpoint{
 		Id: registeredID, Target: fingerprint, Vendor: "fake", Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
-		Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
+		Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL,
 	})
 	linked(t, root, srv.URL)
 
@@ -439,10 +416,10 @@ func TestStatusSaysWhatTheConsoleHasRegistered(t *testing.T) {
 	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	root := project.Root
 	seen := time.Now().Add(-10 * time.Second)
-	srv := newConsoleServer(t, &consolev1.Connector{
+	srv := newConsoleServer(t, &consolev1.Endpoint{
 		Id: registeredID, Target: fingerprint, Vendor: "fake", Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
-		Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
-		Url:   proto.String("https://" + hostname + "/" + buildoutput.StateDir + "/connector"), Capabilities: []string{"variables.read", "variables.write"},
+		Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL,
+		Url:   proto.String("https://" + hostname + "/" + buildoutput.StateDir + "/connector"), AllowedScopes: []scopev1.Scope{scopev1.Scope_SCOPE_VARIABLES_READ, scopev1.Scope_SCOPE_VARIABLES_WRITE},
 		ConnectedAt: timestamppb.New(seen), LastSeenAt: timestamppb.New(seen), Online: true,
 	})
 	linked(t, root, srv.URL)
@@ -486,16 +463,16 @@ func TestStatusAsJSONPrintsEveryRegisteredConnectorAsOneEnvelope(t *testing.T) {
 	root := project.Root
 	seen := time.Date(2026, 10, 5, 8, 0, 0, 0, time.UTC)
 	srv := newConsoleServer(t,
-		&consolev1.Connector{
-			Id: "0199b5c4-0000-7000-8000-00000000cafd", Target: "zzz/sha256:bbbb/ocel", Vendor: "fake", Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
+		&consolev1.Endpoint{
+			Id: "0199b5c4-0000-7000-8000-00000000cafd", Target: "zzz/sha256:bbbb/ocel", Vendor: "fake", Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL,
 		},
-		&consolev1.Connector{
+		&consolev1.Endpoint{
 			Id: registeredID, Target: fingerprint, Vendor: "fake", Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
-			Reach:        consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
-			Url:          proto.String("https://" + hostname + "/" + buildoutput.StateDir + "/connector"),
-			Capabilities: []string{"variables.write", "variables.read"},
-			ConnectedAt:  timestamppb.New(seen), LastSeenAt: timestamppb.New(seen), Online: true,
-			LastDenied: &consolev1.ConnectorDenial{
+			Reach:         consolev1.EndpointReach_ENDPOINT_REACH_DIAL,
+			Url:           proto.String("https://" + hostname + "/" + buildoutput.StateDir + "/connector"),
+			AllowedScopes: []scopev1.Scope{scopev1.Scope_SCOPE_VARIABLES_WRITE, scopev1.Scope_SCOPE_VARIABLES_READ},
+			ConnectedAt:   timestamppb.New(seen), LastSeenAt: timestamppb.New(seen), Online: true,
+			LastDenied: &consolev1.EndpointDenial{
 				Verb: "variables.write", At: timestamppb.New(time.Date(2026, 10, 5, 7, 0, 0, 123_000_000, time.UTC)), Message: "not allowed",
 			},
 		})
@@ -539,9 +516,9 @@ func TestStatusAsJSONPrintsEveryRegisteredConnectorAsOneEnvelope(t *testing.T) {
 func TestStatusAsJSONKeepsARefusalButLeavesItsTimeEmptyWhenTheConsoleRecordedNone(t *testing.T) {
 	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	root := project.Root
-	srv := newConsoleServer(t, &consolev1.Connector{
-		Id: registeredID, Target: fingerprint, Vendor: "fake", Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
-		LastDenied: &consolev1.ConnectorDenial{Verb: "variables.write", Message: "not allowed"},
+	srv := newConsoleServer(t, &consolev1.Endpoint{
+		Id: registeredID, Target: fingerprint, Vendor: "fake", Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL,
+		LastDenied: &consolev1.EndpointDenial{Verb: "variables.write", Message: "not allowed"},
 	})
 	linked(t, root, srv.URL)
 
@@ -583,7 +560,7 @@ func TestStatusAsJSONPrintsAnEmptyListWhenTheOrganizationHasNoConnector(t *testi
 func TestStatusForAConfigAsJSONPrintsAnEmptyListWhenItsTargetIsNotRegistered(t *testing.T) {
 	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	root := project.Root
-	srv := newConsoleServer(t, &consolev1.Connector{Id: "0199b5c4-0000-7000-8000-00000000cafc", Target: "other/sha256:cccc/ocel", Vendor: "fake", Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL})
+	srv := newConsoleServer(t, &consolev1.Endpoint{Id: "0199b5c4-0000-7000-8000-00000000cafc", Target: "other/sha256:cccc/ocel", Vendor: "fake", Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL})
 	linked(t, root, srv.URL)
 
 	dependencies := newJSONDependencies()
@@ -793,9 +770,9 @@ func failure(t *testing.T, stream string) string {
 func TestStatusForAConfigReadsItsTargetInTheCheckPhaseOfItsRunAndPrintsWhatTheConsoleHasAloneOnStdout(t *testing.T) {
 	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	root := project.Root
-	srv := newConsoleServer(t, &consolev1.Connector{
+	srv := newConsoleServer(t, &consolev1.Endpoint{
 		Id: registeredID, Target: fingerprint, Vendor: "fake", Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
-		Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
+		Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL,
 	})
 	linked(t, root, srv.URL)
 
@@ -866,9 +843,9 @@ func TestRemoveNamesItsForgettingInTheConsole(t *testing.T) {
 		t.Run(fmt.Sprintf("--target %t", flagged), func(t *testing.T) {
 			project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 			root := project.Root
-			srv := newConsoleServer(t, &consolev1.Connector{
+			srv := newConsoleServer(t, &consolev1.Endpoint{
 				Id: registeredID, Target: fingerprint, Vendor: "fake", Compute: consolev1.ComputeKind_COMPUTE_KIND_CONTAINER,
-				Reach: consolev1.ConnectorReach_CONNECTOR_REACH_DIAL,
+				Reach: consolev1.EndpointReach_ENDPOINT_REACH_DIAL,
 			})
 			linked(t, root, srv.URL)
 
@@ -892,5 +869,109 @@ func TestRemoveNamesItsForgettingInTheConsole(t *testing.T) {
 				"Removed the connector from the console",
 			)
 		})
+	}
+}
+
+func TestTheRunnerFlagsGoToTheProviderUntouched(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+
+	project.Provider.WithFacts(func(facts *provider.Facts) { facts.ConnectorRunsJobs = true })
+	opts := opened(t, srv)
+	opts.runner, opts.cpus, opts.memory, opts.image = true, "2", "4g", "registry.example.com/ocel-job:dev"
+	if err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
+		t.Fatalf("runAdd err = %v", err)
+	}
+
+	installed := project.Provider.FakeConnector().Installed()
+	want := provider.ConnectorRunner{CPUs: "2", Memory: "4g", Image: "registry.example.com/ocel-job:dev"}
+	if len(installed) != 1 || installed[0].Runner == nil || *installed[0].Runner != want {
+		t.Errorf("the provider was handed %+v, want the runner %+v", installed, want)
+	}
+}
+
+func TestAddWithoutTheRunnerFlagAsksForNoRunner(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+
+	if err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opened(t, srv)); err != nil {
+		t.Fatalf("runAdd err = %v", err)
+	}
+	if installed := project.Provider.FakeConnector().Installed(); len(installed) != 1 || installed[0].Runner != nil {
+		t.Errorf("the provider was handed %+v, want no runner", installed)
+	}
+}
+
+func TestRunnerCapsWithoutTheRunnerFlagAreAUsageError(t *testing.T) {
+	_, err := options{memory: "4g"}.installedRunner()
+	var usage *clierror.Error
+	if !errors.As(err, &usage) || usage.Code != clierror.CodeUsage || !strings.Contains(err.Error(), "--runner") {
+		t.Fatalf("err = %v, want a usage error naming --runner", err)
+	}
+}
+
+func TestAddWithTheRunnerFlagOnATargetWhoseConnectorRunsNoJobsIsRefusedBeforeTheConsoleHearsOfIt(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	opts := opened(t, srv)
+	opts.runner = true
+	err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opts)
+	if code := clierror.NewRunError(err).GetCode(); code != clierror.CodeProviderUnsupported || strings.Contains(err.Error(), "again") {
+		t.Fatalf("err = %v (%s), want %s with no advice to run it again", err, code, clierror.CodeProviderUnsupported)
+	}
+	if len(srv.upserted) != 0 || len(project.Provider.FakeConnector().Installed()) != 0 {
+		t.Fatalf("upserted %v and installed %v, want nothing registered or installed", srv.upserted, project.Provider.FakeConnector().Installed())
+	}
+}
+
+func TestAddNamesTheConnectorTheNameItIsGiven(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	opts := opened(t, srv)
+	opts.name = "staging-box"
+	if err := runAdd(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opts); err != nil {
+		t.Fatalf("runAdd err = %v", err)
+	}
+	if len(srv.upserted) != 1 || srv.upserted[0].GetName() != "staging-box" {
+		t.Fatalf("upserted %v, want the connector named staging-box", srv.upserted)
+	}
+}
+
+func TestRemoveWithNoTerminalAndNoYesIsRefusedBeforeAnythingIsRemoved(t *testing.T) {
+	project := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	root := project.Root
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	opts := opened(t, srv)
+	opts.policy = consent.Policy{Command: "ocel connector rm"}
+	err := runRemove(context.Background(), dependencies, resolved(t, root), read(t, root, srv.URL), opts)
+	if got := clierror.NewRunError(err); got.GetCode() != clierror.CodeConfirmationRequired || got.GetHint() != "--yes" {
+		t.Fatalf("run error = %v, want %s hinting --yes", got, clierror.CodeConfirmationRequired)
+	}
+	if len(srv.deleted) != 0 {
+		t.Fatalf("deleted %v, want nothing removed without consent", srv.deleted)
 	}
 }

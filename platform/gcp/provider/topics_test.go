@@ -39,7 +39,7 @@ func cronTask(cron string) *provider.TopicSpec {
 
 func provisionTopic(t *testing.T, p *Provider, in resources.ProvisionRequest) *provider.Binding {
 	t.Helper()
-	binding, err := p.topicHooks().Provision(context.Background(), in, nil)
+	binding, err := p.TopicHooks().Provision(context.Background(), in, nil)
 	if err != nil {
 		t.Fatalf("ProvisionTopic() = %v", err)
 	}
@@ -49,7 +49,7 @@ func provisionTopic(t *testing.T, p *Provider, in resources.ProvisionRequest) *p
 func planTopic(t *testing.T, p *Provider, server *topicsServer, in resources.ProvisionRequest, recorded *provider.Binding) (provider.ChangeAction, string, error) {
 	t.Helper()
 	before := len(server.wrote())
-	action, reason, err := p.topicHooks().Plan(context.Background(), in, recorded)
+	action, reason, err := p.TopicHooks().Plan(context.Background(), in, recorded)
 	if wrote := server.wrote()[before:]; len(wrote) != 0 {
 		t.Errorf("PlanTopic() wrote %q, want a plan that only reads", wrote)
 	}
@@ -181,7 +181,7 @@ func TestATopicWithAConsumerItsSubscriptionCannotHoldIsRefusedAtPlan(t *testing.
 func TestATopicWithAConsumerItsSubscriptionCannotHoldIsRefusedAtProvisionBeforeAnythingIsMade(t *testing.T) {
 	p, server := servingTopics(t)
 
-	_, err := p.topicHooks().Provision(context.Background(), aTopic(t, provider.BindingTopic, consumersNamed(false, "ship", strings.Repeat("c", 64))), nil)
+	_, err := p.TopicHooks().Provision(context.Background(), aTopic(t, provider.BindingTopic, consumersNamed(false, "ship", strings.Repeat("c", 64))), nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Errorf("ProvisionTopic() = %v, want an %s refusal", err, refusal.CodeInvalid)

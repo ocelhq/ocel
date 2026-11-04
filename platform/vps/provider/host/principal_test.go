@@ -198,7 +198,7 @@ func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 
 	existing := decidedAccount()
 	tier := environment.TierProduction
-	items := Items(tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
+	items := Items(testAssets, tier, []byte(aKey+"\n"), ssh.AMD64, front.Proxy{})
 	observed, _, err := machine.ReadSurvey(sh(t, stubs(t, &existing), machine.SurveyScript(items, machine.StampPath(tier))))
 	if err != nil {
 		t.Fatal(err)

@@ -7,6 +7,11 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/ocelhq/ocel/pkg/stackrecords"
+
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/postgres"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/compute/container"
@@ -113,9 +118,9 @@ func newStacks(resolve ReleaseConfig, realized *Realized, engine pulumi.Engine) 
 		tierEvaluated: map[environment.Tier]tierPatches{},
 	}
 	r.network = &network.Stacks{Open: r.openShared, Patches: r.networkPatches, PartsByConsumer: map[string]string{
-		containers.Slug:      containers.Part,
-		functionnetwork.Slug: functionnetwork.Part,
-		bastion.ConsumerSlug: bastion.Part,
+		awsports.ContainersSlug:         sharedparts.ContainersPart,
+		sharedparts.FunctionNetworkSlug: sharedparts.FunctionNetworkPart,
+		bastion.ConsumerSlug:            bastion.Part,
 	}}
 	r.containers = &containers.Stacks{Open: r.openShared, Network: r.network}
 	r.functionNetwork = &functionnetwork.Stacks{Open: r.openShared, Network: r.network, Patches: r.functionNetworkPatches}
@@ -191,7 +196,7 @@ func (r *Stacks) open(ctx context.Context, scope Scope) (*release, error) {
 			URL:        cfg.BackendURL,
 			Passphrase: cfg.Passphrase,
 			Project:    cfg.PulumiProject,
-			Env:        map[string]string{"AWS_REGION": cfg.Region},
+			Env:        engineEnv(cfg),
 		},
 		Program:   component.ProgramIn(cfg.Region),
 		Configure: component.DefaultProvidersDisabled,
@@ -440,7 +445,12 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 	if err := opened.refuseToAdopt(ctx, spec); err != nil {
 		return provider.StackResult{}, err
 	}
-	return opened.provision(ctx, spec, progress)
+	result, err := opened.provision(ctx, spec, progress)
+	recorded := opened.recordResources(ctx, spec.Ref)
+	if err != nil {
+		return provider.StackResult{}, err
+	}
+	return result, recorded
 }
 
 func (r *release) provision(ctx context.Context, spec provider.StackSpec, progress progress.Log) (provider.StackResult, error) {
@@ -650,26 +660,47 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec, kind run
 }
 
 func (r *Stacks) Resources(ctx context.Context, req provider.StackResources) ([]provider.PhysicalResource, error) {
-	ref := req.Ref
-	opened, err := r.at(ctx, ref, "")
+	opened, err := r.at(ctx, req.Ref, "")
 	if err != nil {
 		return nil, err
 	}
-	var workers []provider.StackRef
-	if req.NewestRelease {
-		if workers, err = opened.listRecordedWorkers(ctx, ref); err != nil {
-			return nil, err
-		}
+	if opened.cfg.KeyValues == nil {
+		return nil, nil
 	}
-	var listed []provider.PhysicalResource
-	for _, held := range append([]provider.StackRef{ref}, workers...) {
-		exported, err := opened.automation.Export(ctx, held)
+	return stackrecords.ReadResources(ctx, opened.cfg.KeyValues, req)
+}
+
+func (r *release) recordResources(ctx context.Context, ref provider.StackRef) error {
+	if r.cfg.KeyValues == nil {
+		return nil
+	}
+	held, err := r.exportResources(ctx, ref)
+	if err != nil {
+		return err
+	}
+	workers, err := r.listRecordedWorkers(ctx, ref)
+	if err != nil {
+		return err
+	}
+	recorded := stackrecords.Resources{Held: held}
+	for _, worker := range workers {
+		exported, err := r.exportResources(ctx, worker)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		for _, resource := range exported {
-			listed = append(listed, cfn.NewPhysicalResource(cfn.ResourceTypeOf(resource.Type), resource.ID, opened.cfg.Region))
-		}
+		recorded.Workers = append(recorded.Workers, exported...)
+	}
+	return stackrecords.WriteResources(ctx, r.cfg.KeyValues, ref, recorded)
+}
+
+func (r *release) exportResources(ctx context.Context, ref provider.StackRef) ([]provider.PhysicalResource, error) {
+	exported, err := r.automation.Export(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	listed := make([]provider.PhysicalResource, 0, len(exported))
+	for _, resource := range exported {
+		listed = append(listed, cfn.NewPhysicalResource(cfn.ResourceTypeOf(resource.Type), resource.ID, r.cfg.Region))
 	}
 	return listed, nil
 }
@@ -688,6 +719,11 @@ func (r *Stacks) Destroy(ctx context.Context, req provider.StackDestroy, progres
 	}
 	if err := opened.automation.Destroy(ctx, ref, req.Lease, progress); err != nil {
 		return err
+	}
+	if opened.cfg.KeyValues != nil {
+		if err := stackrecords.ForgetResources(ctx, opened.cfg.KeyValues, ref.Tier, ref.Project, ref.Name); err != nil {
+			return err
+		}
 	}
 	if ref.Name.IsInfra() {
 		if err := opened.sweep(ctx, ref, nil); err != nil {
@@ -748,3 +784,9 @@ func (r *Stacks) Outputs(ctx context.Context, ref provider.StackRef, progress pr
 }
 
 var _ provider.Stacks = (*Stacks)(nil)
+
+func engineEnv(cfg Config) map[string]string {
+	env := map[string]string{"AWS_REGION": cfg.Region}
+	maps.Copy(env, cfg.CredentialEnv)
+	return env
+}

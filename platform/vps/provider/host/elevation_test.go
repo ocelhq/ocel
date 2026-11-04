@@ -86,7 +86,7 @@ func (c *sudoless) elevated() []string {
 }
 
 func hostFor(conn *sudoless) *Host {
-	return New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return conn, nil }, nil), "shop", Keys{}, nil, front.Proxy{})
+	return New(ssh.NewBox(func(context.Context) (ssh.Conn, error) { return conn, nil }, nil), testAssets, "shop", Keys{}, nil, front.Proxy{})
 }
 
 func TestDescribingAHostNeedsNoPowerToWriteToIt(t *testing.T) {
@@ -128,7 +128,7 @@ func stampedBy(t *testing.T, conn *sudoless, change func(map[string]string)) {
 		t.Fatal(err)
 	}
 	conn.recorded = string(record.Content)
-	written := machine.DigestsOf(append(Items(environment.TierProduction, keys, ssh.AMD64, front.Proxy{}), record))
+	written := machine.DigestsOf(append(Items(testAssets, environment.TierProduction, keys, ssh.AMD64, front.Proxy{}), record))
 	change(written)
 	stamp, err := json.Marshal(machine.Stamp{
 		State:   machine.StateComplete,

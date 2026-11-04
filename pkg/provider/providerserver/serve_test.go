@@ -28,9 +28,26 @@ func TestServeNeedsAConstructor(t *testing.T) {
 	}
 	t.Setenv(localrpc.ClientCertEnvVar, identity.CertificatePEM())
 
-	if err := Serve(Config{Version: "test"}); err == nil {
+	if err := Serve(Config{Version: "test", ExportSpans: exportNoSpans}); err == nil {
 		t.Fatal("Serve() with no constructor returned nil, want a refusal to start")
 	}
+}
+
+func TestServeNeedsASpanExporter(t *testing.T) {
+	identity, err := localrpc.NewIdentity()
+	if err != nil {
+		t.Fatalf("NewIdentity() error = %v", err)
+	}
+	t.Setenv(localrpc.ClientCertEnvVar, identity.CertificatePEM())
+
+	err = Serve(Config{Version: "test", New: func(context.Context, provider.Settings) (provider.Provider, error) { return stubProvider{}, nil }})
+	if err == nil || !strings.Contains(err.Error(), "ExportSpans") {
+		t.Fatalf("Serve() with no span exporter = %v, want a refusal to start that names it", err)
+	}
+}
+
+func exportNoSpans(ctx context.Context, _ string) (context.Context, func(context.Context) error, error) {
+	return ctx, func(context.Context) error { return nil }, nil
 }
 
 func TestServeNeedsTheClientCertificate(t *testing.T) {
@@ -44,7 +61,7 @@ func TestServeNeedsTheClientCertificate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(localrpc.ClientCertEnvVar, tc.cert)
 
-			err := Serve(Config{Version: "test", New: func(context.Context, provider.Settings) (provider.Provider, error) { return nil, nil }})
+			err := Serve(Config{Version: "test", ExportSpans: exportNoSpans, New: func(context.Context, provider.Settings) (provider.Provider, error) { return nil, nil }})
 			if err == nil || !strings.Contains(err.Error(), localrpc.ClientCertEnvVar) {
 				t.Fatalf("Serve() error = %v, want it to name the environment variable the CLI must set", err)
 			}
@@ -180,7 +197,7 @@ func TestServingLeavesTheStandardLibrarysDefaultTransportInPlace(t *testing.T) {
 	})
 	_ = written.Close()
 
-	if err := Serve(Config{Version: "test", New: func(context.Context, provider.Settings) (provider.Provider, error) { return stubProvider{}, nil }}); err != nil {
+	if err := Serve(Config{Version: "test", ExportSpans: exportNoSpans, New: func(context.Context, provider.Settings) (provider.Provider, error) { return stubProvider{}, nil }}); err != nil {
 		t.Fatalf("Serve() = %v", err)
 	}
 	if _, standard := http.DefaultTransport.(*http.Transport); !standard {

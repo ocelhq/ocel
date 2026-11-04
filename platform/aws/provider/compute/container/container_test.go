@@ -11,10 +11,16 @@ import (
 	"testing"
 
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/compute/containerservice"
 	livefile "github.com/ocelhq/ocel/platform/aws/provider/resources/variables/live"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	"github.com/pulumi/pulumi/pkg/v3/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+
 	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -36,9 +42,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/site"
 	"github.com/ocelhq/ocel/platform/aws/provider/tier/containers"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
-	"github.com/pulumi/pulumi/pkg/v3/resource"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 const (
@@ -578,8 +581,8 @@ func TestAContainerReleasesScalableTargetIsTaggedWithTheInstanceCountsItScalesBa
 	rec := runContainerProgram(t, cfg, spec)
 
 	tags := recordedOf(t, rec, "aws:appautoscaling/target:Target")["tags"].ObjectValue()
-	if tags[minInstancesTag].StringValue() != "2" || tags[maxInstancesTag].StringValue() != "6" {
-		t.Errorf("tags = %v, want %s=2 and %s=6, which a rollback reads to scale the release back up once it was scaled to zero", tags, minInstancesTag, maxInstancesTag)
+	if tags[containerservice.MinInstancesTag].StringValue() != "2" || tags[containerservice.MaxInstancesTag].StringValue() != "6" {
+		t.Errorf("tags = %v, want %s=2 and %s=6, which a rollback reads to scale the release back up once it was scaled to zero", tags, containerservice.MinInstancesTag, containerservice.MaxInstancesTag)
 	}
 }
 

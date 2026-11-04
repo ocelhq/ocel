@@ -14,9 +14,9 @@ import (
 	"github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 )
 
-func shapedSet(t *testing.T, tier environment.Tier) *costv1.ResourceSet {
+func inventoriedSet(t *testing.T, tier environment.Tier) *costv1.ResourceSet {
 	t.Helper()
-	shape, err := cloudflare.Shape(pricing.EdgeSite{Slug: "shop", Tier: tier})
+	inventory, err := cloudflare.Inventory(pricing.EdgeSite{Slug: "shop", Tier: tier})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func shapedSet(t *testing.T, tier environment.Tier) *costv1.ResourceSet {
 	tree.AddEdge(pricing.EdgeScopes{
 		Shared:      tree.Scope("", pricing.ScopeShared, string(tier)),
 		Environment: tree.Scope("", pricing.ScopeEnvironment, "prod"),
-	}, shape)
+	}, inventory)
 	set, err := tree.Set("ocel")
 	if err != nil {
 		t.Fatal(err)
@@ -61,10 +61,10 @@ func estimateOfType(t *testing.T, est *costv1.Estimate, set *costv1.ResourceSet,
 	return nil
 }
 
-func TestTheEdgeShapesItsPlanStoreAndEntry(t *testing.T) {
+func TestTheEdgeInventoriesItsPlanStoreAndEntry(t *testing.T) {
 	t.Parallel()
 
-	set := shapedSet(t, environment.TierProduction)
+	set := inventoriedSet(t, environment.TierProduction)
 	counts := map[string]int{}
 	for _, r := range set.GetResources() {
 		counts[r.GetType()]++
@@ -75,16 +75,16 @@ func TestTheEdgeShapesItsPlanStoreAndEntry(t *testing.T) {
 	if counts[cost.TypeAccountSubscription] != 1 || counts[cost.TypeWorkersScript] != 2 || len(counts) != 2 {
 		t.Errorf("counts = %v, want the plan and the store and entry workers, and no bucket", counts)
 	}
-	preview := shapedSet(t, environment.TierPreview)
+	preview := inventoriedSet(t, environment.TierPreview)
 	if n := len(preview.GetResources()); n != len(set.GetResources())+1 {
-		t.Errorf("a preview tier shapes %d resources, want the production set plus the shared preview entry worker", n)
+		t.Errorf("a preview tier inventories %d resources, want the production set plus the shared preview entry worker", n)
 	}
 }
 
 func TestEveryEntryWorkerIsPricedForItsPurgeQueue(t *testing.T) {
 	t.Parallel()
 
-	set := shapedSet(t, environment.TierPreview)
+	set := inventoriedSet(t, environment.TierPreview)
 	est := priced(t, set, costv1.Profile_PROFILE_MODERATE)
 
 	for _, scope := range []string{"environment:prod", "shared:preview"} {
@@ -115,7 +115,7 @@ func TestEveryEntryWorkerIsPricedForItsPurgeQueue(t *testing.T) {
 func TestAModerateMonthStaysInsideThePaidPlansAllowances(t *testing.T) {
 	t.Parallel()
 
-	set := shapedSet(t, environment.TierProduction)
+	set := inventoriedSet(t, environment.TierProduction)
 	est := priced(t, set, costv1.Profile_PROFILE_MODERATE)
 
 	plan := estimateOfType(t, est, set, cost.TypeAccountSubscription, "shared:production")
@@ -133,7 +133,7 @@ func TestAModerateMonthStaysInsideThePaidPlansAllowances(t *testing.T) {
 func TestAHeavyMonthBillsRequestsPastTheAllowance(t *testing.T) {
 	t.Parallel()
 
-	set := shapedSet(t, environment.TierProduction)
+	set := inventoriedSet(t, environment.TierProduction)
 	est := priced(t, set, costv1.Profile_PROFILE_HEAVY)
 
 	entry := estimateOfType(t, est, set, cost.TypeWorkersScript, "environment:prod")
@@ -151,7 +151,7 @@ func TestAHeavyMonthBillsRequestsPastTheAllowance(t *testing.T) {
 func TestTheIncludedRequestsAreSpentOnceAcrossEveryWorker(t *testing.T) {
 	t.Parallel()
 
-	set := shapedSet(t, environment.TierProduction)
+	set := inventoriedSet(t, environment.TierProduction)
 	est := priced(t, set, costv1.Profile_PROFILE_HEAVY)
 
 	var billed int

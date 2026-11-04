@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider/transform"
 	"github.com/ocelhq/ocel/pkg/provider/transform/transformtest"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/albresources"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/surface"
 )
 
@@ -30,13 +30,13 @@ func TestATransformPatchesEveryResourceTheALBEdgeConstructs(t *testing.T) {
 	root := transformtest.Root(t, map[string]string{"conformance.transform.ts": ownedConformanceModule})
 	pass := transformPass(root, []string{"./conformance.transform.ts"})
 	constructed := map[string][]string{
-		alb.TransformKindEdge:         alb.EdgeSurfaces,
-		alb.TransformKindLoadBalancer: alb.LoadBalancerSurfaces,
+		albresources.TransformKindEdge:         albresources.EdgeSurfaces,
+		albresources.TransformKindLoadBalancer: albresources.LoadBalancerSurfaces,
 	}
 
 	req := surface.Request(environment.TierProduction, "", []transform.Resource{
-		{Type: alb.TransformKindEdge, Name: "web", App: "web"},
-		{Type: alb.TransformKindLoadBalancer, Name: "production"},
+		{Type: albresources.TransformKindEdge, Name: "web", App: "web"},
+		{Type: albresources.TransformKindLoadBalancer, Name: "production"},
 	})
 	results, err := pass.Evaluate(t.Context(), req)
 	if err != nil {

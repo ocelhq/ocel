@@ -299,7 +299,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err != nil {
 		return err
 	}
-	front, err := ensureDomainName(ctx, c, binding)
+	front, err := ensureDomainName(ctx, c, binding, s.projectTags())
 	if err != nil {
 		return err
 	}
@@ -323,7 +323,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	return nil
 }
 
-func ensureDomainName(ctx context.Context, c Clients, binding edge.DomainBinding) (string, error) {
+func ensureDomainName(ctx context.Context, c Clients, binding edge.DomainBinding, tags map[string]string) (string, error) {
 	current, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
 		DomainName: aws.String(binding.Hostname),
 	})
@@ -337,6 +337,7 @@ func ensureDomainName(ctx context.Context, c Clients, binding edge.DomainBinding
 		DomainName:             aws.String(binding.Hostname),
 		RegionalCertificateArn: aws.String(binding.Certificate),
 		SecurityPolicy:         agtypes.SecurityPolicyTls12,
+		Tags:                   tags,
 		EndpointConfiguration: &agtypes.EndpointConfiguration{
 			Types: []agtypes.EndpointType{agtypes.EndpointTypeRegional},
 		},

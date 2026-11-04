@@ -173,8 +173,37 @@ func TestNothingAContainerIsEntitledToIsTheKeyTheRecordsOrTheTierStateItself(t *
 func TestEveryContainerThisPackageRunsIsBoundByTheIsolationRules(t *testing.T) {
 	t.Parallel()
 
-	rendered(t, `[]string{"docker", "run"`, []string{"ContainerRun", "VolumeCopy", "placementRun", "TokenArgv", "Run"},
+	rendered(t, `[]string{"docker", "run"`, []string{"ContainerRun", "VolumeCopy", "placementRun", "TokenArgv", "Run", "jobsDaemonRun"},
 		"a container run built somewhere this bench does not read is bound by none of the rules in this file")
+}
+
+func TestTheJobsDaemonIsPrivilegedOnlyInsideTheJobsSliceAndMountsNothingButItsSocketDirectory(t *testing.T) {
+	t.Parallel()
+
+	command := shell.Words(jobsDaemonRun())
+	for _, refused := range []string{"/var/run/docker.sock", "source=/run/docker.sock", shell.Quote("--pid"), "--pid=", "--volume", "--network"} {
+		if strings.Contains(command, refused) {
+			t.Errorf("the jobs' daemon runs %q, and names %s", command, refused)
+		}
+	}
+	if !strings.Contains(command, shell.Quote("--cgroup-parent="+boxapi.RunnerSlice)) {
+		t.Errorf("the jobs' daemon runs %q outside %s: privileged, it is the host, and only the slice keeps what jobs build within their cap", command, boxapi.RunnerSlice)
+	}
+	var bound []string
+	for _, token := range strings.Fields(command) {
+		fields := strings.Split(strings.Trim(token, "'"), ",")
+		if !slices.Contains(fields, "type=bind") {
+			continue
+		}
+		for _, field := range fields {
+			if from, cut := strings.CutPrefix(field, "source="); cut {
+				bound = append(bound, from)
+			}
+		}
+	}
+	if want := []string{boxapi.RunnerJobsDaemonDir}; !slices.Equal(bound, want) {
+		t.Errorf("the jobs' daemon runs %q and binds %q, want %q alone: nothing else under %s or %s is its business", command, bound, want, boxapi.TierRoot, boxapi.StateRoot)
+	}
 }
 
 func TestAPlacementContainerIsBoundByTheIsolationRulesAndMountsNothingButItsDirectoryAndTheSwitchboardBinary(t *testing.T) {

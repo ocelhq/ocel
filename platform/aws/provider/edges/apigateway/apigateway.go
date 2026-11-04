@@ -127,8 +127,8 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 			return Clients{}, err
 		}
 		return Clients{
-			APIGateway: apigateway.NewFromConfig(awscfg),
-			Routing:    apigatewayv2.NewFromConfig(awscfg),
+			APIGateway: newAPIGatewayCalls(apigateway.NewFromConfig(awscfg)),
+			Routing:    newRoutingCalls(apigatewayv2.NewFromConfig(awscfg)),
 			Tagging:    resourcegroupstaggingapi.NewFromConfig(awscfg),
 			Dynamo:     dynamodb.NewFromConfig(awscfg),
 			CFN:        cloudformation.NewFromConfig(awscfg),

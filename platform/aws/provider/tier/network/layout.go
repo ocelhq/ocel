@@ -4,13 +4,13 @@ import (
 	"hash/fnv"
 	"net/netip"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const (
-	Zones = 2
-
 	defaultSecondOctetFrom = 16
 	defaultBlockPairs      = 120
 	exampleCIDR            = "10.64.0.0/16"
@@ -61,7 +61,7 @@ func NewLayout(cidr string) (Layout, error) {
 	if block.Bits() < widestBits || block.Bits() > narrowestBits {
 		return Layout{}, refusal.Refuse(refusal.CodeInvalid,
 			"the network's block %s is a /%d, and ocel splits a VPC between /%d and /%d into the six subnets it places across %d zones",
-			cidr, block.Bits(), widestBits, narrowestBits, Zones)
+			cidr, block.Bits(), widestBits, narrowestBits, sharedparts.NetworkZones)
 	}
 	if !isPrivate(block) {
 		return Layout{}, refusal.Refuse(refusal.CodeInvalid,
@@ -70,9 +70,9 @@ func NewLayout(cidr string) (Layout, error) {
 	slots := carve(block)
 	return Layout{
 		CIDR:     cidr,
-		Public:   slots[0:Zones],
-		Private:  slots[Zones : 2*Zones],
-		Isolated: slots[2*Zones : 3*Zones],
+		Public:   slots[0:sharedparts.NetworkZones],
+		Private:  slots[sharedparts.NetworkZones : 2*sharedparts.NetworkZones],
+		Isolated: slots[2*sharedparts.NetworkZones : 3*sharedparts.NetworkZones],
 	}, nil
 }
 

@@ -32,7 +32,7 @@ type Part struct {
 	APIs         []string
 	Retires      bool
 	Resources    []provider.PhysicalResource
-	Shape        []pricing.Shaped
+	Inventory    []pricing.Resource
 	Removals     []provider.Change
 	Make         func(ctx context.Context) error
 	Replace      func(ctx context.Context) error
@@ -135,7 +135,7 @@ func (b Engine) describePart(ctx context.Context, tier environment.Tier, want Pa
 		Digest:              recorded.Digest,
 		Resources:           want.Resources,
 		RetiresWithLastUser: want.Retires,
-		Shape:               &provider.PartShape{Vendor: string(gcloud.Vendor), Region: b.Clients.Region, Resources: want.Shape},
+		Inventory:           &provider.PartInventory{Vendor: string(gcloud.Vendor), Region: b.Clients.Region, Resources: want.Inventory},
 	}
 	if want.Users != nil {
 		if described.UsedBy, err = want.Users(ctx); err != nil {

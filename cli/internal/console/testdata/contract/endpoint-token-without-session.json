@@ -1,0 +1,27 @@
+{
+  "name": "endpoint-token-without-session",
+  "request": {
+    "method": "POST",
+    "path": "/api/connect/console.v1.ConsoleService/IssueEndpointToken",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "organizationId": "{{organization.id}}",
+      "endpointId": "ocel-cloud",
+      "scopes": [
+        "SCOPE_APPS_READ"
+      ]
+    }
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "code": "unauthenticated",
+      "message": "sign in to the console first"
+    }
+  },
+  "dynamic": [
+    "$.message"
+  ]
+}

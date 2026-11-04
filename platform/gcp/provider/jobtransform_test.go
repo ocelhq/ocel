@@ -121,7 +121,7 @@ func TestATaskThatDropsItsCronForgetsWhatItsJobPatchReached(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !slices.ContainsFunc(slices.Collect(maps.Keys(p.records.(*fake.KeyValues).Snapshot())), func(key string) bool {
+	if !slices.ContainsFunc(slices.Collect(maps.Keys(p.Records.(*fake.KeyValues).Snapshot())), func(key string) bool {
 		return strings.Contains(key, "patches") && strings.Contains(key, "job")
 	}) {
 		t.Fatal("nothing recorded what the job's patch reached")
@@ -130,7 +130,7 @@ func TestATaskThatDropsItsCronForgetsWhatItsJobPatchReached(t *testing.T) {
 	pass.patches = nil
 	provisionTopicStack(t, p, cronTaskStack(""))
 
-	for key := range p.records.(*fake.KeyValues).Snapshot() {
+	for key := range p.Records.(*fake.KeyValues).Snapshot() {
 		if strings.Contains(key, "patches") && strings.Contains(key, "job") {
 			t.Errorf("%s is left behind, want what the job's patch reached forgotten with the job", key)
 		}

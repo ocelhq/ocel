@@ -128,7 +128,7 @@ func (s kvStore) instance(project, network string, labels map[string]string) *gc
 	}
 }
 
-func (s kvStore) shapeProperties(region string, instance *gcloud.MemorystoreInstance) map[string]any {
+func (s kvStore) pricedProperties(region string, instance *gcloud.MemorystoreInstance) map[string]any {
 	return map[string]any{
 		"location":           region,
 		"mode":               clusterModeOff,
@@ -541,9 +541,15 @@ func New(openClients func(ctx context.Context) (*gcloud.Clients, error), store r
 	return &KV{openClients: openClients, records: store, skipChecks: skipChecks}
 }
 
+var bindingTypes = []provider.BindingType{provider.BindingKV}
+
+func (p *KV) Listing() component.Component {
+	return component.Component{Types: bindingTypes, ListResources: p.ListResources}
+}
+
 func (p *KV) Component() component.Component {
 	return component.Component{
-		Types:         []provider.BindingType{provider.BindingKV},
+		Types:         bindingTypes,
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
 		Egress:        true,
@@ -552,29 +558,29 @@ func (p *KV) Component() component.Component {
 			_, err := readKVStore(resource)
 			return err
 		},
-		Shape:      shapeKV,
+		Inventory:  inventoryKV,
 		Transforms: map[provider.BindingType]*component.Transform{provider.BindingKV: transformTarget()},
 	}
 }
 
-func shapeKV(shape component.Shape, declared []provider.Resource) error {
-	tier := shape.Request.Deploy.Tier
+func inventoryKV(inventory component.Inventory, declared []provider.Resource) error {
+	tier := inventory.Request.Deploy.Tier
 	for _, resource := range declared {
 		store, err := readKVStoreOn(resource, tier)
 		if err != nil {
 			return err
 		}
-		instance, err := shape.Names.KVInstance(shape.Request.Deploy.Slug, shape.Request.Deploy.Env, resource.Name)
+		instance, err := inventory.Names.KVInstance(inventory.Request.Deploy.Slug, inventory.Request.Deploy.Env, resource.Name)
 		if err != nil {
 			return err
 		}
-		result := shape.Transforms.For(transformKind, resource.Name)
+		result := inventory.Transforms.For(transformKind, resource.Name)
 		known, unknown := storeSurface.SplitOutputs(result.Patches[transformSurface])
-		patched, err := storeSurface.Patch("kv "+resource.Name, *store.instance(shape.Names.Project(), shape.Names.NetworkPath(tier), nil), known, nil, surface.Recorded{})
+		patched, err := storeSurface.Patch("kv "+resource.Name, *store.instance(inventory.Names.Project(), inventory.Names.NetworkPath(tier), nil), known, nil, surface.Recorded{})
 		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.MemorystoreInstanceType, instance, shape.Region, store.shapeProperties(shape.Region, &patched.Desired),
+		inventory.Tree.Add(inventory.Environment, inventory.Vendor, cost.MemorystoreInstanceType, instance, inventory.Region, store.pricedProperties(inventory.Region, &patched.Desired),
 			surface.ListPriced(unknown, pricedPaths)...)
 	}
 	return nil

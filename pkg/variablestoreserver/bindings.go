@@ -57,7 +57,7 @@ func (h *Service) SetBinding(ctx context.Context, req *variablestorev1.SetBindin
 		return nil, bindingsError(err)
 	}
 
-	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (h *Service) RemoveBinding(ctx context.Context, req *variablestorev1.Remove
 	if err := variablestore.ValidateBindingName(req.GetEnvironment(), req.GetName()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (h *Service) ListBindings(ctx context.Context, req *variablestorev1.ListBin
 	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
-	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}

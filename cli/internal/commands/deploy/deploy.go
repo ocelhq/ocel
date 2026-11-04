@@ -48,6 +48,7 @@ func NewCommand(dependencies deploy.Dependencies) *cobra.Command {
 	cmd.Flags().BoolVar(&opts.Prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	commands.AddDryFlag(cmd, &opts.Dry, dryFlagUsage)
 	commands.AddNoWaitFlag(cmd, &opts.NoWait)
+	commands.AddRemoteFlag(cmd, &opts.Remote)
 
 	return commands.DeclareRunEvents(commands.DeclareMutating(cmd))
 }

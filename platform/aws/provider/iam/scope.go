@@ -26,6 +26,8 @@ type Scope struct {
 	BootstrapStacks     []string
 	BootstrapChangeSets []string
 	BootstrapRoles      []string
+	EdgeInvokeRole      string
+	ArtifactObjects     string
 	PartRoles           []string
 	DeployPolicies      string
 
@@ -184,6 +186,10 @@ func (s Scope) TaggedOnCreateForItsTier() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:RequestTag/" + naming.EnvTierTagKey: string(s.Tier)}}
 }
 
+func (s Scope) TaggedForItsTierWhereItExists() map[string]any {
+	return map[string]any{"StringEqualsIfExists": map[string]any{"aws:ResourceTag/" + naming.EnvTierTagKey: string(s.Tier)}}
+}
+
 func (s Scope) TaggedForItsTier() map[string]any {
 	return map[string]any{"StringEquals": map[string]any{"aws:ResourceTag/" + naming.EnvTierTagKey: string(s.Tier)}}
 }
@@ -230,7 +236,7 @@ func AttachedPolicyIsAServiceRole() map[string]any {
 
 func AttachedPolicyIsAServiceRoleOrInCallerAccount() map[string]any {
 	return map[string]any{
-		"ArnLike": map[string]any{"iam:PolicyARN": append(slices.Clone(serviceRolePolicyARNs), CallerAccountPolicyARNs)},
+		"StringLike": map[string]any{"iam:PolicyARN": append(slices.Clone(serviceRolePolicyARNs), CallerAccountPolicyARNs)},
 	}
 }
 

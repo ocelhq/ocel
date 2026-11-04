@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/environment"
+	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/boxapi"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -25,6 +26,7 @@ import (
 
 type Host struct {
 	*ssh.Box
+	assets      Assets
 	deploy      Keys
 	pins        *certs.Pins
 	proxyOption front.Proxy
@@ -45,8 +47,8 @@ type Host struct {
 	resources  *container.Containers
 }
 
-func New(box *ssh.Box, project string, deploy Keys, pins []boxapi.Pin, fronting front.Proxy) *Host {
-	h := &Host{Box: box, engine: docker.NewEngine(box), deploy: deploy, pins: certs.NewPins(box, pins), proxyOption: fronting}
+func New(box *ssh.Box, assets Assets, project string, deploy Keys, pins []boxapi.Pin, fronting front.Proxy) *Host {
+	h := &Host{Box: box, assets: assets, engine: docker.NewEngine(box), deploy: deploy, pins: certs.NewPins(box, pins), proxyOption: fronting}
 	h.front = fronting.Front().Open(frontBox{h})
 	h.routing = routing.NewTable(box, h.front, project, h.pins.Verified)
 	h.tunnel = tunnel.New(box, h.routing)
@@ -61,6 +63,24 @@ func (h *Host) Pins() *certs.Pins { return h.pins }
 func (h *Host) Install(ctx context.Context, item machine.Item) error {
 	_, err := h.Run(ctx, ssh.Root, "write "+item.ID(), item.Command(), item.Stdin())
 	return err
+}
+
+func (h *Host) InstallChanged(ctx context.Context, items []machine.Item, current func(machine.Item) bool, progress progress.Log) error {
+	for _, item := range items {
+		if current(item) {
+			progress.Debug(machine.Capitalized(item.Phrase()) + " is " + machine.ReasonCurrent)
+			continue
+		}
+		if err := h.Install(ctx, item); err != nil {
+			return err
+		}
+		progress.Say("Installed " + item.Phrase())
+	}
+	return nil
+}
+
+func CurrentIn(observed map[string]string) func(machine.Item) bool {
+	return func(item machine.Item) bool { return observed[item.ID()] == item.Digest() }
 }
 
 func (h *Host) remove(ctx context.Context, taken machine.Removal) (bool, error) {
@@ -99,6 +119,7 @@ func (h *Host) remove(ctx context.Context, taken machine.Removal) (bool, error) 
 }
 
 type Reading struct {
+	Assets   Assets
 	Tier     environment.Tier
 	Present  bool
 	Keys     []byte
@@ -210,7 +231,7 @@ func (h *Host) observe(ctx context.Context, tier environment.Tier, keys []byte, 
 }
 
 func (h *Host) surveyed(ctx context.Context, tier environment.Tier, keys []byte, arch string, as ssh.Acting) (Reading, error) {
-	surveying := Items(tier, keys, arch, h.proxyOption)
+	surveying := Items(h.assets, tier, keys, arch, h.proxyOption)
 	if h.proxyOption.Adopted() {
 		surveying = append(surveying, containerItem(frontProxy(), ""))
 	}
@@ -222,7 +243,7 @@ func (h *Host) surveyed(ctx context.Context, tier environment.Tier, keys []byte,
 	if err != nil {
 		return Reading{}, err
 	}
-	return Reading{Tier: tier, Keys: keys, Arch: arch, Seal: seal, Observed: observed, Front: h.proxyOption, Engine: readEngine(rendered)}, nil
+	return Reading{Assets: h.assets, Tier: tier, Keys: keys, Arch: arch, Seal: seal, Observed: observed, Front: h.proxyOption, Engine: readEngine(rendered)}, nil
 }
 
 func (h *Host) read(ctx context.Context, tier environment.Tier, keys []byte, as ssh.Acting) (Reading, error) {

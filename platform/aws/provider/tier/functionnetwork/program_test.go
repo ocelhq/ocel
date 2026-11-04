@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/platform/aws/provider/tier/sharedparts"
+
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -32,7 +34,7 @@ func runFunctionNetwork(t *testing.T, namespace string, tier environment.Tier) *
 	t.Helper()
 	cloud := &inputRecorder{}
 	program := NewProgram(namespace, tier, tierNetwork, component.Patches{})
-	if err := pulumi.RunErr(program.Run, pulumi.WithMocks(Slug, string(tier)+"--infra", cloud)); err != nil {
+	if err := pulumi.RunErr(program.Run, pulumi.WithMocks(sharedparts.FunctionNetworkSlug, string(tier)+"--infra", cloud)); err != nil {
 		t.Fatalf("run the function network program: %v", err)
 	}
 	return cloud
@@ -173,7 +175,7 @@ func TestTheFunctionNetworkProgramRefusesANetworkWithTooFewPublicSubnetsForItsNA
 	short := tierNetwork
 	short.Public = short.Public[:1]
 	program := NewProgram(testNamespace, environment.TierProduction, short, component.Patches{})
-	if err := pulumi.RunErr(program.Run, pulumi.WithMocks(Slug, "production--infra", &inputRecorder{})); err == nil {
+	if err := pulumi.RunErr(program.Run, pulumi.WithMocks(sharedparts.FunctionNetworkSlug, "production--infra", &inputRecorder{})); err == nil {
 		t.Fatal("run = nil, want a production function network with one public subnet for two NAT gateways refused")
 	}
 }

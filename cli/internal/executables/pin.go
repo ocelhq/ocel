@@ -59,10 +59,17 @@ func Pin(ctx context.Context, projectDir string) (lockfile.Lock, error) {
 }
 
 func ensurePinned(ctx context.Context, store *Store, kind Kind, projectDir, name string, platform Platform, pinning Pinning) (string, error) {
-	if store.HasOverride() {
-		return store.EnsureBinary(ctx, kind, name, platform, "")
+	if err := refuseInvalidName(name); err != nil {
+		return "", err
 	}
+	if path, ok := store.overridden(kind, name, platform); ok {
+		return path, nil
+	}
+	path, err := ensureFetched(ctx, store, kind, projectDir, name, platform, pinning)
+	return path, store.explainUnshadowed(kind, name, platform, err)
+}
 
+func ensureFetched(ctx context.Context, store *Store, kind Kind, projectDir, name string, platform Platform, pinning Pinning) (string, error) {
 	lock, err := ensureLock(ctx, store, projectDir, pinning)
 	if err != nil {
 		return "", err

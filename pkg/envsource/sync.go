@@ -126,7 +126,7 @@ func (s *Sync) CopyScheduled(ctx context.Context) error {
 			break
 		}
 		share, cancelShare := context.WithTimeout(ctx, left/time.Duration(len(due)-i))
-		_, _, err := s.copyGroup(share, key, groups[key], nil)
+		_, _, err := s.copyGroup(share, key, groups[key], "", nil)
 		cancelShare()
 		if err != nil {
 			failed = append(failed, err)
@@ -136,15 +136,15 @@ func (s *Sync) CopyScheduled(ctx context.Context) error {
 }
 
 func (s *Sync) CopyProject(ctx context.Context, registration Registration) (CopyResult, error) {
-	return s.CopyProjectFrom(ctx, registration, nil)
+	return s.CopyProjectFrom(ctx, registration, "", nil)
 }
 
-func (s *Sync) CopyProjectFrom(ctx context.Context, registration Registration, source Source) (CopyResult, error) {
+func (s *Sync) CopyProjectFrom(ctx context.Context, registration Registration, environment string, source Source) (CopyResult, error) {
 	key, err := s.keyOf(ctx, registration)
 	if err != nil {
 		return CopyResult{}, err
 	}
-	results, failure, err := s.copyGroup(ctx, key, []Registration{registration}, source)
+	results, failure, err := s.copyGroup(ctx, key, []Registration{registration}, environment, source)
 	if failure != nil {
 		return CopyResult{}, failure
 	}
@@ -173,9 +173,9 @@ func (s *Sync) keyOf(ctx context.Context, registration Registration) (string, er
 	return key, nil
 }
 
-func (s *Sync) copyGroup(ctx context.Context, key string, group []Registration, source Source) ([]CopyResult, error, error) {
+func (s *Sync) copyGroup(ctx context.Context, key string, group []Registration, environment string, source Source) ([]CopyResult, error, error) {
 	attemptedAt := s.now()
-	results, urls, failure := s.readAndCopy(ctx, key, group, source, attemptedAt)
+	results, urls, failure := s.readAndCopy(ctx, key, group, environment, source, attemptedAt)
 	if failure != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		failure = fmt.Errorf("ran out of its share of the sync's time, and waits for the next sync so the env sources after it get theirs: %w", failure)
 	}
@@ -203,7 +203,7 @@ func (s *Sync) copyGroup(ctx context.Context, key string, group []Registration, 
 	return results, failure, err
 }
 
-func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration, source Source, readAt time.Time) ([]CopyResult, map[string]string, error) {
+func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration, environment string, source Source, readAt time.Time) ([]CopyResult, map[string]string, error) {
 	if source == nil {
 		opened, err := s.open(ctx, key, group[0])
 		if err != nil {
@@ -245,7 +245,7 @@ func (s *Sync) readAndCopy(ctx context.Context, key string, group []Registration
 		if !current[i] {
 			continue
 		}
-		result, err := CopyValues(ctx, s.Store, s.scope(registration), listings[i], digestKey, source.ID(), readAt, read, registration.Folders, registration.Credentials())
+		result, err := CopyValues(ctx, s.Store, s.scope(registration), environment, listings[i], digestKey, source.ID(), readAt, read, registration.Folders, registration.Credentials())
 		if len(result.versions) > 0 || err != nil {
 			from := variablestore.Provenance{EnvSource: source.ID(), ReadAt: readAt}
 			err = errors.Join(err, s.forgetCopiesIntoRemoved(ctx, s.scope(registration), from, result))
@@ -272,7 +272,7 @@ func (s *Sync) forgetCopiesIntoRemoved(ctx context.Context, scope variablestore.
 		return err
 	}
 	for _, at := range copied.Present {
-		if err := s.Store.ForgetFromEnvSource(ctx, scope, variablestore.Coordinate{Cell: at}, from, copied.versions[at]); err != nil {
+		if err := s.Store.ForgetFromEnvSource(ctx, scope, variablestore.Coordinate{Cell: at, Environment: copied.environment}, from, copied.versions[at]); err != nil {
 			return fmt.Errorf("forget what this sync copied into %s after its removal: %w", scope.Project, err)
 		}
 	}

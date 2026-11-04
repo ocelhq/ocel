@@ -7,7 +7,9 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
+	"github.com/ocelhq/ocel/pkg/endpoint"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/account"
@@ -85,7 +88,7 @@ func TestTheFunctionReadsItsKeyParameterAndNothingElseInTheStore(t *testing.T) {
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePayload, payloads.Of([]byte("connector")))
-	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{}`)}, sealingKeys)
+	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{}`)}, sealingKeys, reservedConcurrency)
 	if err != nil {
 		t.Fatalf("templateFor: %v", err)
 	}
@@ -125,7 +128,7 @@ func TestTheConnectorIsWokenOnceAMinuteToBeat(t *testing.T) {
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePayload, payloads.Of([]byte("connector")))
-	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{}`)}, sealingKeys)
+	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{}`)}, sealingKeys, reservedConcurrency)
 	if err != nil {
 		t.Fatalf("templateFor: %v", err)
 	}
@@ -163,7 +166,7 @@ func TestAnInstallNamingNoPublicKeyIsRefused(t *testing.T) {
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePayload, payloads.Of([]byte("connector")))
-	if _, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", Config: []byte(`{}`)}, sealingKeys); err == nil {
+	if _, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", Config: []byte(`{}`)}, sealingKeys, reservedConcurrency); err == nil {
 		t.Error("a template with no public key rendered, and the console refuses every heartbeat from a connector that published none")
 	}
 }
@@ -187,7 +190,7 @@ func TestTheStackIsSeparateFromEveryBootstrapStack(t *testing.T) {
 	}
 }
 
-func TestTheTierGrantsNothingADeployWouldNeed(t *testing.T) {
+func TestTheConnectorsOwnPolicyGrantsItsVariablesAndLeavesProvisioningToItsControlPolicies(t *testing.T) {
 	t.Parallel()
 
 	granted := map[string]bool{}
@@ -209,7 +212,7 @@ func TestTheTierGrantsNothingADeployWouldNeed(t *testing.T) {
 		"dynamodb:CreateTable",
 	} {
 		if granted[action] {
-			t.Errorf("the connector credential grants %s, and a connector reads and writes variables rather than deploying", action)
+			t.Errorf("the connector's own policy grants %s; what the connector's control calls need is granted by the control policies it is installed with, scoped as the deploy credential scopes it", action)
 		}
 	}
 	for _, action := range []string{
@@ -231,7 +234,7 @@ func TestTheTemplateIncludesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePayload, payloads.Of([]byte("connector")))
-	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, sealingKeys)
+	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, sealingKeys, reservedConcurrency)
 	if err != nil {
 		t.Fatalf("templateFor: %v", err)
 	}
@@ -286,8 +289,8 @@ func TestTheTemplateIncludesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.
 		t.Errorf("the function runs on %v, want %s alone", function["Architectures"], Arch)
 	}
 	env, _ := function["Environment"].(map[string]any)["Variables"].(map[string]any)
-	if env["OCEL_CONNECTOR_CONFIG_JSON"] != `{"console":"https://console.example.com"}` {
-		t.Errorf("the function has %v as its config, and a function has no filesystem to read one off", env["OCEL_CONNECTOR_CONFIG_JSON"])
+	if env[endpoint.ConfigEnvVar] != `{"console":"https://console.example.com"}` {
+		t.Errorf("the function has %v as its config, and a function has no filesystem to read one off", env[endpoint.ConfigEnvVar])
 	}
 
 	if got, _ := function["ReservedConcurrentExecutions"].(float64); int(got) != reservedConcurrency || reservedConcurrency <= 0 {
@@ -307,7 +310,7 @@ func TestTheKeyGrantNamesTheKeysThisNamespaceSealedUnderAndNoOther(t *testing.T)
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePayload, payloads.Of([]byte("connector")))
-	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, sealingKeys)
+	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, sealingKeys, reservedConcurrency)
 	if err != nil {
 		t.Fatalf("templateFor: %v", err)
 	}
@@ -357,7 +360,7 @@ func TestATemplateNamingNoKeyIsRefused(t *testing.T) {
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePayload, payloads.Of([]byte("connector")))
-	if _, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, nil); err == nil {
+	if _, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, nil, reservedConcurrency); err == nil {
 		t.Error("a template naming no key rendered, and an empty Resources list is a policy CloudFormation refuses or a grant that reaches nothing")
 	}
 }
@@ -429,7 +432,7 @@ func mapKeys[V any](entries map[string]V) func(func(string) bool) {
 func TestReplacingTheCodeBucketIsRefused(t *testing.T) {
 	t.Parallel()
 
-	err := reviewing(defaultNamespace, nil)(StackName(defaultNamespace), []cfntypes.ResourceChange{{
+	err := reviewing(nil)(StackName(defaultNamespace), []cfntypes.ResourceChange{{
 		LogicalResourceId: aws.String("CodeBucket"),
 		ResourceType:      aws.String("AWS::S3::Bucket"),
 		Action:            cfntypes.ChangeActionModify,
@@ -446,7 +449,7 @@ func TestReplacingTheCodeBucketIsRefused(t *testing.T) {
 func TestAnInPlaceUpdateOfTheFunctionPasses(t *testing.T) {
 	t.Parallel()
 
-	err := reviewing(defaultNamespace, nil)(StackName(defaultNamespace), []cfntypes.ResourceChange{{
+	err := reviewing(nil)(StackName(defaultNamespace), []cfntypes.ResourceChange{{
 		LogicalResourceId: aws.String("Function"),
 		ResourceType:      aws.String("AWS::Lambda::Function"),
 		Action:            cfntypes.ChangeActionModify,
@@ -454,5 +457,39 @@ func TestAnInPlaceUpdateOfTheFunctionPasses(t *testing.T) {
 	}})
 	if err != nil {
 		t.Fatalf("reviewing() = %v, want a new connector release written in place", err)
+	}
+}
+
+func TestTheRoleTheConnectorRunsUnderHoldsEveryControlPolicyItIsInstalledWith(t *testing.T) {
+	t.Parallel()
+
+	at := payloads.At("staged-bucket", codePayload, payloads.Of([]byte("connector")))
+	policies := []iam.ManagedPolicy{
+		{PolicyName: "ocel-connector-1", PolicyDocument: iam.Document([]iam.Statement{{Actions: []string{"logs:FilterLogEvents"}, Resources: []string{"*"}}})},
+		{PolicyName: "ocel-connector-2", PolicyDocument: iam.Document([]iam.Statement{{Actions: []string{"ecs:UpdateService"}, Resources: []string{"*"}}})},
+	}
+	rendered, err := templateFor(defaultNamespace, at, Bundle{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{}`), Policies: policies}, sealingKeys, reservedConcurrency)
+	if err != nil {
+		t.Fatalf("templateFor: %v", err)
+	}
+	var read struct {
+		Resources map[string]struct {
+			Type       string         `json:"Type"`
+			Properties map[string]any `json:"Properties"`
+		} `json:"Resources"`
+	}
+	if err := json.Unmarshal([]byte(rendered), &read); err != nil {
+		t.Fatal(err)
+	}
+	attached, _ := read.Resources["ConnectorRole"].Properties["ManagedPolicyArns"].([]any)
+	for i, policy := range policies {
+		id := "ConnectorPolicy" + strconv.Itoa(i+1)
+		managed, present := read.Resources[id]
+		if !present || managed.Type != "AWS::IAM::ManagedPolicy" || managed.Properties["ManagedPolicyName"] != policy.PolicyName {
+			t.Errorf("the template renders %s as %+v, want the managed policy %s", id, managed, policy.PolicyName)
+		}
+		if !slices.ContainsFunc(attached, func(arn any) bool { return reflect.DeepEqual(arn, map[string]any{"Ref": id}) }) {
+			t.Errorf("the connector role attaches %v, want %s among them", attached, id)
+		}
 	}
 }

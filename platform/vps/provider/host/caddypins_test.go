@@ -40,7 +40,7 @@ func projectBox(t *testing.T, state boxapi.RoutingTable, project string, pins []
 		}
 		return serves(command)
 	}
-	return rig, New(ssh.NewBox(rig.dial, nil), project, Keys{}, pins, front.Proxy{})
+	return rig, New(ssh.NewBox(rig.dial, nil), testAssets, project, Keys{}, pins, front.Proxy{})
 }
 
 func recordedPins(t *testing.T, rig *claimBench) []boxapi.Pin {
@@ -91,7 +91,7 @@ func pinning(t *testing.T) (*claimBench, *Host) {
 		}
 		return serves(command)
 	}
-	return rig, New(ssh.NewBox(rig.dial, nil), "shop", Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, front.Proxy{})
+	return rig, New(ssh.NewBox(rig.dial, nil), testAssets, "shop", Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, front.Proxy{})
 }
 
 func claiming(t *testing.T, pins []boxapi.Pin, files map[string][]byte) error {
@@ -189,7 +189,7 @@ func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 		}
 		return serves(command)
 	}
-	h := New(ssh.NewBox(rig.dial, nil), "shop", Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, front.Proxy{})
+	h := New(ssh.NewBox(rig.dial, nil), testAssets, "shop", Keys{}, []boxapi.Pin{{Hostname: wildcard, Path: at}}, front.Proxy{})
 
 	ctx := context.Background()
 	for _, hostname := range []string{claimed, "blog.example.com", "www.example.com"} {
@@ -411,7 +411,7 @@ func previewEntryShared(t *testing.T) (*claimBench, *Host, *Host) {
 	if err := shop.routing.InstallPreviewEntry(ctx, previewBase); err != nil {
 		t.Fatalf("InstallPreviewEntry() = %v", err)
 	}
-	blog := New(ssh.NewBox(rig.dial, nil), "blog", Keys{}, nil, front.Proxy{})
+	blog := New(ssh.NewBox(rig.dial, nil), testAssets, "blog", Keys{}, nil, front.Proxy{})
 	if err := blog.routing.ClaimHosts(ctx, []boxapi.Claim{
 		{Hostname: "pr-1." + previewBase, Owner: boxapi.Surface("blog", "preview"), Pointer: "@pr-1"},
 	}); err != nil {

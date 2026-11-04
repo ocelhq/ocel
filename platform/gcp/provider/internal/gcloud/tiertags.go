@@ -70,7 +70,7 @@ func (c *Clients) openTagService(cache *Memo[*crm.Service], endpoint string) (*c
 		if !c.Emulated() {
 			located = append(located, option.WithEndpoint(endpoint))
 		}
-		return ports.NewRESTService(context.Background(), crm.NewService, c.TierTagEndpoint, c.QuotaProject(), located...)
+		return ports.NewRESTService(context.Background(), c.Credentials, crm.NewService, c.TierTagEndpoint, c.QuotaProject(), located...)
 	})
 }
 

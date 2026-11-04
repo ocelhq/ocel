@@ -216,6 +216,13 @@ func TestTheRemovedLogFormatFlagIsRejected(t *testing.T) {
 	}
 }
 
+func TestTheCLIHasNoJobAgentCommandHiddenOrNot(t *testing.T) {
+	ocel := newCommand()
+	if found, _, err := ocel.root.Find([]string{"job-agent"}); err == nil && found != ocel.root {
+		t.Errorf("ocel has a %q command; the job agent is the ocel-job binary", found.Name())
+	}
+}
+
 func lastJSONSummaryOfAFailingCommand(t *testing.T, failure error) map[string]any {
 	t.Helper()
 	ocel := newCommand()

@@ -6,12 +6,14 @@ provider_dir=$(CDPATH= cd -- "$host_dir/.." && pwd)
 box_dir=$(CDPATH= cd -- "$provider_dir/../box" && pwd)
 realtime_dir=$(CDPATH= cd -- "$provider_dir/../../realtime" && pwd)
 runtime_dir=$(CDPATH= cd -- "$provider_dir/../runtime" && pwd)
-dist="$host_dir/dist"
+jobimage_dir=$(CDPATH= cd -- "$provider_dir/../../../cli/jobimage" && pwd)
+dist="$host_dir/assets/dist"
 
 arches="amd64 arm64"
 
 rm -rf "$dist"
-mkdir -p "$dist/next-container"
+mkdir -p "$dist/next-container" "$dist/jobimage"
+cp "$jobimage_dir/Dockerfile" "$dist/jobimage/Dockerfile"
 cp "$runtime_dir/dist/next/entrypoint.mjs" "$dist/next-container/entrypoint.mjs"
 mkdir -p "$dist/next-container/sharp"
 cp -R "$runtime_dir/dist/sharp/x64" "$dist/next-container/sharp/amd64"

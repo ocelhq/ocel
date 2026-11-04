@@ -13,7 +13,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
-	"github.com/ocelhq/ocel/cli/internal/cloud"
+	"github.com/ocelhq/ocel/cli/internal/endpointcall"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/wireerror"
@@ -32,7 +32,7 @@ const (
 type Remote struct {
 	Name       string
 	URL        string
-	Tokens     cloud.TokenSource
+	Tokens     endpointcall.TokenSource
 	HTTPClient *http.Client
 }
 
@@ -60,8 +60,8 @@ func StartRemote(ctx context.Context, cfg *project.Project, span *run.Span, ques
 	}
 	session := &remoteSession{}
 	t := &remoteTransport{
-		clients: newClients(httpClient, strings.TrimRight(remote.URL, "/"), MaxMessageBytes, session, cloud.Headers{Tokens: remote.Tokens, Session: sessionID}, wireerror.Interceptor(func(err *connect.Error) *clierror.Error {
-			return cmp.Or(cloud.RefusalOf(remote.URL, err), providerRefusal(err))
+		clients: newClients(httpClient, strings.TrimRight(remote.URL, "/"), MaxMessageBytes, session, endpointcall.Headers{Tokens: remote.Tokens, Session: sessionID}, wireerror.Interceptor(func(err *connect.Error) *clierror.Error {
+			return cmp.Or(endpointcall.RefusalOf(endpointcall.CloudSession, "Ocel Cloud", remote.URL, err), providerRefusal(err))
 		})),
 		http: httpClient,
 	}

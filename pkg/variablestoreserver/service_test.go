@@ -71,17 +71,8 @@ func TestSetGetAndRevealAnswerAcrossTheWire(t *testing.T) {
 		Tier:       environmentv1.Tier_TIER_PRODUCTION,
 		Coordinate: cell("DATABASE_URL"),
 	})
-	if err != nil || !got.GetFound() || got.GetValue() != "" {
-		t.Fatalf("GetValue() found=%t revealed=%t, %v, want it found and unrevealed", got.GetFound(), got.GetValue() != "", err)
-	}
-
-	got, err = variables.GetValue(ctx, &variablestorev1.GetValueRequest{
-		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: cell("DATABASE_URL"),
-		Reveal:     true,
-	})
-	if err != nil || got.GetValue() != "postgres://one" {
-		t.Fatalf("GetValue(reveal) = %q, %v", got.GetValue(), err)
+	if err != nil || !got.GetFound() {
+		t.Fatalf("GetValue() found=%t, %v, want it found", got.GetFound(), err)
 	}
 
 	missing, err := variables.GetValue(ctx, &variablestorev1.GetValueRequest{
@@ -216,11 +207,7 @@ func TestReferencesAnswerAcrossTheWire(t *testing.T) {
 		t.Fatalf("SetReference() = %+v, want the target reported back", set.GetMetadata())
 	}
 
-	got, err := variables.GetValue(ctx, &variablestorev1.GetValueRequest{
-		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: cell("DATABASE_URL"),
-		Reveal:     true,
-	})
+	got, err := revealOne(ctx, variables, environmentv1.Tier_TIER_PRODUCTION, cell("DATABASE_URL"))
 	if err != nil || got.GetValue() != "postgres://shared" {
 		t.Fatalf("GetValue() through a reference = %q, %v", got.GetValue(), err)
 	}
@@ -448,4 +435,12 @@ func TestTheRecordsInlineBindingsKeepAreWrittenByThemAlone(t *testing.T) {
 	if _, err := variables.SetBinding(ctx, &variablestorev1.SetBindingRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Published: record(inline), Owner: bindings.InlineRecordOwner}); err != nil {
 		t.Fatalf("the inline owner writing its own record: %v", err)
 	}
+}
+
+func revealOne(ctx context.Context, variables variablestorev1connect.VariableStoreServiceClient, tier environmentv1.Tier, at *variablestorev1.Coordinate) (*variablestorev1.RevealedValue, error) {
+	revealed, err := variables.RevealValues(ctx, &variablestorev1.RevealValuesRequest{Tier: tier, Slug: at.GetSlug(), Cells: []*variablestorev1.Coordinate{at}})
+	if err != nil || len(revealed.GetValues()) == 0 {
+		return &variablestorev1.RevealedValue{}, err
+	}
+	return revealed.GetValues()[0], nil
 }

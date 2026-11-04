@@ -14,10 +14,11 @@ import (
 )
 
 func NewPart(records tier.Records, c Clients, namespace string, specFor func(context.Context, environment.Tier) (Spec, error)) tier.Part {
+	described := description(namespace, specFor)
 	return tier.Recorded(records, tier.RecordedSpec{
-		Name:    Part,
-		Summary: Summary,
-		Shape:   func(tier environment.Tier) []pricing.Shaped { return Shape(namespace, tier) },
+		Name:      described.Name,
+		Summary:   described.Summary,
+		Inventory: described.Inventory,
 		Work: func(ctx context.Context, tier environment.Tier) (work tier.Work, err error) {
 			spec, err := specFor(ctx, tier)
 			if err != nil {
@@ -30,6 +31,25 @@ func NewPart(records tier.Records, c Clients, namespace string, specFor func(con
 		},
 		IsUsedBy: isUsedBy,
 	})
+}
+
+func DescribedPart(records tier.Records, namespace string, specFor func(context.Context, environment.Tier) (Spec, error)) tier.Part {
+	return tier.Described(records, description(namespace, specFor))
+}
+
+func description(namespace string, specFor func(context.Context, environment.Tier) (Spec, error)) tier.Description {
+	return tier.Description{
+		Name:      Part,
+		Summary:   Summary,
+		Inventory: func(tier environment.Tier) []pricing.Resource { return Inventory(namespace, tier) },
+		Digest: func(ctx context.Context, tier environment.Tier) (string, error) {
+			spec, err := specFor(ctx, tier)
+			if err != nil {
+				return "", err
+			}
+			return Digest(spec), nil
+		},
+	}
 }
 
 func isUsedBy(uses []buildoutput.Uses, _ edge.Kind) bool {
