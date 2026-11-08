@@ -478,3 +478,240 @@ func TestCompileBuildsACrateReachedThroughASymlink(t *testing.T) {
 		t.Fatalf("the compile wrote no binary: %v", err)
 	}
 }
+
+const dependsOnSys = "[dependencies]\nsys = { path = \"sys\" }\n\n[workspace]\n"
+
+func cBuildingWorkspace(t *testing.T, manifest string) string {
+	t.Helper()
+	dir := t.TempDir()
+	writeTree(t, dir, map[string]string{
+		"Cargo.toml":     "[package]\nname = \"server\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n" + manifest,
+		"src/main.rs":    "fn main() {}\n",
+		"sys/Cargo.toml": "[package]\nname = \"sys\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[build-dependencies]\ncc = { path = \"../cc\" }\n",
+		"sys/build.rs":   "fn main() {}\n",
+		"sys/src/lib.rs": "",
+		"cc/Cargo.toml":  "[package]\nname = \"cc\"\nversion = \"1.0.0\"\nedition = \"2021\"\n",
+		"cc/src/lib.rs":  "",
+	})
+	t.Setenv("CARGO_TARGET_DIR", filepath.Join(dir, "target"))
+	return dir
+}
+
+func cargoBuilt(workspace string) bool {
+	_, err := os.Stat(filepath.Join(workspace, "target"))
+	return err == nil
+}
+
+func withNoCCompilerNamed(t *testing.T) {
+	t.Helper()
+	var path []string
+	for _, tool := range []string{"cargo", "rustc"} {
+		found, err := exec.LookPath(tool)
+		if err != nil {
+			t.Skipf("%s is not on PATH", tool)
+		}
+		path = append(path, filepath.Dir(found))
+	}
+	for _, dir := range path {
+		for _, compiler := range []string{"aarch64-linux-musl-gcc", "x86_64-linux-musl-gcc", "musl-gcc"} {
+			if _, err := os.Stat(filepath.Join(dir, compiler)); err == nil {
+				t.Skipf("%s sits beside cargo in %s", compiler, dir)
+			}
+		}
+	}
+	host, err := exec.Command("rustc", "-vV").Output()
+	if err != nil {
+		t.Skipf("rustc -vV: %v", err)
+	}
+	unset := []string{"TARGET_CC", "CC", "CROSS_COMPILE"}
+	for _, architecture := range []string{arch.X8664, arch.ARM64} {
+		target, _ := arch.RustTarget(architecture)
+		if strings.Contains(string(host), "host: "+target+"\n") {
+			t.Skipf("rustc's host is %s, and cc-rs compiles C for its own host with the host's cc", target)
+		}
+		underscored := strings.ReplaceAll(target, "-", "_")
+		unset = append(unset, "CC_"+target, "CC_"+underscored, "CARGO_TARGET_"+strings.ToUpper(underscored)+"_LINKER")
+	}
+	for _, name := range unset {
+		t.Setenv(name, "")
+		os.Unsetenv(name)
+	}
+	t.Setenv("PATH", strings.Join(path, string(os.PathListSeparator)))
+}
+
+func compileRustWithEnv(t *testing.T, source, architecture string, env map[string]string) error {
+	t.Helper()
+	appDir := filepath.Join(t.TempDir(), "apps", "web")
+	return Compile(context.Background(), Compilation{
+		App:         "web",
+		Framework:   buildoutput.Framework{Name: buildoutput.FrameworkRust, Arch: architecture},
+		Source:      source,
+		FunctionDir: filepath.Join(appDir, "functions", "index.func"),
+		AppDir:      appDir,
+		Env:         env,
+	})
+}
+
+func TestCompileRefusesACrateThatCompilesCForTheTargetWhenNoCCompilerForItIsNamed(t *testing.T) {
+	reachedThroughABuildDependencyFirst := "[dependencies]\nfirst = { path = \"first\" }\nsecond = { path = \"second\" }\n\n[workspace]\n"
+	throughABuildDependencyFirst := map[string]string{
+		"first/Cargo.toml":  "[package]\nname = \"first\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[build-dependencies]\nhelper = { path = \"../helper\" }\n",
+		"first/src/lib.rs":  "",
+		"helper/Cargo.toml": "[package]\nname = \"helper\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\nsys = { path = \"../sys\" }\n",
+		"helper/src/lib.rs": "",
+		"second/Cargo.toml": "[package]\nname = \"second\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\nsys = { path = \"../sys\" }\n",
+		"second/src/lib.rs": "",
+	}
+	for name, reached := range map[string]struct {
+		manifest string
+		files    map[string]string
+	}{
+		"a dependency": {manifest: dependsOnSys},
+		"a dependency also built for a build script, resolver 2": {
+			manifest: reachedThroughABuildDependencyFirst,
+			files:    throughABuildDependencyFirst,
+		},
+		"a dependency also built for a build script, resolver 1": {
+			manifest: strings.Replace(reachedThroughABuildDependencyFirst, "[workspace]\n", "[workspace]\nresolver = \"1\"\n", 1),
+			files:    throughABuildDependencyFirst,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			withNoCCompilerNamed(t)
+			source := cBuildingWorkspace(t, reached.manifest)
+			writeTree(t, source, reached.files)
+
+			err := compileRustWithEnv(t, source, arch.ARM64, nil)
+			if err == nil {
+				t.Fatal("compile handed cargo a crate whose build script looks for a C compiler for the target that is nowhere")
+			}
+			for _, want := range []string{`"web"`, "sys", "aarch64-unknown-linux-musl", "aarch64-linux-musl-gcc", "CC_aarch64_unknown_linux_musl"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("err = %v, want it to name %s — the app, the crate that compiles C, ocel's target and what to install or set", err, want)
+				}
+			}
+			if cargoBuilt(source) {
+				t.Error("cargo build ran before the refusal")
+			}
+		})
+	}
+}
+
+func TestCompileHandsCargoACrateThatCompilesCOnceACCompilerForTheTargetIsNamed(t *testing.T) {
+	for name, named := range map[string]struct {
+		architecture string
+		osEnv        map[string]string
+		buildEnv     map[string]string
+		files        map[string]string
+		onPath       string
+	}{
+		"CC with the target":             {architecture: arch.ARM64, osEnv: map[string]string{"CC_aarch64-unknown-linux-musl": "ocel-named-cc"}},
+		"CC with the underscored target": {architecture: arch.ARM64, osEnv: map[string]string{"CC_aarch64_unknown_linux_musl": "ocel-named-cc"}},
+		"TARGET_CC":                      {architecture: arch.ARM64, osEnv: map[string]string{"TARGET_CC": "ocel-named-cc"}},
+		"CC":                             {architecture: arch.ARM64, osEnv: map[string]string{"CC": "ocel-named-cc"}},
+		"CROSS_COMPILE":                  {architecture: arch.ARM64, osEnv: map[string]string{"CROSS_COMPILE": "ocel-named-"}},
+		"the build's own env":            {architecture: arch.ARM64, buildEnv: map[string]string{"CC_aarch64_unknown_linux_musl": "ocel-named-cc"}},
+		"a cargo config's env":           {architecture: arch.ARM64, files: map[string]string{".cargo/config.toml": "[env]\nCC_aarch64_unknown_linux_musl = \"ocel-named-cc\"\n"}},
+		"a gcc the linker names":         {architecture: arch.ARM64, files: map[string]string{".cargo/config.toml": "[target.aarch64-unknown-linux-musl]\nlinker = \"/opt/musl/bin/aarch64-linux-musl-gcc\"\n"}},
+		"aarch64-linux-musl-gcc on PATH": {architecture: arch.ARM64, onPath: "aarch64-linux-musl-gcc"},
+		"x86_64-linux-musl-gcc on PATH":  {architecture: arch.X8664, onPath: "x86_64-linux-musl-gcc"},
+		"musl-gcc on PATH":               {architecture: arch.X8664, onPath: "musl-gcc"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			withNoCCompilerNamed(t)
+			source := cBuildingWorkspace(t, dependsOnSys)
+			writeTree(t, source, named.files)
+			for variable, value := range named.osEnv {
+				t.Setenv(variable, value)
+			}
+			if named.onPath != "" {
+				bin := t.TempDir()
+				writeTree(t, bin, map[string]string{named.onPath: "#!/bin/sh\nexit 1\n"})
+				if err := os.Chmod(filepath.Join(bin, named.onPath), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			}
+
+			err := compileRustWithEnv(t, source, named.architecture, named.buildEnv)
+			if !cargoBuilt(source) {
+				t.Fatalf("compile refused before cargo build ran (%v), and cc-rs finds the compiler that is named", err)
+			}
+		})
+	}
+}
+
+func TestCompileHandsCargoACrateWhoseCIsCompiledOnlyForTheHost(t *testing.T) {
+	for name, sys := range map[string]struct {
+		dependency string
+		files      map[string]string
+	}{
+		"a build dependency's": {dependency: "[build-dependencies]\nsys = { path = \"sys\" }\n"},
+		"a dev dependency's":   {dependency: "[dev-dependencies]\nsys = { path = \"sys\" }\n"},
+		"a proc macro's": {
+			dependency: "[dependencies]\nderive = { path = \"derive\" }\n",
+			files: map[string]string{
+				"derive/Cargo.toml": "[package]\nname = \"derive\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\nproc-macro = true\n\n[dependencies]\nsys = { path = \"../sys\" }\n",
+				"derive/src/lib.rs": "",
+			},
+		},
+		"another platform's": {dependency: "[target.'cfg(target_os = \"haiku\")'.dependencies]\nsys = { path = \"sys\" }\n"},
+		"no crate's":         {dependency: ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			withNoCCompilerNamed(t)
+			source := cBuildingWorkspace(t, sys.dependency+"\n[workspace]\n")
+			writeTree(t, source, sys.files)
+
+			err := compileRustWithEnv(t, source, arch.ARM64, nil)
+			if !cargoBuilt(source) {
+				t.Fatalf("compile refused before cargo build ran (%v), and no C is compiled for the target", err)
+			}
+		})
+	}
+}
+
+func TestCompileHandsCargoACrateWhoseCIsBehindAFeatureItsOwnBuildLeavesOff(t *testing.T) {
+	shared := map[string]string{
+		"shared/Cargo.toml": "[package]\nname = \"shared\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\nsys = { path = \"../sys\", optional = true }\n\n[features]\nc = [\"dep:sys\"]\n",
+		"shared/src/lib.rs": "",
+		"sys/build.rs":      "fn main() { panic!(\"sys is built\") }\n",
+	}
+	for name, enabled := range map[string]struct {
+		manifest string
+		files    map[string]string
+	}{
+		"by a sibling workspace member": {
+			manifest: "[dependencies]\nshared = { path = \"shared\" }\n\n[workspace]\nmembers = [\"tool\"]\n",
+			files: map[string]string{
+				"tool/Cargo.toml":  "[package]\nname = \"tool\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\nshared = { path = \"../shared\", features = [\"c\"] }\n",
+				"tool/src/main.rs": "fn main() {}\n",
+			},
+		},
+		"by the app's dev dependency": {
+			manifest: "[dependencies]\nshared = { path = \"shared\" }\n\n[dev-dependencies]\nshared = { path = \"shared\", features = [\"c\"] }\n\n[workspace]\n",
+		},
+		"by the app's build dependency on the same crate": {
+			manifest: "[dependencies]\nsys = { path = \"sys\" }\n\n[build-dependencies]\nsys = { path = \"sys\", features = [\"bundled\"] }\n\n[workspace]\n",
+			files: map[string]string{
+				"sys/Cargo.toml": "[package]\nname = \"sys\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[build-dependencies]\ncc = { path = \"../cc\", optional = true }\n\n[features]\nbundled = [\"dep:cc\"]\n",
+				"sys/build.rs":   "fn main() {\n    if std::env::var_os(\"CARGO_FEATURE_BUNDLED\").is_some() && std::env::var(\"TARGET\").unwrap().contains(\"musl\") {\n        panic!(\"sys is built\")\n    }\n}\n",
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			withNoCCompilerNamed(t)
+			source := cBuildingWorkspace(t, enabled.manifest)
+			writeTree(t, source, shared)
+			writeTree(t, source, enabled.files)
+
+			err := compileRustWithEnv(t, source, arch.ARM64, nil)
+			if !cargoBuilt(source) {
+				t.Fatalf("compile refused before cargo build ran (%v), and the app's own build leaves off the feature that compiles C", err)
+			}
+			if err != nil && strings.Contains(err.Error(), "sys is built") {
+				t.Errorf("cargo built sys, which the app's own build leaves out: %v", err)
+			}
+		})
+	}
+}
