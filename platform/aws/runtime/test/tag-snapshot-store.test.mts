@@ -69,11 +69,22 @@ test("a publish whose conditional write conflicts with a concurrent one tries ag
   expect(bucket.readRecords()).toEqual({ products: { expired: 5_000 } });
 });
 
-test("a build seeded with no snapshot publishes none", async () => {
+test("a snapshot object that is missing is created holding the tag", async () => {
   bucket = newTagSnapshotBucket(snapshotKey, null);
   const publish = await newPublisher();
 
   await publish("products", { expired: 5_000 });
 
-  expect(bucket.objects.has(snapshotKey)).toBe(false);
+  expect(bucket.readRecords()).toEqual({ products: { expired: 5_000 } });
+});
+
+test("a creation that loses to another instance's creation merges into it", async () => {
+  bucket = newTagSnapshotBucket(snapshotKey, null);
+  bucket.createBeforeNextWrite(genesis);
+  const publish = await newPublisher();
+
+  await publish("products", { expired: 5_000 });
+
+  expect(bucket.readRecords()).toEqual({ products: { expired: 5_000 } });
+  expect(JSON.parse(bucket.objects.get(snapshotKey)!.body).deployedAt).toBe(100);
 });

@@ -7,7 +7,18 @@ import { afterEach, expect, test, vi } from "vitest";
 import { loadTagsManifest, mirrorTag, mirrorTagsInto } from "../src/tags-manifest.mjs";
 
 const manifestModule = "next/dist/server/lib/incremental-cache/tags-manifest.external.js";
-const adapterDir = join(import.meta.dirname, "../../../../../frameworks/next/adapter");
+const adapterDir = join(import.meta.dirname, "../../adapter");
+const wwwDir = join(import.meta.dirname, "../../../../www");
+
+interface NextTagsManifest {
+  tagsManifest: Map<string, { stale?: number; expired?: number }>;
+  areTagsExpired(tags: string[], timestamp: number): boolean;
+  areTagsStale(tags: string[], timestamp: number): boolean;
+}
+
+function nextTagsManifest(projectDir: string): NextTagsManifest {
+  return createRequire(join(projectDir, "package.json"))(manifestModule);
+}
 
 afterEach(() => {
   mirrorTagsInto(null);
@@ -65,14 +76,37 @@ test("mirrors a record into the registered manifest", () => {
 
   mirrorTag("posts", { stale: 5, expired: 9 });
 
-  expect(manifest.get("posts")).toEqual({ stale: 5, expired: 9 });
+  expect(manifest.get("posts")).toEqual({ stale: 5 });
 });
 
 test("moves each mark forward only", () => {
-  const manifest = new Map([["posts", { stale: 7, expired: 20 }]]);
+  const manifest = new Map([["posts", { stale: 7 }]]);
   mirrorTagsInto(manifest);
 
   mirrorTag("posts", { stale: 3, expired: 30 });
 
-  expect(manifest.get("posts")).toEqual({ stale: 7, expired: 30 });
+  expect(manifest.get("posts")).toEqual({ stale: 7 });
 });
+
+for (const [version, projectDir, expiryClock] of [
+  ["16.2.10", adapterDir, "Date.now()"],
+  ["16.3.4", wwwDir, "the performance clock"],
+] as const) {
+  test(`Next ${version}, which compares an expiry against ${expiryClock}, never expires an entry the handler serves stale`, () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const next = nextTagsManifest(projectDir);
+    expect(next.areTagsExpired.toString()).toContain(
+      expiryClock === "Date.now()" ? "Date.now()" : "performance.now()",
+    );
+    mirrorTagsInto(loadTagsManifest(projectDir));
+    const tag = `posts-${version}`;
+    const at = performance.timeOrigin + performance.now();
+    vi.spyOn(Date, "now").mockReturnValue(at + 3_600_000);
+
+    mirrorTag(tag, { stale: at, expired: at + 10_000 });
+
+    expect(next.areTagsExpired([tag], at - 1)).toBe(false);
+    expect(next.areTagsStale([tag], at - 1)).toBe(true);
+    next.tagsManifest.delete(tag);
+  });
+}

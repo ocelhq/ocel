@@ -121,10 +121,6 @@ function startSync(): Promise<void> {
   }));
 }
 
-function readInstant(): number {
-  return Math.max(Date.now(), now());
-}
-
 const revalidations = new WeakMap<readonly string[], Promise<void>>();
 
 async function writeRevalidation(
@@ -151,7 +147,7 @@ export function revalidateTags(
   const known = typeof tags === "string" ? undefined : revalidations.get(tags);
   if (known) return known;
 
-  const at = readInstant();
+  const at = now();
   const record: TagRecord = durations
     ? {
         stale: at,
@@ -207,7 +203,7 @@ export const tagClock: TagClock = {
 
 export async function tagsExpireEntry(tags: string[], lastModified: number): Promise<boolean> {
   await tagClock.refreshTags();
-  return areTagsExpired(tags, state.records, lastModified, readInstant());
+  return areTagsExpired(tags, state.records, lastModified, now());
 }
 
 export const clockMethods = {

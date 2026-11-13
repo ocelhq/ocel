@@ -6,7 +6,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/processenv"
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/resources/variables"
 )
@@ -22,9 +21,7 @@ func AppEnv(spec provider.StackSpec, bundle variables.Bundle, sessions bucket.Se
 		if !facts.RunsCode {
 			maps.Copy(env, provider.NewOriginDispatchEnv())
 		}
-		if !isForwardedPastEdge(spec) {
-			maps.Copy(env, edge.NewCachingOriginEnv(facts, spec.Ref.Name.Release.String()))
-		}
+		maps.Copy(env, edge.NewCachingOriginEnv(facts, spec.Ref.Name.Release.String()))
 	}
 	if app.OcelRouteTable != nil {
 		env[edge.OcelRouteTableVar] = ocelRouteTableInTask
@@ -44,9 +41,4 @@ func AppEnv(spec provider.StackSpec, bundle variables.Bundle, sessions bucket.Se
 		env[key] = value
 	}
 	return env
-}
-
-func isForwardedPastEdge(spec provider.StackSpec) bool {
-	pairings := provider.Facts{Pairings: edges.Pairings()}
-	return pairings.IsForwarded(spec.Edge.Kind(), spec.App.Router)
 }

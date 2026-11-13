@@ -17,10 +17,14 @@ export function newTagSnapshotBucket(snapshotKey: string, seed: Record<string, u
   if (seed) put(snapshotKey, JSON.stringify(seed));
   let losses = 0;
   let conflicts = 0;
+  let creation: Record<string, unknown> | null = null;
   return {
     objects,
     loseNextWrites(count: number) {
       losses = count;
+    },
+    createBeforeNextWrite(created: Record<string, unknown>) {
+      creation = created;
     },
     conflictNextWrites(count: number) {
       conflicts = count;
@@ -29,7 +33,11 @@ export function newTagSnapshotBucket(snapshotKey: string, seed: Record<string, u
       return JSON.parse(objects.get(snapshotKey)!.body).records;
     },
     async send(cmd: any) {
-      const { Key, IfMatch, Body } = cmd.input;
+      const { Key, IfMatch, IfNoneMatch, Body } = cmd.input;
+      if (creation && cmd.constructor.name === "PutObjectCommand") {
+        put(snapshotKey, JSON.stringify(creation));
+        creation = null;
+      }
       const stored = objects.get(Key);
       if (cmd.constructor.name === "PutObjectCommand" && conflicts > 0) {
         conflicts--;
@@ -41,6 +49,9 @@ export function newTagSnapshotBucket(snapshotKey: string, seed: Record<string, u
       if (cmd.constructor.name === "GetObjectCommand") {
         if (!stored) throw Object.assign(new Error("missing"), { name: "NoSuchKey" });
         return { Body: { transformToString: async () => stored.body }, ETag: stored.etag };
+      }
+      if (IfNoneMatch === "*" && stored) {
+        throw Object.assign(new Error("exists"), { name: "PreconditionFailed" });
       }
       if (losses > 0 || (IfMatch !== undefined && IfMatch !== stored?.etag)) {
         losses = Math.max(0, losses - 1);
