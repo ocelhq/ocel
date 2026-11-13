@@ -301,9 +301,10 @@ type controlledChild interface {
 }
 
 type upstream struct {
-	port   int
-	client *http.Client
-	guard  *originguard.Guard
+	port       int
+	client     *http.Client
+	guard      *originguard.Guard
+	childGuard *originguard.Guard
 }
 
 func (u upstream) endpoint() upstream { return u }
@@ -332,7 +333,7 @@ func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWrit
 	if err != nil {
 		return false, u.fail(rw, http.StatusBadGateway, fmt.Sprintf("bad event payload: %v", err))
 	}
-	if !u.guard.Admits(&http.Request{Header: ev.header()}) {
+	if !u.guard.Admits(&http.Request{Header: ev.header(false)}) {
 		return false, u.relay(ctx, rw, &http.Response{StatusCode: http.StatusForbidden, Header: http.Header{}, Body: http.NoBody})
 	}
 	resp, err := u.forwardToApp(ctx, ev)
@@ -401,7 +402,7 @@ func (u upstream) forwardToApp(ctx context.Context, ev *httpEvent) (*http.Respon
 }
 
 func (u upstream) buildForwardRequest(ctx context.Context, ev *httpEvent) (*http.Request, error) {
-	req, err := buildLoopbackRequest(ctx, u.port, ev)
+	req, err := buildLoopbackRequest(ctx, u.port, ev, u.guard != nil || u.childGuardAdmits(ev))
 	if err != nil {
 		return nil, err
 	}
@@ -413,6 +414,10 @@ func (u upstream) buildForwardRequest(ctx context.Context, ev *httpEvent) (*http
 		req.Header.Set("x-ocel-function-arn", lc.InvokedFunctionArn)
 	}
 	return req, nil
+}
+
+func (u upstream) childGuardAdmits(ev *httpEvent) bool {
+	return u.childGuard != nil && u.childGuard.Admits(&http.Request{Header: ev.header(false)})
 }
 
 func (u upstream) roundTrip(req *http.Request) (resp *http.Response, retryable bool, err error) {
