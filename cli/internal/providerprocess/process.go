@@ -21,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/localrpc"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/tracing"
 )
@@ -315,15 +314,6 @@ func (r *Process) dial(ready localrpc.Readiness) error {
 
 func (r *Process) Name() string {
 	return r.providerName
-}
-
-func (r *Process) Cost() (costv1connect.CostServiceClient, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.clients.cost == nil {
-		return nil, ErrClientUnavailable
-	}
-	return r.clients.cost, nil
 }
 
 func (r *Process) VariableStore() (variablestorev1connect.VariableStoreServiceClient, error) {

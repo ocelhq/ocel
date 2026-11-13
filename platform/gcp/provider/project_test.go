@@ -16,11 +16,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -237,7 +236,7 @@ func TestTheCredentialsAreReadWhenNothingAroundTheRunNamesAProject(t *testing.T)
 	}
 }
 
-func configured(t *testing.T, options provider.Options) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
+func configured(t *testing.T, options provider.Options) contractv1connect.ProviderServiceClient {
 	t.Helper()
 	config := providerserver.Config{
 		Version: "test",
@@ -251,21 +250,18 @@ func configured(t *testing.T, options provider.Options) (contractv1connect.Provi
 	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{ProjectDir: t.TempDir()}}); err != nil {
 		t.Fatalf("Configure(%v) error = %v, want it to answer: nothing has reached the cloud yet", options, err)
 	}
-	return client, costv1connect.NewCostServiceClient(server.Client(), server.URL)
+	return client
 }
 
 func scanned(t *testing.T, options provider.Options) *costv1.ResourceSet {
 	t.Helper()
-	client, costs := configured(t, options)
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	client := configured(t, options)
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape(%v) = %v, want the shape with no credentials and no gcloud consulted", options, err)
-	}
-	if _, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set}); err != nil {
-		t.Fatalf("Price() = %v, want an estimate with no credentials and no gcloud consulted", err)
+		t.Fatalf("Inventory(%v) = %v, want the inventory with no credentials and no gcloud consulted", options, err)
 	}
 	return set
 }
@@ -284,14 +280,14 @@ func TestAScanReadsNoCredentialsAndRunsNoGcloud(t *testing.T) {
 	}
 }
 
-func TestAScanOfADeployWhoseProjectNothingNamesShapesWhatItShapesWithOneNamed(t *testing.T) {
+func TestAScanOfADeployWhoseProjectNothingNamesListsWhatItListsWithOneNamed(t *testing.T) {
 	withoutAnAmbientProject(t)
 	ran := withGcloudNaming(t, "gcloud-config-prod")
 
 	named := scanned(t, provider.Options{"project": "acme-prod", "region": "europe-west1"})
 	unnamed := scanned(t, provider.Options{"region": "europe-west1"})
 	if !proto.Equal(unnamed, named) {
-		t.Errorf("the scan with no project named shapes %v, want what it shapes with one named, %v: no name a shape holds carries the project", unnamed, named)
+		t.Errorf("the scan with no project named lists %v, want what it lists with one named, %v: no name an inventory holds carries the project", unnamed, named)
 	}
 	if ran() {
 		t.Errorf("the scan with no project named ran gcloud to find one; a scan reads nothing ambient")

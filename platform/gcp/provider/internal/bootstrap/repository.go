@@ -8,7 +8,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 )
@@ -28,7 +27,7 @@ const (
 var repositoryKind = KindOps{
 	tagged:        repositoryTagged,
 	noun:          "Artifact Registry repository",
-	terraform:     cost.ArtifactRepositoryType,
+	terraform:     gcloud.ArtifactRepositoryType,
 	emulatorSkips: true,
 	properties: func(region string, _ Resource) map[string]any {
 		return map[string]any{"location": region, "format": "DOCKER"}

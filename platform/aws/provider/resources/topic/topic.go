@@ -30,12 +30,12 @@ func New() component.Component {
 		Declare:    Declare,
 		Collect:    Collect,
 		Credential: credential,
-		Shape: func(cost component.CostTree, scope string, at component.Stack, declared []provider.Resource) error {
+		Inventory: func(tree component.InventoryTree, scope string, at component.Stack, declared []provider.Resource) error {
 			topics, err := Of(NamesAt(at), declared)
 			if err != nil {
 				return err
 			}
-			Shape(cost, scope, topics)
+			Inventory(tree, scope, topics)
 			return nil
 		},
 	}
@@ -71,14 +71,14 @@ func Collect(_ context.Context, at component.Stack, declared provider.Resource, 
 	return &variablestorev1.PublishedBinding{Binding: binding}, nil
 }
 
-func Shape(cost component.CostTree, scope string, topics Topics) {
+func Inventory(tree component.InventoryTree, scope string, topics Topics) {
 	for _, topic := range topics {
 		if topic.SNS != "" {
-			cost.AddPlain(scope, component.TerraformSNSTopic, topic.Resource.Declared, map[string]any{"fifo_topic": topic.Spec.Ordered})
+			tree.AddPlain(scope, component.TerraformSNSTopic, topic.Resource.Declared, map[string]any{"fifo_topic": topic.Spec.Ordered})
 		}
 		for _, queue := range topic.Queues {
-			cost.AddPlain(scope, component.TerraformSQSQueue, queue.Topic+"/"+queue.Consumer.Name, map[string]any{"fifo_queue": queue.FIFO})
-			cost.AddPlain(scope, component.TerraformSQSQueue, queue.Topic+"/"+queue.Consumer.Name+"/dead-letters", map[string]any{"fifo_queue": queue.FIFO})
+			tree.AddPlain(scope, component.TerraformSQSQueue, queue.Topic+"/"+queue.Consumer.Name, map[string]any{"fifo_queue": queue.FIFO})
+			tree.AddPlain(scope, component.TerraformSQSQueue, queue.Topic+"/"+queue.Consumer.Name+"/dead-letters", map[string]any{"fifo_queue": queue.FIFO})
 		}
 	}
 }

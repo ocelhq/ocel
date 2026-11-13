@@ -14,7 +14,6 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -23,7 +22,6 @@ import (
 type transport interface {
 	Client() (contractv1connect.ProviderServiceClient, error)
 	VariableStore() (variablestorev1connect.VariableStoreServiceClient, error)
-	Cost() (costv1connect.CostServiceClient, error)
 	Facts() *contractv1.ProviderFacts
 	explainLost(err error) error
 	isExportingSpans() bool
@@ -33,7 +31,6 @@ type transport interface {
 type clients struct {
 	provider      contractv1connect.ProviderServiceClient
 	variableStore variablestorev1connect.VariableStoreServiceClient
-	cost          costv1connect.CostServiceClient
 }
 
 func newClients(httpClient *http.Client, baseURL string, maxMessageBytes int, interceptors ...connect.Interceptor) clients {
@@ -44,7 +41,6 @@ func newClients(httpClient *http.Client, baseURL string, maxMessageBytes int, in
 	return clients{
 		provider:      contractv1connect.NewProviderServiceClient(httpClient, baseURL, opts),
 		variableStore: variablestorev1connect.NewVariableStoreServiceClient(httpClient, baseURL, opts),
-		cost:          costv1connect.NewCostServiceClient(httpClient, baseURL, opts),
 	}
 }
 

@@ -19,9 +19,9 @@ func TestAFunctionSpecSaysWhetherItsArtifactCarriesTheWorkerEntry(t *testing.T) 
 		}}},
 	}}}
 
-	specs := shapedFunctions(manifest)["web"]
+	specs := inventoryFunctions(manifest)["web"]
 	if len(specs) != 2 || specs[0].HasWorkerEntry || !specs[1].HasWorkerEntry {
-		t.Errorf("shaped functions = %+v, want only fn--web--b to carry the worker entry", specs)
+		t.Errorf("inventory functions = %+v, want only fn--web--b to carry the worker entry", specs)
 	}
 }
 

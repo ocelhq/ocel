@@ -74,9 +74,9 @@ func Digest(spec Spec) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func Shape(namespace string, tier environment.Tier) []pricing.Shaped {
+func Inventory(namespace string, tier environment.Tier) []pricing.Item {
 	names := NamesFor(namespace, tier)
-	return []pricing.Shaped{
+	return []pricing.Item{
 		{Name: names.Function, Type: "aws_lambda_function", Properties: map[string]any{
 			"runtime": runtime, "memory_size": memoryMB, "timeout": timeoutSeconds, "architectures": []any{architecture},
 		}},

@@ -358,7 +358,7 @@ func ReadPart(ctx context.Context, store records.Store, namespace, region string
 		Current:   true,
 		Resources: recorded.Resources,
 		UsedBy:    users,
-		Shape:     &provider.PartShape{Vendor: awsports.Vendor, Region: region, Resources: Shape(tier, findFronts(namespace, tier, recorded.Resources))},
+		Inventory: &provider.PartInventory{Vendor: awsports.Vendor, Region: region, Resources: Inventory(tier, findFronts(namespace, tier, recorded.Resources))},
 
 		RetiresWithLastUser: true,
 	}, true, nil
@@ -419,24 +419,24 @@ func findFronts(namespace string, tier environment.Tier, resources []provider.Ph
 	}
 }
 
-func Shape(_ environment.Tier, fronts Raised) []pricing.Shaped {
-	shaped := []pricing.Shaped{
+func Inventory(_ environment.Tier, fronts Raised) []pricing.Item {
+	items := []pricing.Item{
 		{Name: Slug, Type: component.TerraformECSCluster, Properties: map[string]any{}},
 	}
 	if fronts.Private {
-		shaped = append(shaped, pricing.Shaped{Name: Slug, Type: component.TerraformLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": true}})
+		items = append(items, pricing.Item{Name: Slug, Type: component.TerraformLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": true}})
 	}
-	shaped = append(shaped, pricing.Shaped{Name: Slug, Type: component.TerraformLogGroup, Properties: map[string]any{"retention_in_days": logRetentionDays}})
+	items = append(items, pricing.Item{Name: Slug, Type: component.TerraformLogGroup, Properties: map[string]any{"retention_in_days": logRetentionDays}})
 	if fronts.Public {
 		public := naming.Join(naming.WordSeparator, Slug, "public")
-		shaped = append(shaped,
-			pricing.Shaped{Name: public, Type: component.TerraformLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": false}},
-			pricing.Shaped{Name: naming.Join(naming.WordSeparator, Slug, "liveness"), Type: component.TerraformLambdaFunction, Properties: map[string]any{
+		items = append(items,
+			pricing.Item{Name: public, Type: component.TerraformLoadBalancer, Properties: map[string]any{"load_balancer_type": "application", "internal": false}},
+			pricing.Item{Name: naming.Join(naming.WordSeparator, Slug, "liveness"), Type: component.TerraformLambdaFunction, Properties: map[string]any{
 				"runtime":           component.LambdaNodeRuntime,
 				"memory_size":       component.LambdaDefaultMemoryMB,
 				"architectures":     []any{arch.X8664},
 				"ephemeral_storage": map[string]any{"size": component.LambdaDefaultEphemeralMB},
 			}})
 	}
-	return shaped
+	return items
 }

@@ -24,7 +24,7 @@ func (h *handlers) listSharedParts(ctx context.Context, project recordedProject)
 		if !status.Present {
 			continue
 		}
-		parts, err := bootstrapPartsOf(ctx, readiness, status, nil)
+		parts, _, err := bootstrapPartsOf(ctx, readiness, status)
 		if err != nil {
 			return nil, err
 		}

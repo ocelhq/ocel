@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
-type jobShape struct {
+type jobInventory struct {
 	Schedule     string `json:"schedule"`
 	TimeZone     string `json:"timeZone"`
 	PubsubTarget struct {
@@ -21,14 +21,14 @@ type jobShape struct {
 	} `json:"pubsubTarget"`
 }
 
-func readJob(t *testing.T, endpoint, path string) (jobShape, int) {
+func readJob(t *testing.T, endpoint, path string) (jobInventory, int) {
 	t.Helper()
 	resp, err := http.Get(endpoint + "/v1/" + path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	var job jobShape
+	var job jobInventory
 	_ = json.NewDecoder(resp.Body).Decode(&job)
 	return job, resp.StatusCode
 }

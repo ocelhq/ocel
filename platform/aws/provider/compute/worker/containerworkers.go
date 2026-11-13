@@ -42,6 +42,8 @@ const (
 	schedulerContainerRoleWord = "container-scheduler-role"
 	scalingPart                = "scaling"
 	backlogWord                = "backlog"
+	backlogLabel               = "visible messages"
+	backlogQueryID             = "backlog"
 )
 
 type workerDefinition struct {
@@ -352,12 +354,10 @@ func (w *ContainerStack) declareBacklogAlarm(ctx *pulumi.Context, worker provide
 		return err
 	}
 	queries := cloudwatch.MetricAlarmMetricQueryArray{}
-	ids := make([]string, 0, len(queueNames))
+	ids := backlogMetricIDs(queueNames)
 	for i, queue := range queueNames {
-		id := "m" + strconv.Itoa(i)
-		ids = append(ids, id)
 		queries = append(queries, &cloudwatch.MetricAlarmMetricQueryArgs{
-			Id: pulumi.String(id),
+			Id: pulumi.String(ids[i]),
 			Metric: &cloudwatch.MetricAlarmMetricQueryMetricArgs{
 				Namespace:  pulumi.String(sqsNamespace),
 				MetricName: pulumi.String(visibleMessagesMetric),
@@ -368,9 +368,9 @@ func (w *ContainerStack) declareBacklogAlarm(ctx *pulumi.Context, worker provide
 		})
 	}
 	queries = append(queries, &cloudwatch.MetricAlarmMetricQueryArgs{
-		Id:         pulumi.String("backlog"),
+		Id:         pulumi.String(backlogQueryID),
 		Expression: pulumi.String(strings.Join(ids, "+")),
-		Label:      pulumi.String("visible messages"),
+		Label:      pulumi.String(backlogLabel),
 		ReturnData: pulumi.Bool(true),
 	})
 	_, err = cloudwatch.NewMetricAlarm(ctx, name, &cloudwatch.MetricAlarmArgs{
@@ -386,6 +386,29 @@ func (w *ContainerStack) declareBacklogAlarm(ctx *pulumi.Context, worker provide
 		Tags:               tags,
 	})
 	return err
+}
+
+func backlogMetricIDs(queueNames []string) []string {
+	ids := make([]string, 0, len(queueNames))
+	for i := range queueNames {
+		ids = append(ids, "m"+strconv.Itoa(i))
+	}
+	return ids
+}
+
+func BacklogMetricQuery(queueNames []string) []any {
+	ids := backlogMetricIDs(queueNames)
+	query := make([]any, 0, len(queueNames)+1)
+	for i, queue := range queueNames {
+		query = append(query, map[string]any{"id": ids[i], "metric": map[string]any{
+			"namespace":   sqsNamespace,
+			"metric_name": visibleMessagesMetric,
+			"dimensions":  map[string]any{"QueueName": queue},
+			"period":      backlogAlarmPeriodSeconds,
+			"stat":        "Maximum",
+		}})
+	}
+	return append(query, map[string]any{"id": backlogQueryID, "expression": strings.Join(ids, "+"), "label": backlogLabel, "return_data": true})
 }
 
 func (w *ContainerStack) Decode(outputs auto.OutputMap) (provider.StackResult, error) {

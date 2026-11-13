@@ -1,0 +1,104 @@
+{
+  "format": 1,
+  "vendor": "cloudflare",
+  "version": "2026-09-13",
+  "currency": "USD",
+  "products": [
+    {
+      "service": "workers",
+      "sku": "workers-paid-plan",
+      "region": "",
+      "productFamily": "Workers",
+      "attributes": { "metric": "subscription", "plan": "paid" },
+      "purchaseOption": "on_demand",
+      "unit": "months",
+      "tiers": [{ "start": "0", "price": "5" }],
+      "source": "https://developers.cloudflare.com/workers/platform/pricing/",
+      "verified": "2026-09-13"
+    },
+    {
+      "service": "workers",
+      "sku": "workers-requests",
+      "region": "",
+      "productFamily": "Workers",
+      "attributes": { "metric": "requests", "plan": "paid" },
+      "purchaseOption": "on_demand",
+      "unit": "requests",
+      "tiers": [{ "start": "0", "price": "0" }, { "start": "10000000", "price": "0.0000003" }],
+      "source": "https://developers.cloudflare.com/workers/platform/pricing/",
+      "verified": "2026-09-13"
+    },
+    {
+      "service": "workers",
+      "sku": "workers-cpu-time",
+      "region": "",
+      "productFamily": "Workers",
+      "attributes": { "metric": "cpu-time", "plan": "paid" },
+      "purchaseOption": "on_demand",
+      "unit": "CPU-milliseconds",
+      "tiers": [{ "start": "0", "price": "0" }, { "start": "30000000", "price": "0.00000002" }],
+      "source": "https://developers.cloudflare.com/workers/platform/pricing/",
+      "verified": "2026-09-13"
+    },
+    {
+      "service": "durable-objects",
+      "sku": "durable-objects-requests",
+      "region": "",
+      "productFamily": "Durable Objects",
+      "attributes": { "metric": "requests", "plan": "paid" },
+      "purchaseOption": "on_demand",
+      "unit": "requests",
+      "tiers": [{ "start": "0", "price": "0" }, { "start": "1000000", "price": "0.00000015" }],
+      "source": "https://developers.cloudflare.com/durable-objects/platform/pricing/",
+      "verified": "2026-09-13"
+    },
+    {
+      "service": "durable-objects",
+      "sku": "durable-objects-duration",
+      "region": "",
+      "productFamily": "Durable Objects",
+      "attributes": { "metric": "duration", "plan": "paid" },
+      "purchaseOption": "on_demand",
+      "unit": "GB-seconds",
+      "tiers": [{ "start": "0", "price": "0" }, { "start": "400000", "price": "0.0000125" }],
+      "source": "https://developers.cloudflare.com/durable-objects/platform/pricing/",
+      "verified": "2026-09-13"
+    },
+    {
+      "service": "durable-objects",
+      "sku": "durable-objects-rows-read",
+      "region": "",
+      "productFamily": "Durable Objects",
+      "attributes": { "metric": "rows-read", "plan": "paid" },
+      "purchaseOption": "on_demand",
+      "unit": "rows",
+      "tiers": [{ "start": "0", "price": "0" }, { "start": "25000000000", "price": "0.000000001" }],
+      "source": "https://developers.cloudflare.com/durable-objects/platform/pricing/",
+      "verified": "2026-09-13"
+    },
+    {
+      "service": "durable-objects",
+      "sku": "durable-objects-rows-written",
+      "region": "",
+      "productFamily": "Durable Objects",
+      "attributes": { "metric": "rows-written", "plan": "paid" },
+      "purchaseOption": "on_demand",
+      "unit": "rows",
+      "tiers": [{ "start": "0", "price": "0" }, { "start": "50000000", "price": "0.000001" }],
+      "source": "https://developers.cloudflare.com/durable-objects/platform/pricing/",
+      "verified": "2026-09-13"
+    },
+    {
+      "service": "durable-objects",
+      "sku": "durable-objects-storage",
+      "region": "",
+      "productFamily": "Durable Objects",
+      "attributes": { "metric": "storage", "plan": "paid" },
+      "purchaseOption": "on_demand",
+      "unit": "GB-month",
+      "tiers": [{ "start": "0", "price": "0" }, { "start": "5", "price": "0.2" }],
+      "source": "https://developers.cloudflare.com/durable-objects/platform/pricing/",
+      "verified": "2026-09-13"
+    }
+  ]
+}

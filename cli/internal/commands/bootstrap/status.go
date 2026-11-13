@@ -38,6 +38,7 @@ const (
 
 type StatusOptions struct {
 	Resources bool
+	Offline   bool
 }
 
 type tierStatus struct {
@@ -52,7 +53,9 @@ func newStatusCommand(invocation commands.Invocation) *cobra.Command {
 		Use:   "status [production|preview]",
 		Short: "Show every part of a bootstrap: who added it, who uses it, what it costs idle and whether it is current",
 		Long: "Show every part of a bootstrap: who added it, who uses it, what it costs idle and whether it is current.\n\n" +
-			"Reads both environments unless one is named. --resources lists what each part holds.",
+			"Reads both environments unless one is named. --resources lists what each part holds. " +
+			"The idle cost is priced against the console's price catalog, or the cached prices alone with --offline, " +
+			"and shows — when a price is missing.",
 		Example: "  $ ocel bootstrap status\n" +
 			"  $ ocel bootstrap status production --resources",
 		Args: cobra.MaximumNArgs(1),
@@ -70,6 +73,7 @@ func newStatusCommand(invocation commands.Invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&opts.Resources, "resources", false, "List the resources each part holds")
+	cmd.Flags().BoolVar(&opts.Offline, "offline", false, "Price idle costs from cached answers only, never asking the console")
 	return commands.DeclareResult(commands.DeclareReadOnly(commands.ReserveStdout(cmd)), &resultv1.BootstrapStatusResult{})
 }
 
@@ -117,37 +121,39 @@ func RunStatus(ctx context.Context, invocation commands.Invocation, cwd string, 
 	if err != nil {
 		return err
 	}
+	idle := priceIdle(ctx, invocation, read, opts.Offline)
 	if invocation.Presentation(stdout).Format == terminal.FormatJSON {
-		return terminal.WriteResultJSON(stdout, statusResult(read))
+		return terminal.WriteResultJSON(stdout, statusResult(read, idle))
 	}
 	for i, status := range read {
 		if i > 0 {
 			fmt.Fprintln(stdout)
 		}
-		renderTierStatus(stdout, status, opts)
+		renderTierStatus(stdout, status, idle[i], opts)
 	}
 	return nil
 }
 
-func statusResult(read []tierStatus) *resultv1.BootstrapStatusResult {
+func statusResult(read []tierStatus, idle []idleCosts) *resultv1.BootstrapStatusResult {
 	result := &resultv1.BootstrapStatusResult{}
-	for _, status := range read {
+	for i, status := range read {
 		tier := &resultv1.BootstrapTierStatus{Tier: status.tier, Present: status.described.GetBootstrap().GetPresent()}
 		for _, part := range status.described.GetParts() {
 			out := &resultv1.BootstrapPartStatus{
-				Name:             part.GetName(),
-				Summary:          part.GetSummary(),
-				AddedBy:          part.GetAddedBy(),
-				AddedWith:        part.GetAddedWith(),
-				AddedAt:          terminal.EpochRFC3339(part.GetAddedAt()),
-				State:            partState(part),
-				Current:          part.GetCurrent(),
-				UsedBy:           part.GetUsedBy(),
-				IdleMonthlyFixed: part.IdleMonthlyFixed,
-				Currency:         part.GetCurrency(),
+				Name:      part.GetName(),
+				Summary:   part.GetSummary(),
+				AddedBy:   part.GetAddedBy(),
+				AddedWith: part.GetAddedWith(),
+				AddedAt:   terminal.EpochRFC3339(part.GetAddedAt()),
+				State:     partState(part),
+				Current:   part.GetCurrent(),
+				UsedBy:    part.GetUsedBy(),
 
 				RetiresWithLastUser: part.GetRetiresWithLastUser(),
 				WantedBy:            part.GetWantedBy(),
+			}
+			if amount, priced := idle[i][part.GetName()]; priced {
+				out.IdleMonthlyFixed, out.Currency = &amount, idleCurrency
 			}
 			for _, resource := range part.GetResources() {
 				out.Resources = append(out.Resources, &resultv1.PhysicalResource{Kind: resource.GetKind(), Id: resource.GetId(), Location: resource.GetLocation(), ConsoleUrl: resource.GetConsoleUrl()})
@@ -169,7 +175,7 @@ func partState(part *contractv1.BootstrapPart) string {
 	return partReady
 }
 
-func renderTierStatus(out io.Writer, status tierStatus, opts StatusOptions) {
+func renderTierStatus(out io.Writer, status tierStatus, idle idleCosts, opts StatusOptions) {
 	name := readiness.TierName(status.tier)
 	header := strings.Join(append([]string{name}, readiness.IdentityCells(status.identity)...), " · ")
 	if !status.described.GetBootstrap().GetPresent() {
@@ -180,7 +186,7 @@ func renderTierStatus(out io.Writer, status tierStatus, opts StatusOptions) {
 	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "PART\tADDED\tUSED BY\tIDLE\tSTATE")
 	for _, part := range status.described.GetParts() {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", part.GetName(), addedCell(part), usedByCell(part), idleCell(part), stateCell(part, status.tier))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", part.GetName(), addedCell(part), usedByCell(part), idleCell(idle, part.GetName()), stateCell(part, status.tier))
 	}
 	_ = tw.Flush()
 	if opts.Resources {
@@ -234,22 +240,15 @@ func usedByCell(part *contractv1.BootstrapPart) string {
 	return strings.Join(users, ", ")
 }
 
-func idleCell(part *contractv1.BootstrapPart) string {
-	if part.IdleMonthlyFixed == nil {
+func idleCell(idle idleCosts, part string) string {
+	amount, priced := idle[part]
+	if !priced {
 		return unknownCell
 	}
-	amount := part.GetIdleMonthlyFixed()
 	if strings.Trim(amount, "0.") == "" {
-		return currencyOf(part) + "0"
+		return "$0"
 	}
-	return currencyOf(part) + amount + "/mo"
-}
-
-func currencyOf(part *contractv1.BootstrapPart) string {
-	if part.GetCurrency() == "USD" || part.GetCurrency() == "" {
-		return "$"
-	}
-	return part.GetCurrency() + " "
+	return "$" + amount + "/mo"
 }
 
 func stateCell(part *contractv1.BootstrapPart, tier environmentv1.Tier) string {

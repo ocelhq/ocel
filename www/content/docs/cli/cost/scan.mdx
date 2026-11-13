@@ -1,19 +1,27 @@
 ---
 title: "ocel cost scan"
-description: "Estimate the monthly bill for what a deploy would provision."
+description: "Estimate the monthly bill for what a deploy, a plan or a state would provision."
 ---
 
 ```bash
 ocel cost scan [flags]
 ```
 
-Reads the project's config and declarations, asks the provider what a deploy would create and what each piece costs, and prints the estimate. Nothing is built and no credentials are read. Fixed costs accrue whether or not traffic arrives; usage costs follow the profile, or the quantities a usage file sets per resource.
+Without `--from`, reads the project's config and declarations and asks the provider what a deploy would create. With `--from`, reads a Terraform plan or state, a Pulumi preview or stack export, an SST state export, or an earlier `ocel cost scan --json`, and needs no project. Each resource is priced against the console's price catalog in one lookup; no resource names leave the machine. Fixed costs accrue whether or not traffic arrives; usage costs follow the profile, or the quantities a usage file sets per resource.
+
+`--against` prices a second document as the current set and shows what changes; `--diff` takes the current set from the prior state a plan or preview carries.
+
+`pulumi preview --json` lists unchanged resources only with `--show-sames`, so pass it to price the whole stack. `sst diff --json` lists changes alone, so it suits `--diff` only.
 
 ## Flags
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
-| `--env` | `string` | `production` | Environment to price: production or preview |
+| `--against` | `string` |  | Plan, state or scan file holding the current set to compare with, or - for stdin |
+| `--diff` | `bool` | `false` | Compare with the prior state the `--from` plan or preview carries |
+| `--env` | `string` |  | Environment to price: production (the default) or preview |
+| `--from` | `string` |  | Plan, state or scan file to price instead of the project, or - for stdin |
+| `--offline` | `bool` | `false` | Price from cached answers only, never asking the console |
 | `--profile` | `string` | `moderate` | Usage assumptions for the usage-based rows: light, moderate, heavy |
 | `--usage` | `string` |  | YAML or JSON file of monthly quantities keyed by resource id, overriding the profile |
 

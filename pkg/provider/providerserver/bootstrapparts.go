@@ -6,38 +6,34 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/pricing"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 )
 
-const partScope = "part"
-
-type estimate func(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error)
-
-func bootstrapPartsOf(ctx context.Context, r bootstrapplan.Readiness, status bootstrapplan.Status, price estimate) ([]*contractv1.BootstrapPart, error) {
+func bootstrapPartsOf(ctx context.Context, r bootstrapplan.Readiness, status bootstrapplan.Status) ([]*contractv1.BootstrapPart, *costv1.ResourceSet, error) {
 	described, err := r.Bootstrap.DescribeParts(ctx, status.Description())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	records, err := r.PartRecords(ctx, status.Tier)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	recorded, err := r.RecordedParts(ctx, status.Tier)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	idle, currency, err := idleCosts(ctx, described, price)
+	inventory, err := partInventory(described)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	offer := r.Bootstrap.Parts()
 	wants, err := r.WantedParts(ctx, status.Tier, offer, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	offered := map[string]bool{}
 	summaries := map[string]string{}
@@ -61,9 +57,6 @@ func bootstrapPartsOf(ctx context.Context, r bootstrapplan.Readiness, status boo
 			RetiresWithLastUser: part.RetiresWithLastUser,
 		}
 		out.Resources = encodePhysicalResources(part.Resources)
-		if cost, known := idle[part.Name]; known {
-			out.IdleMonthlyFixed, out.Currency = &cost, currency
-		}
 		if record, ok := records[part.Name]; ok {
 			applyRecord(out, record)
 			delete(records, part.Name)
@@ -86,7 +79,7 @@ func bootstrapPartsOf(ctx context.Context, r bootstrapplan.Readiness, status boo
 			WantedBy: slices.Sorted(slices.Values(wants[name])),
 		})
 	}
-	return parts, nil
+	return parts, inventory, nil
 }
 
 func boolOrder(b bool) int {
@@ -108,44 +101,13 @@ func applyRecord(out *contractv1.BootstrapPart, record stackrecords.BootstrapPar
 	}
 }
 
-func idleCosts(ctx context.Context, parts []provider.BootstrapPart, price estimate) (map[string]string, string, error) {
+func partInventory(parts []provider.BootstrapPart) (*costv1.ResourceSet, error) {
 	tree := &pricing.Tree{}
-	scopes := map[string]string{}
 	for _, part := range parts {
-		if part.Shape == nil {
+		if part.Inventory == nil {
 			continue
 		}
-		scope := tree.Scope("", partScope, part.Name)
-		scopes[scope] = part.Name
-		tree.AddShaped(scope, part.Shape.Vendor, part.Shape.Region, part.Shape.Resources)
+		tree.AddItems(tree.Scope("", pricing.ScopePart, part.Name), part.Inventory.Vendor, part.Inventory.Region, part.Inventory.Resources)
 	}
-	if len(scopes) == 0 || price == nil {
-		return nil, "", nil
-	}
-	set, err := tree.Set(provider.CostSource)
-	if err != nil {
-		return nil, "", err
-	}
-	estimated, err := price(ctx, &costv1.PriceRequest{Resources: set})
-	if err != nil {
-		return nil, "", err
-	}
-	unpriced := map[string]bool{}
-	scopeOf := map[string]string{}
-	for _, resource := range set.GetResources() {
-		scopeOf[resource.GetId()] = resource.GetScope()
-	}
-	for _, resource := range estimated.GetResources() {
-		switch resource.GetStatus() {
-		case costv1.ResourceEstimate_STATUS_UNSUPPORTED, costv1.ResourceEstimate_STATUS_NO_PRICE:
-			unpriced[scopeOf[resource.GetResource()]] = true
-		}
-	}
-	idle := map[string]string{}
-	for _, total := range estimated.GetScopes() {
-		if name, ok := scopes[total.GetScope()]; ok && !unpriced[total.GetScope()] {
-			idle[name] = total.GetMonthlyFixed()
-		}
-	}
-	return idle, estimated.GetCurrency(), nil
+	return tree.Set(provider.InventorySource)
 }

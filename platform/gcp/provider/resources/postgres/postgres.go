@@ -26,7 +26,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -120,7 +119,7 @@ func readPostgres(resource provider.Resource) (postgresSpec, error) {
 	return postgresSpec{version: version}, nil
 }
 
-func shapeProperties(region string, instance *sqladmin.DatabaseInstance) map[string]any {
+func inventoryProperties(region string, instance *sqladmin.DatabaseInstance) map[string]any {
 	settings := settingsOf(instance)
 	return map[string]any{
 		"region":           region,
@@ -131,6 +130,9 @@ func shapeProperties(region string, instance *sqladmin.DatabaseInstance) map[str
 			"availability_type": settings.AvailabilityType,
 			"disk_type":         settings.DataDiskType,
 			"disk_size":         settings.DataDiskSizeGb,
+			"ip_configuration": map[string]any{
+				"psc_config": map[string]any{"psc_enabled": settings.IpConfiguration != nil && settings.IpConfiguration.PscConfig != nil && settings.IpConfiguration.PscConfig.PscEnabled},
+			},
 		},
 	}
 }
@@ -793,35 +795,35 @@ func (p *Postgres) Component() component.Component {
 			_, err := readPostgres(resource)
 			return err
 		},
-		Shape:      shapePostgres,
+		Inventory:  postgresInventory,
 		Transforms: map[provider.BindingType]*component.Transform{provider.BindingPostgres: transformTarget()},
 	}
 }
 
-func shapePostgres(shape component.Shape, declared []provider.Resource) error {
-	tier := shape.Request.Deploy.Tier
+func postgresInventory(inventory component.Inventory, declared []provider.Resource) error {
+	tier := inventory.Request.Deploy.Tier
 	for _, resource := range declared {
 		spec, err := readPostgres(resource)
 		if err != nil {
 			return err
 		}
-		instance, err := shape.Names.UntaggedPostgresInstance(shape.Request.Deploy.Slug, shape.Request.Deploy.Env, resource.Name)
+		instance, err := inventory.Names.UntaggedPostgresInstance(inventory.Request.Deploy.Slug, inventory.Request.Deploy.Env, resource.Name)
 		if err != nil {
 			return err
 		}
-		result := shape.Transforms.For(transformKind, resource.Name)
+		result := inventory.Transforms.For(transformKind, resource.Name)
 		known, unknown := instanceSurface.SplitOutputs(result.Patches[transformSurface])
-		own := newInstance(spec, tier, shape.Region, shape.Names.Project(), shape.Names.NetworkPath(tier), nil)
+		own := newInstance(spec, tier, inventory.Region, inventory.Names.Project(), inventory.Names.NetworkPath(tier), nil)
 		patched, err := instanceSurface.Patch("postgres "+resource.Name, *own, known, nil, surface.Recorded{})
 		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.SQLInstanceType, instance, shape.Region, shapeProperties(shape.Region, &patched.Desired), surface.ListPriced(unknown, pricedSettings)...)
+		inventory.Tree.Add(inventory.Environment, inventory.Vendor, gcloud.SQLInstanceType, instance, inventory.Region, inventoryProperties(inventory.Region, &patched.Desired), surface.UnknownProperties(unknown, inventorySettings)...)
 	}
 	return nil
 }
 
-var pricedSettings = map[string]string{
+var inventorySettings = map[string]string{
 	"settings.tier":             "settings.tier",
 	"settings.edition":          "settings.edition",
 	"settings.availabilityType": "settings.availability_type",

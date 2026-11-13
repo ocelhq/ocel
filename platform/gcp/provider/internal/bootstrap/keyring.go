@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"google.golang.org/grpc/codes"
@@ -16,7 +15,7 @@ const ReasonRingKept = "Google never deletes a key ring"
 
 var keyRingKind = KindOps{
 	noun:      "KMS key ring",
-	terraform: cost.KMSKeyRingType,
+	terraform: gcloud.KMSKeyRingType,
 	survey: func(ctx context.Context, b Engine, _ Survey, _ Resource) (Presence, error) {
 		return presenceFrom(b.keyRingExists(ctx))
 	},

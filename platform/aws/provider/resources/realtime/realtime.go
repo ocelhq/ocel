@@ -41,7 +41,7 @@ func New(artifacts component.Artifacts, keys Keys) component.Component {
 		Sweep: func(ctx context.Context, at component.Stack, kept []provider.Resource) error {
 			return sweep(ctx, at, kept, keys)
 		},
-		Shape: shape,
+		Inventory: inventory,
 	}
 }
 

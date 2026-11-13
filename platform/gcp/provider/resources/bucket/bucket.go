@@ -21,7 +21,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/grants"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -484,7 +483,7 @@ func (p *Bucket) Component() component.Component {
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
 		Preflight:     refusePublicBucket,
-		Shape:         shapeBuckets,
+		Inventory:     bucketsInventory,
 		Grants: func(_ context.Context, app component.App) ([]grants.Grant, error) {
 			return bucketGrants(app.Spec, app.Account, app.Member), nil
 		},
@@ -502,26 +501,26 @@ func refusePublicBucket(resource provider.Resource) error {
 	return nil
 }
 
-func shapeBuckets(shape component.Shape, declared []provider.Resource) error {
+func bucketsInventory(inventory component.Inventory, declared []provider.Resource) error {
 	for _, resource := range declared {
-		bucket, err := shape.Names.UntaggedAppBucket(shape.Request.Deploy.Slug, shape.Request.Deploy.Env, resource.Name)
+		bucket, err := inventory.Names.UntaggedAppBucket(inventory.Request.Deploy.Slug, inventory.Request.Deploy.Env, resource.Name)
 		if err != nil {
 			return err
 		}
-		result := shape.Transforms.For(transformKind, resource.Name)
+		result := inventory.Transforms.For(transformKind, resource.Name)
 		known, unknown := bucketSurface.SplitOutputs(result.Patches[transformSurface])
 		patched, err := bucketSurface.Patch("bucket "+resource.Name, storage.BucketAttrs{StorageClass: defaultStorageClass}, known, nil, surface.Recorded{})
 		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.StorageBucketType, bucket, shape.Region,
-			map[string]any{"location": shape.Region, "storage_class": patched.Desired.StorageClass, "versioning": map[string]any{"enabled": patched.Desired.VersioningEnabled}},
-			surface.ListPriced(unknown, pricedPaths)...)
+		inventory.Tree.Add(inventory.Environment, inventory.Vendor, gcloud.StorageBucketType, bucket, inventory.Region,
+			map[string]any{"location": inventory.Region, "storage_class": patched.Desired.StorageClass, "versioning": map[string]any{"enabled": patched.Desired.VersioningEnabled}},
+			surface.UnknownProperties(unknown, inventoryPaths)...)
 	}
 	return nil
 }
 
-var pricedPaths = map[string]string{
+var inventoryPaths = map[string]string{
 	"storageClass":       "storage_class",
 	"versioning.enabled": "versioning",
 }

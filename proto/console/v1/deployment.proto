@@ -5,6 +5,7 @@ option go_package = "github.com/ocelhq/ocel/pkg/proto/console/v1;consolev1";
 
 import "app/resources/v1/variables.proto";
 import "buf/validate/validate.proto";
+import "common/cost/v1/cost.proto";
 import "common/environment/v1/environment.proto";
 import "google/protobuf/timestamp.proto";
 import "opentelemetry/proto/trace/v1/trace.proto";
@@ -270,6 +271,11 @@ message Deployment {
     message: "a usage names an app and a resource this deployment reports"
     expression: "this.usages.all(u, this.apps.exists(a, a.name == u.app) && this.resources.exists(r, r.name == u.resource))"
   };
+  option (buf.validate.message).cel = {
+    id: "deployment.estimate_bounded"
+    message: "an estimate prices at most 2000 resources"
+    expression: "!has(this.estimate) || this.estimate.resources.size() <= 2000"
+  };
 
   string id = 1 [
     (buf.validate.field).string.pattern = "^[0-9a-f]{32}$",
@@ -329,6 +335,8 @@ message Deployment {
   Trigger trigger = 20 [(buf.validate.field).required = true];
 
   repeated opentelemetry.proto.trace.v1.Span spans = 21 [(buf.validate.field).repeated.max_items = 500];
+
+  common.cost.v1.Estimate estimate = 22;
 }
 
 message EnvironmentEvent {

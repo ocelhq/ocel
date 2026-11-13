@@ -495,14 +495,14 @@ func TestTheFunctionNetworkIsDescribedAsAPartWithTheProjectsInItAndTheIdleCostOf
 	if !slices.ContainsFunc(part.Resources, func(resource provider.PhysicalResource) bool { return resource.Kind == "AWS::EC2::NatGateway" }) {
 		t.Errorf("function network resources = %v, want its NAT gateway", part.Resources)
 	}
-	priced := []string{}
-	if part.Shape != nil {
-		for _, shaped := range part.Shape.Resources {
-			priced = append(priced, shaped.Type)
+	listed := []string{}
+	if part.Inventory != nil {
+		for _, item := range part.Inventory.Resources {
+			listed = append(listed, item.Type)
 		}
 	}
-	if !slices.Contains(priced, "aws_nat_gateway") || !slices.Contains(priced, "aws_eip") {
-		t.Errorf("function network priced as %v, want its NAT gateway and elastic IP: they bill by the hour whether or not a function runs", priced)
+	if !slices.Contains(listed, "aws_nat_gateway") || !slices.Contains(listed, "aws_eip") {
+		t.Errorf("function network lists %v, want its NAT gateway and elastic IP: they bill by the hour whether or not a function runs", listed)
 	}
 }
 

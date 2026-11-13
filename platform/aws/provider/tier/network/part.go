@@ -14,7 +14,7 @@ func NewPart(stacks *Stacks, store records.Store, region string) tier.Part {
 		Part:          Shared.Part,
 		RefuseInUse:   stacks.RefuseInUse,
 		Summary:       Summary,
-		Shape:         Shape,
+		Inventory:     Inventory,
 		RemovalReason: "this run removes it; the next container app, VPC-attached function, database, cache or port forward adds it again",
 		Describe: func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error) {
 			return ReadPart(ctx, store, region, tier)

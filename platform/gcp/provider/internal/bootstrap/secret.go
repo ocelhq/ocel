@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	secretmanager "google.golang.org/api/secretmanager/v1"
@@ -18,7 +17,7 @@ var secretKind = KindOps{
 	tagged:           secretTagged,
 	taggedAtCreation: true,
 	noun:             "secret",
-	terraform:        cost.SecretManagerSecretType,
+	terraform:        gcloud.SecretManagerSecretType,
 	parameter:        true,
 	replaceable:      true,
 	properties: func(string, Resource) map[string]any {

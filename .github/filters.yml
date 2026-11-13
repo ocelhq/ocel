@@ -13,6 +13,7 @@ go:
   - "turbo.json"
   - "scripts/floci.sh"
   - "scripts/flocidispatch/**"
+  - "scripts/pricingbridge/**"
   - "scripts/redactvet/**"
   - "www/content/docs/telemetry.mdx"
   - "skills/**"

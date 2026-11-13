@@ -13,10 +13,10 @@ import (
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	topicv1 "github.com/ocelhq/ocel/pkg/proto/app/topic/v1"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -247,13 +247,13 @@ func TestAManifestTheBuildEmitsReachesTheProviderWithEveryTopicTaskAndWorker(t *
 		t.Fatalf("assemble() = %v", err)
 	}
 
-	recorded := &provider.ShapeRequest{}
-	client := shapeServed(t, shapeRecorded{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), shaped: recorded})
-	if _, err := client.Shape(t.Context(), &contractv1.ShapeRequest{
+	recorded := &provider.InventoryRequest{}
+	client := inventoryServed(t, inventoryRecorded{Provider: fake.NewProvider(fake.Options{Region: "nowhere"}), taken: recorded})
+	if _, err := client.Inventory(t.Context(), &contractv1.InventoryRequest{
 		Manifest:    m,
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	}); err != nil {
-		t.Fatalf("Shape() = %v, want the provider to accept the manifest the build emits", err)
+		t.Fatalf("Inventory() = %v, want the provider to accept the manifest the build emits", err)
 	}
 
 	consumers := map[string]provider.ConsumerSpec{}
@@ -285,25 +285,22 @@ func TestAManifestTheBuildEmitsReachesTheProviderWithEveryTopicTaskAndWorker(t *
 	}
 }
 
-type shapeRecorded struct {
+type inventoryRecorded struct {
 	provider.Provider
-	shaped *provider.ShapeRequest
+	taken *provider.InventoryRequest
 }
 
-func (s shapeRecorded) Hooks() provider.Hooks {
+func (s inventoryRecorded) Hooks() provider.Hooks {
 	hooks := s.Provider.Hooks()
-	shape := hooks.Cost.Shape
-	hooks.Cost = &provider.CostHooks{
-		Shape: func(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
-			*s.shaped = req
-			return shape(ctx, req)
-		},
-		Estimate: hooks.Cost.Estimate,
+	inventory := hooks.Inventory
+	hooks.Inventory = func(ctx context.Context, req provider.InventoryRequest) (*costv1.ResourceSet, error) {
+		*s.taken = req
+		return inventory(ctx, req)
 	}
 	return hooks
 }
 
-func shapeServed(t *testing.T, p provider.Provider) contractv1connect.ProviderServiceClient {
+func inventoryServed(t *testing.T, p provider.Provider) contractv1connect.ProviderServiceClient {
 	t.Helper()
 	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
 		Version: "1.0.0",

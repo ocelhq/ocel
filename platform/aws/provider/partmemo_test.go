@@ -83,10 +83,10 @@ func TestADeployReadsACurrentPartRecordOnceHoweverManyStepsNeedIt(t *testing.T) 
 	}
 	table.record = string(record)
 	part := tier.Recorded(p.partRecords(), tier.RecordedSpec{
-		Name:    imageoptimizer.Part,
-		Summary: imageoptimizer.Summary,
-		Shape:   func(environment.Tier) []pricing.Shaped { return nil },
-		Remove:  func(context.Context, environment.Tier, []provider.PhysicalResource) error { return nil },
+		Name:      imageoptimizer.Part,
+		Summary:   imageoptimizer.Summary,
+		Inventory: func(environment.Tier) []pricing.Item { return nil },
+		Remove:    func(context.Context, environment.Tier, []provider.PhysicalResource) error { return nil },
 		Work: func(context.Context, environment.Tier) (tier.Work, error) {
 			return tier.Work{Digest: digest, Make: func(context.Context, []provider.PhysicalResource, bool) ([]provider.PhysicalResource, error) {
 				t.Error("the part was made again, though its record is current for this build")

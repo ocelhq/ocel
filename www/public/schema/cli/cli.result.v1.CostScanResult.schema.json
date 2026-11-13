@@ -11,21 +11,36 @@
           "type": "array"
         },
         "estimate": {
-          "$ref": "#/$defs/provider.cost.v1.Estimate.jsonschema.json"
+          "$ref": "#/$defs/common.cost.v1.Estimate.jsonschema.json"
         },
         "resources": {
-          "$ref": "#/$defs/provider.cost.v1.ResourceSet.jsonschema.json"
+          "$ref": "#/$defs/common.cost.v1.ResourceSet.jsonschema.json"
         }
       },
       "title": "Cost Scan Result",
       "type": "object"
     },
-    "google.protobuf.Struct.jsonschema.json": {
+    "common.cost.v1.CatalogVersion.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "Struct",
+      "additionalProperties": false,
+      "properties": {
+        "service": {
+          "default": "",
+          "type": "string"
+        },
+        "vendor": {
+          "default": "",
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Catalog Version",
       "type": "object"
     },
-    "provider.cost.v1.CostComponent.jsonschema.json": {
+    "common.cost.v1.CostComponent.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "patternProperties": {
@@ -43,13 +58,34 @@
           "default": "",
           "type": "string"
         },
-        "^(price_not_found)$": {
-          "default": false,
-          "type": "boolean"
-        },
-        "^(rate_ref)$": {
+        "^(price_detail)$": {
           "default": "",
           "type": "string"
+        },
+        "^(price_source)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(price_status)$": {
+          "anyOf": [
+            {
+              "enum": [
+                "PRICE_STATUS_PRICED",
+                "PRICE_STATUS_UNKNOWN_INPUT",
+                "PRICE_STATUS_MISSING",
+                "PRICE_STATUS_AMBIGUOUS",
+                "PRICE_STATUS_UNAVAILABLE"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 5,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Price Status"
         },
         "^(unit_price)$": {
           "default": "",
@@ -83,11 +119,36 @@
           "default": "",
           "type": "string"
         },
-        "priceNotFound": {
-          "default": false,
-          "type": "boolean"
+        "priceDetail": {
+          "default": "",
+          "type": "string"
         },
-        "rateRef": {
+        "priceSource": {
+          "default": "",
+          "type": "string"
+        },
+        "priceStatus": {
+          "anyOf": [
+            {
+              "enum": [
+                "PRICE_STATUS_PRICED",
+                "PRICE_STATUS_UNKNOWN_INPUT",
+                "PRICE_STATUS_MISSING",
+                "PRICE_STATUS_AMBIGUOUS",
+                "PRICE_STATUS_UNAVAILABLE"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 5,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Price Status"
+        },
+        "sku": {
           "default": "",
           "type": "string"
         },
@@ -107,7 +168,7 @@
       "title": "Cost Component",
       "type": "object"
     },
-    "provider.cost.v1.Coverage.jsonschema.json": {
+    "common.cost.v1.Coverage.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "patternProperties": {
@@ -237,7 +298,7 @@
       "title": "Coverage",
       "type": "object"
     },
-    "provider.cost.v1.Estimate.jsonschema.json": {
+    "common.cost.v1.Estimate.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "patternProperties": {
@@ -248,15 +309,17 @@
         "^(monthly_usage)$": {
           "default": "",
           "type": "string"
-        },
-        "^(rates_version)$": {
-          "default": "",
-          "type": "string"
         }
       },
       "properties": {
+        "catalogs": {
+          "items": {
+            "$ref": "#/$defs/common.cost.v1.CatalogVersion.jsonschema.json"
+          },
+          "type": "array"
+        },
         "coverage": {
-          "$ref": "#/$defs/provider.cost.v1.Coverage.jsonschema.json"
+          "$ref": "#/$defs/common.cost.v1.Coverage.jsonschema.json"
         },
         "currency": {
           "default": "",
@@ -279,10 +342,6 @@
         "profile": {
           "anyOf": [
             {
-              "pattern": "^PROFILE_UNSPECIFIED$",
-              "type": "string"
-            },
-            {
               "enum": [
                 "PROFILE_LIGHT",
                 "PROFILE_MODERATE",
@@ -291,27 +350,23 @@
               "type": "string"
             },
             {
-              "maximum": 2147483647,
-              "minimum": -2147483648,
+              "maximum": 3,
+              "minimum": 1,
               "type": "integer"
             }
           ],
           "default": 0,
           "title": "Profile"
         },
-        "ratesVersion": {
-          "default": "",
-          "type": "string"
-        },
         "resources": {
           "items": {
-            "$ref": "#/$defs/provider.cost.v1.ResourceEstimate.jsonschema.json"
+            "$ref": "#/$defs/common.cost.v1.ResourceEstimate.jsonschema.json"
           },
           "type": "array"
         },
         "scopes": {
           "items": {
-            "$ref": "#/$defs/provider.cost.v1.ScopeTotal.jsonschema.json"
+            "$ref": "#/$defs/common.cost.v1.ScopeTotal.jsonschema.json"
           },
           "type": "array"
         }
@@ -319,7 +374,7 @@
       "title": "Estimate",
       "type": "object"
     },
-    "provider.cost.v1.Resource.jsonschema.json": {
+    "common.cost.v1.Resource.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
@@ -334,6 +389,15 @@
         },
         "properties": {
           "$ref": "#/$defs/google.protobuf.Struct.jsonschema.json"
+        },
+        "references": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
         },
         "region": {
           "default": "",
@@ -373,7 +437,7 @@
       "title": "Resource",
       "type": "object"
     },
-    "provider.cost.v1.ResourceEstimate.jsonschema.json": {
+    "common.cost.v1.ResourceEstimate.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "patternProperties": {
@@ -389,7 +453,7 @@
       "properties": {
         "components": {
           "items": {
-            "$ref": "#/$defs/provider.cost.v1.CostComponent.jsonschema.json"
+            "$ref": "#/$defs/common.cost.v1.CostComponent.jsonschema.json"
           },
           "type": "array"
         },
@@ -408,10 +472,6 @@
         "status": {
           "anyOf": [
             {
-              "pattern": "^STATUS_UNSPECIFIED$",
-              "type": "string"
-            },
-            {
               "enum": [
                 "STATUS_PRICED",
                 "STATUS_FREE",
@@ -421,8 +481,8 @@
               "type": "string"
             },
             {
-              "maximum": 2147483647,
-              "minimum": -2147483648,
+              "maximum": 4,
+              "minimum": 1,
               "type": "integer"
             }
           ],
@@ -433,32 +493,37 @@
       "title": "Resource Estimate",
       "type": "object"
     },
-    "provider.cost.v1.ResourceSet.jsonschema.json": {
+    "common.cost.v1.ResourceSet.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
         "resources": {
           "items": {
-            "$ref": "#/$defs/provider.cost.v1.Resource.jsonschema.json"
+            "$ref": "#/$defs/common.cost.v1.Resource.jsonschema.json"
           },
           "type": "array"
         },
         "scopes": {
           "items": {
-            "$ref": "#/$defs/provider.cost.v1.Scope.jsonschema.json"
+            "$ref": "#/$defs/common.cost.v1.Scope.jsonschema.json"
           },
           "type": "array"
         },
         "source": {
           "default": "",
-          "minLength": 1,
+          "enum": [
+            "ocel",
+            "pulumi",
+            "sst",
+            "terraform"
+          ],
           "type": "string"
         }
       },
       "title": "Resource Set",
       "type": "object"
     },
-    "provider.cost.v1.Scope.jsonschema.json": {
+    "common.cost.v1.Scope.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
@@ -484,7 +549,7 @@
       "title": "Scope",
       "type": "object"
     },
-    "provider.cost.v1.ScopeTotal.jsonschema.json": {
+    "common.cost.v1.ScopeTotal.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "patternProperties": {
@@ -512,6 +577,11 @@
         }
       },
       "title": "Scope Total",
+      "type": "object"
+    },
+    "google.protobuf.Struct.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Struct",
       "type": "object"
     }
   },

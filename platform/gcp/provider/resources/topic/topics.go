@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/credential"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -270,7 +269,7 @@ func (p *Topic) Component() component.Component {
 		Types:         []provider.BindingType{provider.BindingTopic, provider.BindingTask},
 		Hooks:         resources.ResourceHooks{Plan: p.Plan, Provision: p.Provision, Remove: p.Remove},
 		ListResources: p.ListResources,
-		Shape:         shapeTopics,
+		Inventory:     topicsInventory,
 		Transforms:    transformTargets(),
 		Parts:         []component.Part{component.NewPart(bootstrap.Topics)},
 		Accounts:      []bootstrap.Account{{Name: names.Names.PushAccount, Purpose: task.PushPurpose}},
@@ -283,20 +282,20 @@ func (p *Topic) Component() component.Component {
 	}
 }
 
-func shapeTopics(shape component.Shape, declared []provider.Resource) error {
-	req := shape.Request
-	scope := Names(shape.Names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
+func topicsInventory(inventory component.Inventory, declared []provider.Resource) error {
+	req := inventory.Request
+	scope := Names(inventory.Names, provider.StackRef{Project: req.Deploy.Slug, Tier: req.Deploy.Tier, Name: naming.InfraStack(req.Deploy.Env)})
 	for _, resource := range declared {
 		topic := declaredTopicOf(resource)
 		name, err := scope.Topic(topic.declared)
 		if err != nil {
 			return err
 		}
-		retained, err := shapeRetention(shape, resource)
+		retained, err := retentionInventory(inventory, resource)
 		if err != nil {
 			return err
 		}
-		shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubTopicType, name, shape.Region, retained.topic, retained.topicUnknown...)
+		inventory.Tree.Add(inventory.Environment, inventory.Vendor, gcloud.PubSubTopicType, name, inventory.Region, retained.topic, retained.topicUnknown...)
 		for _, consumer := range topic.spec.Consumers {
 			subscription, err := scope.Subscription(topic.declared, consumer.Name)
 			if err != nil {
@@ -304,10 +303,10 @@ func shapeTopics(shape component.Shape, declared []provider.Resource) error {
 			}
 			properties := map[string]any{"ack_deadline_seconds": int(PushCeiling.Seconds()), "enable_message_ordering": topic.spec.Ordered}
 			maps.Copy(properties, retained.subscription)
-			shape.Tree.Add(shape.Environment, shape.Vendor, cost.PubSubSubscriptionType, subscription, shape.Region, properties, retained.subscriptionUnknown...)
+			inventory.Tree.Add(inventory.Environment, inventory.Vendor, gcloud.PubSubSubscriptionType, subscription, inventory.Region, properties, retained.subscriptionUnknown...)
 		}
 		if topic.spec.Cron != "" {
-			shape.Tree.Add(shape.Environment, shape.Vendor, cost.SchedulerJobType, name, shape.Region, map[string]any{"region": shape.Region, "schedule": topic.spec.Cron})
+			inventory.Tree.Add(inventory.Environment, inventory.Vendor, gcloud.SchedulerJobType, name, inventory.Region, map[string]any{"region": inventory.Region, "schedule": topic.spec.Cron})
 		}
 	}
 	return nil

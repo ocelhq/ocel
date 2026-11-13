@@ -52,8 +52,8 @@ func TestThePrivateNetworkIsAPartADeployAdds(t *testing.T) {
 	}
 	b, _ := servingNetworks(t)
 	net := network.NewPart(b, environment.TierProduction, network.Patches{})
-	if net.Name != network.PartName || !strings.Contains(network.Summary, network.SubnetRange) || len(net.Shape) != len(net.Resources) {
-		t.Errorf("the network part is %+v, want it named %s, its summary naming its range and each resource priced", net, network.PartName)
+	if net.Name != network.PartName || !strings.Contains(network.Summary, network.SubnetRange) || len(net.Inventory) != len(net.Resources) {
+		t.Errorf("the network part is %+v, want it named %s, its summary naming its range and each resource listed", net, network.PartName)
 	}
 }
 
@@ -302,8 +302,8 @@ func TestARecordedPrivateNetworkIsDescribedAsAPartUsedByTheProjectsConnectedToIt
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(parts) != 1 || parts[0].Name != network.PartName || !slices.Equal(parts[0].UsedBy, []string{"shop"}) || len(parts[0].Resources) != 4 || parts[0].Shape == nil {
-		t.Errorf("listDescribedParts() = %+v, want the network used by shop, holding its four resources, priced", parts)
+	if len(parts) != 1 || parts[0].Name != network.PartName || !slices.Equal(parts[0].UsedBy, []string{"shop"}) || len(parts[0].Resources) != 4 || parts[0].Inventory == nil {
+		t.Errorf("listDescribedParts() = %+v, want the network used by shop, holding its four resources, listed", parts)
 	}
 }
 

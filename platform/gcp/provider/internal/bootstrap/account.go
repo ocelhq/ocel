@@ -9,7 +9,6 @@ import (
 	"google.golang.org/api/iam/v1"
 
 	"github.com/ocelhq/ocel/pkg/environment"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -20,7 +19,7 @@ const reasonUngranted = "this credential may not act as it"
 var accountKind = KindOps{
 	tagged:    accountTagged,
 	noun:      "service account",
-	terraform: cost.ServiceAccountType,
+	terraform: gcloud.ServiceAccountType,
 	survey: func(ctx context.Context, b Engine, read Survey, target Resource) (Presence, error) {
 		return b.AccountPresence(ctx, read.Tier, target.Name)
 	},

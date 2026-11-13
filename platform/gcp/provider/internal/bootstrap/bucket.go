@@ -9,7 +9,6 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"google.golang.org/api/iterator"
@@ -27,7 +26,7 @@ const (
 var bucketKind = KindOps{
 	tagged:    bucketTagged,
 	noun:      "bucket",
-	terraform: cost.StorageBucketType,
+	terraform: gcloud.StorageBucketType,
 	properties: func(region string, target Resource) map[string]any {
 		return map[string]any{"location": region, "storage_class": "STANDARD", "versioning": map[string]any{"enabled": versioned(target.Class)}}
 	},

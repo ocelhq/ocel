@@ -7,7 +7,6 @@ import (
 	"path"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"google.golang.org/api/iterator"
@@ -22,7 +21,7 @@ const (
 
 var keyKind = KindOps{
 	noun:        "KMS key",
-	terraform:   cost.KMSCryptoKeyType,
+	terraform:   gcloud.KMSCryptoKeyType,
 	replaceable: true,
 	survey: func(ctx context.Context, b Engine, _ Survey, target Resource) (Presence, error) {
 		key, err := b.readKey(ctx, target.Name)

@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/envsource"
 	"github.com/ocelhq/ocel/pkg/progress"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 )
 
 type Hooks struct {
@@ -22,7 +22,7 @@ type Hooks struct {
 	CheckHost            func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
 	BindingAccess        *BindingAccessHooks
 	EnvSource            *EnvSourceHooks
-	Cost                 *CostHooks
+	Inventory            func(ctx context.Context, req InventoryRequest) (*costv1.ResourceSet, error)
 	Retirement           *RetirementHooks
 	ContainerReleases    *ContainerReleaseHooks
 	ProjectRemoval       *ProjectRemovalHooks
@@ -42,11 +42,6 @@ type BindingAccessHooks struct {
 type EnvSourceHooks struct {
 	ProveIdentity func(ctx context.Context, audience string) (envsource.IdentityProof, error)
 	EnsureSync    func(ctx context.Context, tier environment.Tier, project string) error
-}
-
-type CostHooks struct {
-	Shape    func(ctx context.Context, req ShapeRequest) (*costv1.ResourceSet, error)
-	Estimate func(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error)
 }
 
 type RetirementHooks struct {

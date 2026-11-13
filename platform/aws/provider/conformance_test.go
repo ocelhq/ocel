@@ -65,7 +65,7 @@ func TestTheProviderNamesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 		"OpenRegistryImages":  hooks.OpenRegistryImages != nil,
 		"EnvSource":           hooks.EnvSource != nil,
 		"BindingAccess":       hooks.BindingAccess != nil,
-		"Cost":                hooks.Cost != nil,
+		"Inventory":           hooks.Inventory != nil,
 		"Retirement":          hooks.Retirement != nil,
 	} {
 		if !set {

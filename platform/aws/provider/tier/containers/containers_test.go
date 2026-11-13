@@ -42,9 +42,9 @@ func global(kind, id string) provider.PhysicalResource {
 	return provider.PhysicalResource{Kind: kind, ID: id, Location: "global"}
 }
 
-func internalFlagsOf(shaped []pricing.Shaped) []bool {
+func internalFlagsOf(items []pricing.Item) []bool {
 	var internal []bool
-	for _, item := range shaped {
+	for _, item := range items {
 		if item.Type == component.TerraformLoadBalancer {
 			internal = append(internal, item.Properties["internal"].(bool))
 		}
@@ -52,9 +52,9 @@ func internalFlagsOf(shaped []pricing.Shaped) []bool {
 	return internal
 }
 
-func countShaped(shaped []pricing.Shaped, typ string) int {
+func countItems(items []pricing.Item, typ string) int {
 	count := 0
-	for _, item := range shaped {
+	for _, item := range items {
 		if item.Type == typ {
 			count++
 		}
@@ -62,7 +62,7 @@ func countShaped(shaped []pricing.Shaped, typ string) int {
 	return count
 }
 
-func TestTheSharedShapePricesTheLoadBalancerOfEachFrontItsContainerAppsAreRoutedThrough(t *testing.T) {
+func TestTheSharedInventoryListsTheLoadBalancerOfEachFrontItsContainerAppsAreRoutedThrough(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -79,20 +79,20 @@ func TestTheSharedShapePricesTheLoadBalancerOfEachFrontItsContainerAppsAreRouted
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			shaped := Shape(environment.TierProduction, tc.fronts)
-			if got := internalFlagsOf(shaped); !slices.Equal(got, tc.internal) {
+			items := Inventory(environment.TierProduction, tc.fronts)
+			if got := internalFlagsOf(items); !slices.Equal(got, tc.internal) {
 				t.Errorf("load balancers internal = %v, want %v", got, tc.internal)
 			}
-			if got := countShaped(shaped, component.TerraformLambdaFunction); got != tc.functions {
+			if got := countItems(items, component.TerraformLambdaFunction); got != tc.functions {
 				t.Errorf("functions = %d, want %d: the public front's liveness answer runs as one", got, tc.functions)
 			}
-			if countShaped(shaped, component.TerraformECSCluster) != 1 || countShaped(shaped, component.TerraformLogGroup) != 1 {
-				t.Errorf("shape = %+v, want the cluster and the log group every container app needs", shaped)
+			if countItems(items, component.TerraformECSCluster) != 1 || countItems(items, component.TerraformLogGroup) != 1 {
+				t.Errorf("inventory = %+v, want the cluster and the log group every container app needs", items)
 			}
 			seen := map[string]bool{}
-			for _, item := range shaped {
+			for _, item := range items {
 				if key := item.Type + ":" + item.Name; seen[key] {
-					t.Errorf("shape names %s twice, so one would price over the other", key)
+					t.Errorf("inventory names %s twice, so one would stand in for the other", key)
 				} else {
 					seen[key] = true
 				}
@@ -160,7 +160,7 @@ func TestTheContainersPartListsThePrivateFrontAndNoPublicFrontBehindCloudFront(t
 	}
 }
 
-func TestTheContainersPartDescribesWhatItsLastRaiseRecordedAndPricesThoseFronts(t *testing.T) {
+func TestTheContainersPartDescribesWhatItsLastRaiseRecordedAndListsThoseFronts(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -181,11 +181,11 @@ func TestTheContainersPartDescribesWhatItsLastRaiseRecordedAndPricesThoseFronts(
 	if !slices.Equal(part.Resources, raised) {
 		t.Errorf("resources = %v, want the %v its raise recorded", part.Resources, raised)
 	}
-	if part.Shape == nil {
-		t.Fatal("the part has no shape, so status cannot say what it costs")
+	if part.Inventory == nil {
+		t.Fatal("the part has no inventory, so status cannot say what it costs")
 	}
-	if got := internalFlagsOf(part.Shape.Resources); !slices.Equal(got, []bool{false}) {
-		t.Errorf("shaped load balancers internal = %v, want the internet-facing one alone it raised", got)
+	if got := internalFlagsOf(part.Inventory.Resources); !slices.Equal(got, []bool{false}) {
+		t.Errorf("listed load balancers internal = %v, want the internet-facing one alone it raised", got)
 	}
 }
 

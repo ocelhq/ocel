@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -354,5 +355,46 @@ func TestRemovingAPreviewFromAnUnlinkedTreeMakesNoCallAndPrintsOneHintNamingOcel
 	}
 	if lines := strings.Split(strings.TrimSpace(stderr), "\n"); len(lines) != 1 || !strings.Contains(lines[0], "`ocel link`") {
 		t.Errorf("stderr = %q, want one hint line naming `ocel link`", stderr)
+	}
+}
+
+func TestALinkedDeployReportsAnEstimateOfItsMonthlyCost(t *testing.T) {
+	dependencies, fixture, console := reportingDeploy(t)
+	console.Link(t, fixture.Root)
+	console.Prices.Answer(clitest.FakePriceCard(t))
+	dependencies.Prices.CachePath = filepath.Join(t.TempDir(), "answers.json")
+
+	_, stderr, err := deployOnce(t, dependencies, fixture, deployOptions{})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; stderr=%s", err, stderr)
+	}
+
+	estimate := console.Reports()[0].GetDeployment().GetEstimate()
+	if estimate.GetProfile() != costv1.Profile_PROFILE_MODERATE || estimate.GetMonthlyUsage() != "1.00" {
+		t.Errorf("estimate = %v, want the moderate profile pricing the api function at 1.00", estimate)
+	}
+	if got := readDeployReport(t, fixture.Root).GetEstimate(); got.GetMonthlyUsage() != estimate.GetMonthlyUsage() {
+		t.Errorf("file estimate = %v, want the estimate the console received", got)
+	}
+	if calls := console.Prices.Calls(); len(calls) != 1 {
+		t.Errorf("the deploy asked for prices %d times, want one lookup", len(calls))
+	}
+}
+
+func TestADeployWhoseEstimateFailsReportsWithoutOneAndSaysNothing(t *testing.T) {
+	dependencies, fixture, console := reportingDeploy(t)
+	console.Link(t, fixture.Root)
+	dependencies.Prices.CachePath = filepath.Join(t.TempDir(), "answers.json")
+
+	stdout, stderr, err := deployOnce(t, dependencies, fixture, deployOptions{})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; stderr=%s", err, stderr)
+	}
+
+	if estimate := console.Reports()[0].GetDeployment().GetEstimate(); estimate != nil {
+		t.Errorf("estimate = %v, want none from a console that prices nothing", estimate)
+	}
+	if said := strings.ToLower(stdout); stderr != "" || strings.Contains(said, "estimate_monthly_cost") || strings.Contains(said, "price") {
+		t.Errorf("stdout=%q stderr=%q, want nothing said about the estimate", stdout, stderr)
 	}
 }

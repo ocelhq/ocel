@@ -15,13 +15,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/pricing"
-	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/realtime"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
+	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/googletest"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/run"
@@ -446,18 +446,18 @@ func TestARealtimeWhoseKeysChangedPlansAnUpdate(t *testing.T) {
 	}
 }
 
-func TestARealtimeIsPricedAsAGatewayOfUpToTenInstancesItsTopicAndTheirSubscriptions(t *testing.T) {
+func TestARealtimeIsListedAsAGatewayOfUpToTenInstancesItsTopicAndTheirSubscriptions(t *testing.T) {
 	t.Parallel()
 
 	tree := &pricing.Tree{}
 	scope := tree.Scope("", pricing.ScopeProject, "shop")
 	named := names.New(provider.Namespace("ocel"), "acme-prod")
-	shape := component.Shape{
+	inventory := component.Inventory{
 		Tree: tree, Vendor: "gcp", Names: named, Region: "europe-west1", Environment: scope,
-		Request: provider.ShapeRequest{Deploy: provider.DeploySpec{Slug: "shop", Env: "prod", Tier: environment.TierProduction}},
+		Request: provider.InventoryRequest{Deploy: provider.DeploySpec{Slug: "shop", Env: "prod", Tier: environment.TierProduction}},
 	}
-	if err := shapeRealtime(shape, []provider.Resource{aRealtime("app")}); err != nil {
-		t.Fatalf("shapeRealtime() = %v", err)
+	if err := realtimeInventory(inventory, []provider.Resource{aRealtime("app")}); err != nil {
+		t.Fatalf("realtimeInventory() = %v", err)
 	}
 	set, err := tree.Set("ocel")
 	if err != nil {
@@ -471,17 +471,17 @@ func TestARealtimeIsPricedAsAGatewayOfUpToTenInstancesItsTopicAndTheirSubscripti
 	for _, resource := range set.Resources {
 		found[resource.Type+":"+resource.Name] = resource
 	}
-	for _, want := range []string{cost.PubSubTopicType + ":" + gateway, cost.PubSubSubscriptionType + ":" + gateway} {
+	for _, want := range []string{gcloud.PubSubTopicType + ":" + gateway, gcloud.PubSubSubscriptionType + ":" + gateway} {
 		if found[want] == nil {
-			t.Errorf("the shape prices no %s, and every publish the gateway carries crosses it", want)
+			t.Errorf("the inventory lists no %s, and every publish the gateway carries crosses it", want)
 		}
 	}
-	service := found[cost.CloudRunServiceType+":"+gateway]
+	service := found[gcloud.CloudRunServiceType+":"+gateway]
 	if service == nil {
-		t.Fatalf("the shape prices no gateway service %s", gateway)
+		t.Fatalf("the inventory lists no gateway service %s", gateway)
 	}
 	scaling := service.Properties.AsMap()["template"].(map[string]any)["scaling"].(map[string]any)
 	if scaling["max_instance_count"] != float64(10) {
-		t.Errorf("the gateway is priced at up to %v instances, want 10", scaling["max_instance_count"])
+		t.Errorf("the gateway is listed at up to %v instances, want 10", scaling["max_instance_count"])
 	}
 }

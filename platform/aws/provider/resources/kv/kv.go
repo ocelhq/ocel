@@ -57,7 +57,7 @@ func New(tokens Tokens) component.Component {
 				return checkKVNodeCount(name, patches["replicationGroup"])
 			}}, err
 		},
-		Shape: shape,
+		Inventory: inventory,
 	}
 }
 

@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/component"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/bootstrap"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
@@ -88,7 +87,7 @@ func NewPart(b bootstrap.Engine, tier environment.Tier, patches Patches) bootstr
 		Content:   content,
 		APIs:      networkAPIs,
 		Resources: resources,
-		Shape:     Shape(b.Clients.Names, tier, b.Clients.Region),
+		Inventory: Inventory(b.Clients.Names, tier, b.Clients.Region),
 		Make:      func(ctx context.Context) error { return Make(ctx, b, tier, patches) },
 		Users:     func(ctx context.Context) ([]string, error) { return listNetworkUsers(ctx, b, tier) },
 		RefuseInUse: func(ctx context.Context, removal bootstrap.PartRemoval) error {
@@ -102,15 +101,15 @@ func NewPart(b bootstrap.Engine, tier environment.Tier, patches Patches) bootstr
 	return part
 }
 
-func Shape(names names.Names, tier environment.Tier, region string) []pricing.Shaped {
-	shaped := []pricing.Shaped{
-		{Name: names.Network(tier), Type: cost.NetworkType, Properties: map[string]any{"auto_create_subnetworks": false}},
-		{Name: names.Subnetwork(tier), Type: cost.SubnetworkType, Properties: map[string]any{"region": region, "ip_cidr_range": SubnetRange}},
+func Inventory(names names.Names, tier environment.Tier, region string) []pricing.Item {
+	items := []pricing.Item{
+		{Name: names.Network(tier), Type: gcloud.NetworkType, Properties: map[string]any{"auto_create_subnetworks": false}},
+		{Name: names.Subnetwork(tier), Type: gcloud.SubnetworkType, Properties: map[string]any{"region": region, "ip_cidr_range": SubnetRange}},
 	}
 	for _, policy := range connectionPolicies {
-		shaped = append(shaped, pricing.Shaped{Name: names.ConnectionPolicy(tier, policy.name), Type: cost.ConnectionPolicyType, Properties: map[string]any{"location": region, "service_class": policy.class}})
+		items = append(items, pricing.Item{Name: names.ConnectionPolicy(tier, policy.name), Type: gcloud.ConnectionPolicyType, Properties: map[string]any{"location": region, "service_class": policy.class}})
 	}
-	return shaped
+	return items
 }
 
 func Make(ctx context.Context, b bootstrap.Engine, tier environment.Tier, patches Patches) error {
@@ -576,4 +575,4 @@ func connectivityOutcome(operation *networkconnectivity.GoogleLongrunningOperati
 	return outcome
 }
 
-var Part = component.Part{Name: PartName, Shape: Shape}
+var Part = component.Part{Name: PartName, Inventory: Inventory}

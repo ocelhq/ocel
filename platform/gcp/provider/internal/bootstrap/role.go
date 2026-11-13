@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -18,7 +17,7 @@ import (
 
 var roleKind = KindOps{
 	noun:          "custom role",
-	terraform:     cost.ProjectCustomRoleType,
+	terraform:     gcloud.ProjectCustomRoleType,
 	emulatorSkips: true,
 	survey: func(ctx context.Context, b Engine, _ Survey, target Resource) (Presence, error) {
 		role, ok := FindCustomRole(b.Clients.Names, target.Name)

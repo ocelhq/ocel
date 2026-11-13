@@ -22,7 +22,11 @@ func TestMain(m *testing.M) {
 }
 
 func newTestDependencies() Dependencies {
-	return Dependencies{Invocation: clitest.NewInvocation(), ReadFunctions: build.ReadFunctions, CollectDeclarations: declaration.Collect}
+	return Dependencies{
+		Invocation:          clitest.NewInvocation(),
+		ReadFunctions:       build.ReadFunctions,
+		CollectDeclarations: declaration.Collect,
+	}
 }
 
 func stubFunctions(dependencies *Dependencies, functions []build.Function) {

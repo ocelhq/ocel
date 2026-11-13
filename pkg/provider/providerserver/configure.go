@@ -42,7 +42,7 @@ func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureReque
 func factsProto(p provider.Provider) *contractv1.ProviderFacts {
 	facts := p.Facts()
 	return &contractv1.ProviderFacts{
-		PricesDeploys:    p.Hooks().Cost != nil,
+		TakesInventory:   p.Hooks().Inventory != nil,
 		Computes:         provider.ComputeNames(facts.Computes),
 		WorkerCeilings:   provider.WorkerCeilingMessages(facts.WorkerCeilings),
 		MaxFunctionBytes: facts.MaxFunctionBytes,

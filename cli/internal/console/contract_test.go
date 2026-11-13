@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/consolecontract"
 	cloudv1 "github.com/ocelhq/ocel/pkg/proto/cloud/v1"
+	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
 
 var contractBinding = consolecontract.Binding{Values: map[string]string{
@@ -75,6 +76,13 @@ var contractCalls = map[string]contractCall{
 		},
 		refused: func(err error) bool { return connect.CodeOf(err) == connect.CodeUnauthenticated },
 	},
+	"price-lookup": {send: func(ctx context.Context, c *Client, _ map[string]string) (any, error) {
+		return asProtoJSON(c.LookupPrices(ctx, "", []*consolev1.PriceQuery{
+			{Vendor: "aws", Service: "AWSLambda", Region: "eu-west-2", Attributes: map[string]string{"group": "AWS-Lambda-Requests", "usagetype": "Request"}, PurchaseOption: consolev1.PurchaseOption_PURCHASE_OPTION_ON_DEMAND},
+			{Vendor: "aws", Service: "AmazonCloudWatch", Region: "us-east-1", Attributes: map[string]string{"usagetype": "DataProcessing-Bytes"}, PurchaseOption: consolev1.PurchaseOption_PURCHASE_OPTION_ON_DEMAND},
+			{Vendor: "gcp", Service: "152E-C115-5142", Region: "europe-west1", ProductFamily: "ApplicationServices", Attributes: map[string]string{"description": "Services CPU (Instance-based billing)", "resourceGroup": "Compute", "usageType": "OnDemand"}, PurchaseOption: consolev1.PurchaseOption_PURCHASE_OPTION_ON_DEMAND},
+		}))
+	}},
 }
 
 func asProtoJSON[T proto.Message](msg T, err error) (any, error) {

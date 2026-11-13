@@ -51,8 +51,8 @@ func TestTheFirstDeployBehindTheALBAddsItsLoadBalancerOnceAndEveryProjectBehindI
 	if at < 0 {
 		t.Fatalf("listDescribedParts() = %+v, want the %s part", parts, albpart.PartName)
 	}
-	if got := parts[at]; !got.RetiresWithLastUser || !slices.Equal(got.UsedBy, []string{"blog", "shop"}) || got.Shape == nil || len(got.Shape.Resources) == 0 {
-		t.Errorf("the %s part = %+v, want it used by blog and shop, priced, and retiring with its last user", albpart.PartName, got)
+	if got := parts[at]; !got.RetiresWithLastUser || !slices.Equal(got.UsedBy, []string{"blog", "shop"}) || got.Inventory == nil || len(got.Inventory.Resources) == 0 {
+		t.Errorf("the %s part = %+v, want it used by blog and shop, listed in its inventory, and retiring with its last user", albpart.PartName, got)
 	}
 }
 

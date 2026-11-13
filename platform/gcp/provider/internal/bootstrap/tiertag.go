@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/gcloud"
 	"github.com/ocelhq/ocel/platform/gcp/provider/internal/names"
@@ -26,7 +25,7 @@ const (
 
 var tierTagKind = KindOps{
 	noun:      "tag key",
-	terraform: cost.TagKeyType,
+	terraform: gcloud.TagKeyType,
 	survey: func(ctx context.Context, b Engine, _ Survey, _ Resource) (Presence, error) {
 		return b.tierTagPresence(ctx)
 	},

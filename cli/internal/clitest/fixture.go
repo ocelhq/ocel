@@ -46,6 +46,7 @@ func NewInvocation() commands.Invocation {
 		ConfigPath:      func() string { return os.Getenv(commands.ConfigEnvVar) },
 		RecordEvent:     func(telemetry.Payload) bool { return false },
 		CloudSessions:   commands.NewCloudSessions(),
+		Prices:          commands.Prices{Table: FakePriceTable},
 	}
 }
 

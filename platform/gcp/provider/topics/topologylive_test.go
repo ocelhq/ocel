@@ -15,16 +15,16 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/topics"
 )
 
-func readSubscription(t *testing.T, endpoint, project, name string) (subscriptionShape, int) {
+func readSubscription(t *testing.T, endpoint, project, name string) (subscriptionInventory, int) {
 	t.Helper()
 	resp, err := http.Get(endpoint + "/v1/projects/" + project + "/subscriptions/" + name)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	var shape subscriptionShape
-	_ = json.NewDecoder(resp.Body).Decode(&shape)
-	return shape, resp.StatusCode
+	var inventory subscriptionInventory
+	_ = json.NewDecoder(resp.Body).Decode(&inventory)
+	return inventory, resp.StatusCode
 }
 
 func readTopicStatus(t *testing.T, endpoint, project, name string) int {

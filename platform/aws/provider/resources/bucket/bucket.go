@@ -36,7 +36,7 @@ func New(artifacts component.Artifacts) component.Component {
 			names, err := NamesFor(at, declared.Name)
 			return component.Transformable{Kind: transformKind, Names: names.Surfaces()}, err
 		},
-		Shape: shape,
+		Inventory: inventory,
 	}
 }
 

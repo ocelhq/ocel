@@ -3,7 +3,9 @@ package pricing
 import (
 	"fmt"
 
-	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	"google.golang.org/protobuf/types/known/structpb"
+
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 )
 
 const (
@@ -11,6 +13,7 @@ const (
 	ScopeShared      = "shared"
 	ScopeEnvironment = "environment"
 	ScopeApp         = "app"
+	ScopePart        = "part"
 )
 
 type Tree struct {
@@ -45,7 +48,7 @@ func (t *Tree) Add(scope, vendor, typ, name, region string, properties map[strin
 		Region:  region,
 		Unknown: unknown,
 	}
-	props, err := Struct(properties)
+	props, err := structpb.NewStruct(properties)
 	if err != nil && t.err == nil {
 		t.err = fmt.Errorf("%s: %w", resource.Id, err)
 	}
@@ -54,8 +57,8 @@ func (t *Tree) Add(scope, vendor, typ, name, region string, properties map[strin
 	return resource
 }
 
-func (t *Tree) AddShaped(scope, vendor, region string, shaped []Shaped) {
-	for _, item := range shaped {
+func (t *Tree) AddItems(scope, vendor, region string, items []Item) {
+	for _, item := range items {
 		t.Add(scope, vendor, item.Type, item.Name, region, item.Properties)
 	}
 }

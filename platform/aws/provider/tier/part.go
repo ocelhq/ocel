@@ -16,13 +16,13 @@ type Part struct {
 	Name    string
 	Summary string
 
-	Describe func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error)
-	Shape    func(tier environment.Tier) []pricing.Shaped
-	Removal  *Removal
-	Teardown *Removal
-	Repair   func(ctx context.Context, tier environment.Tier) (bool, error)
-	Use      *Use
-	Added    *Added
+	Describe  func(ctx context.Context, tier environment.Tier) (provider.BootstrapPart, bool, error)
+	Inventory func(tier environment.Tier) []pricing.Item
+	Removal   *Removal
+	Teardown  *Removal
+	Repair    func(ctx context.Context, tier environment.Tier) (bool, error)
+	Use       *Use
+	Added     *Added
 }
 
 type Removal struct {

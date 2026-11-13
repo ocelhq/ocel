@@ -1,0 +1,193 @@
+{
+  "set": {
+    "resources": [
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Bucket$aws:s3/bucketV2:BucketV2::UploadsBucket",
+        "name": "UploadsBucket",
+        "properties": {
+          "arn": "arn:aws:s3:::uploadsbucket-ee6419d",
+          "bucket": "uploadsbucket-ee6419d",
+          "bucket_region": "us-east-1",
+          "force_destroy": true,
+          "id": "uploadsbucket-ee6419d"
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Bucket::Uploads",
+        "type": "aws_s3_bucket",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/vpc:Vpc::VpcVpc",
+        "name": "VpcVpc",
+        "properties": {
+          "arn": "arn:aws:ec2:us-east-1:123456789012:vpc/vpc-0fake0000000000001",
+          "cidr_block": "10.0.0.0/16",
+          "enable_dns_hostnames": true,
+          "enable_dns_support": true,
+          "id": "vpc-0fake0000000000001",
+          "instance_tenancy": "default",
+          "region": "us-east-1",
+          "tags_all": {}
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "type": "aws_vpc",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Function$aws:cloudwatch/logGroup:LogGroup::ApiLogGroup",
+        "name": "ApiLogGroup",
+        "properties": {
+          "arn": "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/shop-production-ApiFunction",
+          "id": "/aws/lambda/shop-production-ApiFunction",
+          "log_group_class": "STANDARD",
+          "name": "/aws/lambda/shop-production-ApiFunction",
+          "region": "us-east-1",
+          "retention_in_days": 30,
+          "tags_all": {}
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "type": "aws_cloudwatch_log_group",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Function$aws:iam/role:Role::ApiRole",
+        "name": "ApiRole",
+        "properties": {
+          "arn": "arn:aws:iam::123456789012:role/ApiRole-1b57b65",
+          "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}",
+          "id": "ApiRole-1b57b65",
+          "max_session_duration": 3600,
+          "name": "ApiRole-1b57b65",
+          "path": "/",
+          "tags_all": {}
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "type": "aws_iam_role",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/eip:Eip::VpcElasticIp1",
+        "name": "VpcElasticIp1",
+        "properties": {
+          "allocation_id": "eipalloc-0fake0000000000001",
+          "domain": "vpc",
+          "id": "eipalloc-0fake0000000000001",
+          "public_ip": "203.0.113.10",
+          "region": "us-east-1",
+          "tags_all": {}
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "type": "aws_eip",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/subnet:Subnet::VpcPublicSubnet1",
+        "name": "VpcPublicSubnet1",
+        "properties": {
+          "arn": "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-0fake0000000000001",
+          "availability_zone": "us-east-1a",
+          "cidr_block": "10.0.0.0/22",
+          "id": "subnet-0fake0000000000001",
+          "region": "us-east-1",
+          "tags_all": {},
+          "vpc_id": "vpc-0fake0000000000001"
+        },
+        "references": {
+          "vpc_id": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/vpc:Vpc::VpcVpc"
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "type": "aws_subnet",
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Function$aws:lambda/function:Function::ApiFunction",
+        "name": "ApiFunction",
+        "properties": {
+          "architectures": [
+            "arm64"
+          ],
+          "arn": "arn:aws:lambda:us-east-1:123456789012:function:shop-production-ApiFunction",
+          "environment": {
+            "variables": {
+              "SST_RESOURCE_App": "{\"name\":\"shop\",\"stage\":\"production\"}"
+            }
+          },
+          "function_name": "shop-production-ApiFunction",
+          "handler": "index.handler",
+          "id": "shop-production-ApiFunction",
+          "memory_size": 1024,
+          "package_type": "Zip",
+          "region": "us-east-1",
+          "reserved_concurrent_executions": -1,
+          "role": "arn:aws:iam::123456789012:role/ApiRole-1b57b65",
+          "runtime": "nodejs22.x",
+          "tags_all": {},
+          "timeout": 20,
+          "version": "$LATEST"
+        },
+        "references": {
+          "role": "urn:pulumi:production::shop::sst:aws:Function$aws:iam/role:Role::ApiRole"
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "type": "aws_lambda_function",
+        "unknown": [
+          "environment.variables.SST_RESOURCE_Secret"
+        ],
+        "vendor": "aws"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/natGateway:NatGateway::VpcNatGateway1",
+        "name": "VpcNatGateway1",
+        "properties": {
+          "allocation_id": "eipalloc-0fake0000000000001",
+          "connectivity_type": "public",
+          "id": "nat-0fake0000000000001",
+          "public_ip": "203.0.113.10",
+          "region": "us-east-1",
+          "subnet_id": "subnet-0fake0000000000001",
+          "tags_all": {}
+        },
+        "references": {
+          "allocation_id": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/eip:Eip::VpcElasticIp1",
+          "subnet_id": "urn:pulumi:production::shop::sst:aws:Vpc$aws:ec2/subnet:Subnet::VpcPublicSubnet1"
+        },
+        "region": "us-east-1",
+        "scope": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "type": "aws_nat_gateway",
+        "vendor": "aws"
+      }
+    ],
+    "scopes": [
+      {
+        "id": "stage:production",
+        "kind": "stage",
+        "name": "production"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Bucket::Uploads",
+        "kind": "component",
+        "name": "Uploads",
+        "parent": "stage:production"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Vpc::Vpc",
+        "kind": "component",
+        "name": "Vpc",
+        "parent": "stage:production"
+      },
+      {
+        "id": "urn:pulumi:production::shop::sst:aws:Function::Api",
+        "kind": "component",
+        "name": "Api",
+        "parent": "stage:production"
+      }
+    ],
+    "source": "sst"
+  }
+}

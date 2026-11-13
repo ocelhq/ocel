@@ -128,9 +128,9 @@ func Digest(spec Spec) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func Shape(ns account.Namespace, tier environment.Tier) []pricing.Shaped {
+func Inventory(ns account.Namespace, tier environment.Tier) []pricing.Item {
 	names := NamesFor(ns, tier)
-	return []pricing.Shaped{
+	return []pricing.Item{
 		{Name: names.RoutesStore, Type: "aws_cloudfront_key_value_store", Properties: map[string]any{}},
 		{Name: names.Resolver, Type: "aws_cloudfront_function", Properties: map[string]any{}},
 		{Name: names.EmptyBody, Type: "aws_cloudfront_function", Properties: map[string]any{}},

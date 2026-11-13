@@ -123,7 +123,7 @@ func (p *Provider) Hooks() provider.Hooks {
 		OpenRegistryImages:  p.OpenRegistryImages,
 		EnvSource:           &provider.EnvSourceHooks{ProveIdentity: p.ProveIdentity, EnsureSync: p.EnsureEnvSourceSync},
 		BindingAccess:       &provider.BindingAccessHooks{ForwardPorts: p.ForwardPorts, ServeProxy: p.ServeBindingProxy},
-		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
+		Inventory:           p.Inventory,
 		Retirement:          &provider.RetirementHooks{Plan: p.PlanRetirement, Retire: p.Retire},
 		ContainerReleases:   &provider.ContainerReleaseHooks{ScaleUp: p.ScaleUpContainerReleases, ScaleDown: p.ScaleDownContainerReleases},
 

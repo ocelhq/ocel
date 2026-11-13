@@ -1,0 +1,85 @@
+{
+  "name": "price-lookup",
+  "request": {
+    "method": "POST",
+    "path": "/api/connect/console.v1.PricingService/Lookup",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "queries": [
+        {
+          "vendor": "aws",
+          "service": "AWSLambda",
+          "region": "eu-west-2",
+          "attributes": {
+            "group": "AWS-Lambda-Requests",
+            "usagetype": "Request"
+          },
+          "purchaseOption": "PURCHASE_OPTION_ON_DEMAND"
+        },
+        {
+          "vendor": "aws",
+          "service": "AmazonCloudWatch",
+          "region": "us-east-1",
+          "attributes": {
+            "usagetype": "DataProcessing-Bytes"
+          },
+          "purchaseOption": "PURCHASE_OPTION_ON_DEMAND"
+        },
+        {
+          "vendor": "gcp",
+          "service": "152E-C115-5142",
+          "region": "europe-west1",
+          "productFamily": "ApplicationServices",
+          "attributes": {
+            "description": "Services CPU (Instance-based billing)",
+            "resourceGroup": "Compute",
+            "usageType": "OnDemand"
+          },
+          "purchaseOption": "PURCHASE_OPTION_ON_DEMAND"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "currency": "USD",
+      "answers": [
+        {
+          "price": {
+            "sku": "NDYBVXT3KB548Z2A",
+            "unit": "Request",
+            "tiers": [
+              {
+                "start": "0",
+                "price": "0.0000002"
+              }
+            ],
+            "catalogVersion": "20261022183959",
+            "sourceUrl": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20261022183959/eu-west-2/index.json"
+          }
+        },
+        {
+          "ambiguous": {
+            "candidateSkus": [
+              "96K55R2PV3ZZZ3AM",
+              "S8QGXX5R2BKKMDSJ"
+            ],
+            "matches": 2
+          }
+        },
+        {
+          "miss": {
+            "reason": "REASON_CATALOG_NOT_SEEDED",
+            "detail": "no gcp catalog for 152E-C115-5142 is seeded"
+          }
+        }
+      ]
+    }
+  },
+  "dynamic": [
+    "$.answers[2].miss.detail"
+  ]
+}

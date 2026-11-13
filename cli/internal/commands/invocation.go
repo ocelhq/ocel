@@ -44,6 +44,7 @@ type Invocation struct {
 	CloudSessions     *CloudSessions
 	BuilderJob        *BuilderJob
 	JobAnswers        *jobinput.Answers
+	Prices            Prices
 }
 
 func (i Invocation) LoadProject(ctx context.Context, cwd string) (*project.Project, error) {

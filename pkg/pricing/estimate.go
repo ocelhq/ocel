@@ -1,18 +1,16 @@
 package pricing
 
 import (
-	"errors"
+	"cmp"
+	"context"
 	"fmt"
 	"maps"
-	"math"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/shopspring/decimal"
-	"google.golang.org/protobuf/types/known/structpb"
 
-	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	costv1 "github.com/ocelhq/ocel/pkg/proto/common/cost/v1"
 )
 
 var MonthlyHours = decimal.NewFromInt(730)
@@ -43,241 +41,117 @@ func (b Band) at(profile costv1.Profile) decimal.Decimal {
 type Component struct {
 	Name       string
 	Unit       string
-	Rate       string
+	Price      Query
+	Allowance  Allowance
 	Quantity   decimal.Decimal
 	UsageBased bool
 	Assumption string
 	Needs      []string
 }
 
-type Formula func(*Subject)
+const AllowanceAssumed = "a free allowance the account gets once is assumed unspent: a scan cannot see what the account already used this month, so a deploy beside other use of the same allowance costs more than shown"
 
-type Table map[string]Formula
+const (
+	currency        = "USD"
+	candidatesShown = 10
+)
 
-type Subject struct {
-	Resource *costv1.Resource
-	Region   string
-
-	profile   costv1.Profile
-	overrides map[string]any
-	unknown   []string
-	usageKeys []string
-	fromFile  []string
-	read      []string
-	faults    []*UsageError
-	free      bool
-	built     []built
+type Input struct {
+	Set   *costv1.ResourceSet
+	Usage *costv1.Usage
 }
 
-type built struct {
-	Component
-	unknown []string
+func Estimate(ctx context.Context, catalog Catalog, table Table, set *costv1.ResourceSet, usage *costv1.Usage) (*costv1.Estimate, error) {
+	estimates, err := EstimateAll(ctx, catalog, table, []Input{{Set: set, Usage: usage}})
+	if err != nil {
+		return nil, err
+	}
+	return estimates[0], nil
 }
 
-func (s *Subject) Free() { s.free = true }
-
-func (s *Subject) Add(c Component) {
-	if c.Assumption == "" && len(s.usageKeys) > 0 {
-		if len(s.fromFile) > 0 {
-			c.Assumption = strings.Join(s.fromFile, ", ") + " from usage file"
-		} else {
-			c.Assumption = fmt.Sprintf("%s profile: %s %s", ProfileName(s.profile), c.Quantity, c.Unit)
+func EstimateAll(ctx context.Context, catalog Catalog, table Table, inputs []Input) ([]*costv1.Estimate, error) {
+	formulated := make([]*formulatedInput, 0, len(inputs))
+	var subjects []*Subject
+	for _, input := range inputs {
+		f, err := formulate(table, input)
+		if err != nil {
+			return nil, err
 		}
+		formulated = append(formulated, f)
+		subjects = append(subjects, f.subjects...)
 	}
-	for _, path := range c.Needs {
-		s.touch(path)
+	answers, err := lookup(ctx, catalog, subjects)
+	if err != nil {
+		return nil, err
 	}
-	s.built = append(s.built, built{Component: c, unknown: s.unknown})
-	s.usageKeys, s.fromFile, s.unknown = nil, nil, nil
-}
-
-func (s *Subject) Usage(key string, band Band) decimal.Decimal {
-	s.usageKeys = append(s.usageKeys, key)
-	s.read = append(s.read, key)
-	raw, ok := walk(s.overrides, key)
-	if !ok {
-		return band.at(s.profile)
-	}
-	number, ok := raw.(float64)
-	if !ok || math.IsNaN(number) || math.IsInf(number, 0) || number < 0 {
-		s.faults = append(s.faults, &UsageError{
-			Resource: s.Resource.GetId(), Key: key,
-			Reason: fmt.Sprintf("which is %#v, not a finite non-negative number", raw),
-		})
-		return band.at(s.profile)
-	}
-	s.fromFile = append(s.fromFile, key)
-	return decimal.NewFromFloat(number)
-}
-
-type UsageError struct {
-	Resource string
-	Key      string
-	Reason   string
-}
-
-func (e *UsageError) Error() string {
-	if e.Key == "" {
-		return fmt.Sprintf("the usage names %s, %s", e.Resource, e.Reason)
-	}
-	return fmt.Sprintf("the usage for %s sets %s, %s", e.Resource, e.Key, e.Reason)
-}
-
-func unpriced(usage *costv1.Usage, priced map[string]bool) error {
-	var faults []error
-	for _, id := range slices.Sorted(maps.Keys(usage.GetResources())) {
-		if !priced[id] {
-			faults = append(faults, &UsageError{Resource: id, Reason: "which is no resource this scan prices"})
+	estimates := make([]*costv1.Estimate, 0, len(formulated))
+	for _, f := range formulated {
+		est, err := f.estimate(answers)
+		if err != nil {
+			return nil, err
 		}
+		estimates = append(estimates, est)
 	}
-	return errors.Join(faults...)
+	return estimates, nil
 }
 
-func (s *Subject) faulted() error {
-	faults := make([]error, 0, len(s.faults))
-	for _, fault := range s.faults {
-		faults = append(faults, fault)
-	}
-	for _, key := range leaves(s.overrides, "") {
-		if !slices.Contains(s.read, key) {
-			faults = append(faults, &UsageError{
-				Resource: s.Resource.GetId(), Key: key,
-				Reason: fmt.Sprintf("which pricing a %s never reads", s.Resource.GetType()),
-			})
-		}
-	}
-	return errors.Join(faults...)
+type formulatedInput struct {
+	set      *costv1.ResourceSet
+	profile  costv1.Profile
+	subjects []*Subject
 }
 
-func leaves(root map[string]any, prefix string) []string {
-	var out []string
-	for key, value := range root {
-		path := prefix + key
-		if nested, ok := value.(map[string]any); ok && len(nested) > 0 {
-			out = append(out, leaves(nested, path+".")...)
-			continue
-		}
-		out = append(out, path)
-	}
-	slices.Sort(out)
-	return out
-}
-
-func (s *Subject) Unknown(path string) bool {
-	return slices.Contains(s.Resource.GetUnknown(), path)
-}
-
-func (s *Subject) touch(path string) bool {
-	if !s.Unknown(path) {
-		return false
-	}
-	if !slices.Contains(s.unknown, path) {
-		s.unknown = append(s.unknown, path)
-	}
-	return true
-}
-
-func (s *Subject) value(path string) (any, bool) {
-	if s.touch(path) {
-		return nil, false
-	}
-	return walk(s.Resource.GetProperties().AsMap(), path)
-}
-
-func walk(root map[string]any, path string) (any, bool) {
-	var current any = root
-	for _, segment := range strings.Split(path, ".") {
-		switch typed := current.(type) {
-		case map[string]any:
-			var ok bool
-			if current, ok = typed[segment]; !ok {
-				return nil, false
-			}
-		case []any:
-			index, err := strconv.Atoi(segment)
-			if err != nil || index < 0 || index >= len(typed) {
-				return nil, false
-			}
-			current = typed[index]
-		default:
-			return nil, false
-		}
-	}
-	return current, true
-}
-
-func (s *Subject) Number(path string) decimal.Decimal {
-	raw, ok := s.value(path)
-	if !ok {
-		return decimal.Zero
-	}
-	switch v := raw.(type) {
-	case float64:
-		return decimal.NewFromFloat(v)
-	case string:
-		if parsed, err := decimal.NewFromString(v); err == nil {
-			return parsed
-		}
-	}
-	return decimal.Zero
-}
-
-func (s *Subject) String(path string) string {
-	raw, ok := s.value(path)
-	if !ok {
-		return ""
-	}
-	str, _ := raw.(string)
-	return str
-}
-
-func (s *Subject) Bool(path string) bool {
-	raw, ok := s.value(path)
-	if !ok {
-		return false
-	}
-	b, _ := raw.(bool)
-	return b
-}
-
-func (s *Subject) List(path string) []any {
-	raw, ok := s.value(path)
-	if !ok {
-		return nil
-	}
-	list, _ := raw.([]any)
-	return list
-}
-
-func (s *Subject) Has(path string) bool {
-	_, ok := s.value(path)
-	return ok
-}
-
-func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	set := req.GetResources()
-	if set == nil {
+func formulate(table Table, input Input) (*formulatedInput, error) {
+	if input.Set == nil {
 		return nil, fmt.Errorf("nothing to price")
 	}
-	profile := req.GetUsage().GetProfile()
+	profile := input.Usage.GetProfile()
 	if profile == costv1.Profile_PROFILE_UNSPECIFIED {
 		profile = DefaultProfile
 	}
-	est := &costv1.Estimate{
-		Currency:     card.Currency,
-		RatesVersion: card.Version,
-		Profile:      profile,
-		Coverage:     &costv1.Coverage{UnsupportedTypes: map[string]uint32{}},
+	if _, defined := costv1.Profile_name[int32(profile)]; !defined {
+		return nil, fmt.Errorf("no usage profile is numbered %d", profile)
 	}
-	supported := map[string]bool{}
-	fixed := map[string]decimal.Decimal{}
-	usage := map[string]decimal.Decimal{}
-	var totalFixed, totalUsage decimal.Decimal
-	account := &tally{card: card, spent: map[rateKey]decimal.Decimal{}}
+	resources := make(map[string]*costv1.Resource, len(input.Set.GetResources()))
+	for _, resource := range input.Set.GetResources() {
+		resources[resource.GetId()] = resource
+	}
+	f := &formulatedInput{set: input.Set, profile: profile, subjects: make([]*Subject, len(input.Set.GetResources()))}
 	priced := map[string]bool{}
-	for _, resource := range set.GetResources() {
+	for i, resource := range input.Set.GetResources() {
 		formula, known := table[resource.GetType()]
 		if !known {
+			continue
+		}
+		subject := &Subject{Resource: resource, resources: resources, profile: profile, overrides: overridesFor(input.Usage, resource.GetId())}
+		formula(subject)
+		if err := subject.faulted(); err != nil {
+			return nil, err
+		}
+		priced[resource.GetId()] = true
+		f.subjects[i] = subject
+	}
+	if err := unpriced(input.Usage, priced); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+func (f *formulatedInput) estimate(answers map[string]Answer) (*costv1.Estimate, error) {
+	est := &costv1.Estimate{
+		Currency: currency,
+		Profile:  f.profile,
+		Coverage: &costv1.Coverage{UnsupportedTypes: map[string]uint32{}},
+	}
+	account := &tally{answers: answers, spent: map[string]decimal.Decimal{}, catalogs: map[catalogVersion]bool{}}
+	supported := map[string]bool{}
+	fixed := map[string]decimal.Decimal{}
+	usageCost := map[string]decimal.Decimal{}
+	var totalFixed, totalUsage decimal.Decimal
+	var vendorNotes []string
+	for i, resource := range f.set.GetResources() {
+		subject := f.subjects[i]
+		if subject == nil {
 			est.Coverage.Unsupported++
 			est.Coverage.UnsupportedTypes[resource.GetType()]++
 			est.Resources = append(est.Resources, &costv1.ResourceEstimate{
@@ -286,20 +160,14 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 			continue
 		}
 		supported[resource.GetType()] = true
-		subject := &Subject{
-			Resource:  resource,
-			Region:    resource.GetRegion(),
-			profile:   profile,
-			overrides: overridesFor(req.GetUsage(), resource.GetId()),
+		for _, text := range subject.notes {
+			if !slices.Contains(vendorNotes, text) {
+				vendorNotes = append(vendorNotes, text)
+			}
 		}
-		formula(subject)
-		if err := subject.faulted(); err != nil {
-			return nil, err
-		}
-		priced[resource.GetId()] = true
-		priced := account.price(subject)
-		est.Resources = append(est.Resources, priced.estimate)
-		switch priced.estimate.Status {
+		out := account.price(subject)
+		est.Resources = append(est.Resources, out.estimate)
+		switch out.estimate.Status {
 		case costv1.ResourceEstimate_STATUS_FREE:
 			est.Coverage.Free++
 		case costv1.ResourceEstimate_STATUS_NO_PRICE:
@@ -307,20 +175,56 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 		default:
 			est.Coverage.Supported++
 		}
-		fixed[resource.GetScope()] = fixed[resource.GetScope()].Add(priced.fixed)
-		usage[resource.GetScope()] = usage[resource.GetScope()].Add(priced.usage)
-		totalFixed = totalFixed.Add(priced.fixed)
-		totalUsage = totalUsage.Add(priced.usage)
+		fixed[resource.GetScope()] = fixed[resource.GetScope()].Add(out.fixed)
+		usageCost[resource.GetScope()] = usageCost[resource.GetScope()].Add(out.usage)
+		totalFixed = totalFixed.Add(out.fixed)
+		totalUsage = totalUsage.Add(out.usage)
 	}
-	if err := unpriced(req.GetUsage(), priced); err != nil {
+	scopes, err := rollUp(f.set.GetScopes(), fixed, usageCost)
+	if err != nil {
 		return nil, err
 	}
 	est.Coverage.SupportedTypes = slices.Sorted(maps.Keys(supported))
 	est.MonthlyFixed = money(totalFixed)
 	est.MonthlyUsage = money(totalUsage)
-	est.Scopes = rollUp(set.GetScopes(), fixed, usage)
-	est.Notes = account.notes
+	est.Scopes = scopes
+	est.Notes = slices.Concat(account.notes, vendorNotes)
+	est.Catalogs = account.versions()
 	return est, nil
+}
+
+func lookup(ctx context.Context, catalog Catalog, subjects []*Subject) (map[string]Answer, error) {
+	var queries []Query
+	var keys []string
+	sent := map[string]bool{}
+	for _, subject := range subjects {
+		if subject == nil {
+			continue
+		}
+		for _, b := range subject.built {
+			if len(b.unknown) > 0 || len(b.absent) > 0 || sent[b.key] {
+				continue
+			}
+			sent[b.key] = true
+			queries = append(queries, b.Price)
+			keys = append(keys, b.key)
+		}
+	}
+	if len(queries) == 0 {
+		return nil, nil
+	}
+	answers, err := catalog.Lookup(ctx, queries)
+	if err != nil {
+		return nil, fmt.Errorf("price lookup: %w", err)
+	}
+	if len(answers) != len(queries) {
+		return nil, fmt.Errorf("price lookup: the catalog answered %d of %d queries", len(answers), len(queries))
+	}
+	byKey := make(map[string]Answer, len(queries))
+	for i, key := range keys {
+		byKey[key] = answers[i]
+	}
+	return byKey, nil
 }
 
 func overridesFor(usage *costv1.Usage, id string) map[string]any {
@@ -335,29 +239,41 @@ type pricedResource struct {
 	fixed, usage decimal.Decimal
 }
 
+type catalogVersion struct{ vendor, service, version string }
+
 type tally struct {
-	card  *Card
-	spent map[rateKey]decimal.Decimal
-	notes []string
+	answers  map[string]Answer
+	spent    map[string]decimal.Decimal
+	catalogs map[catalogVersion]bool
+	notes    []string
 }
 
-const AllowanceAssumed = "a free allowance the account gets once is assumed unspent: a scan cannot see what the account already used this month, so a deploy beside other use of the same allowance costs more than shown"
-
-func (l *tally) charge(rate Rate, quantity decimal.Decimal) (cost, marginal decimal.Decimal) {
-	if rate.Allowance != AllowanceAccount {
-		return rate.Cost(quantity)
+func (l *tally) charge(b built, price Price) (cost, marginal decimal.Decimal) {
+	if b.Allowance == AllowanceResource || (b.Allowance == "" && !price.allows()) {
+		return price.Cost(b.Quantity)
 	}
-	l.note(AllowanceAssumed)
-	key := rateKey{rate.ID, rate.Region}
-	from := l.spent[key]
-	l.spent[key] = from.Add(quantity)
-	return rate.Between(from, from.Add(quantity))
+	if price.allows() && !slices.Contains(l.notes, AllowanceAssumed) {
+		l.notes = append(l.notes, AllowanceAssumed)
+	}
+	from := l.spent[b.key]
+	l.spent[b.key] = from.Add(b.Quantity)
+	return price.Between(from, from.Add(b.Quantity))
 }
 
-func (l *tally) note(text string) {
-	if text != "" && !slices.Contains(l.notes, text) {
-		l.notes = append(l.notes, text)
+func (l *tally) versions() []*costv1.CatalogVersion {
+	keys := slices.SortedFunc(maps.Keys(l.catalogs), func(a, b catalogVersion) int {
+		return cmp.Or(cmp.Compare(a.vendor, b.vendor), cmp.Compare(a.service, b.service), cmp.Compare(a.version, b.version))
+	})
+	versions := make([]*costv1.CatalogVersion, 0, len(keys))
+	for _, key := range keys {
+		versions = append(versions, &costv1.CatalogVersion{Vendor: key.vendor, Service: key.service, Version: key.version})
 	}
+	return versions
+}
+
+func ambiguity(answer Answer) string {
+	shown := answer.Candidates[:min(len(answer.Candidates), candidatesShown)]
+	return fmt.Sprintf("matches %d skus: %s", max(answer.Matches, len(answer.Candidates)), strings.Join(shown, ", "))
 }
 
 func (l *tally) price(subject *Subject) pricedResource {
@@ -373,24 +289,45 @@ func (l *tally) price(subject *Subject) pricedResource {
 			Unit:             b.Unit,
 			UsageBased:       b.UsageBased,
 			Assumption:       b.Assumption,
-			RateRef:          b.Rate,
 			DependsOnUnknown: b.unknown,
 		}
 		out.estimate.Components = append(out.estimate.Components, component)
+		if len(b.absent) > 0 {
+			component.PriceStatus = costv1.CostComponent_PRICE_STATUS_MISSING
+			component.PriceDetail = strings.Join(b.absent, ", ")
+			continue
+		}
 		if len(b.unknown) > 0 {
+			component.PriceStatus = costv1.CostComponent_PRICE_STATUS_UNKNOWN_INPUT
 			continue
 		}
 		component.MonthlyQuantity = b.Quantity.String()
-		rate, found, fellBack := l.card.Lookup(b.Rate, subject.Region)
-		if !found {
-			component.PriceNotFound = true
+		answer := l.answers[b.key]
+		switch {
+		case answer.Kind == AnswerPriced && len(answer.Price.Steps) == 0:
+			component.PriceStatus = costv1.CostComponent_PRICE_STATUS_MISSING
+			component.PriceDetail = fmt.Sprintf("the catalog answered sku %s with no price", answer.Price.SKU)
+			continue
+		case answer.Kind == AnswerPriced:
+		case answer.Kind == AnswerAmbiguous:
+			component.PriceStatus = costv1.CostComponent_PRICE_STATUS_AMBIGUOUS
+			component.PriceDetail = ambiguity(answer)
+			continue
+		case answer.Kind == AnswerUnavailable:
+			component.PriceStatus = costv1.CostComponent_PRICE_STATUS_UNAVAILABLE
+			component.PriceDetail = answer.Reason
+			continue
+		default:
+			component.PriceStatus = costv1.CostComponent_PRICE_STATUS_MISSING
+			component.PriceDetail = answer.Reason
 			continue
 		}
-		if fellBack {
-			l.note(rate.Note)
-		}
-		cost, marginal := l.charge(rate, b.Quantity)
+		cost, marginal := l.charge(b, answer.Price)
 		cost = cost.Round(moneyPlaces)
+		l.catalogs[catalogVersion{b.Price.Vendor, b.Price.Service, answer.Price.CatalogVersion}] = true
+		component.PriceStatus = costv1.CostComponent_PRICE_STATUS_PRICED
+		component.Sku = answer.Price.SKU
+		component.PriceSource = answer.Price.Source
 		component.UnitPrice = marginal.String()
 		component.MonthlyCost = money(cost)
 		priced++
@@ -410,7 +347,11 @@ func (l *tally) price(subject *Subject) pricedResource {
 	return out
 }
 
-func rollUp(scopes []*costv1.Scope, fixed, usage map[string]decimal.Decimal) []*costv1.ScopeTotal {
+func Unpriced(c *costv1.CostComponent) bool {
+	return c.GetPriceStatus() != costv1.CostComponent_PRICE_STATUS_PRICED
+}
+
+func rollUp(scopes []*costv1.Scope, fixed, usage map[string]decimal.Decimal) ([]*costv1.ScopeTotal, error) {
 	parent := make(map[string]string, len(scopes))
 	for _, scope := range scopes {
 		parent[scope.GetId()] = scope.GetParent()
@@ -418,7 +359,12 @@ func rollUp(scopes []*costv1.Scope, fixed, usage map[string]decimal.Decimal) []*
 	totalFixed := map[string]decimal.Decimal{}
 	totalUsage := map[string]decimal.Decimal{}
 	for id := range fixed {
+		visited := map[string]bool{}
 		for at := id; at != ""; at = parent[at] {
+			if visited[at] {
+				return nil, fmt.Errorf("scope %s is its own ancestor", at)
+			}
+			visited[at] = true
 			totalFixed[at] = totalFixed[at].Add(fixed[id])
 			totalUsage[at] = totalUsage[at].Add(usage[id])
 		}
@@ -431,21 +377,22 @@ func rollUp(scopes []*costv1.Scope, fixed, usage map[string]decimal.Decimal) []*
 			MonthlyUsage: money(totalUsage[scope.GetId()]),
 		})
 	}
-	return totals
+	return totals, nil
 }
 
 const moneyPlaces = 2
 
 func money(amount decimal.Decimal) string { return amount.StringFixed(moneyPlaces) }
 
-func Struct(values map[string]any) (*structpb.Struct, error) {
-	return structpb.NewStruct(values)
-}
-
-func Tables(tables ...Table) Table {
-	merged := Table{}
-	for _, table := range tables {
-		maps.Copy(merged, table)
+func Combine(rules ...Rules) Table {
+	combined := Table{}
+	for _, vendor := range rules {
+		for typ, formula := range vendor.Table {
+			combined[typ] = func(s *Subject) {
+				s.notes = append(s.notes, vendor.Notes...)
+				formula(s)
+			}
+		}
 	}
-	return merged
+	return combined
 }

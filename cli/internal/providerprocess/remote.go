@@ -19,7 +19,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/wireerror"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1/variablestorev1connect"
 	"github.com/ocelhq/ocel/pkg/tracing"
 )
@@ -96,10 +95,6 @@ func (t *remoteTransport) Client() (contractv1connect.ProviderServiceClient, err
 
 func (t *remoteTransport) VariableStore() (variablestorev1connect.VariableStoreServiceClient, error) {
 	return t.clients.variableStore, nil
-}
-
-func (t *remoteTransport) Cost() (costv1connect.CostServiceClient, error) {
-	return t.clients.cost, nil
 }
 
 func (t *remoteTransport) Facts() *contractv1.ProviderFacts { return t.facts }

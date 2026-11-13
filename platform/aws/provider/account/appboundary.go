@@ -50,6 +50,7 @@ func appBoundaryActions() []string {
 		"logs:DescribeLogGroups",
 		"logs:DescribeLogStreams",
 		"logs:PutLogEvents",
+		"pricing:GetProducts",
 		"rds-data:BatchExecuteStatement",
 		"rds-data:BeginTransaction",
 		"rds-data:CommitTransaction",

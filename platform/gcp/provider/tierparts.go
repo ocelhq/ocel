@@ -61,7 +61,7 @@ func newDeployUse(pre provider.DeployPreflight) deployUse {
 	return deployUse{deploy: pre.Deploy, front: pre.Edge, resources: pre.Resources, usages: pre.Apps, uses: pre.Uses}
 }
 
-func newShapeUse(req provider.ShapeRequest) deployUse {
+func newInventoryUse(req provider.InventoryRequest) deployUse {
 	return deployUse{deploy: req.Deploy, front: req.Edge, resources: req.Resources, usages: req.Usages, uses: req.Uses}
 }
 

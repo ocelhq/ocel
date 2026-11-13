@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/pricing"
 	"github.com/ocelhq/ocel/pkg/progress"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
@@ -21,6 +22,8 @@ type Suite struct {
 	Certificates *CertificateChecks
 
 	Logs *LogChecks
+
+	Rules pricing.Table
 }
 
 type constructor func(ctx context.Context, settings provider.Settings) (provider.Provider, error)
@@ -38,7 +41,7 @@ func Run(t *testing.T, suite Suite) {
 		runServedRPC(t, suite)
 		t.Run("a run says what it would change and then what it is doing", func(t *testing.T) { runBootstrapStream(t, suite) })
 	})
-	t.Run("cost", func(t *testing.T) { runCost(t, suite) })
+	t.Run("inventory", func(t *testing.T) { runInventory(t, suite) })
 	t.Run("certificates", func(t *testing.T) { runCertificates(t, suite, suite.New) })
 	t.Run("ports", func(t *testing.T) { RunPorts(t, construct(t, suite, suite.New)) })
 	t.Run("hooks", func(t *testing.T) { RunHooks(t, construct(t, suite, suite.New)) })
@@ -55,7 +58,7 @@ func RunWithoutAccount(t *testing.T, suite Suite) {
 	refuseIncompleteServer(t, suite)
 
 	t.Run("rpc", func(t *testing.T) { runServedRPC(t, suite) })
-	t.Run("cost", func(t *testing.T) { runCost(t, suite) })
+	t.Run("inventory", func(t *testing.T) { runInventory(t, suite) })
 	t.Run("certificates", func(t *testing.T) { runCertificates(t, suite, suite.Server.New) })
 	t.Run("logs", func(t *testing.T) {
 		p := construct(t, suite, suite.Server.New)

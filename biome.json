@@ -23,6 +23,7 @@
       "!**/fixtures/**/*.json",
       "!**/schema.core.json",
       "!**/schema.provider.json",
+      "!pkg/pricing/ingest/manifest.json",
       "!**/*_pb.ts",
       "!**/*_pb.js",
       "!**/next-env.d.ts",

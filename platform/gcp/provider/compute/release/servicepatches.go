@@ -156,7 +156,7 @@ func refuseDisagreeingAccounts(app string, runAs map[string][]string) error {
 		app, strings.Join(said, "; "), serviceSurfaceName)
 }
 
-func PriceService(project, region string, served run.Serving, app, kind, name string, evaluated surface.Evaluated) (map[string]any, []string, error) {
+func ServiceInventory(project, region string, served run.Serving, app, kind, name string, evaluated surface.Evaluated) (map[string]any, []string, error) {
 	service := newServiceSurface(servicePlacement{project: project, region: region}, kind != TransformWorker)
 	known, unknown := service.SplitOutputs(evaluated.ForApp(app, kind, name).Patches[serviceSurfaceName])
 	patch := ServicePatch{
@@ -169,16 +169,16 @@ func PriceService(project, region string, served run.Serving, app, kind, name st
 	if err != nil {
 		return nil, nil, err
 	}
-	var priced []string
-	for _, path := range slices.Sorted(maps.Keys(pricedPaths)) {
+	var listed []string
+	for _, path := range slices.Sorted(maps.Keys(inventoryPaths)) {
 		if slices.ContainsFunc(unknown, func(unset string) bool { return path == unset || strings.HasPrefix(path, unset+".") }) {
-			priced = append(priced, pricedPaths[path])
+			listed = append(listed, inventoryPaths[path])
 		}
 	}
-	return run.PricedService(desired), priced, nil
+	return run.PropertiesOf(desired), listed, nil
 }
 
-var pricedPaths = map[string]string{
+var inventoryPaths = map[string]string{
 	"template.containers.resources.limits.cpu":    "template.containers.0.resources.limits.cpu",
 	"template.containers.resources.limits.memory": "template.containers.0.resources.limits.memory",
 	"template.containers.resources.cpuIdle":       "template.containers.0.resources.cpu_idle",

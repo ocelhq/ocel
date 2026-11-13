@@ -73,13 +73,13 @@ func TestTopicsAndTasksCheckTheServicesAndPermissionsTheyAreAddedWith(t *testing
 func TestEveryListingOfATiersRunsByTopicConsumerStatusAndTagHasItsIndex(t *testing.T) {
 	t.Parallel()
 
-	shapes := map[string]bool{}
+	inventories := map[string]bool{}
 	for _, index := range task.RunIndexes() {
 		key := ""
 		for _, field := range index.Fields {
 			key += field.FieldPath + ":" + field.Order + field.ArrayConfig + " "
 		}
-		shapes[key] = true
+		inventories[key] = true
 		if index.QueryScope != "COLLECTION" {
 			t.Errorf("an index on runs is scoped to %s, want each environment's own runs collection", index.QueryScope)
 		}
@@ -87,8 +87,8 @@ func TestEveryListingOfATiersRunsByTopicConsumerStatusAndTagHasItsIndex(t *testi
 	for _, consumer := range []string{"", "consumer:ASCENDING "} {
 		for _, status := range []string{"", "status:ASCENDING "} {
 			for _, tags := range []string{"", "tags:CONTAINS "} {
-				if want := "topic:ASCENDING " + consumer + status + tags + "createdAt:DESCENDING "; !shapes[want] {
-					t.Errorf("the runs indexes are %v, want one on %s", shapes, want)
+				if want := "topic:ASCENDING " + consumer + status + tags + "createdAt:DESCENDING "; !inventories[want] {
+					t.Errorf("the runs indexes are %v, want one on %s", inventories, want)
 				}
 			}
 		}

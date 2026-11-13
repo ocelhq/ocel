@@ -488,6 +488,446 @@
       "title": "Job Result",
       "type": "object"
     },
+    "common.cost.v1.CatalogVersion.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "service": {
+          "default": "",
+          "type": "string"
+        },
+        "vendor": {
+          "default": "",
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Catalog Version",
+      "type": "object"
+    },
+    "common.cost.v1.CostComponent.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(depends_on_unknown)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(monthly_cost)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(monthly_quantity)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(price_detail)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(price_source)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(price_status)$": {
+          "anyOf": [
+            {
+              "enum": [
+                "PRICE_STATUS_PRICED",
+                "PRICE_STATUS_UNKNOWN_INPUT",
+                "PRICE_STATUS_MISSING",
+                "PRICE_STATUS_AMBIGUOUS",
+                "PRICE_STATUS_UNAVAILABLE"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 5,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Price Status"
+        },
+        "^(unit_price)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(usage_based)$": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "properties": {
+        "assumption": {
+          "default": "",
+          "type": "string"
+        },
+        "dependsOnUnknown": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "monthlyCost": {
+          "default": "",
+          "type": "string"
+        },
+        "monthlyQuantity": {
+          "default": "",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "type": "string"
+        },
+        "priceDetail": {
+          "default": "",
+          "type": "string"
+        },
+        "priceSource": {
+          "default": "",
+          "type": "string"
+        },
+        "priceStatus": {
+          "anyOf": [
+            {
+              "enum": [
+                "PRICE_STATUS_PRICED",
+                "PRICE_STATUS_UNKNOWN_INPUT",
+                "PRICE_STATUS_MISSING",
+                "PRICE_STATUS_AMBIGUOUS",
+                "PRICE_STATUS_UNAVAILABLE"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 5,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Price Status"
+        },
+        "sku": {
+          "default": "",
+          "type": "string"
+        },
+        "unit": {
+          "default": "",
+          "type": "string"
+        },
+        "unitPrice": {
+          "default": "",
+          "type": "string"
+        },
+        "usageBased": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "Cost Component",
+      "type": "object"
+    },
+    "common.cost.v1.Coverage.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(no_price)$": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
+        "^(supported_types)$": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(unsupported_types)$": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "maximum": 4294967295,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "pattern": "^[0-9]+$",
+                "type": "string"
+              }
+            ]
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "properties": {
+        "free": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
+        "noPrice": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
+        "supported": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
+        "supportedTypes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "unsupported": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        },
+        "unsupportedTypes": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "maximum": 4294967295,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "pattern": "^[0-9]+$",
+                "type": "string"
+              }
+            ]
+          },
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "title": "Coverage",
+      "type": "object"
+    },
+    "common.cost.v1.Estimate.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(monthly_fixed)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(monthly_usage)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "catalogs": {
+          "items": {
+            "$ref": "#/$defs/common.cost.v1.CatalogVersion.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "coverage": {
+          "$ref": "#/$defs/common.cost.v1.Coverage.jsonschema.json"
+        },
+        "currency": {
+          "default": "",
+          "type": "string"
+        },
+        "monthlyFixed": {
+          "default": "",
+          "type": "string"
+        },
+        "monthlyUsage": {
+          "default": "",
+          "type": "string"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "enum": [
+                "PROFILE_LIGHT",
+                "PROFILE_MODERATE",
+                "PROFILE_HEAVY"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 3,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Profile"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/common.cost.v1.ResourceEstimate.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "scopes": {
+          "items": {
+            "$ref": "#/$defs/common.cost.v1.ScopeTotal.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Estimate",
+      "type": "object"
+    },
+    "common.cost.v1.ResourceEstimate.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(monthly_fixed)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(monthly_usage)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "components": {
+          "items": {
+            "$ref": "#/$defs/common.cost.v1.CostComponent.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "monthlyFixed": {
+          "default": "",
+          "type": "string"
+        },
+        "monthlyUsage": {
+          "default": "",
+          "type": "string"
+        },
+        "resource": {
+          "default": "",
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "STATUS_PRICED",
+                "STATUS_FREE",
+                "STATUS_UNSUPPORTED",
+                "STATUS_NO_PRICE"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 4,
+              "minimum": 1,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Status"
+        }
+      },
+      "title": "Resource Estimate",
+      "type": "object"
+    },
+    "common.cost.v1.ScopeTotal.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(monthly_fixed)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(monthly_usage)$": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "monthlyFixed": {
+          "default": "",
+          "type": "string"
+        },
+        "monthlyUsage": {
+          "default": "",
+          "type": "string"
+        },
+        "scope": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Scope Total",
+      "type": "object"
+    },
     "common.environment.v1.Environment.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -904,6 +1344,9 @@
           "default": "",
           "maxLength": 4000,
           "type": "string"
+        },
+        "estimate": {
+          "$ref": "#/$defs/common.cost.v1.Estimate.jsonschema.json"
         },
         "finishedAt": {
           "$ref": "#/$defs/google.protobuf.Timestamp.jsonschema.json"

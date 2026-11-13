@@ -123,7 +123,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	if err != nil {
 		return nil, err
 	}
-	p, readiness, err := h.readiness(req.GetEdge().GetKind())
+	_, readiness, err := h.readiness(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
@@ -135,11 +135,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 		Bootstrap: BootstrapStatusProto(status, h.session.writer, req.GetTier(), status.Parts),
 	}
 	if req.GetWithParts() {
-		var price estimate
-		if cost := p.Hooks().Cost; cost != nil {
-			price = cost.Estimate
-		}
-		if resp.Parts, err = bootstrapPartsOf(ctx, readiness, status, price); err != nil {
+		if resp.Parts, resp.Inventory, err = bootstrapPartsOf(ctx, readiness, status); err != nil {
 			return nil, provider.RefusalError(err)
 		}
 	}
