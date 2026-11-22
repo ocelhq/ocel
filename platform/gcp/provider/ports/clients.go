@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	cloudtasks "cloud.google.com/go/cloudtasks/apiv2"
 	"cloud.google.com/go/firestore"
@@ -36,6 +37,8 @@ const (
 	ConnectorAccountEnvVar = "OCEL_GCP_CONNECTOR_ACCOUNT"
 
 	CloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
+
+	cloudTasksCallTimeout = 20 * time.Second
 
 	credentialHint = "authenticate with Google Cloud: run `gcloud auth application-default login`"
 )
@@ -154,8 +157,16 @@ func (c *Clients) PubSub() (*pubsub.Service, error) {
 
 func (c *Clients) CloudTasks() (*cloudtasks.Client, error) {
 	return Opened(c, &c.tasks, "Cloud Tasks", func() (*cloudtasks.Client, error) {
-		return cloudtasks.NewClient(context.Background(), NewGRPCOptions(c.Endpoint, c.QuotaProject())...)
+		options := append(NewGRPCOptions(c.Endpoint, c.QuotaProject()),
+			option.WithGRPCDialOption(grpc.WithChainUnaryInterceptor(withinCloudTasksTimeout)))
+		return cloudtasks.NewClient(context.Background(), options...)
 	})
+}
+
+func withinCloudTasksTimeout(ctx context.Context, method string, req, reply any, conn *grpc.ClientConn, invoke grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	ctx, cancel := context.WithTimeout(ctx, cloudTasksCallTimeout)
+	defer cancel()
+	return invoke(ctx, method, req, reply, conn, opts...)
 }
 
 func (c *Clients) Scheduler() (*cloudscheduler.Service, error) {
