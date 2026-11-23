@@ -25,6 +25,26 @@ esac
 
 const exitZeroStub = "#!/usr/bin/env bash\nexit 0\n";
 
+const sudoStub = `#!/usr/bin/env bash
+[ "$*" != "-n iptables-save -t filter" ] || printf '%s\\n' "$STUB_HOST_FILTER"
+exit 0
+`;
+
+const dockerFilter = [
+  "*filter",
+  ":INPUT ACCEPT [0:0]",
+  ":FORWARD DROP [0:0]",
+  ":OUTPUT ACCEPT [0:0]",
+  ":DOCKER-USER - [0:0]",
+  "-A FORWARD -j DOCKER-USER",
+  "COMMIT",
+];
+
+const bridgeAccepted = [
+  "-A DOCKER-USER -i incusbr0 -j ACCEPT",
+  "-A DOCKER-USER -o incusbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+];
+
 function run(env, name) {
   return new Promise((resolve) => {
     const started = Date.now();
@@ -52,10 +72,12 @@ describe("incus.sh run", () => {
     await mkdir(bin);
     await writeFile(join(bin, "incus"), incusStub);
     await chmod(join(bin, "incus"), 0o755);
-    for (const stub of ["ssh", "curl", "sudo"]) {
+    for (const stub of ["ssh", "curl"]) {
       await writeFile(join(bin, stub), exitZeroStub);
       await chmod(join(bin, stub), 0o755);
     }
+    await writeFile(join(bin, "sudo"), sudoStub);
+    await chmod(join(bin, "sudo"), 0o755);
     env = {
       ...process.env,
       PATH: `${bin}:${process.env.PATH}`,
@@ -98,5 +120,37 @@ describe("incus.sh run", () => {
       result.stderr,
       /no-address: no SSH after \d+s, budget 3s \(cloud-init done, sshd installed, address none\)/,
     );
+  });
+
+  it("names Docker's FORWARD drop as the cause when DOCKER-USER lets nothing from incusbr0 through", async () => {
+    const result = await run(
+      {
+        ...env,
+        STUB_GUEST_ADDRESS: "none",
+        OCEL_INCUS_SSH_WAIT: "3",
+        STUB_HOST_FILTER: dockerFilter.join("\n"),
+      },
+      "docker-drop",
+    );
+    assert.notEqual(result.code, 0);
+    assert.match(
+      result.stderr,
+      /the host's FORWARD policy is DROP and Docker's DOCKER-USER chain accepts\nincus\.sh: nothing from incusbr0/,
+    );
+    assert.match(result.stderr, /sudo iptables -I DOCKER-USER -i incusbr0 -j ACCEPT/);
+  });
+
+  it("names no FORWARD drop once DOCKER-USER accepts incusbr0", async () => {
+    const result = await run(
+      {
+        ...env,
+        STUB_GUEST_ADDRESS: "none",
+        OCEL_INCUS_SSH_WAIT: "3",
+        STUB_HOST_FILTER: [...dockerFilter.slice(0, -1), ...bridgeAccepted, "COMMIT"].join("\n"),
+      },
+      "docker-accepted",
+    );
+    assert.notEqual(result.code, 0);
+    assert.doesNotMatch(result.stderr, /FORWARD policy is DROP/);
   });
 });
