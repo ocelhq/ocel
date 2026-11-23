@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -200,3 +201,5 @@ func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T)
 		t.Errorf("resolved %v, want the value read out of the Firestore database and opened by the tier key the manifest names", got)
 	}
 }
+
+func (s *sink) SetWriteDeadline(time.Time) error { return nil }

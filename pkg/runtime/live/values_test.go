@@ -936,3 +936,5 @@ func TestABucketBoundToAStoreIsShownToTheAppWithoutItsCredential(t *testing.T) {
 		t.Errorf("Value = %q, want the proxy handed the whole record", l.Value(binding.Key))
 	}
 }
+
+func (s *sink) SetWriteDeadline(time.Time) error { return nil }

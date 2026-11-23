@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -386,3 +387,5 @@ func TestGrantLag(t *testing.T) {
 		}
 	})
 }
+
+func (s *sink) SetWriteDeadline(time.Time) error { return nil }
