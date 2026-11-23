@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
@@ -364,7 +365,7 @@ type readyResult struct {
 	err   error
 }
 
-func watchReady(ln net.Listener, exited <-chan error, onControl func(io.Writer), abandon <-chan struct{}) <-chan readyResult {
+func watchReady(ln net.Listener, exited <-chan error, onControl func(live.Sink), abandon <-chan struct{}) <-chan readyResult {
 	var log lastLog
 	shook := make(chan readyResult, 1)
 	go func() {
@@ -401,7 +402,7 @@ func awaitReady(results <-chan readyResult, budget time.Duration) (readyResult, 
 	}
 }
 
-func handshake(ln net.Listener, log *lastLog, onControl func(io.Writer)) (*nodeReady, error) {
+func handshake(ln net.Listener, log *lastLog, onControl func(live.Sink)) (*nodeReady, error) {
 	control, err := ln.Accept()
 	if err != nil {
 		return nil, err
@@ -461,12 +462,12 @@ func nodeVersionFromBinary(ctx context.Context) (string, error) {
 }
 
 func startNode(entrypoint string) spawner {
-	return func(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error) {
+	return func(extraEnv []string, budget time.Duration, onControl func(live.Sink), abandon <-chan struct{}) (*nodeChild, error) {
 		return spawnNode(entrypoint, extraEnv, budget, onControl, abandon)
 	}
 }
 
-func spawnNode(entrypoint string, extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error) {
+func spawnNode(entrypoint string, extraEnv []string, budget time.Duration, onControl func(live.Sink), abandon <-chan struct{}) (*nodeChild, error) {
 	if _, err := os.Stat(entrypoint); err != nil {
 		return nil, fmt.Errorf("node entrypoint not found: %w", err)
 	}

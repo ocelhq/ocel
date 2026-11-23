@@ -129,7 +129,7 @@ func (s *stubValues) Abandoned() <-chan struct{} {
 	return abandon
 }
 
-func (s *stubValues) Attach(w io.Writer) {
+func (s *stubValues) Attach(w live.Sink) {
 	s.mu.Lock()
 	s.sink = w
 	s.mu.Unlock()
@@ -158,7 +158,7 @@ func (s *stubValues) Bindings() []live.Binding { return s.bindings }
 func (s *stubValues) Generation() uint32 { return 1 }
 
 func fakeSpawn(gotBudget *time.Duration) spawner {
-	return func(_ []string, budget time.Duration, onControl func(io.Writer), _ <-chan struct{}) (*nodeChild, error) {
+	return func(_ []string, budget time.Duration, onControl func(live.Sink), _ <-chan struct{}) (*nodeChild, error) {
 		*gotBudget = budget
 		if onControl != nil {
 			onControl(&sink{})
@@ -167,7 +167,7 @@ func fakeSpawn(gotBudget *time.Duration) spawner {
 	}
 }
 
-func neverReady(_ []string, budget time.Duration, _ func(io.Writer), abandon <-chan struct{}) (*nodeChild, error) {
+func neverReady(_ []string, budget time.Duration, _ func(live.Sink), abandon <-chan struct{}) (*nodeChild, error) {
 	select {
 	case <-abandon:
 	case <-time.After(budget):
@@ -181,7 +181,7 @@ func TestNodeStartsBesideThePrefetchAndAFailedPrefetchIsReportedAsItself(t *test
 		out := &sink{}
 		prefetch := l.Prefetch(context.Background())
 
-		spawn := func(_ []string, _ time.Duration, onControl func(io.Writer), _ <-chan struct{}) (*nodeChild, error) {
+		spawn := func(_ []string, _ time.Duration, onControl func(live.Sink), _ <-chan struct{}) (*nodeChild, error) {
 			close(l.released)
 			onControl(out)
 			return &nodeChild{}, nil
@@ -329,3 +329,5 @@ func TestACompiledAppStartsOnlyOnceItsLiveValuesAreInPlace(t *testing.T) {
 		t.Error("the app never started once its live values were in place")
 	}
 }
+
+func (s *sink) SetWriteDeadline(time.Time) error { return nil }

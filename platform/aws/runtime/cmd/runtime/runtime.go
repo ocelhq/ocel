@@ -87,7 +87,7 @@ type liveValues interface {
 	Join(done <-chan error) error
 	Failure() error
 	Abandoned() <-chan struct{}
-	Attach(sink io.Writer)
+	Attach(sink live.Sink)
 	Freshen(ctx context.Context)
 	Env() []string
 	Value(key string) string
@@ -113,7 +113,7 @@ func primeBytecode(p *bytecode.Priming) primer {
 	}
 }
 
-type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error)
+type spawner func(extraEnv []string, budget time.Duration, onControl func(live.Sink), abandon <-chan struct{}) (*nodeChild, error)
 
 func bringUp(ctx context.Context, served buildoutput.FunctionConfig, values liveValues, prefetch <-chan error, env []string, start time.Time, prime primer) (child, error) {
 	if executable(served) {
