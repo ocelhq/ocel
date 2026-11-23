@@ -3,6 +3,7 @@ package live
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -10,6 +11,8 @@ import (
 )
 
 const EnvVar = "OCEL_LIVE_MANIFEST"
+
+const GrantPatience = 2 * time.Minute
 
 type Manifest struct {
 	Project            string            `json:"project"`

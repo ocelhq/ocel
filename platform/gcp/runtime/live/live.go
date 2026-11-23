@@ -2,6 +2,10 @@ package live
 
 import (
 	"context"
+	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -9,9 +13,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtime/live"
 	"github.com/ocelhq/ocel/pkg/seal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
+	"github.com/ocelhq/ocel/platform/gcp/provider/googleretry"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 	variables "github.com/ocelhq/ocel/platform/gcp/provider/resources/variables/live"
 )
+
+const grantRetryCeiling = 5 * time.Second
 
 type storeSource struct {
 	reader   variablestore.EnvironmentReader
@@ -24,7 +31,7 @@ func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
 	return values, err
 }
 
-func FromManifest(raw []byte) (*live.Values, error) {
+func Resolve(ctx context.Context, raw []byte) (*live.Values, error) {
 	manifest, err := variables.Parse(raw)
 	if err != nil {
 		return nil, err
@@ -40,7 +47,25 @@ func FromManifest(raw []byte) (*live.Values, error) {
 
 		ProjectDatabases: manifest.Databases,
 	}
-	return Over(manifest, ports.KeyValues{Clients: clients}, ports.Cipher{Clients: clients}), nil
+	store, cipher := ports.KeyValues{Clients: clients}, ports.Cipher{Clients: clients}
+	return resolveWithin(ctx, variables.GrantPatience, func() *live.Values { return Over(manifest, store, cipher) })
+}
+
+func resolveWithin(ctx context.Context, patience time.Duration, open func() *live.Values) (*live.Values, error) {
+	deadline := time.Now().Add(patience)
+	for attempt := 1; ; attempt++ {
+		values := open()
+		err := values.Join(values.Prefetch(ctx))
+		switch {
+		case err == nil:
+			return values, nil
+		case status.Code(err) != codes.PermissionDenied || !time.Now().Before(deadline):
+			return nil, err
+		}
+		if !googleretry.WaitedFor(ctx, attempt, grantRetryCeiling) {
+			return nil, err
+		}
+	}
 }
 
 func Over(manifest variables.Manifest, store records.Store, cipher seal.Cipher) *live.Values {
