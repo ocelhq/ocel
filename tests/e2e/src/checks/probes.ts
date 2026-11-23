@@ -316,6 +316,18 @@ export const clientAddressCheck: Check = {
   },
 };
 
+export const authenticateHeaderCheck: Check = {
+  title: "GET /api/probes/auth answers 401 with its WWW-Authenticate header under its own name",
+  run: async (ctx) => {
+    const { res, text } = await json(ctx, "/api/probes/auth");
+    assert.equal(res.status, 401, describeResponse(res, text));
+    assert.equal(res.headers.get("www-authenticate"), 'Bearer realm="ocel"');
+    assert.equal(res.headers.get("x-ocel-number"), "42");
+    const remapped = [...res.headers.keys()].filter((name) => name.includes("remapped"));
+    assert.deepEqual(remapped, [], `the edge renamed ${remapped.join(", ")}`);
+  },
+};
+
 export const publicOriginCheck: Check = {
   title: "GET /api/probes/headers is told the public scheme and host",
   run: async (ctx) => {
@@ -555,17 +567,7 @@ export const httpProbeChecks: Check[] = [
       }
     },
   },
-  {
-    title: "GET /api/probes/auth answers 401 with its WWW-Authenticate header under its own name",
-    run: async (ctx) => {
-      const { res, text } = await json(ctx, "/api/probes/auth");
-      assert.equal(res.status, 401, describeResponse(res, text));
-      assert.equal(res.headers.get("www-authenticate"), 'Bearer realm="ocel"');
-      assert.equal(res.headers.get("x-ocel-number"), "42");
-      const remapped = [...res.headers.keys()].filter((name) => name.includes("remapped"));
-      assert.deepEqual(remapped, [], `the edge renamed ${remapped.join(", ")}`);
-    },
-  },
+  authenticateHeaderCheck,
   clientAddressCheck,
   publicOriginCheck,
   {

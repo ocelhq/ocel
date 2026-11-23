@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
@@ -524,7 +525,8 @@ func serveWhenReady(results <-chan readyResult, ln net.Listener, exited <-chan e
 }
 
 func (m *nodeChild) arm(ready *nodeReady, exited <-chan error) {
-	m.upstream = upstream{port: ready.httpPort, client: newLoopbackClient()}
+	childGuard, _, _ := originguard.GuardFromEnv(os.Environ())
+	m.upstream = upstream{port: ready.httpPort, client: newLoopbackClient(), childGuard: childGuard}
 	m.control = ready.control
 	m.lifecycle = ready.lifecycle
 	if !ready.lifecycle {

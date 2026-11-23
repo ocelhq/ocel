@@ -8,12 +8,18 @@ function load() {
   return new Function(`${source}\nreturn handler;`)();
 }
 
-function response(headers = {}, body) {
+function response(headers = {}, body, cookies = {}) {
   const wire = {};
   for (const [name, value] of Object.entries(headers)) wire[name] = { value };
   const answered = { statusCode: 200, statusDescription: "OK", headers: wire };
   if (body !== undefined) answered.body = body;
-  return { response: answered };
+  const jar = {};
+  for (const [name, value] of Object.entries(cookies)) jar[name] = { value };
+  return { request: { method: "GET", uri: "/", headers: {}, cookies: jar }, response: answered };
+}
+
+function header(answered, name) {
+  return answered.headers[name] === undefined ? undefined : answered.headers[name].value;
 }
 
 describe("the empty-body dropper", () => {
@@ -58,5 +64,84 @@ describe("the remapped-header restorer", () => {
 
     expect(answered.headers.connection).toBeUndefined();
     expect(answered.headers["x-amzn-remapped-connection"]).toBeUndefined();
+  });
+});
+
+describe("the cache-control a browser is handed", () => {
+  it("tells a browser to revalidate what the origin let a shared cache keep", () => {
+    for (const stored of ["s-maxage=31536000", "s-maxage=15, stale-while-revalidate=31535985"]) {
+      const answered = load()(response({ "cache-control": stored }));
+
+      expect(header(answered, "cache-control")).toBe("public, max-age=0, must-revalidate");
+    }
+  });
+
+  it("leaves a response no shared cache may keep exactly as the origin sent it", () => {
+    for (const personal of [
+      "private, no-cache, no-store, max-age=0, must-revalidate",
+      "private, s-maxage=60",
+      "public, max-age=31536000, immutable",
+    ]) {
+      const answered = load()(response({ "cache-control": personal }));
+
+      expect(header(answered, "cache-control")).toBe(personal);
+    }
+  });
+});
+
+describe("the vary a browser is handed", () => {
+  it("gives back the Vary the origin carried past CloudFront as x-ocel-vary", () => {
+    const vary = "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch";
+
+    const answered = load()(response({ "x-ocel-vary": vary }));
+
+    expect(header(answered, "vary")).toBe(vary);
+    expect(answered.headers["x-ocel-vary"]).toBeUndefined();
+  });
+
+  it("adds no Vary to a response that carried none", () => {
+    expect(load()(response({})).headers.vary).toBeUndefined();
+  });
+});
+
+describe("the cache tier the edge stamps", () => {
+  it("names a response CloudFront answered from its cache a HIT, whatever the origin stamped", () => {
+    for (const metric of ["cdn-cache-hit", "cdn-cache-refresh"]) {
+      const answered = load()(
+        response({
+          "x-ocel-cache": "MISS",
+          "server-timing": `${metric},cdn-pop;desc="IAD12-P4",cdn-hit-layer;desc="EDGE"`,
+        }),
+      );
+
+      expect(header(answered, "x-ocel-cache")).toBe("HIT");
+    }
+  });
+
+  it("names a response CloudFront fetched from the origin a MISS unless the origin said more", () => {
+    const missed = { "server-timing": 'cdn-upstream-layer;desc="EDGE",cdn-cache-miss' };
+
+    expect(header(load()(response(missed)), "x-ocel-cache")).toBe("MISS");
+    expect(header(load()(response({ ...missed, "x-ocel-cache": "BYPASS" })), "x-ocel-cache")).toBe(
+      "BYPASS",
+    );
+  });
+
+  it("names a request carrying the draft cookie a BYPASS, since its key is its own", () => {
+    const answered = load()(
+      response({ "server-timing": "cdn-cache-miss" }, undefined, { __prerender_bypass: "t" }),
+    );
+
+    expect(header(answered, "x-ocel-cache")).toBe("BYPASS");
+  });
+
+  it("hands a browser the origin's own Server-Timing and none of CloudFront's", () => {
+    const answered = load()(
+      response({ "server-timing": 'app;dur=12,cdn-cache-hit,cdn-pop;desc="IAD12-P4"' }),
+    );
+    const bare = load()(response({ "server-timing": 'cdn-cache-hit,cdn-rid;desc="abc"' }));
+
+    expect(header(answered, "server-timing")).toBe("app;dur=12");
+    expect(bare.headers["server-timing"]).toBeUndefined();
   });
 });

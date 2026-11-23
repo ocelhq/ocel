@@ -286,10 +286,11 @@ func TestEnsureMakesEverythingADistributionSharesAndRecordsHowToFindIt(t *testin
 		for _, item := range headers.RemoveHeadersConfig.Items {
 			removed = append(removed, aws.ToString(item.Header))
 		}
-		for _, header := range []string{cloudfrontpart.CacheTagHeader, edge.HeaderEmptyBody} {
-			if !slices.Contains(removed, header) {
-				t.Errorf("removed headers = %v, want %s among them: nothing of ocel's own reaches a browser", removed, header)
-			}
+		if !slices.Contains(removed, cloudfrontpart.CacheTagHeader) {
+			t.Errorf("removed headers = %v, want %s among them: no cache tag reaches a browser", removed, cloudfrontpart.CacheTagHeader)
+		}
+		if slices.Contains(removed, edge.HeaderEmptyBody) {
+			t.Errorf("removed headers = %v, want no %s: a policy removes it before the viewer-response function that empties the body can see it", removed, edge.HeaderEmptyBody)
 		}
 		noindex := false
 		for _, item := range headers.CustomHeadersConfig.Items {
@@ -297,6 +298,9 @@ func TestEnsureMakesEverythingADistributionSharesAndRecordsHowToFindIt(t *testin
 			if aws.ToString(item.Header) == router.HeaderRouter && aws.ToString(item.Value) != cloudfrontpart.Kind {
 				t.Errorf("%s = %q, want %q", router.HeaderRouter, aws.ToString(item.Value), cloudfrontpart.Kind)
 			}
+		}
+		if timing := headers.ServerTimingHeadersConfig; timing == nil || !aws.ToBool(timing.Enabled) || aws.ToFloat64(timing.SamplingRate) != 100 {
+			t.Errorf("server timing = %+v, want it on every response: the viewer-response function reads the edge's cache tier from it", timing)
 		}
 		if want := tier == environment.TierPreview; noindex != want {
 			t.Errorf("the %s headers policy marks answers noindex = %t, want %t: only previews are kept out of search engines", tier, noindex, want)

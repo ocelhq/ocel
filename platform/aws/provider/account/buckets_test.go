@@ -263,7 +263,7 @@ func TestReadingABootstrapWhoseBucketsShareNoRandomTagIsRefusedRatherThanPlannin
 	}
 }
 
-func TestOnlyTheEdgeBucketAdmitsCloudFrontAndOnlyToItsAssets(t *testing.T) {
+func TestOnlyTheEdgeBucketAdmitsCloudFrontToReadItsAssetsAndListThem(t *testing.T) {
 	for _, tier := range bothTiers {
 		t.Run(string(tier), func(t *testing.T) {
 			tmpl := parseTemplateStr(t, coreBody(defaultNamespace, tier, ""))
@@ -282,21 +282,30 @@ func TestOnlyTheEdgeBucketAdmitsCloudFrontAndOnlyToItsAssets(t *testing.T) {
 				t.Errorf("the policy is attached to %q, want the edge bucket", got)
 			}
 			statements := policy.PolicyDocument.Statement
-			if len(statements) != 1 {
-				t.Fatalf("the policy has %d statements, want exactly one: it is written once by the bootstrap and never rewritten per deploy", len(statements))
+			if len(statements) != 2 {
+				t.Fatalf("the policy has %d statements, want a read and a list: it is written once by the bootstrap and never rewritten per deploy", len(statements))
 			}
-			grant := statements[0]
-			if grant.Effect != "Allow" || !slices.Equal(templateStrings(grant.Action), []string{"s3:GetObject"}) {
-				t.Errorf("the grant is %s %v, want Allow s3:GetObject", grant.Effect, grant.Action)
-			}
-			if grant.Principal.Service != "cloudfront.amazonaws.com" {
-				t.Errorf("principal = %q, want the CloudFront service principal and nothing wider", grant.Principal.Service)
-			}
-			if got := grant.Resource; got != "${EdgeBucket.Arn}/assets/*" {
-				t.Errorf("resource = %q, want the edge bucket's assets and nothing else: CloudFront serves only a release's static assets out of it", got)
-			}
-			if got := grant.Condition.StringEquals["AWS:SourceAccount"]; got != "AWS::AccountId" {
-				t.Errorf("source account condition = %q, want this account, so no other account's distribution can read the bucket", got)
+			for _, want := range []struct{ action, resource, why string }{
+				{"s3:GetObject", "${EdgeBucket.Arn}/assets/*", "CloudFront serves only a release's static assets out of it"},
+				{"s3:ListBucket", "${EdgeBucket.Arn}", "without it S3 answers a missing asset 403 rather than 404"},
+			} {
+				grant := statements[0]
+				if slices.Equal(templateStrings(statements[1].Action), []string{want.action}) {
+					grant = statements[1]
+				}
+				if grant.Effect != "Allow" || !slices.Equal(templateStrings(grant.Action), []string{want.action}) {
+					t.Errorf("the grant is %s %v, want Allow %s", grant.Effect, grant.Action, want.action)
+					continue
+				}
+				if grant.Principal.Service != "cloudfront.amazonaws.com" {
+					t.Errorf("%s principal = %q, want the CloudFront service principal and nothing wider", want.action, grant.Principal.Service)
+				}
+				if got := grant.Resource; got != templateText(want.resource) {
+					t.Errorf("%s resource = %q, want %q: %s", want.action, got, want.resource, want.why)
+				}
+				if got := grant.Condition.StringEquals["AWS:SourceAccount"]; got != "AWS::AccountId" {
+					t.Errorf("%s source account condition = %q, want this account, so no other account's distribution can reach the bucket", want.action, got)
+				}
 			}
 		})
 	}

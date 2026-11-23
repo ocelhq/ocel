@@ -54,6 +54,15 @@ export const streamPageCheck: Check = {
   },
 };
 
+export const missingNextAssetCheck: Check = {
+  title: "a bogus static asset is a plain-text 404",
+  run: async (ctx) => {
+    const res = await ctx.fetch(`${ctx.baseUrl}/_next/static/chunks/ocel-bogus.js`);
+    assert.equal(res.status, 404);
+    assert.match(res.headers.get("content-type") ?? "", /^text\/plain/);
+  },
+};
+
 export const nextRoutingChecks: Check[] = [
   {
     title: "the next handler answers every method with the body it was sent",
@@ -150,14 +159,7 @@ export const nextRoutingChecks: Check[] = [
       assert.match(res.headers.get("content-type") ?? "", /^text\/html/);
     },
   },
-  {
-    title: "a bogus static asset is a plain-text 404",
-    run: async (ctx) => {
-      const res = await ctx.fetch(`${ctx.baseUrl}/_next/static/chunks/ocel-bogus.js`);
-      assert.equal(res.status, 404);
-      assert.match(res.headers.get("content-type") ?? "", /^text\/plain/);
-    },
-  },
+  missingNextAssetCheck,
   {
     title: "config redirects answer 307 and 308 to the same landing page",
     run: async (ctx) => {
