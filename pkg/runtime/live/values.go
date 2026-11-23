@@ -254,11 +254,12 @@ func (l *Values) Freshen(ctx context.Context) {
 	if l == nil {
 		return
 	}
-	if l.isDueForRenewal() {
+	l.mu.Lock()
+	stale := l.now().Sub(l.fetchedAt) >= StalenessBound
+	l.mu.Unlock()
+	if stale || l.isDueForRenewal() {
 		l.Reread(ctx)
-		return
 	}
-	l.Refresh(ctx)
 }
 
 func (l *Values) isDueForRenewal() bool {
