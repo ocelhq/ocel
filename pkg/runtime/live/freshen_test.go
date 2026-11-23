@@ -2,6 +2,8 @@ package live
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -14,7 +16,7 @@ type expiringSource struct {
 
 func (f expiringSource) RenewWithin() (time.Duration, bool) { return f.renewWithin, f.expires }
 
-func TestFreshenRereadsBeforeItReturnsOnlyWhatAnExpiringSourceHandedOutIsDueForRenewal(t *testing.T) {
+func TestFreshenRereadsStaleValuesAndCredentialsDueForRenewalBeforeReturning(t *testing.T) {
 	t.Run("values an expiring source handed out past their renewal age are read again before Freshen returns", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
 		source := expiringSource{
@@ -55,24 +57,49 @@ func TestFreshenRereadsBeforeItReturnsOnlyWhatAnExpiringSourceHandedOutIsDueForR
 		}
 	})
 
-	t.Run("a source whose values do not expire is refreshed behind the invocation", func(t *testing.T) {
+	t.Run("an invocation waits for a stale secret to reach the app before it can finish and freeze the runtime", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
 		release := make(chan struct{})
 		inner := resolves(map[string]string{"STORE_BASE": "first"}, map[string]string{"STORE_BASE": "second"})
 		source := expiringSource{scriptedSource: inner, renewWithin: 10 * time.Minute}
 		l := New(source, []string{"STORE_BASE"}, nil, func() time.Time { return clock })
+		dir := t.TempDir()
+		if err := l.Project(dir); err != nil {
+			t.Fatal(err)
+		}
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
 			t.Fatalf("join: %v", err)
 		}
 
 		inner.release = release
-		clock = clock.Add(time.Hour)
-		l.Freshen(context.Background())
-
-		if got := l.Value("STORE_BASE"); got != "first" {
-			t.Errorf("Value() = %q as Freshen returns, want the last generation while the refresh runs behind it", got)
+		clock = clock.Add(StalenessBound)
+		done := make(chan struct{})
+		go func() {
+			l.Freshen(context.Background())
+			close(done)
+		}()
+		eventually(t, "the stale secret fetch to start", func() bool { return inner.startedFetches() == 2 })
+		select {
+		case <-done:
+			close(release)
+			t.Fatal("Freshen returned before the store read completed, so Lambda can freeze it and serve the old secret indefinitely")
+		case <-time.After(20 * time.Millisecond):
 		}
 		close(release)
-		eventually(t, "the refresh behind the invocation to land", func() bool { return l.Value("STORE_BASE") == "second" })
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("Freshen did not return after the store read completed")
+		}
+		if got := l.Value("STORE_BASE"); got != "second" {
+			t.Errorf("Value() = %q as Freshen returns, want the current secret before the request reaches the app", got)
+		}
+		value, err := os.ReadFile(filepath.Join(dir, "STORE_BASE"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(value) != "second" {
+			t.Errorf("the app's live file = %q, want the current secret before the request reaches the app", value)
+		}
 	})
 }
