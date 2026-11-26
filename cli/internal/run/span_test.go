@@ -78,6 +78,26 @@ func TestASpanThatSucceedsEndsTitledWithWhatItDidAndOneThatFailsWithNoTitle(t *t
 	}
 }
 
+func TestASpanCanEndWithItsResolvedResultAtInfoLevel(t *testing.T) {
+	sink := &recording{}
+	r, _ := begin(t, sink)
+	_, span := r.Phase(progressv1.Phase_PHASE_UNSPECIFIED).Child(t.Context(), "env", progress.Title{Started: "Resolving variables", Ended: "Resolved variables"})
+	span.EndWithTitle("Resolved 3 variables from .env")
+	span.End(nil)
+	var endedCount int
+	for _, event := range sink.received() {
+		if ended := event.GetOperation().GetEnded(); ended != nil && event.GetOperation().GetSubject() == "env" {
+			endedCount++
+			if ended.GetTitle() != "Resolved 3 variables from .env" || ended.GetStatus() != progressv1.SpanStatus_SPAN_STATUS_OK || event.GetOperation().GetLevel() != progressv1.Level_LEVEL_INFO {
+				t.Fatalf("ended event = %v, want the resolved result at info level", event)
+			}
+		}
+	}
+	if endedCount != 1 {
+		t.Fatalf("ended %d times, want once", endedCount)
+	}
+}
+
 func TestASpanEndedPartiallyIsAnOKWarningTitledWithWhatItGotDone(t *testing.T) {
 	sink := &recording{}
 	run, _ := begin(t, sink)
