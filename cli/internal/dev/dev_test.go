@@ -476,8 +476,11 @@ export default { slug: "test-app" };
 
 		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "# the value the run needs, deleted\n")
 		waitForOutput(t, &leaderStderr, "API_TOKEN")
-		if got := leaderStderr.String(); !strings.Contains(got, project.DotenvFileName) {
-			t.Errorf("stderr = %q, want the mid-session refusal to name %s", got, project.DotenvFileName)
+		if got := leaderStderr.String(); !strings.Contains(got, "Set it in "+project.DotenvFileName+"; `ocel dev` picks up the change.") {
+			t.Errorf("stderr = %q, want the mid-session refusal to say the watched %s picks up the fix", got, project.DotenvFileName)
+		}
+		if got := leaderStderr.String(); strings.Contains(got, "`ocel dev` again") {
+			t.Errorf("stderr = %q, want no rerun asked of a run that is still watching", got)
 		}
 
 		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "API_TOKEN=restored\n")

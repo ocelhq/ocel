@@ -32,9 +32,8 @@ func TestDescribeRefusal(t *testing.T) {
 			"DATABASE_URL",
 			"API_BASE",
 			"/web",
-			"no value is set",
+			"no value",
 			"expected a URL",
-			"DATABASE_URL=<VALUE>",
 			project.DotenvFileName,
 		} {
 			if !strings.Contains(got, want) {
@@ -54,7 +53,7 @@ func TestDescribeRefusal(t *testing.T) {
 
 		got := describeRefusal(refusal, nil, localCommand{name: "dev", source: valueSource{id: "infisical:p-1/dev", values: map[string]string{}}}).Error()
 
-		for _, want := range []string{"set DATABASE_URL in infisical:p-1/dev", "DATABASE_URL=<VALUE> to " + project.LocalDotenvFileName, "Set the values above in infisical:p-1/dev and " + project.LocalDotenvFileName} {
+		for _, want := range []string{"Set it in infisical:p-1/dev or " + project.LocalDotenvFileName + ", then run `ocel dev` again."} {
 			if !strings.Contains(got, want) {
 				t.Errorf("refusal = %q, want it to say %q", got, want)
 			}
@@ -118,6 +117,73 @@ func TestDescribeRefusal(t *testing.T) {
 			if strings.Contains(got, value) {
 				t.Errorf("refusal = %q, want it to disclose no value from %s", got, project.DotenvFileName)
 			}
+		}
+	})
+}
+
+func TestARefusalGathersAGroupsUnsetMembersUnderWhyTheGroupIsNeeded(t *testing.T) {
+	refusal := &variables.MissingError{
+		Problems: []*resourcesv1.VariableProblem{
+			{Key: "GITHUB_APP_SLUG", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+			{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+			{Key: "GITHUB_APP_PRIVATE_KEY", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "expected a PEM key"},
+			{Key: "STRIPE_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+			{Key: "API_BASE", Folder: "/web", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "expected a URL"},
+		},
+		Definitions: []*resourcesv1.VariableDefinition{
+			{Key: "GITHUB_APP_ID", Group: "github", Required: true},
+			{Key: "GITHUB_APP_SLUG", Group: "github", Required: true},
+			{Key: "GITHUB_APP_PRIVATE_KEY", Group: "github", Required: true},
+			{Key: "GITHUB_APP_CLIENT_ID", Group: "github", Required: true},
+			{Key: "DATABASE_URL", Required: true},
+			{Key: "STRIPE_KEY", Group: "stripe", Required: true},
+			{Key: "API_BASE", Required: true},
+		},
+		Groups: []*resourcesv1.GroupDefinition{
+			{Key: "github", Description: "the GitHub App"},
+			{Key: "stripe", Required: true},
+		},
+		SetMembers: map[string][]string{"github": {"GITHUB_APP_ID", "GITHUB_APP_CLIENT_ID"}},
+	}
+
+	got := describeRefusal(refusal, nil, localCommand{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}).Error()
+
+	want := "5 variables are not ready — the app has not been started.\n" +
+		"\n" +
+		"  group github (the GitHub App) is active because GITHUB_APP_ID and GITHUB_APP_CLIENT_ID are set, so it needs:\n" +
+		"    GITHUB_APP_SLUG\n" +
+		"    GITHUB_APP_PRIVATE_KEY: set, but expected a PEM key\n" +
+		"  DATABASE_URL: no value\n" +
+		"  group stripe is required, so it needs:\n" +
+		"    STRIPE_KEY\n" +
+		"  API_BASE (/web): set, but expected a URL\n" +
+		"\n" +
+		"Set them in " + project.DotenvFileName + ", then run `ocel dev` again."
+	if got != want {
+		t.Errorf("refusal =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestARefusalAfterAChangeSaysTheWatchedFilePicksUpTheFix(t *testing.T) {
+	refusal := &variables.MissingError{Problems: []*resourcesv1.VariableProblem{{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING}}}
+
+	t.Run("from "+project.DotenvFileName, func(t *testing.T) {
+		got := describeRefusal(refusal, nil, localCommand{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}.afterChange()).Error()
+
+		if want := "Set it in " + project.DotenvFileName + "; `ocel dev` picks up the change."; !strings.HasSuffix(got, want) {
+			t.Errorf("refusal = %q, want it to end %q", got, want)
+		}
+		if strings.Contains(got, "again") {
+			t.Errorf("refusal = %q, want no rerun: the watcher resolves again on the next change", got)
+		}
+	})
+
+	t.Run("from another dev source", func(t *testing.T) {
+		got := describeRefusal(refusal, nil, localCommand{name: "dev", source: valueSource{id: "infisical:p-1/dev", values: map[string]string{}}}.afterChange()).Error()
+
+		want := "Set it in " + project.LocalDotenvFileName + ", which `ocel dev` picks up as it changes, or in infisical:p-1/dev and restart `ocel dev`."
+		if !strings.HasSuffix(got, want) {
+			t.Errorf("refusal = %q, want it to end %q: nothing watches infisical:p-1/dev", got, want)
 		}
 	})
 }
