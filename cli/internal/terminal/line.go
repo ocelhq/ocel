@@ -44,8 +44,18 @@ func (l line) render(present Presentation) string {
 	if l.dim {
 		message = present.Palette().Muted(message)
 	}
-	b.WriteString(strings.ReplaceAll(message+present.Palette().Muted(l.timing)+l.outcome, "\n", "\n"+indent))
+	b.WriteString(hang(message+present.Palette().Muted(l.timing)+l.outcome, indent))
 	return b.String()
+}
+
+func hang(text, indent string) string {
+	lines := strings.Split(text, "\n")
+	for i := 1; i < len(lines); i++ {
+		if lines[i] != "" {
+			lines[i] = indent + lines[i]
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (l line) annotation() string {

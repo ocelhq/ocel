@@ -157,7 +157,9 @@ func (s *Transcript) end(span string, ev *streamv1.RunEvent) {
 	}
 	if failed {
 		head.message, head.timing = tracked.opened.GetOperation().GetMessage()+" failed", " after "+took+tally.finished()
-		if reason := ev.GetOperation().GetMessage(); reason != "" {
+		if reason := ev.GetOperation().GetMessage(); strings.Contains(reason, "\n") {
+			head.outcome += "\n" + reason
+		} else if reason != "" {
 			head.outcome += ": " + reason
 		}
 	}
