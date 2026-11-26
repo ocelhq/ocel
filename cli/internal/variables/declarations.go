@@ -166,7 +166,7 @@ func (d *Declarations) RefuseIncomplete() error {
 		}
 		return cmp.Compare(a.GetFolder(), b.GetFolder())
 	})
-	return refuse(&MissingError{Problems: problems, Definitions: definitions, Groups: groups, Scope: d.scope})
+	return refuse(&MissingError{Problems: problems, Definitions: definitions, Groups: groups, SetMembers: setMembers(definitions, apps, present), Scope: d.scope})
 }
 
 func (d *Declarations) RefuseCredentials(problems []*resourcesv1.VariableProblem) error {

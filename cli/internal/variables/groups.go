@@ -1,6 +1,8 @@
 package variables
 
 import (
+	"slices"
+
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -84,4 +86,18 @@ func groupDescription[T described](groups []T, key string) string {
 		}
 	}
 	return ""
+}
+
+func setMembers(definitions []*resourcesv1.VariableDefinition, apps []App, present presentCells) map[string][]string {
+	set := map[string][]string{}
+	for _, definition := range definitions {
+		group := definition.GetGroup()
+		if group == "" || slices.Contains(set[group], definition.GetKey()) {
+			continue
+		}
+		if slices.ContainsFunc(apps, func(app App) bool { return resolves(definition, app.Folder, present) }) {
+			set[group] = append(set[group], definition.GetKey())
+		}
+	}
+	return set
 }
