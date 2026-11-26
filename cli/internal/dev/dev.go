@@ -8,6 +8,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/ocelhq/ocel/cli/internal/childprocess"
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devresources/docker"
@@ -82,6 +83,9 @@ func RunOnce(ctx context.Context, opts Options, cwd string) error {
 			return err
 		}
 		defer stream.Close()
+		if env == nil {
+			return errors.New("the running `ocel dev` reports the app's environment is not ready: set what its terminal names, then run `ocel run` again")
+		}
 		return RunProjected(ctx, opts, env)
 	}
 	return runStandalone(ctx, opts, cwd)
@@ -154,16 +158,23 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	}
 	tally.noteKinds(server.ResourceKinds())
 	updates := make(chan reload, 1)
-	watching, err := startWatching(background, server, cfg, local, opts.session(), func(env map[string]string, changed []string) {
-		tally.noteKinds(server.ResourceKinds())
-		next := reload{env: env, changed: changed}
+	queue := func(next reload) {
 		select {
 		case pending := <-updates:
-			next.changed = slices.Concat(pending.changed, changed)
+			next.changed = slices.Concat(pending.changed, next.changed)
 		default:
 		}
 		updates <- next
-	}, tally.noteError)
+	}
+	watching, err := startWatching(background, server, cfg, local, opts.session(), func(env map[string]string, changed []string) {
+		tally.noteKinds(server.ResourceKinds())
+		queue(reload{env: env, changed: changed})
+	}, func(err error) {
+		tally.noteError(err)
+		if refusesStart(err) {
+			queue(reload{refused: true})
+		}
+	})
 	if err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)
 	}
@@ -193,22 +204,29 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	workers.restart(ctx, appEnv, nil)
 	for {
 		select {
-		case err := <-child.Exited():
+		case err := <-exited(child):
 			return exitError(ctx, err)
+		case <-interrupted(ctx, child):
+			return &exitcode.ExitError{Code: exitcode.Interrupt}
 		case update := <-updates:
+			if update.refused {
+				child = stopped(child)
+				workers.stopAll(ctx)
+				continue
+			}
 			env := update.env
 			appEnv, err := live.project(env)
 			if err != nil {
 				return err
 			}
 			workers.restart(ctx, appEnv, update.changed)
-			if maps.Equal(env, resolved) {
+			if child != nil && maps.Equal(env, resolved) {
 				live.retire()
 				continue
 			}
 			resolved = env
 			tally.noteReload()
-			child.Stop()
+			stopped(child)
 			child, err = startChild(ctx, opts, appEnv)
 			if err != nil {
 				return err
@@ -221,6 +239,28 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 type reload struct {
 	env     map[string]string
 	changed []string
+	refused bool
+}
+
+func exited(child *childprocess.Child) <-chan error {
+	if child == nil {
+		return nil
+	}
+	return child.Exited()
+}
+
+func interrupted(ctx context.Context, child *childprocess.Child) <-chan struct{} {
+	if child != nil {
+		return nil
+	}
+	return ctx.Done()
+}
+
+func stopped(child *childprocess.Child) *childprocess.Child {
+	if child != nil {
+		child.Stop()
+	}
+	return nil
 }
 
 func follow(ctx context.Context, opts Options, running leader.Leader) (err error) {
@@ -237,13 +277,17 @@ func follow(ctx context.Context, opts Options, running leader.Leader) (err error
 		return err
 	}
 	defer live.remove()
-	appEnv, err := live.project(first)
-	if err != nil {
-		return err
-	}
-	child, err := startChild(ctx, opts, appEnv)
-	if err != nil {
-		return err
+	var child *childprocess.Child
+	if first == nil {
+		sayLeaderNotReady(opts)
+	} else {
+		appEnv, err := live.project(first)
+		if err != nil {
+			return err
+		}
+		if child, err = startChild(ctx, opts, appEnv); err != nil {
+			return err
+		}
 	}
 
 	updates := make(chan map[string]string)
@@ -251,7 +295,7 @@ func follow(ctx context.Context, opts Options, running leader.Leader) (err error
 	go func() {
 		for {
 			env, err := stream.Next()
-			if err != nil {
+			if err != nil && !errors.Is(err, leader.ErrNotReady) {
 				streamDone <- struct{}{}
 				return
 			}
@@ -265,28 +309,39 @@ func follow(ctx context.Context, opts Options, running leader.Leader) (err error
 
 	for {
 		select {
-		case err := <-child.Exited():
+		case err := <-exited(child):
 			return exitError(ctx, err)
+		case <-interrupted(ctx, child):
+			return &exitcode.ExitError{Code: exitcode.Interrupt}
 		case env := <-updates:
+			if env == nil {
+				child = stopped(child)
+				sayLeaderNotReady(opts)
+				continue
+			}
 			tally.noteReload()
 			appEnv, err := live.project(env)
 			if err != nil {
 				return err
 			}
-			child.Stop()
+			stopped(child)
 			child, err = startChild(ctx, opts, appEnv)
 			if err != nil {
 				return err
 			}
 			live.retire()
 		case <-streamDone:
-			child.Stop()
+			stopped(child)
 			if ctx.Err() != nil {
 				return &exitcode.ExitError{Code: exitcode.Interrupt}
 			}
 			return errors.New("the leader disconnected: restart `ocel dev` in the leader's terminal, then re-run this command")
 		}
 	}
+}
+
+func sayLeaderNotReady(opts Options) {
+	opts.session().Warn("The running `ocel dev` reports the app's environment is not ready, so the app has been stopped until it is. Its terminal says what to set.")
 }
 
 func subscribe(ctx context.Context, opts Options, running leader.Leader) (_ *leader.EnvStream, _ map[string]string, err error) {
@@ -297,6 +352,9 @@ func subscribe(ctx context.Context, opts Options, running leader.Leader) (_ *lea
 		return nil, nil, fmt.Errorf("connect to leader: %w", err)
 	}
 	first, err := stream.Next()
+	if errors.Is(err, leader.ErrNotReady) {
+		return stream, nil, nil
+	}
 	if err != nil {
 		stream.Close()
 		if errors.Is(err, io.EOF) {

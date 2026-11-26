@@ -51,6 +51,9 @@ func watchAndResolve(ctx context.Context, server *devserver.Server, cfg *project
 		resolved, values, err := resolveOnce(changeCtx, server, cfg, local.afterChange(), change)
 		if err != nil {
 			change.End(err)
+			if refusesStart(err) {
+				server.PushNotReady()
+			}
 			onFailed(err)
 			return
 		}

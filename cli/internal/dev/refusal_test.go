@@ -170,7 +170,10 @@ func TestARefusalAfterAChangeSaysTheWatchedFilePicksUpTheFix(t *testing.T) {
 	t.Run("from "+project.DotenvFileName, func(t *testing.T) {
 		got := describeRefusal(refusal, nil, localCommand{name: "dev", source: valueSource{id: "dotenv", ownStore: true}}.afterChange()).Error()
 
-		if want := "Set it in " + project.DotenvFileName + "; `ocel dev` picks up the change."; !strings.HasSuffix(got, want) {
+		if want := "1 variable is not ready — the app has been stopped.\n"; !strings.HasPrefix(got, want) {
+			t.Errorf("refusal = %q, want it to start %q", got, want)
+		}
+		if want := "Set it in " + project.DotenvFileName + "; `ocel dev` restarts the app once it is."; !strings.HasSuffix(got, want) {
 			t.Errorf("refusal = %q, want it to end %q", got, want)
 		}
 		if strings.Contains(got, "again") {
@@ -181,7 +184,7 @@ func TestARefusalAfterAChangeSaysTheWatchedFilePicksUpTheFix(t *testing.T) {
 	t.Run("from another dev source", func(t *testing.T) {
 		got := describeRefusal(refusal, nil, localCommand{name: "dev", source: valueSource{id: "infisical:p-1/dev", values: map[string]string{}}}.afterChange()).Error()
 
-		want := "Set it in " + project.LocalDotenvFileName + ", which `ocel dev` picks up as it changes, or in infisical:p-1/dev and restart `ocel dev`."
+		want := "Set it in " + project.LocalDotenvFileName + ", which `ocel dev` watches, or in infisical:p-1/dev and restart `ocel dev`."
 		if !strings.HasSuffix(got, want) {
 			t.Errorf("refusal = %q, want it to end %q: nothing watches infisical:p-1/dev", got, want)
 		}

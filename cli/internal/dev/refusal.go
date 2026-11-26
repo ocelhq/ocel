@@ -33,7 +33,7 @@ func (c localCommand) afterChange() localCommand {
 
 func (c localCommand) outcome() string {
 	if c.watched {
-		return "the app keeps running on its previous environment"
+		return "the app has been stopped"
 	}
 	return "the app has not been started"
 }
@@ -45,15 +45,22 @@ func (c localCommand) remedy(them string) string {
 	case !c.watched:
 		return fmt.Sprintf("Set %s in %s or %s, then run `%s` again.", them, c.source.id, project.LocalDotenvFileName, c.line())
 	case c.source.ownStore:
-		return fmt.Sprintf("Set %s in %s; `%s` picks up the change.", them, project.DotenvFileName, c.line())
+		return fmt.Sprintf("Set %s in %s; `%s` restarts the app once %s.", them, project.DotenvFileName, c.line(), isSet(them))
 	default:
-		return fmt.Sprintf("Set %s in %s, which `%s` picks up as it changes, or in %s and restart `%s`.", them, project.LocalDotenvFileName, c.line(), c.source.id, c.line())
+		return fmt.Sprintf("Set %s in %s, which `%s` watches, or in %s and restart `%s`.", them, project.LocalDotenvFileName, c.line(), c.source.id, c.line())
 	}
+}
+
+func isSet(them string) string {
+	if them == "it" {
+		return "it is"
+	}
+	return "they are"
 }
 
 func (c localCommand) hint(keys []string) string {
 	if c.watched {
-		return fmt.Sprintf("set %s in %s; `%s` picks up the change", english.And(keys), c.source.where(), c.line())
+		return fmt.Sprintf("set %s in %s; `%s` restarts the app once %s", english.And(keys), c.source.where(), c.line(), isSet(pronoun(keys)))
 	}
 	return fmt.Sprintf("set %s in %s, then run `%s` again", english.And(keys), c.source.where(), c.line())
 }
@@ -95,12 +102,20 @@ func describeRefusal(err error, dotfileKeys map[string]struct{}, run localComman
 	described := errors.New(b.String())
 	var raised *clierror.Error
 	if !errors.As(err, &raised) {
-		return described
+		return notReady{described}
 	}
 	coded := *raised
 	coded.Hint = run.hint(keys)
 	coded.Cause = described
-	return &coded
+	return notReady{&coded}
+}
+
+type notReady struct{ error }
+
+func (n notReady) Unwrap() error { return n.error }
+
+func refusesStart(err error) bool {
+	return errors.As(err, new(notReady))
 }
 
 func writeCell(b *strings.Builder, lead string, cell *streamv1.MissingVariable, reason string, dotfileKeys map[string]struct{}, run localCommand) {
@@ -197,12 +212,12 @@ func refuseUnstatableBinding(source valueSource, apps []project.App, stated, con
 		}
 	}
 
-	return fmt.Errorf(`%s scoped to a folder this run cannot state — the app has not been started.
+	return notReady{fmt.Errorf(`%s scoped to a folder this run cannot state — the app has not been started.
 
   %s
 
 `+"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, so the binding they state is %s. A scoped read refuses under it, even with the value in %s.\n\nfix: bind every app to the same folder in %s, or drop `folders:` from those declarations",
-		scopedPlural(keys), strings.Join(bindings, "\n  "), folderLabel(stated), source.where(), configName)
+		scopedPlural(keys), strings.Join(bindings, "\n  "), folderLabel(stated), source.where(), configName)}
 }
 
 func scopedPlural(keys []string) string {
