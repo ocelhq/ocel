@@ -47,6 +47,7 @@ func (d *deployRun) collectBuildAndAssemble(ctx context.Context) (*contractv1.Ma
 	if err != nil {
 		return nil, nil, err
 	}
+	d.released = c.values
 	steps := newBuildSteps(d.phase)
 	var built build.Output
 	if d.prebuilt {

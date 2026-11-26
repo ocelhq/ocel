@@ -376,6 +376,30 @@ func TestRemovingAPreviewFromAnUnlinkedTreeMakesNoCallAndPrintsOneHintNamingOcel
 	}
 }
 
+func TestADeploysReportNamesTheVersionOfEachValueItsReleaseBakedIn(t *testing.T) {
+	fixture := setUpVariablesProject(t, `[{"key":"LIVE_KEY","class":"VARIABLE_CLASS_SECRET","required":true},{"key":"BAKED_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+	envSet(t, fixture, "LIVE_KEY", "sk_live_value", envOptions{})
+	envSet(t, fixture, "BAKED_KEY", "first", envOptions{})
+	envSet(t, fixture, "BAKED_KEY", "second", envOptions{})
+	writeRootApp(t, fixture.Root)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; out=%s", err, out)
+	}
+
+	apps := readDeployReport(t, fixture.Root).GetApps()
+	if len(apps) != 1 {
+		t.Fatalf("apps = %v, want the root app", apps)
+	}
+	values := apps[0].GetValues()
+	if len(values) != 1 || values[0].GetKey() != "BAKED_KEY" || values[0].GetVersion() != 2 || values[0].GetEnvironment() != "" {
+		t.Errorf("released values = %v, want BAKED_KEY at version 2 and no secret: a secret is read live", values)
+	}
+}
+
 func TestADeploysReportNamesTheVariablesEachAppDeclares(t *testing.T) {
 	fixture := setUpVariablesProject(t, `[{"key":"LIVE_KEY","class":"VARIABLE_CLASS_SECRET","required":true},{"key":"BAKED_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 	envSet(t, fixture, "LIVE_KEY", "sk_live_value", envOptions{})

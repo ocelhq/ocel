@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 func scoped(key string, folders ...string) *resourcesv1.VariableDefinition {
@@ -355,4 +356,30 @@ func TestAnAppsVariablesPairEachDeclarationWithItsResolvedValue(t *testing.T) {
 			t.Errorf("SCOPED_KEY = %+v, want version 9 from the folder it resolved from", got[1])
 		}
 	})
+}
+
+func TestAResolvedValueNamesTheEnvironmentWhoseOverrideItReads(t *testing.T) {
+	t.Parallel()
+	values := newFakeValues()
+	values.setAt("API_URL", "", "https://root.example", 4)
+	values.setAt("LOG_LEVEL", "", "info", 2)
+	values.override("API_URL", "", "pr-7", "https://pr-7.example")
+
+	g := prefetched(t, values, variables.Scope{
+		Apps:        []variables.App{{Name: "api"}},
+		Tier:        environmentv1.Tier_TIER_PREVIEW,
+		Environment: "pr-7",
+	})
+	declare(t, g,
+		def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+		def("LOG_LEVEL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+	)
+
+	resolved := resolve(t, g, "api")
+	if got := resolved["API_URL"]; got.Environment != "pr-7" || got.Version != 1 {
+		t.Errorf("API_URL = %+v, want pr-7's own override at version 1", got)
+	}
+	if got := resolved["LOG_LEVEL"]; got.Environment != "" || got.Version != 2 {
+		t.Errorf("LOG_LEVEL = %+v, want the tier-wide value at version 2", got)
+	}
 }

@@ -9,7 +9,9 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
@@ -187,5 +189,30 @@ func TestAnAppWhoseFrameworkBuildIDCannotBeReadIsRecordedWithoutItAndNamedInTheE
 	}
 	if len(apps) != 2 || apps[0].GetOutcome() != consolev1.AppOutcome_APP_OUTCOME_SUCCEEDED || apps[0].GetFrameworkBuildId() != "" || apps[1].GetFrameworkBuildId() != "fw-api" {
 		t.Errorf("apps = %v, want both apps, web live without a framework build id", apps)
+	}
+}
+
+func TestAReleaseRecordsTheVersionOfEachValueItBakedIn(t *testing.T) {
+	t.Parallel()
+	resolved := []variables.Variable{
+		{Key: "API_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Folder: "/apps/web", Environment: "pr-7", Version: 3},
+		{Key: "SIGNING_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Version: 2},
+		{Key: "STRIPE_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Version: 5},
+		{Key: "WEB_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example.com"},
+	}
+
+	got := ReleasedValues(resolved)
+
+	want := []*consolev1.ReleasedValue{
+		{Key: "API_URL", Folder: "/apps/web", Environment: "pr-7", Version: 3},
+		{Key: "SIGNING_KEY", Version: 2},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("released = %v, want %v: a secret is read live and a value with no version is the deploy's own", got, want)
+	}
+	for i := range want {
+		if !proto.Equal(got[i], want[i]) {
+			t.Errorf("released %d = %v, want %v", i, got[i], want[i])
+		}
 	}
 }

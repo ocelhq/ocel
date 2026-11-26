@@ -7,6 +7,7 @@ type Variable struct {
 	Class       resourcesv1.VariableClass
 	Value       string
 	Folder      string
+	Environment string
 	Version     int64
 	Source      string
 	Description string

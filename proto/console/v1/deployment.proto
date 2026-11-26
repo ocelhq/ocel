@@ -163,6 +163,18 @@ message App {
   string framework_build_id = 14 [(buf.validate.field).string.max_len = 256];
 
   string storage_coordinate = 15 [(buf.validate.field).string.max_len = 512];
+
+  repeated ReleasedValue values = 16 [(buf.validate.field).repeated.max_items = 500];
+}
+
+message ReleasedValue {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, max_len: 256, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  string folder = 2 [(buf.validate.field).string = {max_len: 512, pattern: "^(/[^/#\\x00-\\x1f\\x7f]+)*$"}];
+
+  string environment = 3 [(buf.validate.field).string = {max_len: 128, pattern: "^[^*#\\x00-\\x1f\\x7f]*$"}];
+
+  int64 version = 4 [(buf.validate.field).int64.gt = 0];
 }
 
 message ResourceBinding {
