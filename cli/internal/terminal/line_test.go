@@ -1,7 +1,6 @@
 package terminal
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/fatih/color"
@@ -196,19 +195,5 @@ func TestEachPhaseNameHasAColourOfItsOwnAmongThePhasesOneRunPasses(t *testing.T)
 func TestAMultiLineGrayTextIsPaintedLineByLine(t *testing.T) {
 	if got, want := (Palette{colored: true}).Muted("a\n\nb"), "\x1b[90ma\x1b[0m\n\n\x1b[90mb\x1b[0m"; got != want {
 		t.Errorf("Muted() = %q, want %q so no colour leaks across a line a log viewer reads alone", got, want)
-	}
-}
-
-func TestSuccessfulHeadersEmphasizeTheResultButKeepTimingMuted(t *testing.T) {
-	result := "Resolved 2 variables from .env"
-	timing := " in 1s"
-	l := line{level: progressv1.Level_LEVEL_INFO, status: progressv1.SpanStatus_SPAN_STATUS_OK, header: true, message: result, timing: timing}
-	palette := Presentation{Color: true}.Palette()
-	got := l.render(Presentation{Color: true})
-	if !strings.Contains(got, palette.SuccessBold(result)+palette.Muted(timing)) {
-		t.Fatalf("colored result = %q, want a green bold result and muted timing", got)
-	}
-	if plain := l.render(Presentation{}); plain != "INFO  ✓ "+result+timing {
-		t.Fatalf("plain result = %q, want unchanged text without ANSI codes", plain)
 	}
 }

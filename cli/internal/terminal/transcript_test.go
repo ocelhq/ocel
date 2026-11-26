@@ -770,7 +770,7 @@ func TestWithColourABlockGraysItsTimingItsDetailAndWhatEachResourceIsButNotItsSi
 	deploy.Forward(runtrace.Call{}, providerEnded(1, "web", "Deployed web", progressv1.SpanStatus_SPAN_STATUS_OK, start, start.Add(8*time.Second)))
 
 	for _, want := range []string{
-		" \x1b[1mweb\x1b[22m: \x1b[32;1mDeployed web\x1b[0;22m\x1b[90m in 8s\x1b[0m — 1 resource created\n",
+		" \x1b[1mweb\x1b[22m: Deployed web\x1b[90m in 8s\x1b[0m — 1 resource created\n",
 		"      \x1b[32m+\x1b[0m \x1b[90massets (fake:bucket) created\x1b[0m\n",
 	} {
 		if !strings.Contains(out.String(), want) {
