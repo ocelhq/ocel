@@ -8,6 +8,7 @@ import (
 	"slices"
 	"text/tabwriter"
 
+	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
 	"github.com/ocelhq/ocel/cli/internal/run"
@@ -55,6 +56,9 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 		if err != nil {
 			return err
 		}
+		if err := refuseUndeclaredBareArguments(definitions, pairs); err != nil {
+			return err
+		}
 		for _, pair := range pairs {
 			if err := variables.RefuseImpliedInFolder(variables.ScopeOf(cfg, opts.tier(), ""), pair.key, opts.folder); err != nil {
 				return err
@@ -62,6 +66,19 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 			if err := variables.RefuseUnwritable(definitions, pair.key, opts.folder); err != nil {
 				return err
 			}
+		}
+		values := envValues(provider, cfg, opts)
+		owner, err := ownerOf(ctx, values, opts)
+		if err != nil {
+			return err
+		}
+		for _, pair := range pairs {
+			if err := owner.RefuseOwned(envCoordinate(pair.key, opts)); err != nil {
+				return err
+			}
+		}
+		if pairs, err = askForValues(ctx, dependencies.Values, run, definitions, pairs, opts); err != nil {
+			return err
 		}
 		variableStore, err := provider.VariableStore()
 		if err != nil {
@@ -72,7 +89,7 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 			keys = append(keys, pair.key)
 		}
 		err = runInSpan(ctx, run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeValues(keys, opts)), func(ctx context.Context) error {
-			return setPairs(ctx, envValues(provider, cfg, opts), pairs, opts, definitions, stdout)
+			return setPairs(ctx, values, owner, pairs, opts, definitions, stdout)
 		})
 		if err != nil {
 			return err
@@ -81,14 +98,54 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 	})
 }
 
-func setPairs(ctx context.Context, values variables.Store, pairs []envSetPair, opts envOptions, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
-	var owner variables.EnvSource
-	if opts.environment == "" {
-		var err error
-		if owner, err = values.DescribeEnvSource(ctx); err != nil {
-			return err
+func ownerOf(ctx context.Context, values variables.Store, opts envOptions) (variables.EnvSource, error) {
+	if opts.environment != "" {
+		return variables.EnvSource{}, nil
+	}
+	return values.DescribeEnvSource(ctx)
+}
+
+func refuseUndeclaredBareArguments(definitions []*resourcesv1.VariableDefinition, pairs []envSetPair) error {
+	for _, pair := range pairs {
+		if pair.asked && !slices.ContainsFunc(definitions, func(definition *resourcesv1.VariableDefinition) bool { return definition.GetKey() == pair.key }) {
+			return fmt.Errorf("argument %d has no =, and no variable this project declares goes by it: `ocel env set` takes KEY=VALUE, or a declared KEY alone to be asked for its value, and that argument is not repeated here in case it is a value", pair.arg)
 		}
 	}
+	return nil
+}
+
+func askForValues(ctx context.Context, values commands.ValuePrompt, run *run.Run, definitions []*resourcesv1.VariableDefinition, pairs []envSetPair, opts envOptions) ([]envSetPair, error) {
+	if !slices.ContainsFunc(pairs, func(pair envSetPair) bool { return pair.asked }) {
+		return pairs, nil
+	}
+	if values == nil {
+		return nil, errors.New("`ocel env set` was given a KEY without a value and has nobody to ask for it: pass KEY=VALUE")
+	}
+	answered := slices.Clone(pairs)
+	err := run.Ask(func() error {
+		for i, pair := range answered {
+			if !pair.asked {
+				continue
+			}
+			ask := values.Input
+			if class := classOf(definitions, pair.key); class == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET || class == resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE {
+				ask = values.Secret
+			}
+			typed, ok, err := ask(ctx, terminal.EscapeControls(describeCell(pair.key, opts)), terminal.EscapeControls(descriptions(definitions)[pair.key]))
+			if err != nil {
+				return err
+			}
+			if !ok || typed == "" {
+				return fmt.Errorf("%s was left empty, so nothing was written: to store an empty value, run `ocel env set %s=`", describeCell(pair.key, opts), pair.key)
+			}
+			answered[i].value = typed
+		}
+		return nil
+	})
+	return answered, err
+}
+
+func setPairs(ctx context.Context, values variables.Store, owner variables.EnvSource, pairs []envSetPair, opts envOptions, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
 	for _, pair := range pairs {
 		at := envCoordinate(pair.key, opts)
 		if owner.CanSet(at) {

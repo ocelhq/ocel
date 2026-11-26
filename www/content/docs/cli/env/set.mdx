@@ -4,14 +4,16 @@ description: "Set a value."
 ---
 
 ```bash
-ocel env set <KEY=VALUE>... [flags]
+ocel env set <KEY=VALUE|KEY>... [flags]
 ```
+
+In a terminal, a KEY given alone is asked for, and a secret is typed without being shown or kept in shell history.
 
 ## Arguments
 
 | Argument | Takes |
 | --- | --- |
-| `<KEY=VALUE>...` | Required, and repeatable |
+| `<KEY=VALUE\|KEY>...` | Required, and repeatable |
 
 ## Flags
 
