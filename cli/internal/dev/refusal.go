@@ -133,26 +133,13 @@ func writeCell(b *strings.Builder, lead string, cell *streamv1.MissingVariable, 
 }
 
 func groupNeed(refusal *variables.MissingError, key string) string {
-	name := "group " + key
+	description, required := "", false
 	for _, group := range refusal.Groups {
-		if group.GetKey() != key {
-			continue
-		}
-		if description := group.GetDescription(); description != "" {
-			name += " (" + description + ")"
-		}
-		if group.GetRequired() {
-			return name + " is required, so it needs:"
+		if group.GetKey() == key {
+			description, required = group.GetDescription(), group.GetRequired()
 		}
 	}
-	switch set := refusal.SetMembers[key]; len(set) {
-	case 0:
-		return name + " needs:"
-	case 1:
-		return name + " is active because " + set[0] + " is set, so it needs:"
-	default:
-		return name + " is active because " + english.And(set) + " are set, so it needs:"
-	}
+	return wording.GroupNeed(key, description, required, refusal.SetMembers[key])
 }
 
 func pronoun(keys []string) string {
