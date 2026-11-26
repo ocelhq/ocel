@@ -3,6 +3,7 @@ package variables_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
@@ -320,6 +321,33 @@ func TestAMissingErrorGathersGroupedMembersInDeclarationOrder(t *testing.T) {
 	}, "\n")
 	if err.Error() != want {
 		t.Errorf("refusal =\n%s\nwant\n%s", err.Error(), want)
+	}
+}
+
+func TestAMissingErrorNamesTheMembersSetInEachGroup(t *testing.T) {
+	t.Parallel()
+
+	values := newFakeValues()
+	values.set("GITHUB_APP_ID", "", "1")
+	values.set("STRIPE_KEY", "", "sk")
+	g := prefetched(t, values, variables.Scope{Apps: []variables.App{{Name: "web"}}})
+	if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", false, ""), groupOf("stripe", true, "")},
+		member("GITHUB_APP_ID", "github", true),
+		member("GITHUB_APP_SLUG", "github", true),
+		member("GITHUB_APP_LOGO", "github", false),
+		member("STRIPE_KEY", "stripe", true),
+		member("STRIPE_WEBHOOK_SECRET", "stripe", true),
+	); err != nil {
+		t.Fatalf("DeclareEnv: %v", err)
+	}
+
+	var refusal *variables.MissingError
+	if err := g.RefuseIncomplete(); !errors.As(err, &refusal) {
+		t.Fatalf("RefuseIncomplete() = %v, want a MissingError", err)
+	}
+	want := map[string][]string{"github": {"GITHUB_APP_ID"}, "stripe": {"STRIPE_KEY"}}
+	if !reflect.DeepEqual(refusal.SetMembers, want) {
+		t.Errorf("SetMembers = %v, want %v", refusal.SetMembers, want)
 	}
 }
 

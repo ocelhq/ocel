@@ -16,6 +16,7 @@ type MissingError struct {
 	Problems    []*resourcesv1.VariableProblem
 	Definitions []*resourcesv1.VariableDefinition
 	Groups      []*resourcesv1.GroupDefinition
+	SetMembers  map[string][]string
 	Scope       Scope
 }
 
@@ -137,9 +138,11 @@ func withEnvironment(cmd string, scope Scope) string {
 	return cmd
 }
 
+const NoValue = "no value"
+
 func reason(problem *resourcesv1.VariableProblem) string {
 	if problem.GetKind() != resourcesv1.VariableProblem_KIND_INVALID {
-		return "no value"
+		return NoValue
 	}
 	if detail := problem.GetDetail(); detail != "" {
 		return "set, but " + detail
