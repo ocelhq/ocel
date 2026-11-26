@@ -664,16 +664,59 @@ func TestLinkAsksItsQuestionsWhereItsRunRendersAndLeavesStdoutEmpty(t *testing.T
 
 	var stdout, stderr safeBuffer
 	clitest.AttachTerminalSink(dependencies.Invocation, &stderr)
-	if err := runLink(context.Background(), dependencies, t.TempDir(), "", options{apiURL: srv.URL}, &stdout, &stderr, strings.NewReader("acme-inc\n1\n")); err != nil {
+	if err := runLink(context.Background(), dependencies, t.TempDir(), "", options{apiURL: srv.URL}, &stdout, &stderr, strings.NewReader("1\n1\n")); err != nil {
 		t.Fatalf("runLink err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
 	if stdout.String() != "" {
 		t.Errorf("stdout = %q, want nothing there in human mode", stdout.String())
 	}
-	for _, question := range []string{"Select an organization (number or slug): ", "Select a project (number, slug, or n): "} {
+	for _, question := range []string{"Organization to link:", "Project in Acme Inc to link:"} {
 		if !strings.Contains(stderr.String(), question) {
 			t.Errorf("stderr = %q, want it to ask %q", stderr.String(), question)
 		}
+	}
+}
+
+func TestLinkPicksTheOrganizationAndProjectFromTheSharedPicker(t *testing.T) {
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+	srv := newCloudServer(t, projectRow("p1", "My App", "my-app"), projectRow("p2", "Other App", "other-app"))
+	srv.orgs = append(srv.orgs, map[string]string{"id": "org_2", "name": "Other Co", "slug": "other-co"})
+
+	dir := t.TempDir()
+	var stderr safeBuffer
+	if err := runLink(context.Background(), dependencies, dir, "", options{apiURL: srv.URL}, &bytes.Buffer{}, &stderr, strings.NewReader("2\n2\n")); err != nil {
+		t.Fatalf("runLink err = %v; stderr=%s", err, stderr.String())
+	}
+
+	got := readLink(t, dir, srv.URL)
+	if got.OrganizationID != "org_2" || got.ProjectID != "p2" {
+		t.Errorf("link = %+v, want org_2 and p2", got)
+	}
+	for _, option := range []string{"Acme Inc (acme-inc)", "Other Co (other-co)", "My App (my-app)", "Create a new project"} {
+		if !strings.Contains(stderr.String(), option) {
+			t.Errorf("stderr = %q, want it to offer %q", stderr.String(), option)
+		}
+	}
+}
+
+func TestCreatingAProjectFromThePickerNamesItAfterTheDirectoryByDefault(t *testing.T) {
+	dependencies := newTestDependencies()
+	dependencies.LoadCredentials = clitest.LoadLoggedInCredentials
+	dependencies.StdinIsTerminal = func(io.Reader) bool { return true }
+	srv := newCloudServer(t, projectRow("p1", "My App", "my-app"))
+
+	dir := filepath.Join(t.TempDir(), "shop-front")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := runLink(context.Background(), dependencies, dir, "", options{apiURL: srv.URL}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader("2\n\n")); err != nil {
+		t.Fatalf("runLink err = %v", err)
+	}
+
+	if len(srv.created) != 1 || srv.created[0].GetName() != "shop-front" {
+		t.Fatalf("created = %v, want one project named shop-front", srv.created)
 	}
 }

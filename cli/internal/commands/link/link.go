@@ -1,7 +1,6 @@
 package link
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -18,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/commands"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/terminal"
 	"github.com/ocelhq/ocel/pkg/progress"
@@ -84,7 +83,6 @@ func runLink(ctx context.Context, dependencies Dependencies, projectDir, project
 	defer linking.End(&err)
 
 	apiURL := opts.apiURL
-	scanner := bufio.NewScanner(stdin)
 	projectRef = strings.TrimSpace(projectRef)
 
 	if existing, err := console.ReadLink(projectDir, apiURL); err != nil {
@@ -94,7 +92,7 @@ func runLink(ctx context.Context, dependencies Dependencies, projectDir, project
 	}
 
 	account := commands.NewConsoleAccount(apiURL, creds.AccessToken)
-	lr := linkRun{run: linking, stderr: stderr, stdin: stdin, scanner: scanner, canAsk: dependencies.CanAsk(stdin)}
+	lr := linkRun{run: linking, prompt: prompt.New(stderr, stdin), canAsk: dependencies.CanAsk(stdin)}
 
 	org, err := pickOrganization(ctx, lr, account, opts)
 	if err != nil {
@@ -130,11 +128,9 @@ func runLink(ctx context.Context, dependencies Dependencies, projectDir, project
 }
 
 type linkRun struct {
-	run     *run.Run
-	stderr  io.Writer
-	stdin   io.Reader
-	scanner *bufio.Scanner
-	canAsk  bool
+	run    *run.Run
+	prompt prompt.Prompt
+	canAsk bool
 }
 
 func (c linkRun) wait(ctx context.Context, phase progressv1.Phase, subject string, title progress.Title, fn func(context.Context) error) error {
@@ -146,26 +142,20 @@ func (c linkRun) wait(ctx context.Context, phase progressv1.Phase, subject strin
 	return err
 }
 
-func (c linkRun) ask(ctx context.Context, question func(w io.Writer)) (string, error) {
-	var answer string
-	err := c.run.Ask(func() error {
-		question(c.stderr)
-		answered := make(chan string, 1)
-		go func() {
-			line := ""
-			if c.scanner.Scan() {
-				line = strings.TrimSpace(c.scanner.Text())
-			}
-			answered <- line
-		}()
-		select {
-		case answer = <-answered:
-			return c.scanner.Err()
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+func (c linkRun) choose(ctx context.Context, title string, options []prompt.Option) (choice string, answered bool, err error) {
+	err = c.run.Ask(func() error {
+		choice, answered, err = c.prompt.Select(ctx, title, options)
+		return err
 	})
-	return answer, err
+	return choice, answered, err
+}
+
+func (c linkRun) input(ctx context.Context, title, description string) (typed string, answered bool, err error) {
+	err = c.run.Ask(func() error {
+		typed, answered, err = c.prompt.Input(ctx, title, description)
+		return err
+	})
+	return typed, answered, err
 }
 
 func consoleHost(apiURL string) string {
@@ -213,45 +203,34 @@ func selectOrCreateProject(
 	}
 
 	if len(projects) == 0 {
-		name, err := promptProjectName(ctx, lr, projectDir, fmt.Sprintf("%s has no projects yet.\n", org.Name))
+		name, err := promptProjectName(ctx, lr, projectDir, fmt.Sprintf("%s has no projects yet; name the new one", org.Name))
 		if err != nil {
 			return nil, err
 		}
 		return create(name)
 	}
 
-	selection, err := lr.ask(ctx, func(w io.Writer) {
-		fmt.Fprintf(w, "Projects in %s:\n", org.Name)
-		for i, p := range projects {
-			fmt.Fprintf(w, "  %d) %s (%s)\n", i+1, p.GetName(), p.GetSlug())
-		}
-		fmt.Fprintln(w, "  n) Create a new project")
-		fmt.Fprint(w, "Select a project (number, slug, or n): ")
-	})
+	const createNew = ""
+	options := make([]prompt.Option, 0, len(projects)+1)
+	for _, p := range projects {
+		options = append(options, prompt.Option{Name: p.GetSlug(), Label: fmt.Sprintf("%s (%s)", p.GetName(), p.GetSlug())})
+	}
+	options = append(options, prompt.Option{Name: createNew, Label: "Create a new project"})
+	selection, answered, err := lr.choose(ctx, fmt.Sprintf("Project in %s to link", org.Name), options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read input: %w", err)
 	}
-	switch {
-	case selection == "":
+	if !answered {
 		return nil, errors.New("no project selected; rerun `ocel link`")
-	case strings.EqualFold(selection, "n"):
-		name, err := promptProjectName(ctx, lr, projectDir, "")
+	}
+	if selection == createNew {
+		name, err := promptProjectName(ctx, lr, projectDir, "Name of the new project")
 		if err != nil {
 			return nil, err
 		}
 		return create(name)
 	}
-
-	if idx, convErr := strconv.Atoi(selection); convErr == nil {
-		if idx < 1 || idx > len(projects) {
-			return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
-		}
-		return projects[idx-1], nil
-	}
-	if found := commands.FindProject(projects, selection); found != nil {
-		return found, nil
-	}
-	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
+	return commands.FindProject(projects, selection), nil
 }
 
 func createProject(ctx context.Context, lr linkRun, account commands.ConsoleAccount, name string, org *console.Organization) (*consolev1.Project, error) {
@@ -286,14 +265,14 @@ func defaultProjectName(projectDir, name string) string {
 	return filepath.Base(projectDir)
 }
 
-func promptProjectName(ctx context.Context, lr linkRun, projectDir, lead string) (string, error) {
+func promptProjectName(ctx context.Context, lr linkRun, projectDir, title string) (string, error) {
 	fallback := filepath.Base(projectDir)
-	name, err := lr.ask(ctx, func(w io.Writer) {
-		fmt.Fprint(w, lead)
-		fmt.Fprintf(w, "Project name (%s): ", fallback)
-	})
+	name, answered, err := lr.input(ctx, title, "Enter takes "+fallback)
 	if err != nil {
 		return "", fmt.Errorf("failed to read input: %w", err)
+	}
+	if !answered {
+		return "", errors.New("no project name given; rerun `ocel link`")
 	}
 	if name == "" {
 		return fallback, nil
@@ -332,28 +311,16 @@ func pickOrganization(ctx context.Context, lr linkRun, account commands.ConsoleA
 		)
 	}
 
-	selection, err := lr.ask(ctx, func(w io.Writer) {
-		fmt.Fprintln(w, "Organizations:")
-		for i, org := range orgs {
-			fmt.Fprintf(w, "  %d) %s (%s)\n", i+1, org.Name, org.Slug)
-		}
-		fmt.Fprint(w, "Select an organization (number or slug): ")
-	})
+	options := make([]prompt.Option, 0, len(orgs))
+	for _, org := range orgs {
+		options = append(options, prompt.Option{Name: org.Slug, Label: fmt.Sprintf("%s (%s)", org.Name, org.Slug)})
+	}
+	selection, answered, err := lr.choose(ctx, "Organization to link", options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read input: %w", err)
 	}
-	if selection == "" {
+	if !answered {
 		return nil, errors.New("no organization selected; rerun `ocel link`")
 	}
-
-	if idx, convErr := strconv.Atoi(selection); convErr == nil {
-		if idx < 1 || idx > len(orgs) {
-			return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
-		}
-		return &orgs[idx-1], nil
-	}
-	if org := commands.FindOrganization(orgs, bySlug(selection)); org != nil {
-		return org, nil
-	}
-	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
+	return commands.FindOrganization(orgs, bySlug(selection)), nil
 }
