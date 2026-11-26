@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 )
@@ -27,6 +28,8 @@ type Attempt struct {
 	Trigger     *consolev1.Trigger
 	CI          *consolev1.CI
 	Source      *consolev1.Source
+
+	VariableGroups []*resourcesv1.GroupDefinition
 }
 
 func (a Attempt) Succeeded(finishedAt time.Time, apps []*consolev1.App, promotion *consolev1.Promotion) *consolev1.Deployment {
@@ -94,6 +97,8 @@ func (a Attempt) deployment(finishedAt time.Time, apps []*consolev1.App) *consol
 		Trigger:     a.Trigger,
 		Ci:          a.CI,
 		Source:      a.Source,
+
+		VariableGroups: a.VariableGroups,
 	}
 	if kind := a.Project.EdgeKind(); kind != "" {
 		deployment.Edge = &consolev1.Edge{Kind: string(kind)}

@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/environment"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
@@ -372,5 +373,31 @@ func TestRemovingAPreviewFromAnUnlinkedTreeMakesNoCallAndPrintsOneHintNamingOcel
 	}
 	if lines := strings.Split(strings.TrimSpace(stderr), "\n"); len(lines) != 1 || !strings.Contains(lines[0], "`ocel link`") {
 		t.Errorf("stderr = %q, want one hint line naming `ocel link`", stderr)
+	}
+}
+
+func TestADeploysReportNamesTheVariablesEachAppDeclares(t *testing.T) {
+	fixture := setUpVariablesProject(t, `[{"key":"LIVE_KEY","class":"VARIABLE_CLASS_SECRET","required":true},{"key":"BAKED_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+	envSet(t, fixture, "LIVE_KEY", "sk_live_value", envOptions{})
+	envSet(t, fixture, "BAKED_KEY", "baked_value", envOptions{})
+	writeRootApp(t, fixture.Root)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; out=%s", err, out)
+	}
+
+	apps := readDeployReport(t, fixture.Root).GetApps()
+	if len(apps) != 1 {
+		t.Fatalf("apps = %v, want the root app", apps)
+	}
+	classes := map[string]resourcesv1.VariableClass{}
+	for _, variable := range apps[0].GetVariables() {
+		classes[variable.GetKey()] = variable.GetClass()
+	}
+	if classes["LIVE_KEY"] != resourcesv1.VariableClass_VARIABLE_CLASS_SECRET || classes["BAKED_KEY"] != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
+		t.Errorf("declared variables = %v, want LIVE_KEY secret and BAKED_KEY plain", apps[0].GetVariables())
 	}
 }
