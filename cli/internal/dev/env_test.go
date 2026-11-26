@@ -458,7 +458,7 @@ export default {
 		}
 	})
 
-	t.Run("a live-class key is not refused for having no local value", func(t *testing.T) {
+	t.Run("an unset required secret is refused before the app starts", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -475,16 +475,13 @@ export default {
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
-		var exitErr *exitcode.ExitError
-		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
-			t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
+		if err == nil || !strings.Contains(err.Error(), "DB_PASSWORD") {
+			t.Fatalf("runDev err = %v, want a refusal naming the unset secret", err)
 		}
-		if _, statErr := os.Stat(startedPath); statErr != nil {
-			t.Fatalf("the app was not started: %v", statErr)
+		if _, statErr := os.Stat(startedPath); !os.IsNotExist(statErr) {
+			t.Fatalf("app marker stat = %v, want the app never started", statErr)
 		}
-		if !strings.Contains(stderr.String(), "DB_PASSWORD") {
-			t.Errorf("stderr = %q, want the live-value notice to name DB_PASSWORD", stderr.String())
-		}
+
 	})
 
 	t.Run("it exports a next app's value under its declared name and hands next the adapter and the declared public keys", func(t *testing.T) {
