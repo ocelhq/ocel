@@ -2,6 +2,7 @@ package env
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -22,6 +23,7 @@ type Dependencies struct {
 	commands.Invocation
 	OpenBrowser         func(ctx context.Context, url string) error
 	ServeVariableEditor func(ctx context.Context, cfg *project.Project, provider *providerprocess.Provider, tier environmentv1.Tier, declarations *variables.Declarations, recovery *variableeditor.Recovery) (*variableeditor.Session, error)
+	Guide               GuidePrompt
 }
 
 func NewCommand(dependencies Dependencies) *cobra.Command {
@@ -71,13 +73,21 @@ func newListCommand(dependencies Dependencies) *cobra.Command {
 func newSetCommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
-		Use:     "set <KEY=VALUE|KEY>...",
+		Use:     "set [KEY=VALUE|KEY]...",
 		Short:   "Set a value",
-		Long:    "Set a value.\n\nIn a terminal, a KEY given alone is asked for, and a secret is typed without being shown or kept in shell history.",
-		Example: "  $ ocel env set LOG_LEVEL=debug\n  $ ocel env set LOG_LEVEL=debug FEATURE_FLAG=true --folder /web\n  $ ocel env set STRIPE_API_KEY",
-		Args:    cobra.MinimumNArgs(1),
+		Long:    "Set a value.\n\nIn a terminal, a KEY given alone is asked for, and a secret is typed without being shown or kept in shell history. Given nothing, it asks which values to set: the ones a deploy still needs, a group, or one variable.",
+		Example: "  $ ocel env set LOG_LEVEL=debug\n  $ ocel env set LOG_LEVEL=debug FEATURE_FLAG=true --folder /web\n  $ ocel env set STRIPE_API_KEY\n  $ ocel env set",
+		Args:    cobra.ArbitraryArgs,
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			if !canGuide(dependencies, cmd.InOrStdin()) {
+				return errors.New("`ocel env set` takes KEY=VALUE; run it in a terminal with nothing after it to be asked which values to set")
+			}
+			return withCommand(cmd, dependencies, func(ctx context.Context, cwd string) error {
+				return runGuidedSet(ctx, dependencies, cwd, opts, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+			})
+		}
 		pairs, err := parseEnvSetPairs(args, dependencies.Values != nil && dependencies.CanAsk(cmd.InOrStdin()))
 		if err != nil {
 			return err
@@ -92,10 +102,16 @@ func newSetCommand(dependencies Dependencies) *cobra.Command {
 }
 
 type envSetPair struct {
-	key   string
-	value string
-	asked bool
-	arg   int
+	key    string
+	value  string
+	asked  bool
+	arg    int
+	folder string
+}
+
+func (p envSetPair) options(opts envOptions) envOptions {
+	opts.folder = p.folder
+	return opts
 }
 
 func parseEnvSetPairs(args []string, ask bool) ([]envSetPair, error) {

@@ -82,7 +82,12 @@ ocel env set LOG_LEVEL=debug                               # production
 ocel env set LOG_LEVEL=debug --preview                     # every preview
 ocel env set LOG_LEVEL=debug --preview --environment pr-12 # one preview
 ocel env set STRIPE_API_KEY                                # asks for it, typed hidden
+ocel env set                                               # asks which values to set
 ```
+
+Run with nothing after it in a terminal, `ocel env set` offers the values a deploy still
+needs, a group, or one variable, asks for each one, and writes them once you confirm. A value
+the env source owns is never asked for; it names where to change it instead.
 
 A deploy that is missing a declared value stops and names the `ocel env set` that fills it.
 

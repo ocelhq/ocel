@@ -48,6 +48,9 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 		}
 	}
 	key := ""
+	for i := range pairs {
+		pairs[i].folder = opts.folder
+	}
 	if len(pairs) > 0 {
 		key = pairs[0].key
 	}
@@ -59,43 +62,54 @@ func runEnvSetPairs(ctx context.Context, dependencies Dependencies, cwd string, 
 		if err := refuseUndeclaredBareArguments(definitions, pairs); err != nil {
 			return err
 		}
-		for _, pair := range pairs {
-			if err := variables.RefuseImpliedInFolder(variables.ScopeOf(cfg, opts.tier(), ""), pair.key, opts.folder); err != nil {
-				return err
-			}
-			if err := variables.RefuseUnwritable(definitions, pair.key, opts.folder); err != nil {
-				return err
-			}
-		}
 		values := envValues(provider, cfg, opts)
 		owner, err := ownerOf(ctx, values, opts)
 		if err != nil {
 			return err
 		}
-		for _, pair := range pairs {
-			if err := owner.RefuseOwned(envCoordinate(pair.key, opts)); err != nil {
-				return err
-			}
+		if err := refuseUnsettable(cfg, opts, definitions, owner, pairs); err != nil {
+			return err
 		}
 		if pairs, err = askForValues(ctx, dependencies.Values, run, definitions, pairs, opts); err != nil {
 			return err
 		}
-		variableStore, err := provider.VariableStore()
-		if err != nil {
-			return err
-		}
-		keys := make([]string, 0, len(pairs))
-		for _, pair := range pairs {
-			keys = append(keys, pair.key)
-		}
-		err = runInSpan(ctx, run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeValues(keys, opts)), func(ctx context.Context) error {
-			return setPairs(ctx, values, owner, pairs, opts, definitions, stdout)
-		})
-		if err != nil {
-			return err
-		}
-		return printGroupProgress(ctx, run, variableStore, cfg, definitions, groups, opts, pairs, stdout)
+		return writePairs(ctx, run, provider, cfg, values, owner, definitions, groups, pairs, opts, stdout)
 	})
+}
+
+func refuseUnsettable(cfg *project.Project, opts envOptions, definitions []*resourcesv1.VariableDefinition, owner variables.EnvSource, pairs []envSetPair) error {
+	for _, pair := range pairs {
+		if err := variables.RefuseImpliedInFolder(variables.ScopeOf(cfg, opts.tier(), ""), pair.key, pair.folder); err != nil {
+			return err
+		}
+		if err := variables.RefuseUnwritable(definitions, pair.key, pair.folder); err != nil {
+			return err
+		}
+	}
+	for _, pair := range pairs {
+		if err := owner.RefuseOwned(envCoordinate(pair.key, pair.options(opts))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writePairs(ctx context.Context, run *run.Run, provider *providerprocess.Provider, cfg *project.Project, values variables.Store, owner variables.EnvSource, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, pairs []envSetPair, opts envOptions, stdout io.Writer) error {
+	variableStore, err := provider.VariableStore()
+	if err != nil {
+		return err
+	}
+	keys := make([]string, 0, len(pairs))
+	for _, pair := range pairs {
+		keys = append(keys, pair.key)
+	}
+	err = runInSpan(ctx, run, progressv1.Phase_PHASE_PROVISION, cfg, progress.Updating.Title(describeValues(keys, opts)), func(ctx context.Context) error {
+		return setPairs(ctx, values, owner, pairs, opts, definitions, stdout)
+	})
+	if err != nil {
+		return err
+	}
+	return printGroupProgress(ctx, run, variableStore, cfg, definitions, groups, opts, pairs, stdout)
 }
 
 func ownerOf(ctx context.Context, values variables.Store, opts envOptions) (variables.EnvSource, error) {
@@ -147,7 +161,7 @@ func askForValues(ctx context.Context, values commands.ValuePrompt, run *run.Run
 
 func setPairs(ctx context.Context, values variables.Store, owner variables.EnvSource, pairs []envSetPair, opts envOptions, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
 	for _, pair := range pairs {
-		at := envCoordinate(pair.key, opts)
+		at := envCoordinate(pair.key, pair.options(opts))
 		if owner.CanSet(at) {
 			if err := setInEnvSource(ctx, values, owner.ID, at, pair.value, definitions, stdout); err != nil {
 				return err
@@ -160,9 +174,9 @@ func setPairs(ctx context.Context, values variables.Store, owner variables.EnvSo
 		}
 		version, err := values.Set(ctx, at, pair.value, &seen)
 		if err != nil {
-			return staleCell(err, pair.key, opts)
+			return staleCell(err, pair.key, pair.options(opts))
 		}
-		fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), version)
+		fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, pair.options(opts)), version)
 	}
 	return nil
 }
