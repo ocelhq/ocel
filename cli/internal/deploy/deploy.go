@@ -127,7 +127,10 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 			run.Succeed(nothingToDeploy(cfg))
 			return nil
 		}
-		apps, _ = appsDeployed(cfg, manifest, nil, env)
+		apps, _ = d.appsDeployed(manifest, nil)
+		if attempt != nil {
+			attempt.VariableGroups = d.variableGroups()
+		}
 
 		req, err := d.request(manifest, inline)
 		if err != nil {
@@ -141,7 +144,7 @@ func To(ctx context.Context, dependencies Dependencies, cwd string, target Targe
 		infra.stopRenewing()
 		out, err := streamDeploy(ctx, provider, req)
 		var unread error
-		apps, unread = appsDeployed(cfg, manifest, out.apps, env)
+		apps, unread = d.appsDeployed(manifest, out.apps)
 		if err != nil {
 			return err
 		}

@@ -32,12 +32,12 @@ func ClientAppsOf(cfg *project.Project, definitions []*resourcesv1.VariableDefin
 	scoped := AppsOf(cfg)
 	apps := make([]ClientApp, 0, len(scoped))
 	for _, app := range scoped {
-		apps = append(apps, ClientApp{App: app, Declared: declaredForApp(app, definitions), Variables: values[app.Name]})
+		apps = append(apps, ClientApp{App: app, Declared: DeclaredFor(app, definitions), Variables: values[app.Name]})
 	}
 	return apps
 }
 
-func declaredForApp(app App, definitions []*resourcesv1.VariableDefinition) []*resourcesv1.VariableDefinition {
+func DeclaredFor(app App, definitions []*resourcesv1.VariableDefinition) []*resourcesv1.VariableDefinition {
 	var declared []*resourcesv1.VariableDefinition
 	for _, definition := range definitions {
 		if app.IsInScope(definition.GetFolders()) {
@@ -52,7 +52,7 @@ func PublicKeys(app App, definitions []*resourcesv1.VariableDefinition) []string
 		return nil
 	}
 	keys := []string{processenv.NextPublicURLEnvVar}
-	for _, definition := range declaredForApp(app, definitions) {
+	for _, definition := range DeclaredFor(app, definitions) {
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && processenv.IsNextPublic(definition.GetKey()) {
 			keys = append(keys, definition.GetKey())
 		}
