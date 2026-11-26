@@ -418,7 +418,7 @@ func TestSync(t *testing.T) {
 		}
 	})
 
-	t.Run("names a secret key it has no value for rather than resolving it", func(t *testing.T) {
+	t.Run("does not report an unset secret as resolved", func(t *testing.T) {
 		t.Parallel()
 		s := newDevServer(&fakeResources{})
 		s.UseValues(map[string]string{}, variables.Scope{})
@@ -433,8 +433,8 @@ func TestSync(t *testing.T) {
 		if result.Err != nil {
 			t.Fatalf("Sync result error: %v", result.Err)
 		}
-		if want := []string{"WEBHOOK_SECRET"}; !slices.Equal(result.SecretKeys, want) {
-			t.Errorf("SecretKeys = %v, want %v", result.SecretKeys, want)
+		if len(result.SecretKeys) != 0 {
+			t.Errorf("SecretKeys = %v, want no resolved secret keys", result.SecretKeys)
 		}
 		if len(result.SecretValues) != 0 {
 			t.Errorf("SecretValues = %v, want nothing for a key nothing sets", result.SecretValues)

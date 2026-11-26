@@ -222,7 +222,7 @@ func TestRefuseIncompleteEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("states presence for a secret key it has no value for", func(t *testing.T) {
+	t.Run("refuses a secret key it has no value for", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
 		s, url := serveValues(t, map[string]string{}, variables.Scope{Apps: []variables.App{{Name: "web"}}})
@@ -230,12 +230,16 @@ func TestRefuseIncompleteEnv(t *testing.T) {
 		msg := declareEnv(t, url, &resourcesv1.VariableDefinition{
 			Key: "DB_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true,
 		})
-		if len(msg.GetCells()) != 1 || msg.GetCells()[0].GetValue() != "" {
-			t.Fatalf("cells = %v, want one presence cell with no plaintext", msg.GetCells())
+		if len(msg.GetCells()) != 0 {
+			t.Fatalf("cells = %v, want no presence for an unset secret", msg.GetCells())
 		}
 
-		if err := s.RefuseIncompleteEnv(ctx); err != nil {
-			t.Fatalf("RefuseIncompleteEnv = %v, want nil — a secret key is resolved at sync, not from the file", err)
+		var refusal *variables.MissingError
+		if err := s.RefuseIncompleteEnv(ctx); !errors.As(err, &refusal) {
+			t.Fatalf("RefuseIncompleteEnv = %v, want a missing-secret refusal", err)
+		}
+		if len(refusal.Problems) != 1 || refusal.Problems[0].GetKey() != "DB_PASSWORD" {
+			t.Fatalf("problems = %v, want the unset secret named", refusal.Problems)
 		}
 
 		store, _ := s.env.current()
@@ -248,7 +252,7 @@ func TestRefuseIncompleteEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("still refuses a plain key beside an exempt secret one", func(t *testing.T) {
+	t.Run("refuses both a plain key and a secret key when neither has a value", func(t *testing.T) {
 		t.Parallel()
 		s, url := serveValues(t, map[string]string{}, variables.Scope{Apps: []variables.App{{Name: "web"}}})
 
@@ -262,14 +266,14 @@ func TestRefuseIncompleteEnv(t *testing.T) {
 		if !errors.As(err, &refusal) {
 			t.Fatalf("RefuseIncompleteEnv = %v (%T), want *variables.MissingError", err, err)
 		}
-		if len(refusal.Problems) != 1 || refusal.Problems[0].GetKey() != "DATABASE_URL" {
-			t.Fatalf("problems = %v, want exactly the plain key named", refusal.Problems)
+		if len(refusal.Problems) != 2 || refusal.Problems[0].GetKey() != "DB_PASSWORD" || refusal.Problems[1].GetKey() != "DATABASE_URL" {
+			t.Fatalf("problems = %v, want both unset keys named", refusal.Problems)
 		}
 	})
 
 	t.Run("states presence for every folder a secret key is scoped to", func(t *testing.T) {
 		t.Parallel()
-		s, url := serveValues(t, map[string]string{}, variables.Scope{
+		s, url := serveValues(t, map[string]string{"DB_PASSWORD": "local-password"}, variables.Scope{
 			Apps: []variables.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}},
 		})
 
@@ -290,6 +294,80 @@ func TestRefuseIncompleteEnv(t *testing.T) {
 			t.Fatalf("RefuseIncompleteEnv = %v, want nil", err)
 		}
 	})
+}
+
+func TestOptionalEnvGroupWithNoValuesDoesNotBlockTheApp(t *testing.T) {
+	t.Parallel()
+	s := newDevServer(&fakeResources{})
+	s.UseValues(map[string]string{}, variables.Scope{Apps: []variables.App{{Name: "console"}}})
+	_, err := s.env.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+		Definitions: []*resourcesv1.VariableDefinition{
+			{Key: "GITHUB_CLIENT_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true, Group: "githubAuth"},
+			{Key: "GITHUB_CLIENT_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true, Group: "githubAuth"},
+		},
+		Groups: []*resourcesv1.GroupDefinition{{Key: "githubAuth"}},
+	})
+	if err != nil {
+		t.Fatalf("DeclareEnv: %v", err)
+	}
+	if err := s.RefuseIncompleteEnv(context.Background()); err != nil {
+		t.Fatalf("RefuseIncompleteEnv = %v, want an absent optional group to leave the app ready", err)
+	}
+}
+
+func TestOptionalEnvGroupRequiresAllRequiredMembersOnceAnyValueIsSet(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		values  map[string]string
+		missing []string
+	}{
+		{name: "only the plain member needs the secret", values: map[string]string{"GITHUB_CLIENT_ID": "id"}, missing: []string{"GITHUB_CLIENT_SECRET"}},
+		{name: "only the secret needs the plain member", values: map[string]string{"GITHUB_CLIENT_SECRET": "secret"}, missing: []string{"GITHUB_CLIENT_ID"}},
+		{name: "only an optional member needs both required members", values: map[string]string{"GITHUB_SCOPES": "repo"}, missing: []string{"GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"}},
+		{name: "both required members leave the group ready", values: map[string]string{"GITHUB_CLIENT_ID": "id", "GITHUB_CLIENT_SECRET": "secret"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newDevServer(&fakeResources{})
+			s.UseValues(tc.values, variables.Scope{Apps: []variables.App{{Name: "console", Folder: "/apps/web"}}})
+			response, err := s.env.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+				Definitions: []*resourcesv1.VariableDefinition{
+					{Key: "GITHUB_CLIENT_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true, Group: "githubAuth"},
+					{Key: "GITHUB_CLIENT_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true, Group: "githubAuth"},
+					{Key: "GITHUB_SCOPES", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Group: "githubAuth"},
+				},
+				Groups: []*resourcesv1.GroupDefinition{{Key: "githubAuth"}},
+			})
+			if err != nil {
+				t.Fatalf("DeclareEnv: %v", err)
+			}
+			for _, cell := range response.GetCells() {
+				if cell.GetKey() == "GITHUB_CLIENT_SECRET" && cell.GetValue() != "" {
+					t.Fatal("DeclareEnv revealed the secret")
+				}
+			}
+			err = s.RefuseIncompleteEnv(context.Background())
+			if len(tc.missing) == 0 {
+				if err != nil {
+					t.Fatalf("RefuseIncompleteEnv = %v, want the app ready", err)
+				}
+				return
+			}
+			var refusal *variables.MissingError
+			if !errors.As(err, &refusal) {
+				t.Fatalf("RefuseIncompleteEnv = %v, want a refusal naming %v", err, tc.missing)
+			}
+			var missing []string
+			for _, problem := range refusal.Problems {
+				missing = append(missing, problem.GetKey())
+			}
+			if !slices.Equal(missing, tc.missing) {
+				t.Errorf("missing = %v, want %v", missing, tc.missing)
+			}
+		})
+	}
 }
 
 func TestResetManifest(t *testing.T) {

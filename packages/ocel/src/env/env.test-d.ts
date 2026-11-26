@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from "vitest";
 import { z } from "zod";
-import { defineEnv, group } from "./index.js";
+import { defineEnv, type GroupOptions, group } from "./index.js";
 
 describe("the object defineEnv hands back", () => {
   it("types a schemaless variable as a string and a schema'd one as its output", () => {
@@ -55,6 +55,30 @@ describe("the object defineEnv hands back", () => {
 });
 
 describe("a group of variables", () => {
+  it("keeps a group possibly absent when its optional flag is a runtime boolean", () => {
+    const options: GroupOptions = { optional: Math.random() > 0.5 };
+    const env = defineEnv({
+      dynamic: group({ TYPED_DYNAMIC_ID: { class: "plain" } }, options),
+    });
+
+    expectTypeOf(env.dynamic).toEqualTypeOf<{ readonly TYPED_DYNAMIC_ID: string } | undefined>();
+  });
+
+  it("keeps groups required when options omit or disable optionality", () => {
+    const env = defineEnv({
+      described: group(
+        { TYPED_DESCRIBED_ID: { class: "plain" } },
+        { description: "Always required" },
+      ),
+      emptyOptions: group({ TYPED_EMPTY_OPTIONS_ID: { class: "plain" } }, {}),
+      required: group({ TYPED_REQUIRED_ID: { class: "plain" } }, { optional: false }),
+    });
+
+    expectTypeOf(env.described).toEqualTypeOf<{ readonly TYPED_DESCRIBED_ID: string }>();
+    expectTypeOf(env.emptyOptions).toEqualTypeOf<{ readonly TYPED_EMPTY_OPTIONS_ID: string }>();
+    expectTypeOf(env.required).toEqualTypeOf<{ readonly TYPED_REQUIRED_ID: string }>();
+  });
+
   it("types an optional group as possibly absent and a required one as always there", () => {
     const env = defineEnv({
       github: group(

@@ -33,7 +33,13 @@ export interface GroupDefinition<
   readonly description?: string;
 }
 
-type IsOptional<TOptions extends GroupOptions> = TOptions["optional"] extends true ? true : false;
+type IsOptional<TOptions extends GroupOptions> = "optional" extends keyof TOptions
+  ? TOptions["optional"] extends true
+    ? true
+    : true extends TOptions["optional"]
+      ? boolean
+      : false
+  : false;
 
 export type Definitions = Record<string, VariableDefinition>;
 
@@ -52,7 +58,7 @@ export type FlatDefinitions = Record<string, FlatDefinition>;
  * is delivered for one of its members. */
 export function group<
   const TDefinitions extends Definitions,
-  const TOptions extends GroupOptions = GroupOptions,
+  const TOptions extends GroupOptions = { optional: false },
 >(
   definitions: TDefinitions,
   options?: TOptions,

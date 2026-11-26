@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -212,8 +213,8 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	secretKeys := s.env.secretKeys()
-	s.deliverSync(SyncResult{Resources: resolved, DevServerURL: s.url, AppToken: s.appToken, SecretValues: s.secretValues(secretKeys), SecretKeys: secretKeys})
+	secretValues := s.secretValues(s.env.secretKeys())
+	s.deliverSync(SyncResult{Resources: resolved, DevServerURL: s.url, AppToken: s.appToken, SecretValues: secretValues, SecretKeys: slices.Sorted(maps.Keys(secretValues))})
 	w.WriteHeader(http.StatusOK)
 }
 
