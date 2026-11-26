@@ -278,16 +278,18 @@ func TestASuccessfulSpanAfterAFailureKeepsItsWarningsAndErrorsUnderItsHeader(t *
 	}
 }
 
-func TestAFailureReasonThatRunsOverLinesContinuesDeeperThanTheBlocksDetailLines(t *testing.T) {
+func TestAFailureReasonThatRunsOverLinesStartsBelowTheHeaderDeeperThanTheBlocksDetailLines(t *testing.T) {
 	t.Parallel()
 
 	run, out, c := groupedRun(t, Presentation{})
 	_, api := run.Phase(progressv1.Phase_PHASE_BUILD).Child(t.Context(), "api", progress.Building.Title("api"))
 	api.Warn("tsconfig.json has no strict mode")
 	c.pass(time.Second)
-	api.End(errors.New("npm run build exited with status 1\nsee the build log above"))
+	api.End(errors.New("npm run build exited with status 1\n\nsee the build log above"))
 
-	want := "ERROR [build] ✗ api: Building api failed after 1s: npm run build exited with status 1\n" +
+	want := "ERROR [build] ✗ api: Building api failed after 1s\n" +
+		"        npm run build exited with status 1\n" +
+		"\n" +
 		"        see the build log above\n" +
 		"      WARN  tsconfig.json has no strict mode\n"
 	if got := out.String(); got != want {
