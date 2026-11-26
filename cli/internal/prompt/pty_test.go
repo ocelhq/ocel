@@ -85,6 +85,16 @@ func TestAnAttendedSelectMovesWithTheArrowKeysAndTakesEnter(t *testing.T) {
 	}
 }
 
+func TestAnAttendedSelectOpensOnItsFirstOptionWhateverTheOthersAreNamed(t *testing.T) {
+	ptmx, tty, screen := aPromptTerminal(t)
+	typeOnSight(t, ptmx, screen, "Project to link", "\r")
+
+	chosen, answered, err := New(tty, tty).Select(withinSeconds(t), "Project to link", []Option{{Name: "my-app"}, {Name: "", Label: "Create a new project"}})
+	if err != nil || !answered || chosen != "my-app" {
+		t.Errorf("Select() = %q, %t, %v; want my-app, the first option", chosen, answered, err)
+	}
+}
+
 func TestAnAttendedInputTakesWhatIsTyped(t *testing.T) {
 	ptmx, tty, screen := aPromptTerminal(t)
 	typeOnSight(t, ptmx, screen, "ssh", "203.0.113.7", "\r")

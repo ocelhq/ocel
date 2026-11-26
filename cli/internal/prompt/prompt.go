@@ -94,6 +94,9 @@ func (p Prompt) Select(ctx context.Context, title string, options []Option) (str
 		fields = append(fields, huh.NewOption(o.label(), o.Name))
 	}
 	var chosen string
+	if len(options) > 0 {
+		chosen = options[0].Name
+	}
 	answered, err := p.answer(ctx, huh.NewSelect[string]().Title(title).Options(fields...).Value(&chosen))
 	if !answered {
 		return "", false, err
