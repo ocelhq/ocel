@@ -3,6 +3,7 @@ package wording
 import (
 	"fmt"
 
+	"github.com/ocelhq/ocel/cli/internal/english"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
@@ -92,6 +93,23 @@ func GroupHeadline(group, description string) string {
 		out += " (" + description + ")"
 	}
 	return out
+}
+
+func GroupNeed(group, description string, required bool, set []string) string {
+	name := "group " + group
+	if description != "" {
+		name += " (" + description + ")"
+	}
+	switch {
+	case required:
+		return name + " is required, so it needs:"
+	case len(set) == 0:
+		return name + " needs:"
+	case len(set) == 1:
+		return name + " is active because " + set[0] + " is set, so it needs:"
+	default:
+		return name + " is active because " + english.And(set) + " are set, so it needs:"
+	}
 }
 
 func Remedy(remedy string) string {
