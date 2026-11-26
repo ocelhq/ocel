@@ -36,99 +36,53 @@ func spanWriting(t *testing.T, w io.Writer) *run.Span {
 
 func TestTheDevValueReportNamesWhereEachKeyCameFromAndNeverAValue(t *testing.T) {
 	t.Parallel()
-
-	t.Run("it states what the file costs and prints no value", func(t *testing.T) {
-		t.Parallel()
-
-		var quiet bytes.Buffer
-		reportValues(t.Context(), spanWriting(t, &quiet), t.TempDir(), dotfileValues(nil), true)
-		if quiet.Len() != 0 {
-			t.Errorf("reportValues wrote %q for a run with no dotfile values, want nothing", quiet.String())
-		}
-
-		dir := gitRepository(t)
-		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
-			t.Fatalf("write .gitignore: %v", err)
-		}
-
-		var out bytes.Buffer
-		reportValues(t.Context(), spanWriting(t, &out), dir, dotfileValues(map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}), true)
-		got := out.String()
-
-		for _, want := range []string{"API_TOKEN", "DATABASE_URL", project.DotenvFileName} {
-			if !strings.Contains(got, want) {
-				t.Errorf("notice = %q, want it to mention %q", got, want)
+	for _, tc := range []struct {
+		name   string
+		layers valueLayers
+		want   string
+	}{
+		{name: "empty", want: "0 variables"},
+		{name: "single", layers: dotfileValues(map[string]string{"API_TOKEN": "secret"}), want: "1 variable from .env"},
+		{name: "multiple", layers: dotfileValues(map[string]string{"API_TOKEN": "secret", "DATABASE_URL": "postgres://secret"}), want: "2 variables from .env"},
+		{name: "overlapping sources", layers: valueLayers{
+			{from: "infisical", values: map[string]string{"API_TOKEN": "shared", "DATABASE_URL": "postgres://secret"}},
+			{from: ".env.local", values: map[string]string{"API_TOKEN": "local"}},
+		}, want: "2 variables from infisical, .env.local"},
+		{name: "fully overridden source", layers: valueLayers{
+			{from: ".env", values: map[string]string{"API_TOKEN": "shared"}},
+			{from: ".env.local", values: map[string]string{"API_TOKEN": "local"}},
+		}, want: "1 variable from .env.local"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.layers.summary(); got != tc.want {
+				t.Errorf("summary = %q, want %q", got, tc.want)
 			}
-		}
-		for _, leaked := range []string{"sk-live", "postgres://secret"} {
-			if strings.Contains(got, leaked) {
-				t.Fatalf("notice = %q, want it to disclose no value", got)
-			}
-		}
-		if !strings.Contains(got, "teammate") && !strings.Contains(got, "yours alone") {
-			t.Errorf("notice = %q, want it to say the collaboration a shared store provides is gone", got)
-		}
-		if !strings.Contains(got, "plaintext") {
-			t.Errorf("notice = %q, want it to say values reach the child in plaintext, which a deploy does not do", got)
-		}
-		if strings.Contains(got, ".gitignore") {
-			t.Errorf("notice = %q, want no gitignore warning when the file is already ignored", got)
-		}
+		})
+	}
+}
+
+func TestTheDevValueReportWarnsOnlyForUnignoredFiles(t *testing.T) {
+	t.Parallel()
+	dir := gitRepository(t)
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	warnUnignoredFiles(t.Context(), spanWriting(t, &out), dir, valueLayers{
+		{from: "infisical", values: map[string]string{"API_TOKEN": "secret"}},
+		{from: ".env", file: true, values: map[string]string{"API_TOKEN": "secret"}},
+		{from: ".env.local", file: true, values: map[string]string{"API_TOKEN": "secret"}},
 	})
-
-	t.Run("it warns when the file is not ignored", func(t *testing.T) {
-		t.Parallel()
-
-		var out bytes.Buffer
-		reportValues(t.Context(), spanWriting(t, &out), gitRepository(t), dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
-
-		if got := out.String(); !strings.Contains(got, ".gitignore") {
-			t.Errorf("notice = %q, want it to say the file is not ignored by git", got)
+	got := out.String()
+	if !strings.Contains(got, ".env.local is not ignored by git") {
+		t.Fatalf("warnings = %q, want the unignored file named", got)
+	}
+	for _, unwanted := range []string{"infisical", ".env is not ignored", "API_TOKEN", "secret", "teammate", "plaintext"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("warnings = %q, want no %q", got, unwanted)
 		}
-
-		dir := gitRepository(t)
-		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env*\n!.env\n"), 0o644); err != nil {
-			t.Fatalf("write .gitignore: %v", err)
-		}
-		var reincluded bytes.Buffer
-		reportValues(t.Context(), spanWriting(t, &reincluded), dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
-		if got := reincluded.String(); !strings.Contains(got, ".gitignore") {
-			t.Errorf("notice = %q, want the warning when a later line re-includes the file", got)
-		}
-	})
-
-	t.Run("it names where each value came from, and checks "+project.LocalDotenvFileName+" against .gitignore on its own", func(t *testing.T) {
-		t.Parallel()
-
-		dir := gitRepository(t)
-		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
-			t.Fatalf("write .gitignore: %v", err)
-		}
-		var out bytes.Buffer
-		reportValues(t.Context(), spanWriting(t, &out), dir, valueLayers{
-			{from: "infisical:p-1/dev", values: map[string]string{"API_TOKEN": "sk-live-must-not-appear"}},
-			{from: project.LocalDotenvFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}},
-		}, true)
-		got := out.String()
-
-		for _, want := range []string{"API_TOKEN from infisical:p-1/dev", "LOG_LEVEL from " + project.LocalDotenvFileName, project.LocalDotenvFileName + " is not ignored by git", "editing " + project.LocalDotenvFileName + " re-resolves"} {
-			if !strings.Contains(got, want) {
-				t.Errorf("notice = %q, want it to say %q", got, want)
-			}
-		}
-		if strings.Contains(got, "sk-live") {
-			t.Fatalf("notice = %q, want it to disclose no value", got)
-		}
-
-		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.local\n"), 0o644); err != nil {
-			t.Fatalf("write .gitignore: %v", err)
-		}
-		var ignored bytes.Buffer
-		reportValues(t.Context(), spanWriting(t, &ignored), dir, valueLayers{{from: project.LocalDotenvFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}}}, false)
-		if strings.Contains(ignored.String(), ".gitignore") {
-			t.Errorf("notice = %q, want no warning for a file a glob ignores", ignored.String())
-		}
-	})
+	}
 }
 
 func gitRepository(t *testing.T) string {
@@ -179,7 +133,7 @@ func TestTheDevValueReportAsksGitWhetherItIgnoresEachFile(t *testing.T) {
 		}
 
 		var out bytes.Buffer
-		reportValues(t.Context(), spanWriting(t, &out), project, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
+		warnUnignoredFiles(t.Context(), spanWriting(t, &out), project, dotfileValues(map[string]string{"API_TOKEN": "x"}))
 		if strings.Contains(out.String(), ".gitignore") {
 			t.Errorf("notice = %q, want no warning for a file git ignores", out.String())
 		}
@@ -193,8 +147,8 @@ func TestTheDevValueReportAsksGitWhetherItIgnoresEachFile(t *testing.T) {
 		}
 
 		var out bytes.Buffer
-		reportValues(t.Context(), spanWriting(t, &out), dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
-		if got := out.String(); !strings.Contains(got, "cannot tell whether git ignores "+project.DotenvFileName) {
+		warnUnignoredFiles(t.Context(), spanWriting(t, &out), dir, dotfileValues(map[string]string{"API_TOKEN": "x"}))
+		if got := out.String(); !strings.Contains(got, "Could not check whether git ignores "+project.DotenvFileName) {
 			t.Errorf("notice = %q, want it to say it cannot tell", got)
 		}
 	})
@@ -227,33 +181,6 @@ func TestReportUnreadableLines(t *testing.T) {
 		}
 		if !strings.Contains(one.String(), "line 4 is") {
 			t.Errorf("notice = %q, want a singular line reported singularly", one.String())
-		}
-	})
-}
-
-func TestReportSecretValues(t *testing.T) {
-	t.Parallel()
-
-	t.Run("a run with no secret values says nothing", func(t *testing.T) {
-		t.Parallel()
-
-		var quiet bytes.Buffer
-		reportSecretValues(spanWriting(t, &quiet), nil)
-		if quiet.Len() != 0 {
-			t.Errorf("reportSecretValues wrote %q for a run with no secret values, want nothing", quiet.String())
-		}
-	})
-
-	t.Run("it names every secret key and says dev resolves them like any other value", func(t *testing.T) {
-		t.Parallel()
-
-		var out bytes.Buffer
-		reportSecretValues(spanWriting(t, &out), []string{"WEBHOOK_SECRET", "API_TOKEN"})
-		got := out.String()
-		for _, want := range []string{"API_TOKEN", "WEBHOOK_SECRET", "every other value", "bounded window"} {
-			if !strings.Contains(got, want) {
-				t.Errorf("reportSecretValues wrote %q, want it to mention %q", got, want)
-			}
 		}
 	})
 }

@@ -375,6 +375,10 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "API_TOKEN=second\n")
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "second")
+		waitForOutput(t, &leaderStderr, "Re-resolved 1 variable from .env")
+		if got := leaderStderr.String(); strings.Contains(got, "bounded window") || strings.Contains(got, "the way dev resolves") {
+			t.Errorf("reload output = %q, want only a resolution summary", got)
+		}
 
 		cancelFollower()
 		select {
@@ -1128,7 +1132,7 @@ func TestDevReportsThroughItsRun(t *testing.T) {
 		}
 		var resolved, summarized bool
 		for _, ev := range clitest.RunEvents(t, readTestFile(t, logs[0])) {
-			resolved = resolved || ev.GetOperation().GetEnded().GetTitle() == environmentTitle.Ended
+			resolved = resolved || ev.GetOperation().GetEnded().GetTitle() == "Resolved 0 variables"
 			summarized = summarized || ev.GetSummary().GetSuccess()
 		}
 		if !resolved || !summarized {
@@ -1155,7 +1159,7 @@ export default { slug: "test-app" };
 			done <- runDev(ctx, deps, false, root, []string{"sleep", "10"}, &stdout, &stderr, strings.NewReader(""))
 		}()
 
-		waitForOutput(t, &stderr, environmentTitle.Ended)
+		waitForOutput(t, &stderr, "Resolved 1 variable from .env")
 		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "# the value the run needs, deleted\n")
 		waitForOutput(t, &stderr, "SPAN_STATUS_ERROR")
 

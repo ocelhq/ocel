@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"os/exec"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -31,48 +29,45 @@ func reportUnreadableLines(span *run.Span, values valueLayers) {
 	}
 }
 
-func (v valueLayers) advice(watched bool) string {
-	var files []string
-	for _, layer := range v {
-		if layer.file {
-			files = append(files, layer.from)
+func (v valueLayers) summary() string {
+	seen := map[string]struct{}{}
+	contributes := make([]bool, len(v))
+	for i := len(v) - 1; i >= 0; i-- {
+		for key := range v[i].values {
+			if _, overridden := seen[key]; overridden {
+				continue
+			}
+			seen[key] = struct{}{}
+			contributes[i] = true
 		}
 	}
-	if watched {
-		return fmt.Sprintf("editing %s re-resolves this run; saving it is enough.", strings.Join(files, " or "))
+	var sources []string
+	for i, layer := range v {
+		if contributes[i] {
+			sources = append(sources, layer.from)
+		}
 	}
-	return fmt.Sprintf("%s is read once, at startup; editing it takes effect on the next `ocel run`.", strings.Join(files, " or "))
+	unit := "variables"
+	if len(seen) == 1 {
+		unit = "variable"
+	}
+	summary := fmt.Sprintf("%d %s", len(seen), unit)
+	if len(sources) > 0 {
+		summary += " from " + strings.Join(sources, ", ")
+	}
+	return summary
 }
 
-func reportValues(ctx context.Context, span *run.Span, dir string, values valueLayers, watched bool) {
-	reported := false
-	for _, layer := range values {
-		if len(layer.values) == 0 {
-			continue
-		}
-		reported = true
-		keys := strings.Join(slices.Sorted(maps.Keys(layer.values)), ", ")
-		if !layer.file {
-			span.Say(fmt.Sprintf("resolved %s from %s, the dev env source, read once as this run started.", keys, layer.from))
-			continue
-		}
-		span.Say(fmt.Sprintf("resolved %s from %s. That file is yours alone — a teammate's checkout has its own, so nothing set here reaches anyone else and a deploy resolves none of it.",
-			keys, layer.from))
-	}
-	if !reported {
-		return
-	}
-	span.Say("dev delivers every value to the app in plaintext under its own name; a deploy keeps a sensitive value out of the function environment and a live one out of the artifact.")
-	span.Say(values.advice(watched))
+func warnUnignoredFiles(ctx context.Context, span *run.Span, dir string, values valueLayers) {
 	for _, layer := range values {
 		if !layer.file || len(layer.values) == 0 {
 			continue
 		}
 		switch ignored, err := readGitIgnored(run.ContextWithSpan(ctx, span), dir, layer.from); {
 		case err != nil:
-			span.Warn(fmt.Sprintf("ocel cannot tell whether git ignores %s (%v). Keep it out of version control — it contains values nothing else may see.", layer.from, err))
+			span.Warn(fmt.Sprintf("Could not check whether git ignores %s: %v", layer.from, err))
 		case !ignored:
-			span.Warn(fmt.Sprintf("%s is not ignored by git. Add it to .gitignore before committing — it contains values nothing else may see.", layer.from))
+			span.Warn(fmt.Sprintf("%s is not ignored by git; add it to .gitignore.", layer.from))
 		}
 	}
 }
@@ -90,13 +85,4 @@ func readGitIgnored(ctx context.Context, dir, name string) (bool, error) {
 	default:
 		return false, fmt.Errorf("git did not run: %w", err)
 	}
-}
-
-func reportSecretValues(span *run.Span, secretKeys []string) {
-	if len(secretKeys) == 0 {
-		return
-	}
-	keys := slices.Clone(secretKeys)
-	slices.Sort(keys)
-	span.Say(fmt.Sprintf("resolved %s the way dev resolves every other value. Deployed, a rotated value is picked up within a bounded window.", strings.Join(keys, ", ")))
 }

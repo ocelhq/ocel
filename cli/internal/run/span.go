@@ -176,6 +176,13 @@ func (s *Span) End(err error) {
 	})
 }
 
+func (s *Span) EndWithTitle(result string) {
+	s.mu.Lock()
+	s.title.Ended = result
+	s.mu.Unlock()
+	s.End(nil)
+}
+
 func (s *Span) EndPartial(result string) {
 	s.mu.Lock()
 	s.title.Ended, s.level = result, progressv1.Level_LEVEL_WARN

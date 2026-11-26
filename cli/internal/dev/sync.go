@@ -15,14 +15,15 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func resolveOnce(ctx context.Context, server *devserver.Server, cfg *project.Project, local localCommand, span *run.Span) (map[string]string, error) {
+func resolveOnce(ctx context.Context, server *devserver.Server, cfg *project.Project, local localCommand, span *run.Span) (map[string]string, valueLayers, error) {
 	values, err := local.source.read(cfg.Dir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	reportUnreadableLines(span, values)
 	server.UseValues(values.merged(), variables.DevScope(cfg))
-	return discoverAndSync(ctx, server, cfg, values, variables.DevScope(cfg), local, span)
+	resolved, err := discoverAndSync(ctx, server, cfg, values, variables.DevScope(cfg), local, span)
+	return resolved, values, err
 }
 
 func targetScope(cfg *project.Project, cwd string) variables.Scope {
@@ -63,7 +64,6 @@ func discoverAndSync(ctx context.Context, server *devserver.Server, cfg *project
 		return nil, fmt.Errorf("sync failed: %w", result.Err)
 	}
 
-	reportSecretValues(span, result.SecretKeys)
 	env := resolvedEnv(result.SecretValues, values.merged(), result.Resources, runtimeAccess{url: result.DevServerURL, token: result.AppToken}, appFolder, scope)
 	nextEnv, err := nextEnvOf(server.PublicKeys(scope.Apps))
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
@@ -117,7 +118,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	if err != nil {
 		return err
 	}
-	reportValues(startupCtx, startup, cfg.Dir, values, true)
+	warnUnignoredFiles(startupCtx, startup, cfg.Dir, values)
 
 	if reset {
 		if err := devresources.Reset(startupCtx, opts.OpenDocker, stateDir(cfg), resourcesName(cfg)); err != nil {
@@ -147,7 +148,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	}
 	claimed = true
 
-	resolved, err := resolveOnce(ctx, server, cfg, local, startup)
+	resolved, values, err := resolveOnce(ctx, server, cfg, local, startup)
 	if err != nil {
 		return err
 	}
@@ -180,7 +181,8 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 	if err != nil {
 		return err
 	}
-	startup.End(nil)
+	startup.EndWithTitle("Resolved " + values.summary())
+	opts.session().Say("Watching for changes in " + strings.Join(source.files(), ", ") + " and resource declarations.")
 
 	child, err := startChild(ctx, opts, appEnv)
 	if err != nil {
@@ -317,7 +319,7 @@ func runStandalone(ctx context.Context, opts Options, cwd string) error {
 		return err
 	}
 	reportUnreadableLines(startup, values)
-	reportValues(startupCtx, startup, cfg.Dir, values, false)
+	warnUnignoredFiles(startupCtx, startup, cfg.Dir, values)
 
 	host, err := startHost(startupCtx, opts, source)
 	if err != nil {
@@ -330,7 +332,7 @@ func runStandalone(ctx context.Context, opts Options, cwd string) error {
 	if err != nil {
 		return err
 	}
-	startup.End(nil)
+	startup.EndWithTitle("Resolved " + values.summary())
 
 	return RunProjected(ctx, opts, resolved)
 }

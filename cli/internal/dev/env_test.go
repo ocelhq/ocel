@@ -191,21 +191,17 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			}
 		})
 
-		t.Run("the notice accounts for every line of the file", func(t *testing.T) {
-			if !strings.Contains(stderr.String(), "API_BASE") {
-				t.Errorf("stderr = %q, want the divergence notice to name the key", stderr.String())
+		t.Run("the resolution report is one summary and a watching notice", func(t *testing.T) {
+			got := stderr.String()
+			for _, want := range []string{"Resolved 3 variables from .env", "Watching for changes", "line 5"} {
+				if !strings.Contains(got, want) {
+					t.Errorf("stderr = %q, want %q", got, want)
+				}
 			}
-			if !strings.Contains(stderr.String(), "line 5") {
-				t.Errorf("stderr = %q, want the line that assigns nothing reported by number", stderr.String())
-			}
-			if strings.Contains(stderr.String(), "api_base") {
-				t.Errorf("stderr = %q, want a line Ocel could never be asked for passed over in silence", stderr.String())
-			}
-			if !strings.Contains(stderr.String(), "NEXT_PUBLIC_SITE_URL") {
-				t.Errorf("stderr = %q, want a declarable key accounted for", stderr.String())
-			}
-			if !strings.Contains(stderr.String(), valueLayers{{from: project.DotenvFileName, file: true}, {from: project.LocalDotenvFileName, file: true}}.advice(true)) {
-				t.Errorf("stderr = %q, want the advice for a run that re-resolves on save", stderr.String())
+			for _, unwanted := range []string{"NEXT_PUBLIC_SITE_URL", "API_BASE", "api_base", "teammate", "plaintext", "bounded window"} {
+				if strings.Contains(got, unwanted) {
+					t.Errorf("stderr = %q, want no %q", got, unwanted)
+				}
 			}
 		})
 	})
@@ -317,8 +313,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if env["STRIPE_API_KEY"] != "sk_from_source" {
 			t.Errorf("STRIPE_API_KEY = %q, want the dev source's value, and .env left unread under another source", env["STRIPE_API_KEY"])
 		}
-		if !strings.Contains(reported, "STRIPE_API_KEY") || !strings.Contains(reported, "exec") {
-			t.Errorf("reported = %q, want it to say STRIPE_API_KEY came from exec", reported)
+		if !strings.Contains(reported, "Resolved 1 variable from exec") {
+			t.Errorf("reported = %q, want one variable resolved from exec", reported)
 		}
 		if strings.Contains(reported, "sk_from_source") {
 			t.Errorf("reported = %q, want no value printed", reported)
@@ -614,8 +610,11 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if env[processenv.AppFolderEnvVar] != "/web" {
 			t.Errorf("%s = %q, want the folder the only app binds", processenv.AppFolderEnvVar, env[processenv.AppFolderEnvVar])
 		}
-		if !strings.Contains(stderr.String(), valueLayers{{from: project.DotenvFileName, file: true}, {from: project.LocalDotenvFileName, file: true}}.advice(false)) {
-			t.Errorf("stderr = %q, want the advice for a run that reads the file once", stderr.String())
+		if !strings.Contains(stderr.String(), "Resolved 1 variable from .env") {
+			t.Errorf("stderr = %q, want one variable and its source", stderr.String())
+		}
+		if strings.Contains(stderr.String(), "Watching for changes") {
+			t.Errorf("stderr = %q, want a one-off run to watch nothing", stderr.String())
 		}
 	})
 
