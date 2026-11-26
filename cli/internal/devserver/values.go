@@ -41,14 +41,9 @@ func (v *flatValues) List(context.Context) ([]variables.ValueMetadata, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	keys := make([]string, 0, len(v.values)+len(v.secretKeys))
+	keys := make([]string, 0, len(v.values))
 	for key := range v.values {
 		keys = append(keys, key)
-	}
-	for key := range v.secretKeys {
-		if _, ok := v.values[key]; !ok {
-			keys = append(keys, key)
-		}
 	}
 	slices.Sort(keys)
 
