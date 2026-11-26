@@ -91,10 +91,12 @@ binary and links it as a static musl binary for the app's `arch`, so install the
 rustup target add x86_64-unknown-linux-musl   # or aarch64-unknown-linux-musl
 ```
 
-A crate that compiles C (`ring`, `aws-lc-rs`, `openssl-sys`) also needs a musl C cross
-toolchain, most of all for `arm64` on an x86_64 machine. Set `CC_aarch64_unknown_linux_musl`
-and a linker, below or in `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER`. With neither,
-ocel links with `rust-lld`.
+A crate that compiles C (`ring`, `zstd-sys`, `aws-lc-rs`, `openssl-sys`) also needs a musl C
+cross toolchain, most of all for `arm64` on an x86_64 machine. Put `x86_64-linux-musl-gcc` or
+`musl-gcc` (Debian and Ubuntu package it as `musl-tools`), or `aarch64-linux-musl-gcc`, on
+`PATH`, or set `CC_aarch64_unknown_linux_musl`. Without one, the build stops before cargo runs
+and names the crates that compile C. To link with that toolchain too, set a linker, below or in
+`CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER`. With neither, ocel links with `rust-lld`.
 
 ```toml title=".cargo/config.toml"
 [target.aarch64-unknown-linux-musl]
