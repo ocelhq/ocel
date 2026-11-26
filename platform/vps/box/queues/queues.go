@@ -2,7 +2,9 @@ package queues
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"time"
@@ -31,6 +35,12 @@ import (
 )
 
 const DefaultInterval = 2 * time.Second
+
+const (
+	queueSocketFile = ".s.PGSQL.5432"
+	unixAddressMax  = 107
+	linkNameLength  = 16
+)
 
 type Engine interface {
 	Apply(ctx context.Context, deployment pgmq.Deployment) error
@@ -57,6 +67,7 @@ type Engines struct {
 	Cipher      Cipher
 	Addresses   Addresses
 	Mounts      Mounts
+	Links       string
 	Open        func(ctx context.Context, cfg pgmq.Config) (Engine, error)
 	IsAnswering func(ctx context.Context, url string) bool
 	Interval    time.Duration
@@ -120,6 +131,7 @@ func (e *Engines) Reconcile(ctx context.Context) error {
 	var failed []error
 	recorded := map[queueID]bool{}
 	running := map[string]bool{}
+	linked := map[string]bool{}
 	for _, tier := range e.Tiers {
 		queues, err := boxapi.ReadQueues(ctx, e.Records, tier)
 		if err != nil {
@@ -132,7 +144,7 @@ func (e *Engines) Reconcile(ctx context.Context) error {
 			for _, worker := range queue.Workers {
 				running[worker.Container] = true
 			}
-			if err := e.serve(ctx, id, queue); err != nil {
+			if err := e.serve(ctx, id, queue, linked); err != nil {
 				failed = append(failed, fmt.Errorf("serve %s's %s queue: %w", queue.Project, queue.Env, err))
 			}
 		}
@@ -150,11 +162,14 @@ func (e *Engines) Reconcile(ctx context.Context) error {
 		}
 	}
 	e.mu.Unlock()
+	if err := e.removeLinksBut(linked); err != nil {
+		failed = append(failed, err)
+	}
 	return errors.Join(failed...)
 }
 
-func (e *Engines) serve(ctx context.Context, id queueID, queue boxapi.Queue) error {
-	serverURL, err := e.openServerURL(ctx, queue)
+func (e *Engines) serve(ctx context.Context, id queueID, queue boxapi.Queue, linked map[string]bool) error {
+	serverURL, err := e.openServerURL(ctx, queue, linked)
 	if err != nil {
 		e.forget(id)
 		return err
@@ -205,16 +220,70 @@ func (e *Engines) serve(ctx context.Context, id queueID, queue boxapi.Queue) err
 	return nil
 }
 
-func (e *Engines) openServerURL(ctx context.Context, queue boxapi.Queue) (string, error) {
+func (e *Engines) openServerURL(ctx context.Context, queue boxapi.Queue, linked map[string]bool) (string, error) {
 	sockets, err := e.Mounts.MountSource(ctx, queue.Database.Container, boxapi.QueueSocketsPath)
 	if err != nil {
 		return "", fmt.Errorf("find the socket of the queue database %s: %w", queue.Database.Container, err)
 	}
+	host, err := e.ensureReachable(sockets, linked)
+	if err != nil {
+		return "", fmt.Errorf("reach the socket of the queue database %s: %w", queue.Database.Container, err)
+	}
 	return (&url.URL{
 		Scheme:   "postgres",
 		Path:     "/" + boxapi.QueueDatabaseName,
-		RawQuery: url.Values{"host": {sockets}, "user": {boxapi.QueueRole}, "sslmode": {"disable"}}.Encode(),
+		RawQuery: url.Values{"host": {host}, "user": {boxapi.QueueRole}, "sslmode": {"disable"}}.Encode(),
 	}).String(), nil
+}
+
+func fitsUnixAddress(dir string) bool {
+	return len(filepath.Join(dir, queueSocketFile)) <= unixAddressMax
+}
+
+func (e *Engines) ensureReachable(sockets string, linked map[string]bool) (string, error) {
+	if fitsUnixAddress(sockets) {
+		return sockets, nil
+	}
+	if e.Links == "" {
+		return "", fmt.Errorf("its socket under %s is longer than the %d bytes a unix address holds, and this box keeps no directory to link it from", sockets, unixAddressMax)
+	}
+	sum := sha256.Sum256([]byte(sockets))
+	name := hex.EncodeToString(sum[:])[:linkNameLength]
+	link := filepath.Join(e.Links, name)
+	if !fitsUnixAddress(link) {
+		return "", fmt.Errorf("its socket under %s is longer than the %d bytes a unix address holds, and so is a link to it from %s", sockets, unixAddressMax, e.Links)
+	}
+	linked[name] = true
+	if current, err := os.Readlink(link); err == nil && current == sockets {
+		return link, nil
+	}
+	if err := os.Remove(link); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	if err := os.Symlink(sockets, link); err != nil {
+		return "", err
+	}
+	return link, nil
+}
+
+func (e *Engines) removeLinksBut(linked map[string]bool) error {
+	if e.Links == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(e.Links)
+	if err != nil {
+		return fmt.Errorf("read the queue socket links in %s: %w", e.Links, err)
+	}
+	var failed []error
+	for _, entry := range entries {
+		if linked[entry.Name()] {
+			continue
+		}
+		if err := os.Remove(filepath.Join(e.Links, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			failed = append(failed, err)
+		}
+	}
+	return errors.Join(failed...)
 }
 
 func (e *Engines) openDeliverySecret(ctx context.Context, queue boxapi.Queue) (string, error) {

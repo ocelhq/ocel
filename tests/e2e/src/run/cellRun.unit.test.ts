@@ -10,7 +10,14 @@ import type { Evidence } from "../evidence";
 import { fixture, type Phase } from "../matrix/types";
 import { defaults } from "../matrix/variants";
 import type { ExternalStack } from "../stacks";
-import type { Deployment, PreviewRelease, Previews, ReleaseCycle, Target } from "../targets/types";
+import type {
+  AppLogs,
+  Deployment,
+  PreviewRelease,
+  Previews,
+  ReleaseCycle,
+  Target,
+} from "../targets/types";
 import { CellRun } from "./cellRun";
 
 type Called = string[];
@@ -212,6 +219,64 @@ describe("a cell run", () => {
         throw failure;
       }),
     ).rejects.toBe(failure);
+  });
+
+  it("keeps the logs of the cell's app containers as evidence when a check fails", async () => {
+    const called: Called = [];
+    const written: Called = [];
+    const target: Target & AppLogs = {
+      ...targetFor(called),
+      readAppLogs: async () => {
+        called.push("read app logs");
+        return "ocel: the app said why it answered 500";
+      },
+    };
+    const run = runOf(called, { target, written });
+    await run.deploy();
+    const failure = new Error("the post answered 500");
+    await expect(
+      run.verify("web", "verify", async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    expect(called).toEqual(["deploy", "read app logs"]);
+    expect(written).toEqual(["verify/app-logs.txt"]);
+  });
+
+  it("reads no app logs when a check passes", async () => {
+    const called: Called = [];
+    const written: Called = [];
+    const target: Target & AppLogs = {
+      ...targetFor(called),
+      readAppLogs: async () => {
+        called.push("read app logs");
+        return "";
+      },
+    };
+    const run = runOf(called, { target, written });
+    await run.deploy();
+    await run.verify("web", "verify", async () => {});
+    expect(called).toEqual(["deploy"]);
+    expect(written).toEqual([]);
+  });
+
+  it("rethrows a check's failure unchanged when its app logs cannot be read", async () => {
+    const written: Called = [];
+    const target: Target & AppLogs = {
+      ...targetFor([]),
+      readAppLogs: async () => {
+        throw new Error("the box did not answer");
+      },
+    };
+    const run = runOf([], { target, written });
+    await run.deploy();
+    const failure = new Error("the post answered 500");
+    await expect(
+      run.verify("web", "verify", async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    expect(written).toEqual(["verify/app-logs.txt"]);
   });
 
   it("deploys before it redeploys, however the steps are ordered", async () => {
