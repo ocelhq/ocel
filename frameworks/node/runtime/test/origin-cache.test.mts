@@ -584,12 +584,53 @@ describe("a request bypassing the cache", () => {
     expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=540");
   });
 
-  test("leaves a route that caches nothing as the handler answered it", async () => {
+  test.each([
+    ["a route that caches nothing", "/account"],
+    ["the fallback", "/anything/else"],
+  ])(
+    "on %s keeps the cookie, adds no tags and is answered private and unstored",
+    async (_route, path) => {
+      let seen: string | undefined;
+      const get = await serve(behindCloudFront, (req, res) => {
+        seen = req.headers.cookie;
+        cacheHost().tag(["posts"]);
+        res.writeHead(200, { "cache-control": "public, max-age=60" });
+        res.end("page");
+      });
+
+      const res = await get(path, { headers: bypass });
+
+      expect(seen).toBe(bypass.cookie);
+      expect(res.headers.get("cache-control")).toBe("private, no-store");
+      expect(res.headers.has("cache-tag")).toBe(false);
+    },
+  );
+
+  test("leaves a route that caches nothing as the handler answered it when the cookie holds another token", async () => {
     const get = await serve(behindCloudFront, page);
 
-    const res = await get("/account", { headers: bypass });
+    const res = await get("/account", { headers: { cookie: "__prerender_bypass=wrong" } });
 
     expect(res.headers.has("cache-control")).toBe(false);
+  });
+
+  test("has no token to match in a table whose routes state none", async () => {
+    const get = await serve(
+      {
+        ...behindCloudFront,
+        OCEL_ROUTE_TABLE: writeRouteTable(
+          newRouteTable({ routes: [{ src: "/account", function: "index" }] }),
+        ),
+      },
+      (_req, res) => {
+        res.writeHead(200, { "cache-control": "public, max-age=60" });
+        res.end("page");
+      },
+    );
+
+    const res = await get("/account", { headers: { cookie: "__prerender_bypass=anything" } });
+
+    expect(res.headers.get("cache-control")).toBe("public, max-age=60");
   });
 });
 

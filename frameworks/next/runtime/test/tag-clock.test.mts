@@ -549,9 +549,7 @@ test("mirrors an invalidation it raises into Next's own tags manifest", async ()
 
   await handler.updateTags(["products"], { expire: 3600 });
 
-  const mark = manifest.get("products")!;
-  expect(mark.stale).toBeGreaterThan(0);
-  expect(mark.expired).toBeGreaterThan(mark.stale!);
+  expect(manifest.get("products")).toEqual({ stale: expect.any(Number) });
 });
 
 test("mirrors an invalidation raised elsewhere once it syncs", async () => {
@@ -563,7 +561,7 @@ test("mirrors an invalidation raised elsewhere once it syncs", async () => {
   store.seed("products", { stale: 4_000, expired: 9_000, writtenAt: 4_000 });
   await tagClock.refreshTags();
 
-  expect(manifest.get("products")).toEqual({ stale: 4_000, expired: 9_000 });
+  expect(manifest.get("products")).toEqual({ stale: 4_000 });
 });
 
 test("holds the request's last byte for the tag writes an update makes", async () => {
