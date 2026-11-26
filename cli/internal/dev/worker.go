@@ -269,8 +269,12 @@ func (w *workerProcesses) stop(ctx context.Context, names []string) {
 	}
 }
 
-func (w *workerProcesses) close(ctx context.Context) {
+func (w *workerProcesses) stopAll(ctx context.Context) {
 	w.stop(ctx, slices.Collect(maps.Keys(w.running)))
+}
+
+func (w *workerProcesses) close(ctx context.Context) {
+	w.stopAll(ctx)
 	if err := w.run.Remove(); err != nil {
 		w.warnAll(err)
 	}

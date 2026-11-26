@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/pkg/tracing/content"
 )
+
+var ErrNotReady = errors.New("the leader's environment is not ready")
 
 type EnvStream struct {
 	resp   *http.Response
@@ -50,6 +53,9 @@ func (s *EnvStream) Next() (map[string]string, error) {
 		var env map[string]string
 		if err := json.Unmarshal([]byte(payload), &env); err != nil {
 			return nil, fmt.Errorf("decode env update: %w", err)
+		}
+		if env == nil {
+			return nil, ErrNotReady
 		}
 		return env, nil
 	}

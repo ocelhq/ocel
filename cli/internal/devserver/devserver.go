@@ -149,6 +149,10 @@ func (s *Server) PushEnv(env map[string]string) {
 	s.fanout.push(env)
 }
 
+func (s *Server) PushNotReady() {
+	s.fanout.push(nil)
+}
+
 func (s *Server) handleEnv(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

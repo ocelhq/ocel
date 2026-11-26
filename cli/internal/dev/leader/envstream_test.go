@@ -1,6 +1,7 @@
 package leader
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,5 +29,28 @@ func TestARefusedEnvSubscriptionIsTracedWithoutTheEnvTheLeaderSent(t *testing.T)
 	}
 	if body, recorded := tracingtest.Attributes(span)["http.response.body"]; recorded {
 		t.Errorf("http.response.body = %q, want no body on the stream that carries the user's env", body.AsString())
+	}
+}
+
+func TestANullPushSaysTheLeadersEnvironmentIsNotReadyAndTheStreamGoesOn(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: null\n\n" + `data: {"API_TOKEN":"restored"}` + "\n\n"))
+	}))
+	t.Cleanup(server.Close)
+
+	stream, err := Subscribe(t.Context(), Leader{Address: strings.TrimPrefix(server.URL, "http://"), Token: "leader-token"})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	t.Cleanup(stream.Close)
+
+	if env, err := stream.Next(); !errors.Is(err, ErrNotReady) {
+		t.Fatalf("Next = %v, %v, want ErrNotReady", env, err)
+	}
+	env, err := stream.Next()
+	if err != nil || env["API_TOKEN"] != "restored" {
+		t.Fatalf("Next = %v, %v, want the env pushed after the refusal", env, err)
 	}
 }

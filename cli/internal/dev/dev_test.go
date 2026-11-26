@@ -435,6 +435,79 @@ export default { slug: "test-app" };
 		}
 	})
 
+	t.Run("a refusal mid-session stops the leader's app until an edit fixes it", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses a POSIX shell fixture command")
+		}
+
+		root := t.TempDir()
+		t.Cleanup(func() { releaseLeader(root) })
+
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "API_TOKEN=first\n")
+
+		envDumpPath := filepath.Join(root, "leader-env.out")
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var stdout, stderr syncBuffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runDev(ctx, devDeps(), false, root, []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}, &stdout, &stderr, strings.NewReader(""))
+		}()
+		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
+
+		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "# the value the run needs, deleted\n")
+		waitForOutput(t, &stderr, "the app has been stopped")
+		waitForWritesToStop(t, envDumpPath)
+
+		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "API_TOKEN=first\n")
+		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
+
+		stopAndWait(t, cancel, done)
+	})
+
+	t.Run("while a refusal has stopped the app, `ocel run` refuses and an interrupt still ends the run", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses a POSIX shell fixture command")
+		}
+
+		root := t.TempDir()
+		t.Cleanup(func() { releaseLeader(root) })
+
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "API_TOKEN=first\n")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var stdout, stderr syncBuffer
+		done := make(chan error, 1)
+		go func() {
+			done <- runDev(ctx, devDeps(), false, root, []string{"sleep", "10"}, &stdout, &stderr, strings.NewReader(""))
+		}()
+		waitForOutput(t, &stderr, "Watching for changes")
+
+		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "# the value the run needs, deleted\n")
+		waitForOutput(t, &stderr, "the app has been stopped")
+
+		ranPath := filepath.Join(root, "ran")
+		var runStdout, runStderr bytes.Buffer
+		err := runRun(ctx, devDeps(), root, []string{"touch", ranPath}, &runStdout, &runStderr, strings.NewReader(""))
+		if err == nil || !strings.Contains(err.Error(), "not ready") {
+			t.Errorf("ocel run beside the stopped app = %v, want a refusal saying the environment is not ready", err)
+		}
+		if _, statErr := os.Stat(ranPath); statErr == nil {
+			t.Errorf("ocel run beside the stopped app ran its command")
+		}
+
+		stopAndWait(t, cancel, done)
+	})
+
 	t.Run("a refusal the edit fixes stops refusing", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
@@ -476,15 +549,38 @@ export default { slug: "test-app" };
 
 		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "# the value the run needs, deleted\n")
 		waitForOutput(t, &leaderStderr, "API_TOKEN")
-		if got := leaderStderr.String(); !strings.Contains(got, "Set it in "+project.DotenvFileName+"; `ocel dev` picks up the change.") {
+		if got := leaderStderr.String(); !strings.Contains(got, "Set it in "+project.DotenvFileName+"; `ocel dev` restarts the app once it is.") {
 			t.Errorf("stderr = %q, want the mid-session refusal to say the watched %s picks up the fix", got, project.DotenvFileName)
 		}
 		if got := leaderStderr.String(); strings.Contains(got, "`ocel dev` again") {
 			t.Errorf("stderr = %q, want no rerun asked of a run that is still watching", got)
 		}
 
+		waitForWritesToStop(t, envDumpPath)
+
+		lateDumpPath := filepath.Join(root, "late-follower-env.out")
+		lateCtx, cancelLate := context.WithCancel(context.Background())
+		defer cancelLate()
+		lateDone := make(chan error, 1)
+		var lateStdout, lateStderr syncBuffer
+		go func() {
+			lateDone <- runDev(lateCtx, deps, false, root, []string{"sh", "-c", "while true; do env > " + lateDumpPath + "; sleep 0.02; done"}, &lateStdout, &lateStderr, strings.NewReader(""))
+		}()
+		waitForOutput(t, &lateStderr, "not ready")
+		if _, err := os.Stat(lateDumpPath); err == nil {
+			t.Errorf("a follower joining a refusing leader started its app")
+		}
+
 		clitest.WriteFile(t, filepath.Join(root, project.DotenvFileName), "API_TOKEN=restored\n")
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "restored")
+		waitForEnvValue(t, lateDumpPath, "API_TOKEN", "restored")
+
+		cancelLate()
+		select {
+		case <-lateDone:
+		case <-time.After(5 * time.Second):
+			t.Fatal("late follower runDev did not exit after cancellation")
+		}
 
 		cancelFollower()
 		select {
@@ -1054,6 +1150,21 @@ func waitForEnvValue(t *testing.T, path, key, want string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("%s in %q = %q, never became %q", key, path, last, want)
+}
+
+func waitForWritesToStop(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			t.Fatalf("remove %s: %v", path, err)
+		}
+		time.Sleep(300 * time.Millisecond)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return
+		}
+	}
+	t.Fatalf("%q is still being written: the app was never stopped", path)
 }
 
 func waitForOutputAfter(t *testing.T, buf *syncBuffer, want string, edit func()) {
