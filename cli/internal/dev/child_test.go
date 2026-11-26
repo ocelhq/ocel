@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -183,6 +184,22 @@ export default { slug: "test-app" };
 
 		childprocesstest.WaitDead(t, pidPath)
 	})
+}
+
+func TestDevSeparatesItsLogsFromTheChildsOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+	root := t.TempDir()
+	t.Cleanup(func() { releaseLeader(root) })
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `export default {slug: "handoff"};`)
+	var output syncBuffer
+	if err := runDev(t.Context(), devDeps(), false, root, []string{"sh", "-c", "printf 'APP_OUTPUT\\n'"}, &output, &output, strings.NewReader("")); err != nil {
+		t.Fatal(err)
+	}
+	if got := output.String(); !strings.Contains(got, "Watching for changes in .env, .env.local\n\nAPP_OUTPUT\n") {
+		t.Fatalf("output = %q, want a blank line between Ocel's logs and the child's output", got)
+	}
 }
 
 func TestExitErrorReportsInterruptWhenCancelled(t *testing.T) {
