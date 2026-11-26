@@ -7,7 +7,6 @@ import (
 	"io"
 	"maps"
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/dev/leader"
 	"github.com/ocelhq/ocel/cli/internal/devresources"
@@ -38,6 +37,7 @@ type Options struct {
 	Stdout          io.Writer
 	Stderr          io.Writer
 	StdinIsTerminal bool
+	JSONOutput      bool
 	Run             *run.Run
 	RecordEvent     func(telemetry.Payload) bool
 }
@@ -182,7 +182,7 @@ func lead(ctx context.Context, opts Options, reset bool) (err error) {
 		return err
 	}
 	startup.EndWithTitle("Resolved " + values.summary())
-	opts.session().Say("Watching for changes in " + strings.Join(source.files(), ", ") + " and resource declarations.")
+	opts.session().Say(watching.notice())
 
 	child, err := startChild(ctx, opts, appEnv)
 	if err != nil {

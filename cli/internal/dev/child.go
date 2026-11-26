@@ -3,6 +3,7 @@ package dev
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 
@@ -18,6 +19,9 @@ func startChild(ctx context.Context, opts Options, env map[string]string) (*chil
 	cmd.Stdin = opts.Stdin
 	cmd.Stdout = opts.Stdout
 	cmd.Stderr = opts.Stderr
+	if !opts.JSONOutput && opts.Stderr != nil {
+		fmt.Fprintln(opts.Stderr)
+	}
 	return childprocess.Start(ctx, cmd, childprocess.Options{Stdin: opts.Stdin, Terminal: opts.StdinIsTerminal})
 }
 

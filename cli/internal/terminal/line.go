@@ -43,6 +43,8 @@ func (l line) render(present Presentation) string {
 	message := l.message
 	if l.dim {
 		message = present.Palette().Muted(message)
+	} else if l.header && l.status == progressv1.SpanStatus_SPAN_STATUS_OK {
+		message = present.Palette().SuccessBold(message)
 	}
 	b.WriteString(strings.ReplaceAll(message+present.Palette().Muted(l.timing)+l.outcome, "\n", "\n"+indent))
 	return b.String()

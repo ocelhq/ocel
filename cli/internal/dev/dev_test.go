@@ -24,7 +24,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devresources"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/exitcode"
-	"github.com/ocelhq/ocel/cli/internal/filewatch"
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/run"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
@@ -505,7 +504,7 @@ export default { slug: "test-app" };
 		}
 
 		stalled := startWatching
-		startWatching = func(ctx context.Context, server *devserver.Server, cfg *project.Project, local localCommand, session *run.Span, onResolved func(map[string]string, []string), onFailed func(error)) (*filewatch.Watcher, error) {
+		startWatching = func(ctx context.Context, server *devserver.Server, cfg *project.Project, local localCommand, session *run.Span, onResolved func(map[string]string, []string), onFailed func(error)) (*watcher, error) {
 			time.Sleep(300 * time.Millisecond)
 			return stalled(ctx, server, cfg, local, session, onResolved, onFailed)
 		}
@@ -914,6 +913,7 @@ func runRun(ctx context.Context, deps testDeps, cwd string, command []string, st
 }
 
 func underRun(ctx context.Context, deps testDeps, command string, opts Options, body func(context.Context, Options) error) error {
+	opts.JSONOutput = deps.Format == terminal.FormatJSON
 	output := &lockedWriter{w: opts.Stderr}
 	opts.Stderr = output
 	bus := run.NewBus(time.Now)

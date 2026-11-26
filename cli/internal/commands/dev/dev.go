@@ -73,5 +73,6 @@ func loadOptions(ctx context.Context, dependencies Dependencies, cwd string, com
 		Stdout:          stdout,
 		Stderr:          stderr,
 		StdinIsTerminal: dependencies.StdinIsTerminal(stdin),
+		JSONOutput:      dependencies.IsJSON != nil && dependencies.IsJSON(),
 	}, nil
 }

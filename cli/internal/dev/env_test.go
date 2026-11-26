@@ -160,10 +160,10 @@ func TestRunDevEnvironment(t *testing.T) {
 
 		deps := devDeps()
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
+export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }], discovery: { paths: ["packages/infra/src"] } };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "NEXT_PUBLIC_SITE_URL=https://example.com\nLOG_LEVEL=debug\napi_base=lower\nAPI_BASE=http://localhost:3000\nnot an assignment\n")
-		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
+		clitest.WriteFile(t, filepath.Join(root, "packages", "infra", "src", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -193,7 +193,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 
 		t.Run("the resolution report is one summary and a watching notice", func(t *testing.T) {
 			got := stderr.String()
-			for _, want := range []string{"Resolved 3 variables from .env", "Watching for changes", "line 5"} {
+			for _, want := range []string{"Resolved 3 variables from .env", "Watching for changes in .env, .env.local, packages/infra/src/", "line 5"} {
 				if !strings.Contains(got, want) {
 					t.Errorf("stderr = %q, want %q", got, want)
 				}
