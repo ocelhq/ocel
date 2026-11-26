@@ -229,7 +229,7 @@ func newCommand() *command {
 	rootCmd.AddCommand(deploycommand.NewCommand(deployDependencies))
 	rootCmd.AddCommand(deploycommand.NewPreviewCommand(deployDependencies))
 	rootCmd.AddCommand(protection.NewCommand(invocation))
-	rootCmd.AddCommand(env.NewCommand(env.Dependencies{Invocation: invocation, OpenBrowser: browser.OpenURL, ServeVariableEditor: env.ServeVariableEditor}))
+	rootCmd.AddCommand(env.NewCommand(env.Dependencies{Invocation: invocation, OpenBrowser: browser.OpenURL, ServeVariableEditor: env.ServeVariableEditor, Guide: prompt.New(os.Stderr, os.Stdin)}))
 	rootCmd.AddCommand(promotions.NewRollbackCommand(invocation))
 	rootCmd.AddCommand(promotions.NewPromotionsCommand(invocation))
 	rootCmd.AddCommand(logs.NewCommand(logs.Dependencies{Invocation: invocation, ReadGitBranch: previewid.ReadGitBranch, DiscoverPRNumber: previewid.DiscoverPRNumber, Now: time.Now}))
