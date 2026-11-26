@@ -12,9 +12,10 @@ import (
 )
 
 type ResolvedValue struct {
-	Folder  string
-	Value   string
-	Version int64
+	Folder      string
+	Environment string
+	Value       string
+	Version     int64
 }
 
 type resolvedCell struct {
@@ -38,9 +39,16 @@ func (d *Declarations) Resolve(ctx context.Context, app string) (map[string]Reso
 		return nil, err
 	}
 
+	d.mu.Lock()
+	environments := make(map[Cell]string, len(cells))
+	for _, c := range cells {
+		environments[c.cell] = d.resolvedEnvironment(c.cell)
+	}
+	d.mu.Unlock()
+
 	resolved := make(map[string]ResolvedValue, len(cells))
 	for _, c := range cells {
-		from := ResolvedValue{Folder: c.cell.Folder, Version: present[c.cell]}
+		from := ResolvedValue{Folder: c.cell.Folder, Environment: environments[c.cell], Version: present[c.cell]}
 		if !c.live {
 			if !plaintext[c.cell].found {
 				continue
@@ -80,6 +88,7 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 			Class:       definition.GetClass(),
 			Value:       cell.Value,
 			Folder:      cell.Folder,
+			Environment: cell.Environment,
 			Version:     cell.Version,
 			Source:      definition.GetSource(),
 			Description: definition.GetDescription(),

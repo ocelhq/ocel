@@ -23,6 +23,7 @@ func (d *deployRun) appsDeployed(manifest *contractv1.Manifest, results []*progr
 	}
 	for _, app := range apps {
 		app.Variables = declaredBy[app.GetName()]
+		app.Values = deployreport.ReleasedValues(d.released[app.GetName()])
 	}
 	return apps, err
 }

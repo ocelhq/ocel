@@ -52,6 +52,7 @@ type deployRun struct {
 	job      *jobinput.Answers
 
 	declarations *variables.Declarations
+	released     map[string][]variables.Variable
 	phase        *run.Span
 	span         *run.Span
 }
