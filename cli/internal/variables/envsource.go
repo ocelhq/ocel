@@ -30,6 +30,21 @@ func (s EnvSource) CanSet(at Coordinate) bool {
 	return at.Environment == "" && s.OwnsValues() && (s.CanCreate || s.CanUpdate) && !s.isCredential(at.Cell.Key)
 }
 
+func (s EnvSource) RefuseOwned(at Coordinate) error {
+	if at.Environment != "" || !s.OwnsValues() || s.CanCreate || s.CanUpdate || s.isCredential(at.Cell.Key) {
+		return nil
+	}
+	where := at.Cell.Key
+	if at.Cell.Folder != "" {
+		where += " in " + at.Cell.Folder
+	}
+	link := ""
+	if url := s.URLs[at.Cell.Folder]; url != "" {
+		link = " (" + url + ")"
+	}
+	return fmt.Errorf("%s is read from %s, which ocel may not write into, so nothing was written: change it there%s, and ocel copies it from there", where, s.ID, link)
+}
+
 func (s EnvSource) credentialDefinitions(site string) []*resourcesv1.VariableDefinition {
 	out := make([]*resourcesv1.VariableDefinition, 0, len(s.Credentials))
 	for _, key := range s.Credentials {

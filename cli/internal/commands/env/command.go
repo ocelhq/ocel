@@ -71,13 +71,14 @@ func newListCommand(dependencies Dependencies) *cobra.Command {
 func newSetCommand(dependencies Dependencies) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
-		Use:     "set <KEY=VALUE>...",
+		Use:     "set <KEY=VALUE|KEY>...",
 		Short:   "Set a value",
-		Example: "  $ ocel env set LOG_LEVEL=debug\n  $ ocel env set LOG_LEVEL=debug FEATURE_FLAG=true --folder /web",
+		Long:    "Set a value.\n\nIn a terminal, a KEY given alone is asked for, and a secret is typed without being shown or kept in shell history.",
+		Example: "  $ ocel env set LOG_LEVEL=debug\n  $ ocel env set LOG_LEVEL=debug FEATURE_FLAG=true --folder /web\n  $ ocel env set STRIPE_API_KEY",
 		Args:    cobra.MinimumNArgs(1),
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		pairs, err := parseEnvSetPairs(args)
+		pairs, err := parseEnvSetPairs(args, dependencies.Values != nil && dependencies.CanAsk(cmd.InOrStdin()))
 		if err != nil {
 			return err
 		}
@@ -93,13 +94,18 @@ func newSetCommand(dependencies Dependencies) *cobra.Command {
 type envSetPair struct {
 	key   string
 	value string
+	asked bool
+	arg   int
 }
 
-func parseEnvSetPairs(args []string) ([]envSetPair, error) {
+func parseEnvSetPairs(args []string, ask bool) ([]envSetPair, error) {
 	pairs := make([]envSetPair, 0, len(args))
 	for i, arg := range args {
 		key, value, ok := strings.Cut(arg, "=")
 		switch {
+		case !ok && ask:
+			pairs = append(pairs, envSetPair{key: arg, asked: true, arg: i + 1})
+			continue
 		case !ok:
 			return nil, fmt.Errorf("argument %d has no =: `ocel env set` takes KEY=VALUE, and that argument is not repeated here in case it is a value", i+1)
 		case key == "":

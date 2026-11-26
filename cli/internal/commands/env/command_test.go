@@ -121,7 +121,7 @@ func TestEveryEnvSubcommandTakesTheArgumentsItNames(t *testing.T) {
 }
 
 func TestEnvSetReadsEachArgumentAsAKeyEqualsValuePair(t *testing.T) {
-	pairs, err := parseEnvSetPairs([]string{"LOG_LEVEL=debug", "DATABASE_URL=postgres://db?sslmode=require", "EMPTY="})
+	pairs, err := parseEnvSetPairs([]string{"LOG_LEVEL=debug", "DATABASE_URL=postgres://db?sslmode=require", "EMPTY="}, false)
 	if err != nil {
 		t.Fatalf("parseEnvSetPairs() = %v", err)
 	}
@@ -135,14 +135,14 @@ func TestEnvSetReadsEachArgumentAsAKeyEqualsValuePair(t *testing.T) {
 	}
 
 	for _, arg := range []string{"LOG_LEVEL", "=debug"} {
-		if _, err := parseEnvSetPairs([]string{arg}); err == nil {
+		if _, err := parseEnvSetPairs([]string{arg}, false); err == nil {
 			t.Errorf("parseEnvSetPairs(%q) = nil, want an error", arg)
 		}
 	}
 }
 
 func TestAnArgumentEnvSetCannotReadIsRefusedByPositionWithoutEchoingIt(t *testing.T) {
-	_, err := parseEnvSetPairs([]string{"LOG_LEVEL=debug", "sk_live_pasted_without_a_key", "=hunter2"})
+	_, err := parseEnvSetPairs([]string{"LOG_LEVEL=debug", "sk_live_pasted_without_a_key", "=hunter2"}, false)
 	if err == nil {
 		t.Fatal("parseEnvSetPairs = nil, want an error")
 	}
@@ -153,7 +153,7 @@ func TestAnArgumentEnvSetCannotReadIsRefusedByPositionWithoutEchoingIt(t *testin
 		t.Errorf("parseEnvSetPairs = %q, want it to name the argument by position", err)
 	}
 
-	_, err = parseEnvSetPairs([]string{"=hunter2"})
+	_, err = parseEnvSetPairs([]string{"=hunter2"}, false)
 	if err == nil || strings.Contains(err.Error(), "hunter2") {
 		t.Errorf("parseEnvSetPairs(=VALUE) = %v, want a refusal that echoes no value", err)
 	}

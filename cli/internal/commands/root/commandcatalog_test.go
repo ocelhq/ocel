@@ -310,7 +310,7 @@ func TestHelpJSONDescribesTheArgumentsOfACommandFromItsUsage(t *testing.T) {
 		"deploy":  nil,
 		"link":    {{Name: "project"}},
 		"env get": {{Name: "KEY", Required: true}},
-		"env set": {{Name: "KEY=VALUE", Required: true, Variadic: true}},
+		"env set": {{Name: "KEY=VALUE|KEY", Required: true, Variadic: true}},
 		"logs":    {{Name: "app", Variadic: true}},
 		"dev":     {{Name: "command", Required: true}, {Name: "args", Variadic: true}},
 		"env":     nil,
