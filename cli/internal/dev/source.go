@@ -58,13 +58,6 @@ func (s valueSource) where() string {
 	return s.id + " and " + project.LocalDotenvFileName
 }
 
-func (s valueSource) remedy(key string) string {
-	if s.ownStore {
-		return fmt.Sprintf("add %s=<VALUE> to %s", key, project.DotenvFileName)
-	}
-	return fmt.Sprintf("set %s in %s, or add %s=<VALUE> to %s", key, s.id, key, project.LocalDotenvFileName)
-}
-
 type valueLayer struct {
 	from       string
 	file       bool

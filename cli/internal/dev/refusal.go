@@ -13,15 +13,49 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/cli/internal/variables/wording"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 )
 
 type localCommand struct {
-	name   string
-	source valueSource
+	name    string
+	source  valueSource
+	watched bool
 }
 
 func (c localCommand) line() string {
 	return "ocel " + c.name
+}
+
+func (c localCommand) afterChange() localCommand {
+	c.watched = true
+	return c
+}
+
+func (c localCommand) outcome() string {
+	if c.watched {
+		return "the app keeps running on its previous environment"
+	}
+	return "the app has not been started"
+}
+
+func (c localCommand) remedy(them string) string {
+	switch {
+	case !c.watched && c.source.ownStore:
+		return fmt.Sprintf("Set %s in %s, then run `%s` again.", them, project.DotenvFileName, c.line())
+	case !c.watched:
+		return fmt.Sprintf("Set %s in %s or %s, then run `%s` again.", them, c.source.id, project.LocalDotenvFileName, c.line())
+	case c.source.ownStore:
+		return fmt.Sprintf("Set %s in %s; `%s` picks up the change.", them, project.DotenvFileName, c.line())
+	default:
+		return fmt.Sprintf("Set %s in %s, which `%s` picks up as it changes, or in %s and restart `%s`.", them, project.LocalDotenvFileName, c.line(), c.source.id, c.line())
+	}
+}
+
+func (c localCommand) hint(keys []string) string {
+	if c.watched {
+		return fmt.Sprintf("set %s in %s; `%s` picks up the change", english.And(keys), c.source.where(), c.line())
+	}
+	return fmt.Sprintf("set %s in %s, then run `%s` again", english.And(keys), c.source.where(), c.line())
 }
 
 func describeRefusal(err error, dotfileKeys map[string]struct{}, run localCommand) error {
@@ -30,26 +64,87 @@ func describeRefusal(err error, dotfileKeys map[string]struct{}, run localComman
 		return err
 	}
 
+	keys := missingKeys(refusal.Problems)
+	cells := refusal.Variables().GetCells()
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s not ready — the app has not been started.\n", wording.VariablesAre(len(refusal.Problems)))
-	for _, problem := range refusal.Problems {
-		cell := variables.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}
-		fmt.Fprintf(&b, "\n  %s%s\n    %s\n    fix: %s\n",
-			cellLabel(cell), readBy(refusal.Scope.Apps, cell.Folder), whyUnready(problem), run.source.remedy(cell.Key))
-		if hint := shellHint(cell.Key, dotfileKeys, run); hint != "" {
-			b.WriteString("    " + hint + "\n")
+	fmt.Fprintf(&b, "%s not ready — %s.\n\n", wording.VariablesAre(len(refusal.Problems)), run.outcome())
+	written := map[string]bool{}
+	for _, cell := range cells {
+		group := cell.GetGroup()
+		if group == "" {
+			writeCell(&b, "  ", cell, cell.GetReason(), dotfileKeys, run)
+			continue
+		}
+		if written[group] {
+			continue
+		}
+		written[group] = true
+		b.WriteString("  " + groupNeed(refusal, group) + "\n")
+		for _, member := range cells {
+			if member.GetGroup() != group {
+				continue
+			}
+			reason := member.GetReason()
+			if reason == variables.NoValue {
+				reason = ""
+			}
+			writeCell(&b, "    ", member, reason, dotfileKeys, run)
 		}
 	}
-	fmt.Fprintf(&b, "\nSet the values above in %s, then run `%s` again.", run.source.where(), run.line())
+	b.WriteString("\n" + run.remedy(pronoun(keys)))
 	described := errors.New(b.String())
 	var raised *clierror.Error
 	if !errors.As(err, &raised) {
 		return described
 	}
 	coded := *raised
-	coded.Hint = fmt.Sprintf("set %s in %s, then run `%s` again", english.And(missingKeys(refusal.Problems)), run.source.where(), run.line())
+	coded.Hint = run.hint(keys)
 	coded.Cause = described
 	return &coded
+}
+
+func writeCell(b *strings.Builder, lead string, cell *streamv1.MissingVariable, reason string, dotfileKeys map[string]struct{}, run localCommand) {
+	b.WriteString(lead + cell.GetKey())
+	if folder := cell.GetFolder(); folder != "" {
+		b.WriteString(" (" + folder + ")")
+	}
+	if reason != "" {
+		b.WriteString(": " + reason)
+	}
+	b.WriteString("\n")
+	if hint := shellHint(cell.GetKey(), dotfileKeys, run); hint != "" {
+		b.WriteString(lead + "  " + hint + "\n")
+	}
+}
+
+func groupNeed(refusal *variables.MissingError, key string) string {
+	name := "group " + key
+	for _, group := range refusal.Groups {
+		if group.GetKey() != key {
+			continue
+		}
+		if description := group.GetDescription(); description != "" {
+			name += " (" + description + ")"
+		}
+		if group.GetRequired() {
+			return name + " is required, so it needs:"
+		}
+	}
+	switch set := refusal.SetMembers[key]; len(set) {
+	case 0:
+		return name + " needs:"
+	case 1:
+		return name + " is active because " + set[0] + " is set, so it needs:"
+	default:
+		return name + " is active because " + english.And(set) + " are set, so it needs:"
+	}
+}
+
+func pronoun(keys []string) string {
+	if len(keys) == 1 {
+		return "it"
+	}
+	return "them"
 }
 
 func missingKeys(problems []*resourcesv1.VariableProblem) []string {
@@ -69,37 +164,7 @@ func shellHint(key string, dotfileKeys map[string]struct{}, run localCommand) st
 	if _, inShell := os.LookupEnv(key); !inShell {
 		return ""
 	}
-	return fmt.Sprintf("%s is set in this shell, but `%s` resolves values from %s so every developer's run is the same.", key, run.line(), run.source.where())
-}
-
-func whyUnready(problem *resourcesv1.VariableProblem) string {
-	if problem.GetKind() != resourcesv1.VariableProblem_KIND_INVALID {
-		return "no value is set"
-	}
-	if detail := problem.GetDetail(); detail != "" {
-		return "set, but it does not satisfy its schema: " + detail
-	}
-	return "set, but it does not satisfy its schema"
-}
-
-func cellLabel(cell variables.Cell) string {
-	if cell.Folder == "" {
-		return cell.Key + " (project root)"
-	}
-	return cell.Key + " (" + cell.Folder + ")"
-}
-
-func readBy(apps []variables.App, folder string) string {
-	var names []string
-	for _, app := range apps {
-		if folder == "" || app.Folder == folder {
-			names = append(names, app.Name)
-		}
-	}
-	if len(names) == 0 {
-		return ""
-	}
-	return ", read by " + strings.Join(names, ", ")
+	return fmt.Sprintf("set in this shell, but `%s` resolves values from %s so every developer's run is the same", run.line(), run.source.where())
 }
 
 func refuseUnstatableBinding(source valueSource, apps []project.App, stated, configName string, scoped map[string][]string) error {
