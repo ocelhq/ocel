@@ -13,6 +13,11 @@ anything else. It needs `ocel bootstrap preview` and a preview domain.
 - `prune` keeps the newest `--keep` deployments (3 by default) and whatever is live.
 - `rm` asks first for a persistent preview. Without a terminal it stops unless you pass `--yes`.
 
+`rm` also deletes every value set specifically for that preview, including its history and
+references, whether set by hand, published by a program, or copied from an env source. Shared
+preview-tier values and values in external env sources stay. Recreating the same preview name
+starts without its old overrides.
+
 ## Naming a preview
 
 With no name, a command addresses the current branch's preview, taking the branch from

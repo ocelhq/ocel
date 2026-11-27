@@ -427,7 +427,7 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 	}
 }
 
-func TestRemoveEnvironmentForgetsWhatThePreviewsEnvSourceSyncCopiedThereAndKeepsWhatWasSetByHand(t *testing.T) {
+func TestRemoveEnvironmentPurgesItsValuesAndKeepsSharedValuesAndOtherPreviews(t *testing.T) {
 	t.Parallel()
 	client, vendor := contractServed(t, "1.0.0")
 	deployed(t, vendor, environment.TierPreview, "shop")
@@ -455,6 +455,35 @@ func TestRemoveEnvironmentForgetsWhatThePreviewsEnvSourceSyncCopiedThereAndKeeps
 	if _, err := store.Set(ctx, scope, byHand, "set for pr-7", nil); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.Set(ctx, scope, byHand, "updated for pr-7", nil); err != nil {
+		t.Fatal(err)
+	}
+	deleted := variablestore.Coordinate{Cell: variablestore.Cell{Folder: "api", Key: "DELETED"}, Environment: "pr-7"}
+	if _, err := store.Set(ctx, scope, deleted, "removed before teardown", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Delete(ctx, scope, deleted, nil); err != nil {
+		t.Fatal(err)
+	}
+	published := variablestore.Coordinate{Cell: variablestore.Cell{Key: "PUBLISHED"}, Environment: "pr-7"}
+	if _, err := store.SetPublished(ctx, scope, published, "published for pr-7", variablestore.Provenance{Publisher: "terraform"}, 0); err != nil {
+		t.Fatal(err)
+	}
+	shared := variablestore.Scope{Project: "shared", Tier: scope.Tier}
+	target := variablestore.Cell{Key: "SHARED_TOKEN"}
+	if _, err := store.Set(ctx, shared, variablestore.Coordinate{Cell: target}, "shared", nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, preview := range []string{"pr-7", "pr-8", ""} {
+		at := variablestore.Coordinate{Cell: variablestore.Cell{Folder: "api", Key: "BORROWED_TOKEN"}, Environment: preview}
+		if _, err := store.SetReference(ctx, scope, at, variablestore.Target{Project: shared.Project, Cell: target}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	production := variablestore.Scope{Project: scope.Project, Tier: environment.TierProduction}
+	if _, err := store.Set(ctx, production, variablestore.Coordinate{Cell: byHand.Cell}, "production", nil); err != nil {
+		t.Fatal(err)
+	}
 
 	stream, err := client.RemoveEnvironment(ctx, &contractv1.RemoveEnvironmentRequest{
 		Slug:        "shop",
@@ -477,11 +506,111 @@ func TestRemoveEnvironmentForgetsWhatThePreviewsEnvSourceSyncCopiedThereAndKeeps
 	}
 	slices.Sort(left)
 	want := []string{
-		"cells / PAGE_ID pr-7", "cells / TOKEN *", "cells / TOKEN pr-8",
-		"history / PAGE_ID pr-7", "history / TOKEN *", "history / TOKEN pr-8",
+		"cells / TOKEN *", "cells / TOKEN pr-8", "cells api BORROWED_TOKEN *", "cells api BORROWED_TOKEN pr-8",
+		"history / TOKEN *", "history / TOKEN pr-8", "history api BORROWED_TOKEN *", "history api BORROWED_TOKEN pr-8",
 	}
 	if !slices.Equal(left, want) {
-		t.Errorf("values left = %q, want %q: what pr-7's sync copied goes with it, and what was set by hand stays", left, want)
+		t.Errorf("values left = %q, want %q: every value and version scoped to pr-7 goes with it", left, want)
+	}
+	refs, err := store.References(ctx, shared, variablestore.Coordinate{Cell: target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var environments []string
+	for _, ref := range refs {
+		environments = append(environments, ref.Environment)
+	}
+	slices.Sort(environments)
+	if !slices.Equal(environments, []string{"", "pr-8"}) {
+		t.Errorf("references left = %v, want only the tier-wide and pr-8 references", refs)
+	}
+	for _, kept := range []struct {
+		scope variablestore.Scope
+		at    variablestore.Coordinate
+	}{
+		{shared, variablestore.Coordinate{Cell: target}},
+		{production, variablestore.Coordinate{Cell: byHand.Cell}},
+	} {
+		if _, err := store.Get(ctx, kept.scope, kept.at, false); err != nil {
+			t.Errorf("Get(%s, %s) after teardown = %v", kept.scope.Project, kept.at, err)
+		}
+	}
+}
+
+func TestRemoveEnvironmentKeepsItsRecordUntilEveryValueAndReferenceIsPurged(t *testing.T) {
+	t.Parallel()
+	for _, fail := range []string{"cell", "history", "reference"} {
+		t.Run(fail, func(t *testing.T) {
+			t.Parallel()
+			client, vendor := contractServed(t, "1.0.0")
+			deployed(t, vendor, environment.TierPreview, "shop")
+			seedPromotions(t, vendor, environment.TierPreview, "shop", "pr-7", "p1")
+			recordLabelledEnvironment(t, vendor, "pr-7", "", stackrecords.LifecycleEphemeral)
+			ctx := context.Background()
+			store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
+			scope := variablestore.Scope{Project: "shop", Tier: environment.TierPreview}
+			shared := variablestore.Scope{Project: "shared", Tier: scope.Tier}
+			at := variablestore.Coordinate{Cell: variablestore.Cell{Key: "TOKEN"}, Environment: "pr-7"}
+			if _, err := store.Set(ctx, shared, variablestore.Coordinate{Cell: at.Cell}, "shared", nil); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.SetReference(ctx, scope, at, variablestore.Target{Project: shared.Project, Cell: at.Cell}); err != nil {
+				t.Fatal(err)
+			}
+			partition := variablestore.ValuesPartition(scope)
+			if fail == "reference" {
+				partition = variablestore.ReferencesPartition(shared)
+			}
+			entries, err := vendor.KeyValues().List(ctx, partition)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var failedKey records.Key
+			for _, entry := range entries {
+				if fail == "reference" || fail == "cell" && entry.Key.Path[0] == "cells" || fail == "history" && entry.Key.Path[0] == "history" {
+					failedKey = entry.Key
+					break
+				}
+			}
+			if failedKey.Partition.Root == "" {
+				t.Fatal("no record found to fail removal")
+			}
+			keyValues := vendor.KeyValues().(*fake.KeyValues)
+			keyValues.SetRemovalError(failedKey, errors.New("value cleanup unavailable"))
+			remove := func() *progressv1.OperationResult {
+				t.Helper()
+				stream, err := client.RemoveEnvironment(ctx, &contractv1.RemoveEnvironmentRequest{
+					Slug: "shop", Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7", Lifecycle: environmentv1.Lifecycle_LIFECYCLE_EPHEMERAL},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := drain(stream)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return result
+			}
+			if result := remove(); result.GetSuccess() || !strings.Contains(result.GetError(), "value cleanup unavailable") {
+				t.Fatalf("RemoveEnvironment() = %v, want the value cleanup failure", result)
+			}
+			if _, err := keyValues.Read(ctx, stackrecords.EnvironmentKey(scope.Tier, scope.Project, at.Environment)); err != nil {
+				t.Fatalf("environment record after failed cleanup = %v, want it kept for retry", err)
+			}
+			keyValues.SetRemovalError(failedKey, nil)
+			if result := remove(); !result.GetSuccess() {
+				t.Fatalf("RemoveEnvironment() retry = %v", result)
+			}
+			for _, partition := range []records.Partition{variablestore.ValuesPartition(scope), variablestore.ReferencesPartition(shared)} {
+				entries, err := keyValues.List(ctx, partition)
+				if err != nil || len(entries) != 0 {
+					t.Errorf("records after retry in %s = %d, %v, want none", partition, len(entries), err)
+				}
+			}
+			if _, err := keyValues.Read(ctx, stackrecords.EnvironmentKey(scope.Tier, scope.Project, at.Environment)); !errors.Is(err, records.ErrNotFound) {
+				t.Errorf("environment record after successful retry = %v, want it removed", err)
+			}
+		})
 	}
 }
 
