@@ -739,6 +739,13 @@
           "maxItems": 100,
           "type": "array"
         },
+        "values": {
+          "items": {
+            "$ref": "#/$defs/console.v1.ReleasedValue.jsonschema.json"
+          },
+          "maxItems": 500,
+          "type": "array"
+        },
         "variables": {
           "items": {
             "$ref": "#/$defs/app.resources.v1.VariableDefinition.jsonschema.json"
@@ -1072,6 +1079,46 @@
         }
       },
       "title": "Provider",
+      "type": "object"
+    },
+    "console.v1.ReleasedValue.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "environment": {
+          "default": "",
+          "maxLength": 128,
+          "pattern": "^[^*#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        },
+        "folder": {
+          "default": "",
+          "maxLength": 512,
+          "pattern": "^(/[^/#\\x00-\\x1f\\x7f]+)*$",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "maxLength": 256,
+          "minLength": 1,
+          "pattern": "^[^#\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        }
+      },
+      "title": "Released Value",
       "type": "object"
     },
     "console.v1.Resource.jsonschema.json": {
