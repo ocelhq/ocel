@@ -52,6 +52,13 @@ func recordPromotions(t *testing.T, project clitest.FakeProject, promotions ...r
 	replaces := ""
 	for _, promotion := range promotions {
 		for app, build := range promotion.Releases {
+			_, staged, err := releases.Record(context.Background(), app, build)
+			if err != nil {
+				t.Fatalf("read %s=%s: %v", app, build, err)
+			}
+			if staged {
+				continue
+			}
 			if err := releases.PutStaged(context.Background(), router.ReleaseRecord{App: app, Release: build}); err != nil {
 				t.Fatalf("stage %s=%s: %v", app, build, err)
 			}

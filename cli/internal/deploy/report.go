@@ -14,18 +14,24 @@ func (d *deployRun) appsDeployed(manifest *contractv1.Manifest, results []*progr
 	apps, err := deployreport.AppsDeployed(manifest, results, d.env.GetTier(), func(app string) (string, error) {
 		return build.FrameworkBuildID(d.cfg.Dir, app)
 	})
-	declaredBy := map[string][]*resourcesv1.VariableDefinition{}
-	if d.declarations != nil {
-		definitions := d.declarations.Definitions()
-		for _, app := range variables.AppsOf(d.cfg) {
-			declaredBy[app.Name] = variables.DeclaredFor(app, definitions)
-		}
-	}
+	declaredBy := d.declaredByApp()
 	for _, app := range apps {
 		app.Variables = declaredBy[app.GetName()]
 		app.Values = deployreport.ReleasedValues(d.released[app.GetName()])
 	}
 	return apps, err
+}
+
+func (d *deployRun) declaredByApp() map[string][]*resourcesv1.VariableDefinition {
+	declaredBy := map[string][]*resourcesv1.VariableDefinition{}
+	if d.declarations == nil {
+		return declaredBy
+	}
+	definitions := d.declarations.Definitions()
+	for _, app := range variables.AppsOf(d.cfg) {
+		declaredBy[app.Name] = variables.DeclaredFor(app, definitions)
+	}
+	return declaredBy
 }
 
 func (d *deployRun) variableGroups() []*resourcesv1.GroupDefinition {

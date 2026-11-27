@@ -32,6 +32,9 @@ type ReleaseRecord struct {
 	ReleaseFingerprint      string              `json:"releaseFingerprint,omitempty"`
 	OriginSecretFingerprint string              `json:"originSecretFingerprint,omitempty"`
 	Variables               []VariableRecord    `json:"variables,omitempty"`
+	Declarations            []json.RawMessage   `json:"declarations,omitempty"`
+	VariableGroups          []json.RawMessage   `json:"variableGroups,omitempty"`
+	Values                  []ReleasedValue     `json:"values,omitempty"`
 	Needs                   []edge.Need         `json:"needs,omitempty"`
 	SupportInEffect         []edge.Need         `json:"supportInEffect,omitempty"`
 	Waived                  []edge.Need         `json:"waived,omitempty"`
@@ -62,6 +65,14 @@ type VariableRecord struct {
 	Folder  string `json:"folder,omitempty"`
 	Version int64  `json:"version,omitempty"`
 	Live    bool   `json:"live,omitempty"`
+}
+
+type ReleasedValue struct {
+	Key         string `json:"key"`
+	Folder      string `json:"folder,omitempty"`
+	Environment string `json:"environment,omitempty"`
+	Version     int64  `json:"version"`
+	Class       string `json:"class,omitempty"`
 }
 
 type EdgeBundle struct {

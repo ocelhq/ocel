@@ -3,17 +3,23 @@ package promotions
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
 	"github.com/ocelhq/ocel/pkg/environment"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/router"
 )
 
 const fixtureTarget = "fake/box"
@@ -73,6 +79,58 @@ func TestARollbackFromALinkedTreeReportsOneRollbackDeploymentToTheConsole(t *tes
 	if file := readReportFile(t, project.Root); file.GetId() != got.GetId() {
 		t.Errorf("the report file holds deployment %q, want the %q the console received", file.GetId(), got.GetId())
 	}
+}
+
+func TestARollbackReportCarriesTheDeclarationsGroupsAndValuesOfTheReleaseItServes(t *testing.T) {
+	project := clitest.SetUpProject(t)
+	declared := &resourcesv1.VariableDefinition{Key: "STRIPE_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true, Group: "billing"}
+	group := &resourcesv1.GroupDefinition{Key: "billing", Required: true}
+	staged := router.ReleaseRecord{
+		App:            "web",
+		Release:        "build-1~fp1",
+		Declarations:   []json.RawMessage{protojsonOf(t, declared)},
+		VariableGroups: []json.RawMessage{protojsonOf(t, group)},
+		Values: []router.ReleasedValue{
+			{Key: "PAGE_SIZE", Folder: "/web", Environment: "staging", Version: 4, Class: "VARIABLE_CLASS_PLAIN"},
+			{Key: "STRIPE_KEY", Version: 2, Class: "VARIABLE_CLASS_SECRET"},
+		},
+	}
+	if err := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).PutStaged(context.Background(), staged); err != nil {
+		t.Fatal(err)
+	}
+	recordPromotions(t, project, firstTwoPromotions()...)
+	withWebApp(t, project)
+	console := clitest.ServeConsole(t)
+	console.Link(t, project.Root)
+
+	if stderr, err := rollBack(t, project, console, rollbackOptions{}); err != nil {
+		t.Fatalf("runRollback err = %v; stderr=%s", err, stderr)
+	}
+
+	got := console.Reports()[0].GetDeployment()
+	if len(got.GetApps()) != 1 {
+		t.Fatalf("apps = %v, want web", got.GetApps())
+	}
+	web := got.GetApps()[0]
+	if len(web.GetVariables()) != 1 || !proto.Equal(web.GetVariables()[0], declared) {
+		t.Errorf("variables = %v, want the %v release build-1~fp1 declared", web.GetVariables(), declared)
+	}
+	wantValues := []*consolev1.ReleasedValue{{Key: "PAGE_SIZE", Folder: "/web", Environment: "staging", Version: 4}}
+	if len(web.GetValues()) != 1 || !proto.Equal(web.GetValues()[0], wantValues[0]) {
+		t.Errorf("values = %v, want %v: a rollback reports the versions its release serves, and never a secret's", web.GetValues(), wantValues)
+	}
+	if len(got.GetVariableGroups()) != 1 || !proto.Equal(got.GetVariableGroups()[0], group) {
+		t.Errorf("variable groups = %v, want the %v its declarations name", got.GetVariableGroups(), group)
+	}
+}
+
+func protojsonOf(t *testing.T, message proto.Message) json.RawMessage {
+	t.Helper()
+	raw, err := protojson.Marshal(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
 
 func TestARolledBackPromotionIsSequencedByTheTimeTheRouterRecordedIt(t *testing.T) {

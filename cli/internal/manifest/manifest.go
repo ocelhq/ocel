@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/naming"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -24,6 +25,9 @@ type Input struct {
 	Built     build.Output
 	Usages    []attribution.Usage
 	BuildID   func(projectDir, app string) (string, error)
+
+	Declarations   map[string][]*resourcesv1.VariableDefinition
+	VariableGroups []*resourcesv1.GroupDefinition
 
 	WorkerCeilings []provider.WorkerCeiling
 }
@@ -42,8 +46,15 @@ func Assemble(in Input) (*contractv1.Manifest, error) {
 		values:       in.Variables,
 		ceilings:     in.WorkerCeilings,
 	})
-	if err != nil || in.BuildID == nil {
-		return manifest, err
+	if err != nil {
+		return nil, err
+	}
+	manifest.VariableGroups = in.VariableGroups
+	for _, app := range manifest.GetApps() {
+		app.Declarations = in.Declarations[app.GetName()]
+	}
+	if in.BuildID == nil {
+		return manifest, nil
 	}
 	for _, app := range manifest.GetApps() {
 		id, err := in.BuildID(cfg.Dir, app.GetName())

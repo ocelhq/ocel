@@ -148,6 +148,9 @@ func (r *deployRun) recordStagedRelease(ctx context.Context, release appStack, r
 		SupportInEffect:         r.needs[entry.App].InEffect,
 		Waived:                  r.needs[entry.App].Waived,
 	}
+	if err := recordReleasedVariables(&record, r.manifest, entry.Manifest); err != nil {
+		return err
+	}
 	code, err := r.edgeCode(entry, result)
 	if err != nil {
 		return err

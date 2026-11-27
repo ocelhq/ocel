@@ -2,6 +2,7 @@ package providerserver_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -12,9 +13,12 @@ import (
 	"time"
 
 	connect "connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/progress"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -42,6 +46,15 @@ func seedPromotions(t *testing.T, provider *fake.Provider, tier environment.Tier
 		replaces = id
 	}
 	return releases
+}
+
+func protojsonOf(t *testing.T, message proto.Message) json.RawMessage {
+	t.Helper()
+	raw, err := protojson.Marshal(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
 
 func releaseFor(seq int) string {
@@ -112,6 +125,59 @@ func TestRollbackPromotesTheBuildsOfTheEarlierPromotionAsANewOne(t *testing.T) {
 	}
 	if !listed.GetPromotions()[0].GetActive() {
 		t.Error("after the rollback the pointer does not name the promotion it made")
+	}
+}
+
+func TestARollbackResultCarriesTheDeclarationsGroupsAndValuesOfTheReleaseItServes(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	edgeProvisioned(t, provider, environment.TierProduction, "shop")
+	releases := ledger.New(provider.KeyValues(), environment.TierProduction, "shop")
+	declared := &resourcesv1.VariableDefinition{
+		Key: "STRIPE_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true, Folders: []string{"/web"},
+		Source: "web/pay.ts", Description: "Stripe API key", Group: "billing",
+	}
+	group := &resourcesv1.GroupDefinition{Key: "billing", Required: true, Description: "Billing keys"}
+	built := router.ReleaseRecord{
+		App:            "web",
+		Release:        releaseFor(0),
+		Declarations:   []json.RawMessage{protojsonOf(t, declared)},
+		VariableGroups: []json.RawMessage{protojsonOf(t, group)},
+		Values:         []router.ReleasedValue{{Key: "PUBLIC_MODE", Folder: "/web", Environment: "staging", Version: 3, Class: "VARIABLE_CLASS_PLAIN"}},
+	}
+	for i, record := range []router.ReleaseRecord{built, {App: "web", Release: releaseFor(1)}} {
+		if err := releases.PutStaged(context.Background(), record); err != nil {
+			t.Fatal(err)
+		}
+		replaces := ""
+		if i > 0 {
+			replaces = "p1"
+		}
+		promotion := router.Promotion{PromotionID: fmt.Sprintf("p%d", i+1), Ts: int64(i + 1), Releases: map[string]string{"web": record.Release}}
+		if _, err := releases.Promote(context.Background(), promotion, "", replaces); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rolled, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"})
+	if err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	apps := rolled.result.GetApps()
+	if len(apps) != 1 {
+		t.Fatalf("Rollback() reported %d apps, want web", len(apps))
+	}
+	want := &progressv1.AppResult{
+		App:            "web",
+		Release:        releaseFor(0),
+		Outcome:        progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED,
+		Variables:      []*resourcesv1.VariableDefinition{declared},
+		VariableGroups: []*resourcesv1.GroupDefinition{group},
+		Values:         []*progressv1.ReleasedValue{{Key: "PUBLIC_MODE", Folder: "/web", Environment: "staging", Version: 3, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN}},
+	}
+	if !proto.Equal(apps[0], want) {
+		t.Errorf("Rollback() reported %v, want %v: the report of a rollback names what the release it serves declared and was released with", apps[0], want)
 	}
 }
 

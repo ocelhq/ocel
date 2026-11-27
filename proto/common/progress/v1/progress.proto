@@ -3,6 +3,7 @@ package common.progress.v1;
 
 option go_package = "github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progressv1";
 
+import "app/resources/v1/variables.proto";
 import "buf/validate/validate.proto";
 import "common/plan/v1/plan.proto";
 import "google/protobuf/timestamp.proto";
@@ -140,6 +141,24 @@ message AppResult {
   string release = 7;
 
   string build_id = 8;
+
+  repeated app.resources.v1.VariableDefinition variables = 9;
+
+  repeated app.resources.v1.GroupDefinition variable_groups = 10;
+
+  repeated ReleasedValue values = 11;
+}
+
+message ReleasedValue {
+  string key = 1;
+
+  string folder = 2;
+
+  string environment = 3;
+
+  int64 version = 4;
+
+  app.resources.v1.VariableClass class = 5;
 }
 
 message OperationResult {
