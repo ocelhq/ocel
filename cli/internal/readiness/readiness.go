@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/clierror"
@@ -93,6 +94,9 @@ func RefuseUnready(resp *contractv1.PreflightResponse, provider *providerprocess
 	if req.Require == Credentials {
 		return nil
 	}
+	if err := refuseUnbootstrappedPreviewWithNoDomain(resp, cfg, req); err != nil {
+		return err
+	}
 	if err := refuseAbsentInfrastructure(resp, provider, cfg, req.Tier); err != nil {
 		return err
 	}
@@ -105,6 +109,22 @@ func RefuseUnready(resp *contractv1.PreflightResponse, provider *providerprocess
 		return NoHostnameError{Slug: cfg.Slug, ConfigPath: cfg.Path, Vendor: resp.GetIdentity().GetProvider()}
 	}
 	return nil
+}
+
+func refuseUnbootstrappedPreviewWithNoDomain(resp *contractv1.PreflightResponse, cfg *project.Project, req Request) error {
+	bootstrapped := resp.GetInfrastructurePresent() && resp.GetInfraTier() == req.Tier
+	if !req.CheckPreviewRoute || !resp.GetHostnameRequired() || cfg.Domains.Preview != "" || bootstrapped {
+		return nil
+	}
+	return RefuseNoPreviewDomain(filepath.Base(cfg.Path))
+}
+
+func RefuseNoPreviewDomain(configName string) error {
+	return fmt.Errorf("this project declares no preview domain and this bootstrap has no global one, so a preview deploy has nowhere to serve: "+
+		"add a project-level domains.preview wildcard (e.g. `domains: { preview: \"*.preview.acme.com\" }`) to %s, "+
+		"or run `ocel domain use '*.preview.acme.com' --preview` once to serve every project's previews on one shared wildcard — "+
+		"a preview domain binds to the whole project, which serves every app and every preview under that one wildcard, so it is never declared per app",
+		configName)
 }
 
 func refuseAbsentInfrastructure(resp *contractv1.PreflightResponse, provider *providerprocess.Provider, cfg *project.Project, tier environmentv1.Tier) error {

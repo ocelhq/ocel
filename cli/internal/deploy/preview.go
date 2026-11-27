@@ -39,11 +39,7 @@ func refuseMissingPreviewDomain(cfg *project.Project, wildcard *contractv1.Previ
 		check.Say("Serving previews on the address each app's release is given")
 
 	case declared == "" && base == "":
-		return fmt.Errorf("this project declares no preview domain and this bootstrap has no global one, so a preview deploy has nowhere to serve: "+
-			"add a project-level domains.preview wildcard (e.g. `domains: { preview: \"*.preview.acme.com\" }`) to %s, "+
-			"or run `ocel domain use '*.preview.acme.com' --preview` once to serve every project's previews on one shared wildcard — "+
-			"a preview domain binds to the whole project, which serves every app and every preview under that one wildcard, so it is never declared per app",
-			configName)
+		return readiness.RefuseNoPreviewDomain(configName)
 
 	case declared == "":
 		if err := checkGlobalPreviewDomain(wildcard, id, configName); err != nil {
