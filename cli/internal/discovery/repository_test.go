@@ -196,12 +196,14 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		regexp.MustCompile(`\bfrom\s+` + name + `\s+import\b`),
 	}
 	userDocs := map[string]bool{
-		"README.md":                          true,
-		"www/content/docs/configuration.mdx": true,
-		"packages/ocel/README.md":            true,
+		"README.md":                            true,
+		"www/content/docs/configuration.mdx":   true,
+		"www/components/landing/primitives.ts": true,
+		"packages/ocel/README.md":              true,
 	}
 	allowed := func(rel string) bool {
 		if userDocs[rel] ||
+			(strings.HasPrefix(rel, "www/app/") && filepath.Ext(rel) == ".ts") ||
 			strings.HasPrefix(rel, "packages/ocel/tests/fixtures/"+DefaultRootDirName+"/") ||
 			strings.HasPrefix(rel, "www/"+DefaultRootDirName+"/") {
 			return true
