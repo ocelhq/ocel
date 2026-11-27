@@ -129,7 +129,7 @@ func (r *Run) result(err error) (*streamv1.RunSummary, int) {
 			Headline:    cmp.Or(r.headline, r.verdict("finished")),
 			Propagation: r.propagation,
 		}, 0
-	case r.ctx.Err() != nil:
+	case r.ctx.Err() != nil || errors.Is(err, context.Canceled):
 		result := &streamv1.RunSummary{Interrupted: true, Headline: r.verdict("cancelled")}
 		if r.mayHaveChanged() {
 			result.Detail = fmt.Sprintf("Resources may be partially created.\nRe-run `%s` to reconcile.", r.command)
@@ -304,8 +304,8 @@ func (r *Run) children(parent *Span) []*Span {
 	return children
 }
 
-func (r *Run) failureLevel() progressv1.Level {
-	if r.ctx.Err() != nil {
+func (r *Run) failureLevel(err error) progressv1.Level {
+	if r.ctx.Err() != nil || errors.Is(err, context.Canceled) {
 		return progressv1.Level_LEVEL_WARN
 	}
 	return progressv1.Level_LEVEL_ERROR

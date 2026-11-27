@@ -3,6 +3,7 @@ package prompt
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"sync"
@@ -92,6 +93,16 @@ func TestAnAttendedSelectOpensOnItsFirstOptionWhateverTheOthersAreNamed(t *testi
 	chosen, answered, err := New(tty, tty).Select(withinSeconds(t), "Project to link", []Option{{Name: "my-app"}, {Name: "", Label: "Create a new project"}})
 	if err != nil || !answered || chosen != "my-app" {
 		t.Errorf("Select() = %q, %t, %v; want my-app, the first option", chosen, answered, err)
+	}
+}
+
+func TestAnAttendedSelectReportsCtrlCAsCancellation(t *testing.T) {
+	ptmx, tty, screen := aPromptTerminal(t)
+	typeOnSight(t, ptmx, screen, "Organization to link", "\x03")
+
+	chosen, answered, err := New(tty, tty).Select(withinSeconds(t), "Organization to link", []Option{{Name: "acme"}, {Name: "initech"}})
+	if chosen != "" || answered || !errors.Is(err, context.Canceled) {
+		t.Errorf("Select() = %q, %t, %v; want no selection and context.Canceled", chosen, answered, err)
 	}
 }
 
