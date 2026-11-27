@@ -33,6 +33,7 @@ const (
 	UseInfrastructure
 	UseVariablesKey
 	UseParts
+	SignPreviewHostnames
 	Deploy
 )
 
@@ -53,7 +54,7 @@ func (i Intent) requirement() readiness.Requirement {
 		return readiness.Credentials
 	case UseInfrastructure, UseVariablesKey:
 		return readiness.Infrastructure
-	case UseParts, Deploy:
+	case UseParts, SignPreviewHostnames, Deploy:
 		return readiness.Parts
 	}
 	return readiness.None
@@ -74,7 +75,7 @@ func (o OpenOptions) request(cfg *project.Project) readiness.Request {
 	switch o.Intent {
 	case ManageBootstrap:
 		req.Slug = cfg.Slug
-	case UseVariablesKey:
+	case UseVariablesKey, SignPreviewHostnames:
 		req.Slug, req.Part, req.RecordWants = cfg.Slug, providercontract.VariablesKeyPart, true
 	case Deploy:
 		req.Slug, req.RecordWants, req.Domains = cfg.Slug, true, cfg.HostnameNames(req.Tier)

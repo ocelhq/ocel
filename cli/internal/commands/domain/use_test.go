@@ -16,6 +16,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -44,7 +45,7 @@ func useWildcard(t *testing.T, project clitest.FakeProject) {
 	invocation := newTestInvocation()
 	var stdout, stderr bytes.Buffer
 	clitest.AttachTerminalSink(invocation, &stdout)
-	if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout); err != nil {
+	if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, nil); err != nil {
 		t.Fatalf("use the global preview domain: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 }
@@ -82,6 +83,33 @@ func relayEdge(project clitest.FakeProject) *fake.Edge {
 	return project.Provider.Edges().(*fake.Edges).Edge(fake.KindRelay)
 }
 
+func TestDomainUseWithoutTheVariablesKeyRecordsTheWantSoTheBootstrapItNamesAddsIt(t *testing.T) {
+	project := previewProject(t)
+	bootstrap := project.Provider.FakeBootstrap()
+	bootstrap.Offers(append(bootstrap.Parts(), provider.Part{Name: provider.VariablesKeyPart, Summary: "a key the preview key is sealed under"})...)
+	invocation := newTestInvocation()
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+	err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, nil)
+	if err == nil {
+		t.Fatalf("runDomainUse err = nil, want a refusal for the missing variables key; stdout=%s", stdout.String())
+	}
+	if want := "`ocel bootstrap preview`"; !strings.Contains(err.Error()+stdout.String(), want) {
+		t.Errorf("err = %v, stdout = %q, want it to name %s", err, stdout.String(), want)
+	}
+	if asked := clitest.RequestsTo[*contractv1.UsePreviewWildcardRequest](t, project.Requests, contractv1connect.ProviderServiceUsePreviewWildcardProcedure); len(asked) != 0 {
+		t.Errorf("the CLI asked %v, want no wildcard served before the key it seals under exists", asked)
+	}
+	wants, err := stackrecords.ListBootstrapWants(context.Background(), project.Provider.KeyValues(), environment.TierPreview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(wants[provider.VariablesKeyPart], clitest.FixtureSlug) {
+		t.Errorf("wants = %v, want %s recorded as wanting %s so `ocel bootstrap preview` adds it", wants, clitest.FixtureSlug, provider.VariablesKeyPart)
+	}
+}
+
 func TestDomainUseServesEveryProjectsPreviewsOnTheWildcard(t *testing.T) {
 	t.Run("use claims the wildcard's base domain", func(t *testing.T) {
 		project := previewProject(t)
@@ -89,7 +117,7 @@ func TestDomainUseServesEveryProjectsPreviewsOnTheWildcard(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout); err != nil {
+		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, nil); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if out := stdout.String(); !strings.Contains(out, "Previews are served on *.preview.acme.com") {
@@ -110,7 +138,7 @@ func TestDomainUseServesEveryProjectsPreviewsOnTheWildcard(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout); err != nil {
+		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, nil); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		out := stdout.String()
@@ -131,7 +159,7 @@ func TestDomainUseServesEveryProjectsPreviewsOnTheWildcard(t *testing.T) {
 
 		var stdout, stderr bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout); err != nil {
+		if err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, nil); err != nil {
 			t.Fatalf("runDomainUse err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
 		if out := stdout.String(); !strings.Contains(out, "Writing *.preview.acme.com CNAME preview.relay.fake.invalid") {
@@ -149,7 +177,7 @@ func TestDomainUseServesEveryProjectsPreviewsOnTheWildcard(t *testing.T) {
 
 		var stdout bytes.Buffer
 		clitest.AttachTerminalSink(invocation, &stdout)
-		err := runDomainUse(context.Background(), invocation, project.Root, "preview.acme.com", domainOptions{preview: true}, &stdout)
+		err := runDomainUse(context.Background(), invocation, project.Root, "preview.acme.com", domainOptions{preview: true}, &stdout, nil)
 		if err == nil {
 			t.Fatal("runDomainUse err = nil, want a wildcard refusal")
 		}
