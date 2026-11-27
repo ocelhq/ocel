@@ -168,7 +168,7 @@ func (s *Span) End(err error) {
 			ended.Status, ended.Title = progressv1.SpanStatus_SPAN_STATUS_ERROR, ""
 			ev.Operation.Message = err.Error()
 			if s.level != progressv1.Level_LEVEL_DEBUG {
-				ev.Operation.Level = s.run.failureLevel()
+				ev.Operation.Level = s.run.failureLevel(err)
 			}
 		}
 		s.run.close(s)

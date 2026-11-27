@@ -54,7 +54,7 @@ func TestCtrlCDuringALinkLeavesItsTranscriptWithNoLiveLineAndExitsInterrupted(t 
 		shown   string
 	}{
 		{name: "while the console is loading", console: stalled, shown: "Loading your organizations"},
-		{name: "at a prompt", console: twoOrganizations, shown: "Select an organization"},
+		{name: "at a prompt", console: twoOrganizations, shown: "Organization to link"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			screen, exited := linkOnATerminal(t, tc.console, tc.shown)

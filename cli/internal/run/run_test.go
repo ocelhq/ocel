@@ -201,6 +201,32 @@ func TestAnInterruptedRunEndsCancelledAtWarnAndExitsAsInterrupted(t *testing.T) 
 	}
 }
 
+func TestARunCancelledByAPromptEndsInterruptedWhileItsParentIsActive(t *testing.T) {
+	sink := &recording{}
+	run, _ := beginIn(t, context.Background(), sink)
+	run.Phase(progressv1.Phase_PHASE_BUILD)
+
+	err := fmt.Errorf("failed to read input: %w", context.Canceled)
+	run.End(&err)
+
+	events := sink.received()
+	result := events[len(events)-1]
+	if !result.GetSummary().GetInterrupted() || result.GetSummary().GetHeadline() != "Deploy cancelled" || result.GetSummary().GetError() != nil {
+		t.Errorf("summary = %v, want Deploy cancelled with no error", result.GetSummary())
+	}
+	for _, event := range events {
+		if event.GetOperation().GetEnded() != nil || event.GetSummary() != nil {
+			if level := event.GetOperation().GetLevel(); level != progressv1.Level_LEVEL_WARN {
+				t.Errorf("cancelled event level = %s, want WARN", level)
+			}
+		}
+	}
+	var exit *exitcode.ExitError
+	if !errors.As(err, &exit) || exit.Code != exitcode.Interrupt {
+		t.Errorf("err = %v, want the interrupt exit", err)
+	}
+}
+
 func TestAnInterruptedRunWarnsOfPartlyCreatedResourcesOnlyOnceAPhaseThatChangesThemStarted(t *testing.T) {
 	const partly = "Resources may be partially created.\nRe-run `ocel deploy` to reconcile."
 	for _, tc := range []struct {

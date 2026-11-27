@@ -144,7 +144,10 @@ func (p Prompt) answer(ctx context.Context, field huh.Field) (bool, error) {
 		WithOutput(p.out).
 		WithShowHelp(false).
 		RunWithContext(ctx)
-	if errors.Is(err, huh.ErrUserAborted) || errors.Is(err, io.EOF) {
+	if errors.Is(err, huh.ErrUserAborted) {
+		return false, context.Canceled
+	}
+	if errors.Is(err, io.EOF) {
 		return false, nil
 	}
 	return err == nil, err
