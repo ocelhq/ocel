@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
 	"github.com/ocelhq/ocel/cli/internal/deployreport"
@@ -423,5 +424,63 @@ func TestADeploysReportNamesTheVariablesEachAppDeclares(t *testing.T) {
 	}
 	if classes["LIVE_KEY"] != resourcesv1.VariableClass_VARIABLE_CLASS_SECRET || classes["BAKED_KEY"] != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
 		t.Errorf("declared variables = %v, want LIVE_KEY secret and BAKED_KEY plain", apps[0].GetVariables())
+	}
+}
+
+func TestADeployRecordsWithItsReleaseTheDeclarationsGroupsAndValuesItsReportNames(t *testing.T) {
+	t.Setenv("OCEL_TEST_ENV_GROUPS", `[{"key":"billing","required":true}]`)
+	script := strings.Replace(clitest.EnvDeclarationScript, "{ definitions }", "{ definitions, groups: JSON.parse(process.env.OCEL_TEST_ENV_GROUPS!) }", 1)
+	fixture := setUpVariablesProjectWith(t, `[{"key":"LIVE_KEY","class":"VARIABLE_CLASS_SECRET","group":"billing"},{"key":"BAKED_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`, script)
+	envSet(t, fixture, "LIVE_KEY", "sk_live_value", envOptions{})
+	envSet(t, fixture, "BAKED_KEY", "baked_value", envOptions{})
+	writeRootApp(t, fixture.Root)
+	dependencies := newTestDependencies()
+	stubBuild(&dependencies, nil)
+
+	out, err := deployWith(t, dependencies, fixture, deployOptions{yes: true})
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; out=%s", err, out)
+	}
+
+	report := readDeployReport(t, fixture.Root)
+	if len(report.GetApps()) != 1 {
+		t.Fatalf("apps = %v, want the root app", report.GetApps())
+	}
+	app := report.GetApps()[0]
+	record, staged, err := fixture.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).Record(context.Background(), app.GetName(), app.GetRelease())
+	if err != nil || !staged {
+		t.Fatalf("Record(%s, %s) = staged %v, err %v; want the record the deploy staged", app.GetName(), app.GetRelease(), staged, err)
+	}
+
+	if len(app.GetVariables()) != 2 || len(record.Declarations) != len(app.GetVariables()) {
+		t.Fatalf("the record declares %d variables and the report %v, want the same two", len(record.Declarations), app.GetVariables())
+	}
+	for i, raw := range record.Declarations {
+		var declared resourcesv1.VariableDefinition
+		if err := protojson.Unmarshal(raw, &declared); err != nil {
+			t.Fatal(err)
+		}
+		if !proto.Equal(&declared, app.GetVariables()[i]) {
+			t.Errorf("declarations[%d] = %v, want the %v the report names: a rollback to this release reports what the record holds", i, &declared, app.GetVariables()[i])
+		}
+	}
+	if len(report.GetVariableGroups()) != 1 || len(record.VariableGroups) != 1 {
+		t.Fatalf("the record holds groups %s and the report %v, want billing in both", record.VariableGroups, report.GetVariableGroups())
+	}
+	var group resourcesv1.GroupDefinition
+	if err := protojson.Unmarshal(record.VariableGroups[0], &group); err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(&group, report.GetVariableGroups()[0]) {
+		t.Errorf("variableGroups[0] = %v, want the %v the report names", &group, report.GetVariableGroups()[0])
+	}
+	var recorded []*consolev1.ReleasedValue
+	for _, value := range record.Values {
+		if value.Class != resourcesv1.VariableClass_VARIABLE_CLASS_SECRET.String() {
+			recorded = append(recorded, &consolev1.ReleasedValue{Key: value.Key, Folder: value.Folder, Environment: value.Environment, Version: value.Version})
+		}
+	}
+	if len(app.GetValues()) != 1 || len(recorded) != 1 || !proto.Equal(recorded[0], app.GetValues()[0]) {
+		t.Errorf("the record's non-secret values are %v, want the %v the report names", recorded, app.GetValues())
 	}
 }

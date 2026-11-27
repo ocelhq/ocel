@@ -123,7 +123,8 @@ func runRollback(ctx context.Context, invocation commands.Invocation, cwd string
 		if err != nil {
 			return err
 		}
-		apps, unparsed := deployreport.AppsRolledBack(attempt.Project, rolledReleases(rolled))
+		apps, unparsed := deployreport.AppsRolledBack(attempt.Project, rolled.GetApps())
+		attempt.VariableGroups = deployreport.VariableGroupsRolledBack(rolled.GetApps())
 		promotion := &consolev1.Promotion{Id: rolled.GetPromotionId(), Seq: rolled.GetPromotedAtSeconds()}
 		if succeeded, err = deployreport.WriteSucceeded(attempt, apps, promotion, unparsed); err != nil {
 			return err
@@ -156,14 +157,6 @@ func promote(ctx context.Context, phase *run.Span, provider *providerprocess.Pro
 		ProjectRegistry: registry,
 	}
 	return providerprocess.Stream(run.ContextWithSpan(ctx, phase), provider, "Rollback", req, contractv1connect.ProviderServiceClient.Rollback)
-}
-
-func rolledReleases(result *progressv1.OperationResult) map[string]string {
-	releases := make(map[string]string, len(result.GetApps()))
-	for _, app := range result.GetApps() {
-		releases[app.GetApp()] = app.GetRelease()
-	}
-	return releases
 }
 
 func rollbackTarget(history []*contractv1.PromotionHistoryEntry, to, tag string) (*contractv1.Promotion, error) {

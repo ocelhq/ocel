@@ -907,6 +907,12 @@
         "^(storage_coordinate)$": {
           "default": "",
           "type": "string"
+        },
+        "^(variable_groups)$": {
+          "items": {
+            "$ref": "#/$defs/app.resources.v1.GroupDefinition.jsonschema.json"
+          },
+          "type": "array"
         }
       },
       "properties": {
@@ -960,6 +966,24 @@
         "urls": {
           "items": {
             "type": "string"
+          },
+          "type": "array"
+        },
+        "values": {
+          "items": {
+            "$ref": "#/$defs/common.progress.v1.ReleasedValue.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "variableGroups": {
+          "items": {
+            "$ref": "#/$defs/app.resources.v1.GroupDefinition.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "variables": {
+          "items": {
+            "$ref": "#/$defs/app.resources.v1.VariableDefinition.jsonschema.json"
           },
           "type": "array"
         }
@@ -1495,6 +1519,62 @@
         }
       },
       "title": "Protection Published",
+      "type": "object"
+    },
+    "common.progress.v1.ReleasedValue.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "class": {
+          "anyOf": [
+            {
+              "pattern": "^VARIABLE_CLASS_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "VARIABLE_CLASS_PLAIN",
+                "VARIABLE_CLASS_SENSITIVE",
+                "VARIABLE_CLASS_SECRET",
+                "VARIABLE_CLASS_DERIVED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "title": "Variable Class"
+        },
+        "environment": {
+          "default": "",
+          "type": "string"
+        },
+        "folder": {
+          "default": "",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0
+        }
+      },
+      "title": "Released Value",
       "type": "object"
     },
     "common.progress.v1.SpanAttribute.jsonschema.json": {

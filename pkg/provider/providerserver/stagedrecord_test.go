@@ -7,10 +7,14 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	"github.com/ocelhq/ocel/pkg/edge"
@@ -455,5 +459,66 @@ func TestTheStagedRecordNamesTheFingerprintOfTheOriginSecretTheProviderHandedThe
 	}
 	if want := edge.OriginSecretFingerprint("current"); staged[0].OriginSecretFingerprint != want {
 		t.Errorf("originSecretFingerprint = %q, want %q: an edge presents the release the secret whose fingerprint it holds", staged[0].OriginSecretFingerprint, want)
+	}
+}
+
+func TestTheStagedRecordIncludesTheDeclarationsGroupsAndValueVersionsTheReleaseWasDeployedWith(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
+
+	req := deployRequest()
+	group := &resourcesv1.GroupDefinition{Key: "billing", Required: true, Description: "Billing keys"}
+	declared := &resourcesv1.VariableDefinition{
+		Key:          "PAGE_SIZE",
+		Class:        resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+		Folders:      []string{"/web"},
+		Source:       "web/pay.ts",
+		Description:  "Rows per page",
+		Group:        "billing",
+		Defaulted:    true,
+		DefaultValue: proto.String("20"),
+		ValueType:    resourcesv1.ValueType_VALUE_TYPE_INTEGER,
+	}
+	req.Manifest.VariableGroups = []*resourcesv1.GroupDefinition{group}
+	req.Manifest.Apps[0].Declarations = []*resourcesv1.VariableDefinition{declared}
+	req.Manifest.Apps[0].Variables = []*contractv1.ManifestVariable{
+		{Key: "PUBLIC_MODE", Value: "loud", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Folder: "/web", Environment: "staging", Version: 3},
+		{Key: "UNVERSIONED", Value: "x", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+	}
+
+	result, _ := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	staged := stager.records()
+	if len(staged) != 1 {
+		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+	}
+	record := staged[0]
+	if len(record.Declarations) != 1 {
+		t.Fatalf("declarations = %s, want the one the app declared: a rollback to this release reports what it declared", record.Declarations)
+	}
+	var gotDeclared resourcesv1.VariableDefinition
+	if err := protojson.Unmarshal(record.Declarations[0], &gotDeclared); err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(&gotDeclared, declared) {
+		t.Errorf("declarations[0] = %v, want every field of %v", &gotDeclared, declared)
+	}
+	if len(record.VariableGroups) != 1 {
+		t.Fatalf("variableGroups = %s, want the project's one group", record.VariableGroups)
+	}
+	var gotGroup resourcesv1.GroupDefinition
+	if err := protojson.Unmarshal(record.VariableGroups[0], &gotGroup); err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(&gotGroup, group) {
+		t.Errorf("variableGroups[0] = %v, want %v", &gotGroup, group)
+	}
+	wantValues := []router.ReleasedValue{{Key: "PUBLIC_MODE", Folder: "/web", Environment: "staging", Version: 3, Class: "VARIABLE_CLASS_PLAIN"}}
+	if !reflect.DeepEqual(record.Values, wantValues) {
+		t.Errorf("values = %+v, want %+v: only a value the deploy released at a version is one a rollback can report", record.Values, wantValues)
 	}
 }

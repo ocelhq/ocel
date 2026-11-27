@@ -127,7 +127,11 @@ func TestARolledBackPromotionRecordsEachAppAtTheReleaseItWentLiveWith(t *testing
 		{Name: "api", Compute: provider.ComputeContainer, Container: &project.Container{}},
 	}}
 
-	apps, err := AppsRolledBack(cfg, map[string]string{"web": webRelease, "api": "a1b2c3d4e5f60718~0123456789ab", "removed": "0000000000000000~0123456789ab"})
+	apps, err := AppsRolledBack(cfg, []*progressv1.AppResult{
+		{App: "web", Release: webRelease},
+		{App: "api", Release: "a1b2c3d4e5f60718~0123456789ab"},
+		{App: "removed", Release: "0000000000000000~0123456789ab"},
+	})
 	if err != nil {
 		t.Fatalf("AppsRolledBack() error = %v", err)
 	}
@@ -154,7 +158,7 @@ func TestARolledBackReleaseThatNamesNoBuildIsLeftOutAndNamedInTheError(t *testin
 		{Name: "api", Compute: provider.ComputeContainer, Container: &project.Container{}},
 	}}
 
-	apps, err := AppsRolledBack(cfg, map[string]string{"web": "no-separator", "api": "a1b2c3d4e5f60718~0123456789ab"})
+	apps, err := AppsRolledBack(cfg, []*progressv1.AppResult{{App: "web", Release: "no-separator"}, {App: "api", Release: "a1b2c3d4e5f60718~0123456789ab"}})
 
 	if err == nil || !strings.Contains(err.Error(), "web") {
 		t.Errorf("AppsRolledBack() error = %v, want one naming web", err)

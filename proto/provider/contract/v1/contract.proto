@@ -362,6 +362,8 @@ message Manifest {
   repeated ManifestUsage usages = 7;
 
   repeated ManifestWorker workers = 8;
+
+  repeated app.resources.v1.GroupDefinition variable_groups = 9;
 }
 
 message ManifestWorker {
@@ -434,6 +436,8 @@ message ManifestApp {
 
   string build_id = 6;
 
+  repeated app.resources.v1.VariableDefinition declarations = 11;
+
   oneof artifact {
     option (buf.validate.oneof).required = true;
 
@@ -454,6 +458,8 @@ message ManifestVariable {
   int64 version = 5;
 
   string description = 6;
+
+  string environment = 7;
 }
 
 message ManifestFunction {

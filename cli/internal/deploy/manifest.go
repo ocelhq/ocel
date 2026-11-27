@@ -241,6 +241,9 @@ func (d *deployRun) assemble(c collected, built build.Output) (*contractv1.Manif
 		Usages:    c.usages,
 		BuildID:   d.dependencies.BuildID,
 
+		Declarations:   d.declaredByApp(),
+		VariableGroups: d.variableGroups(),
+
 		WorkerCeilings: d.workerCeilings,
 	})
 }

@@ -799,7 +799,7 @@ func TestAVariableReachesTheManifestAtItsResolvedVersion(t *testing.T) {
 		t.Parallel()
 
 		got := manifestVariables([]variables.Variable{
-			{Key: "VERSIONED", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "v", Version: 4, Description: "Used to call Stripe"},
+			{Key: "VERSIONED", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "v", Environment: "staging", Version: 4, Description: "Used to call Stripe"},
 			{Key: "UNVERSIONED", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "u"},
 		})
 		if len(got) != 2 {
@@ -808,8 +808,8 @@ func TestAVariableReachesTheManifestAtItsResolvedVersion(t *testing.T) {
 		if got[0].GetKey() != "UNVERSIONED" || got[0].GetVersion() != 0 {
 			t.Errorf("%s at version %d, want UNVERSIONED at version 0", got[0].GetKey(), got[0].GetVersion())
 		}
-		if got[1].GetKey() != "VERSIONED" || got[1].GetVersion() != 4 {
-			t.Errorf("%s at version %d, want VERSIONED at the version it resolved at", got[1].GetKey(), got[1].GetVersion())
+		if got[1].GetKey() != "VERSIONED" || got[1].GetVersion() != 4 || got[1].GetEnvironment() != "staging" {
+			t.Errorf("%s at version %d of environment %q, want VERSIONED at the version it resolved at in staging", got[1].GetKey(), got[1].GetVersion(), got[1].GetEnvironment())
 		}
 		if got[1].GetDescription() != "Used to call Stripe" {
 			t.Errorf("VERSIONED description = %q, want it preserved", got[1].GetDescription())

@@ -26,6 +26,9 @@ export interface ReleaseRecord {
   releaseFingerprint?: string;
   originSecretFingerprint?: string;
   variables?: VariableRecord[];
+  declarations?: unknown[];
+  variableGroups?: unknown[];
+  values?: ReleasedValue[];
   needs?: string[];
   supportInEffect?: string[];
   waived?: string[];
@@ -46,4 +49,12 @@ export interface VariableRecord {
   folder?: string;
   version?: number;
   live?: boolean;
+}
+
+export interface ReleasedValue {
+  key: string;
+  folder?: string;
+  environment?: string;
+  version: number;
+  class?: string;
 }

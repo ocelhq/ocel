@@ -3,11 +3,13 @@ package deployreport
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	consolev1 "github.com/ocelhq/ocel/pkg/proto/console/v1"
@@ -63,11 +65,12 @@ func applyResult(app *consolev1.App, result *progressv1.AppResult) {
 	}
 }
 
-func AppsRolledBack(cfg *project.Project, releases map[string]string) ([]*consolev1.App, error) {
-	apps := make([]*consolev1.App, 0, len(releases))
+func AppsRolledBack(cfg *project.Project, results []*progressv1.AppResult) ([]*consolev1.App, error) {
+	apps := make([]*consolev1.App, 0, len(results))
 	var unparsed []error
-	for _, name := range slices.Sorted(maps.Keys(releases)) {
-		release, err := provider.ParseRelease(releases[name])
+	for _, result := range slices.SortedFunc(slices.Values(results), func(a, b *progressv1.AppResult) int { return strings.Compare(a.GetApp(), b.GetApp()) }) {
+		name := result.GetApp()
+		release, err := provider.ParseRelease(result.GetRelease())
 		if err != nil {
 			unparsed = append(unparsed, fmt.Errorf("app %s: %w", name, err))
 			continue
@@ -77,11 +80,13 @@ func AppsRolledBack(cfg *project.Project, releases map[string]string) ([]*consol
 			continue
 		}
 		app := &consolev1.App{
-			Name:    name,
-			BuildId: release.BuildID(),
-			Release: release.String(),
-			Compute: computeKind(cfg.Apps[at].Compute),
-			Outcome: consolev1.AppOutcome_APP_OUTCOME_SUCCEEDED,
+			Name:      name,
+			BuildId:   release.BuildID(),
+			Release:   release.String(),
+			Compute:   computeKind(cfg.Apps[at].Compute),
+			Outcome:   consolev1.AppOutcome_APP_OUTCOME_SUCCEEDED,
+			Variables: result.GetVariables(),
+			Values:    rolledBackValues(result.GetValues()),
 		}
 		if framework := cfg.Apps[at].Framework; buildoutput.IsKnownFramework(framework) {
 			app.Framework = framework
@@ -89,6 +94,27 @@ func AppsRolledBack(cfg *project.Project, releases map[string]string) ([]*consol
 		apps = append(apps, app)
 	}
 	return apps, errors.Join(unparsed...)
+}
+
+func VariableGroupsRolledBack(results []*progressv1.AppResult) []*resourcesv1.GroupDefinition {
+	var groups []*resourcesv1.GroupDefinition
+	for _, result := range results {
+		for _, group := range result.GetVariableGroups() {
+			if !slices.ContainsFunc(groups, func(g *resourcesv1.GroupDefinition) bool { return g.GetKey() == group.GetKey() }) {
+				groups = append(groups, group)
+			}
+		}
+	}
+	slices.SortFunc(groups, func(a, b *resourcesv1.GroupDefinition) int { return strings.Compare(a.GetKey(), b.GetKey()) })
+	return groups
+}
+
+func rolledBackValues(values []*progressv1.ReleasedValue) []*consolev1.ReleasedValue {
+	resolved := make([]variables.Variable, 0, len(values))
+	for _, v := range values {
+		resolved = append(resolved, variables.Variable{Key: v.GetKey(), Class: v.GetClass(), Folder: v.GetFolder(), Environment: v.GetEnvironment(), Version: v.GetVersion()})
+	}
+	return ReleasedValues(resolved)
 }
 
 func computeKind(compute provider.Compute) consolev1.ComputeKind {

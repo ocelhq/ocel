@@ -53,19 +53,20 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		production := environmentScope{tier: environment.TierProduction, slug: req.GetSlug(), env: stackrecords.ProductionEnv}
 		var hold *leaseHold
 		var promoted router.Promotion
+		var apps []*progressv1.AppResult
 		root := RootSpan(SpanPromotion, req.GetSlug(), rollbackTitle(req), progressv1.Phase_PHASE_PROMOTE)
 		err = inSpan(ctx, sender, root, func(ctx context.Context, _ *eventStream, log progress.Log) (err error) {
 			if hold, err = h.leases.takeUnderNewToken(ctx, vendor.KeyValues(), production, stackrecords.LeaseRollback); err != nil {
 				return err
 			}
 			defer func() { _ = hold.release(ctx) }()
-			promoted, err = h.rollBack(ctx, hold, req, log)
+			promoted, apps, err = h.rollBack(ctx, hold, req, log)
 			return err
 		})
 		if err != nil {
 			return nil, hold.explain(err)
 		}
-		return rollbackResult(promoted), nil
+		return rollbackResult(promoted, apps), nil
 	})
 }
 
@@ -80,27 +81,31 @@ func rollbackTitle(req *contractv1.RollbackRequest) progress.Title {
 	}
 }
 
-func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv1.RollbackRequest, log progress.Log) (router.Promotion, error) {
+func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv1.RollbackRequest, log progress.Log) (router.Promotion, []*progressv1.AppResult, error) {
 	leased := hold.context(ctx)
 	session, err := h.openEdgeSession(leased, environment.TierProduction, req.GetSlug(), req.GetEdge())
 	if err != nil {
-		return router.Promotion{}, err
+		return router.Promotion{}, nil, err
 	}
 	current, err := session.ledger.Read(leased, "")
 	if err != nil {
-		return router.Promotion{}, err
+		return router.Promotion{}, nil, err
 	}
 	target, err := rollbackTarget(current.History(), req.GetTo(), req.GetTag())
 	if err != nil {
-		return router.Promotion{}, err
+		return router.Promotion{}, nil, err
+	}
+	apps, err := rolledBackApps(leased, session.ledger, target)
+	if err != nil {
+		return router.Promotion{}, nil, err
 	}
 	promotionID, err := newPromotionID()
 	if err != nil {
-		return router.Promotion{}, err
+		return router.Promotion{}, nil, err
 	}
 	propagation, err := session.readSlowestPropagation(slices.Collect(maps.Values(session.state.Apps)))
 	if err != nil {
-		return router.Promotion{}, err
+		return router.Promotion{}, nil, err
 	}
 	promoted := router.Promotion{
 		PromotionID: promotionID,
@@ -111,33 +116,45 @@ func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv
 	dropped, err := session.promoteApps(leased, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted, confirm: hold.confirm}, session.readAppRouter, log)
 	teardown := provider.StackDestroy{Images: removalImages(leased, session.provider, req.GetProjectRegistry(), log), Lease: hold.lease()}
 	if err != nil {
-		return router.Promotion{}, errors.Join(err, session.reclaimDropped(leased, teardown, "", dropped, log))
+		return router.Promotion{}, nil, errors.Join(err, session.reclaimDropped(leased, teardown, "", dropped, log))
 	}
 	recording, stop := newRecordContext(leased)
 	err = session.checkpoint(recording)
 	stop()
 	if err != nil {
-		return router.Promotion{}, err
+		return router.Promotion{}, nil, err
 	}
 	if err := session.reclaimDropped(leased, teardown, "", dropped, log); err != nil {
 		session.leaveReclaimPending(leased, promoted.PromotionID, dropped, err, log)
 	}
-	return promoted, nil
+	return promoted, apps, nil
 }
 
-func rollbackResult(promoted router.Promotion) *progressv1.OperationEvent {
+func rolledBackApps(ctx context.Context, l projectLedger, target router.Promotion) ([]*progressv1.AppResult, error) {
+	apps := make([]*progressv1.AppResult, 0, len(target.Releases))
+	for _, app := range slices.Sorted(maps.Keys(target.Releases)) {
+		result := &progressv1.AppResult{App: app, Release: target.Releases[app], Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED}
+		record, staged, err := l.Record(ctx, app, target.Releases[app])
+		if err != nil {
+			return nil, err
+		}
+		if staged {
+			if err := readReleasedVariables(result, record); err != nil {
+				return nil, err
+			}
+		}
+		apps = append(apps, result)
+	}
+	return apps, nil
+}
+
+func rollbackResult(promoted router.Promotion, apps []*progressv1.AppResult) *progressv1.OperationEvent {
 	result := &progressv1.OperationResult{
 		Success:           true,
 		PromotionId:       promoted.PromotionID,
 		PromotedAtSeconds: promoted.Ts,
 		Propagation:       propagationProto(promoted.Propagation),
-	}
-	for _, app := range slices.Sorted(maps.Keys(promoted.Releases)) {
-		result.Apps = append(result.Apps, &progressv1.AppResult{
-			App:     app,
-			Release: promoted.Releases[app],
-			Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED,
-		})
+		Apps:              apps,
 	}
 	return &progressv1.OperationEvent{Body: &progressv1.OperationEvent_Result{Result: result}}
 }
