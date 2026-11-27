@@ -135,7 +135,7 @@ func (c Compilation) readPythonProject() (pythonProject, bool, error) {
 func (c Compilation) exportUvLock(ctx context.Context, scratch string) (pythonDependencies, error) {
 	uv, err := exec.LookPath("uv")
 	if err != nil {
-		return pythonDependencies{}, fmt.Errorf("app %q locks its dependencies in %s, and uv is not on PATH to export them for pip: install uv (https://docs.astral.sh/uv/) where ocel builds", c.App, pythonUvLockFile)
+		return pythonDependencies{}, fmt.Errorf("app %q locks its dependencies in %s, and uv is not on PATH: install uv (https://docs.astral.sh/uv/) where ocel builds", c.App, pythonUvLockFile)
 	}
 	requirements := filepath.Join(scratch, pythonRequirementsFile)
 	cmd := tracing.Command(ctx, uv, "export", "--frozen", "--format", "requirements-txt", "--no-dev", "--no-editable", "--no-hashes", "--no-header", "--no-annotate", "--output-file", requirements)

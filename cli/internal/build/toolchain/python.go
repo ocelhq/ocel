@@ -140,7 +140,14 @@ func (c Compilation) installDependencies(ctx context.Context, platform string) e
 	if err != nil || deps.requirements == "" {
 		return err
 	}
+	locked, err := c.declares(pythonUvLockFile)
+	if err != nil {
+		return err
+	}
 	cmd := tracing.Command(ctx, discovery.PythonInterpreter(c.Source), pipArgs(c.FunctionDir, deps.requirements, platform)...)
+	if locked {
+		cmd = tracing.Command(ctx, "uv", uvPipArgs(c.FunctionDir, deps.requirements, platform)...)
+	}
 	cmd.Dir = c.Source
 	var said bytes.Buffer
 	cmd.Stdout = &said
@@ -150,6 +157,17 @@ func (c Compilation) installDependencies(ctx context.Context, platform string) e
 	}
 	c.report("vendoring", said.String())
 	return nil
+}
+
+func uvPipArgs(target, requirements, platform string) []string {
+	return []string{
+		"pip", "install",
+		"--target", target,
+		"-r", requirements,
+		"--only-binary=:all:",
+		"--python-platform", strings.TrimPrefix(platform, "manylinux2014_") + "-manylinux2014",
+		"--python-version", arch.PythonVersion,
+	}
 }
 
 func pipArgs(target, requirements, platform string) []string {
