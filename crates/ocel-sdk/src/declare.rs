@@ -165,7 +165,26 @@ fn collect_declarations() -> Result<Declared, Error> {
     #[cfg(feature = "realtime")]
     all.resources.extend(collect_realtime_resources()?);
     join_group_members(&mut all)?;
+    refuse_unreadable_defaults(&all.variables)?;
     Ok(all)
+}
+
+fn refuse_unreadable_defaults(variables: &[DeclaredVariable]) -> Result<(), Error> {
+    for variable in variables {
+        let (Some(fallback), Some(check)) = (variable.fallback, variable.check) else {
+            continue;
+        };
+        if let Err(said) = check(fallback) {
+            return Err(Error::Definition {
+                key: variable.key.to_string(),
+                detail: format!(
+                    "has a default its own type rejects: {}",
+                    complaint(variable.class, &said)
+                ),
+            });
+        }
+    }
+    Ok(())
 }
 
 #[cfg(feature = "realtime")]
@@ -468,8 +487,9 @@ fn refuse_declaration(resource: &DeclaredResource, said: String) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_definition, DeclaredVariable, ValueType};
+    use super::{build_definition, refuse_unreadable_defaults, DeclaredVariable, ValueType};
     use crate::env::Class;
+    use crate::Error;
 
     fn declared(class: Class, fallback: &'static str) -> DeclaredVariable {
         DeclaredVariable {
@@ -507,5 +527,40 @@ mod tests {
         let definition = build_definition(&declared(Class::Sensitive, "k"));
         assert!(definition.defaulted);
         assert_eq!(definition.default_value, None);
+    }
+
+    fn typed(class: Class, fallback: &'static str) -> DeclaredVariable {
+        DeclaredVariable {
+            check: Some(crate::env::check::<u16>),
+            ..declared(class, fallback)
+        }
+    }
+
+    #[test]
+    fn discovery_refuses_a_default_its_own_type_rejects() {
+        let refused = refuse_unreadable_defaults(&[typed(Class::Plain, "eighty")]);
+        let Err(Error::Definition { key, detail }) = refused else {
+            panic!("refused = {refused:?}, want a definition error");
+        };
+        assert_eq!(key, "BANNER");
+        assert!(
+            detail.starts_with("has a default its own type rejects: ")
+                && detail.contains("invalid digit"),
+            "detail = {detail}"
+        );
+    }
+
+    #[test]
+    fn discovery_keeps_a_confidential_default_out_of_its_refusal() {
+        let refused = refuse_unreadable_defaults(&[typed(Class::Sensitive, "s3cret")]);
+        let Err(Error::Definition { detail, .. }) = refused else {
+            panic!("refused = {refused:?}, want a definition error");
+        };
+        assert!(detail.contains("withheld"), "detail = {detail}");
+    }
+
+    #[test]
+    fn discovery_accepts_a_default_its_own_type_reads() {
+        assert!(refuse_unreadable_defaults(&[typed(Class::Plain, "8080")]).is_ok());
     }
 }
