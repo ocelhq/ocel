@@ -199,6 +199,7 @@ type edgeAccount struct {
 	publications    []edge.GatePublication
 	publishRefusal  error
 	onReconcile     func(edge.StackSpec)
+	keptFailure     *keptReconcileFailure
 
 	routerServes *[]edge.Need
 
@@ -610,6 +611,21 @@ func (e *Edge) Refuse(err error) {
 	e.refusal = err
 }
 
+type keptReconcileFailure struct {
+	secret string
+	err    error
+}
+
+func (e *Edge) FailsReconcileKeepingSecret(secret string, err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if err == nil {
+		e.keptFailure = nil
+		return
+	}
+	e.keptFailure = &keptReconcileFailure{secret: secret, err: err}
+}
+
 func (e *Edge) Owns(hostname, owner string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -795,8 +811,21 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	state.Address = e.front(spec.Slug)
 	e.mu.Lock()
 	state.PurgeURL = e.purgeURL
+	kept := e.keptFailure
 	e.mu.Unlock()
-	return e.open(state)
+	if kept != nil {
+		state.Secret = kept.secret
+		stack, err := e.open(state)
+		if err != nil {
+			return nil, err
+		}
+		return stack, kept.err
+	}
+	stack, err := e.open(state)
+	if err != nil {
+		return nil, err
+	}
+	return stack, nil
 }
 
 func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) { return e.open(state) }

@@ -1238,6 +1238,36 @@ func TestRouteOwnerRequestBudget(t *testing.T) {
 	}
 }
 
+func TestAFirstReconcileThatFailsAfterTheStoreIssuedItsIdentityKeepsTheSecretSoARetrySucceeds(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+
+	m := previewZoneMock()
+	m.existingRoutes = []map[string]any{{"id": "orphan", "pattern": "shop.app.com/*", "script": "left-behind"}}
+	p := m.provider(t)
+	srv, store := fakeStoreFor(t, "")
+	spec := productionSpec(srv.URL, "v1")
+	spec.Domains = []string{"shop.app.com"}
+
+	failed, err := p.Reconcile(t.Context(), spec, edge.StackState{})
+	if err == nil {
+		t.Fatal("Reconcile err = nil, want the held route to fail it")
+	}
+	store.mu.Lock()
+	issued := store.live
+	store.mu.Unlock()
+	if issued == "" {
+		t.Fatal("the store issued no identity, want the failure to come after it did")
+	}
+	if failed == nil || failed.State().Secret != issued {
+		t.Fatalf("failed stack = %v, want one holding the secret the store issued, so the caller can keep it", failed)
+	}
+
+	m.existingRoutes = nil
+	if _, err := p.Reconcile(t.Context(), spec, failed.State()); err != nil {
+		t.Fatalf("Reconcile from the failed stack's state: %v, want the kept secret to open the identity the store issued", err)
+	}
+}
+
 func TestAHostnameAReconcileRoutedIsOwnedByTheProjectBeforeAnyBindRecordsIt(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 

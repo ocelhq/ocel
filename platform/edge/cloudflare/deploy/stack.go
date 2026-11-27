@@ -108,6 +108,19 @@ func (p *cloudflare) Open(state edge.StackState) (edge.EdgeStack, error) {
 }
 
 func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+	var issued edge.StackState
+	reconciled, err := p.reconcile(ctx, spec, prior, &issued)
+	if err == nil || issued.Secret == "" {
+		return reconciled, err
+	}
+	kept, openErr := p.Open(issued)
+	if openErr != nil {
+		return nil, errors.Join(err, openErr)
+	}
+	return kept, err
+}
+
+func (p *cloudflare) reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState, issued *edge.StackState) (edge.EdgeStack, error) {
 	accountID, err := p.readTierAccount(ctx, spec.Tier, "reconcile the Cloudflare stack")
 	if err != nil {
 		return nil, err
@@ -155,6 +168,10 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	secret, deployedStamp, err := p.ensureInstance(ctx, spec, program.store, prior)
 	if err != nil {
 		return nil, err
+	}
+	if secret != prior.Secret {
+		*issued = prior
+		issued.Endpoint, issued.Slug, issued.Secret, issued.Tier = endpoint, slug, secret, spec.Tier
 	}
 	held := edge.StackState{Endpoint: endpoint, Slug: slug, Secret: secret, Tier: spec.Tier}
 	if err := p.putGate(ctx, held, spec.Gate); err != nil {

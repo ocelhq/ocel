@@ -2,12 +2,15 @@ package providerserver_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
 
 	connect "connectrpc.com/connect"
 	"github.com/ocelhq/ocel/pkg/edge"
+	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -15,7 +18,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/provider/providerserver"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/router"
+	"github.com/ocelhq/ocel/pkg/stackrecords"
 	"github.com/ocelhq/ocel/pkg/tracing"
 	"github.com/ocelhq/ocel/pkg/tracing/tracingtest"
 	"go.opentelemetry.io/otel"
@@ -51,6 +56,29 @@ func TestADeployNamingNoEdgeGoesToTheEdgeTheProvidersFactsDefaultTo(t *testing.T
 
 func noteOf(result *progressv1.OperationResult) string {
 	return strings.Join(result.GetUrlNotes(), "\n")
+}
+
+func TestAFailedEdgeReconcileThatHandsBackItsStackIsRecordedSoTheNextDeployOpensIt(t *testing.T) {
+	builtProject(t)
+	client, vendor := deployServed(t)
+	relayEdge(vendor).FailsReconcileKeepingSecret("issued-by-the-store", errors.New("a route is held by another worker"))
+
+	if result, _ := deploy(t, client, deployRequest()); result.GetSuccess() {
+		t.Fatal("Deploy() succeeded, want the edge failure")
+	}
+	recorded, err := records.ReadOrEmpty(context.Background(), vendor.KeyValues(), stackrecords.EdgeStackKey(environment.TierProduction, "shop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state stackrecords.EdgeState
+	if len(recorded.Value) > 0 {
+		if err := json.Unmarshal(recorded.Value, &state); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if state.Edge.Secret != "issued-by-the-store" {
+		t.Errorf("recorded edge secret = %q, want the one the failed reconcile handed back: only it opens the identity the store issued", state.Edge.Secret)
+	}
 }
 
 func TestADeployOpensItsDNSForTheEdgeTheProviderDefaultsTo(t *testing.T) {
