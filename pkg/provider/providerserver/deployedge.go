@@ -77,6 +77,10 @@ func (r *deployRun) reconcileEdge(ctx context.Context, progress progress.Log) er
 	spec.Gate = gateForEdge(r.front, written, password)
 	stack, err := r.front.Reconcile(ctx, spec, r.state.Edge)
 	if err != nil {
+		if stack != nil {
+			r.setEdgeStack(stack)
+			err = errors.Join(err, r.checkpointPromoted(ctx))
+		}
 		if disabled {
 			return errors.Join(err, r.restoreGate(ctx))
 		}
