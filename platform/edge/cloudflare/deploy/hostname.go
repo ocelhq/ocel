@@ -186,14 +186,17 @@ func routeHostname(pattern string) string {
 }
 
 func (p *cloudflare) refuseHeldRoute(ctx context.Context, origin OriginScope, accountID, zoneID string, route workers.RouteListResponse) error {
-	held, other, err := p.readOtherOrigin(ctx, origin, accountID, route.Script)
-	if err != nil {
-		return err
-	}
-	if other {
-		return refuseOtherOriginsRoute(route.Pattern, route.Script, held)
-	}
-	if route.Script == "" {
+	if route.Script != "" {
+		held, tagged, err := p.readScriptOrigin(ctx, accountID, route.Script)
+		switch {
+		case err != nil:
+			return err
+		case !tagged:
+			return fmt.Errorf("worker route %q runs %q, which carries no Ocel origin tag, so no project here can release it and it is left in place; if nothing uses it, remove the route in Cloudflare and run this again", route.Pattern, route.Script)
+		case held != origin:
+			return refuseOtherOriginsRoute(route.Pattern, route.Script, held)
+		}
+	} else {
 		forwarding, forwarded, err := p.readForwardingOwner(ctx, zoneID, routeHostname(route.Pattern))
 		if err != nil {
 			return err

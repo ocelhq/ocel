@@ -1059,6 +1059,46 @@ func TestAttachingARouteHeldByAForeignWorkerSinceTheListingFails(t *testing.T) {
 	}
 }
 
+func TestARouteHeldByAWorkerNoOriginTaggedIsRefusedAsNotOcelsToRelease(t *testing.T) {
+	t.Parallel()
+	m := &cfMock{
+		zoneID: "zone1", zoneName: "app.com",
+		existingRoutes: []map[string]any{{"id": "orphan", "pattern": "*.preview.app.com/*", "script": "ocel-preview-entry"}},
+	}
+	up := upload{accountID: "acct", scriptName: "ocel-shop-prod"}
+
+	err := m.provider(t).reconcileWorkerRoutes(t.Context(), testNames, up, ownedSpec("shop", "*.preview.app.com"), nil)
+	if err == nil {
+		t.Fatal("reconcileWorkerRoutes err = nil, want a refusal")
+	}
+	for _, want := range []string{"ocel-preview-entry", "carries no Ocel origin tag", "remove the route", "Cloudflare"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to contain %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "release it from the project that owns it") {
+		t.Errorf("err = %v, want no remedy naming a project, since no project owns an untagged worker", err)
+	}
+	if len(m.repointedRoutes) != 0 || len(m.deletedRoutes) != 0 {
+		t.Errorf("repointed %v and deleted %v, want the untagged route left in place", m.repointedRoutes, m.deletedRoutes)
+	}
+}
+
+func TestARouteHeldByAnotherProjectOnThisOriginIsRefusedNamingTheProjectToReleaseItFrom(t *testing.T) {
+	t.Parallel()
+	m := &cfMock{
+		zoneID: "zone1", zoneName: "app.com",
+		existingRoutes: []map[string]any{{"id": "theirs", "pattern": "shop.app.com/*", "script": "ocel-other-prod"}},
+		scriptSettings: map[string]map[string]any{"ocel-other-prod": {"tags": []any{testNames.origin.scriptTag()}}},
+	}
+	up := upload{accountID: "acct", scriptName: "ocel-shop-prod"}
+
+	err := m.provider(t).reconcileWorkerRoutes(t.Context(), testNames, up, ownedSpec("shop", "shop.app.com"), nil)
+	if err == nil || !strings.Contains(err.Error(), "release it from the project that owns it") {
+		t.Fatalf("reconcileWorkerRoutes err = %v, want a refusal naming the project to release it from", err)
+	}
+}
+
 func TestARouteAnotherOriginDeployedIsRefusedNamingThatOrigin(t *testing.T) {
 	t.Parallel()
 
