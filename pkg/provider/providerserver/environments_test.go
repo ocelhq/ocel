@@ -455,11 +455,11 @@ func TestRemoveEnvironmentPurgesItsValuesAndKeepsSharedValuesAndOtherPreviews(t 
 	if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: byHand, Plaintext: "set for pr-7"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, scope, byHand, "updated for pr-7", nil); err != nil {
+	if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: byHand, Plaintext: "updated for pr-7"}}); err != nil {
 		t.Fatal(err)
 	}
 	deleted := variablestore.Coordinate{Cell: variablestore.Cell{Folder: "api", Key: "DELETED"}, Environment: "pr-7"}
-	if _, err := store.Set(ctx, scope, deleted, "removed before teardown", nil); err != nil {
+	if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: deleted, Plaintext: "removed before teardown"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Delete(ctx, scope, deleted, nil); err != nil {
@@ -471,7 +471,7 @@ func TestRemoveEnvironmentPurgesItsValuesAndKeepsSharedValuesAndOtherPreviews(t 
 	}
 	shared := variablestore.Scope{Project: "shared", Tier: scope.Tier}
 	target := variablestore.Cell{Key: "SHARED_TOKEN"}
-	if _, err := store.Set(ctx, shared, variablestore.Coordinate{Cell: target}, "shared", nil); err != nil {
+	if _, err := store.Set(ctx, shared, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: target}, Plaintext: "shared"}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, preview := range []string{"pr-7", "pr-8", ""} {
@@ -481,7 +481,7 @@ func TestRemoveEnvironmentPurgesItsValuesAndKeepsSharedValuesAndOtherPreviews(t 
 		}
 	}
 	production := variablestore.Scope{Project: scope.Project, Tier: environment.TierProduction}
-	if _, err := store.Set(ctx, production, variablestore.Coordinate{Cell: byHand.Cell}, "production", nil); err != nil {
+	if _, err := store.Set(ctx, production, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: byHand.Cell}, Plaintext: "production"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -551,7 +551,7 @@ func TestRemoveEnvironmentKeepsItsRecordUntilEveryValueAndReferenceIsPurged(t *t
 			scope := variablestore.Scope{Project: "shop", Tier: environment.TierPreview}
 			shared := variablestore.Scope{Project: "shared", Tier: scope.Tier}
 			at := variablestore.Coordinate{Cell: variablestore.Cell{Key: "TOKEN"}, Environment: "pr-7"}
-			if _, err := store.Set(ctx, shared, variablestore.Coordinate{Cell: at.Cell}, "shared", nil); err != nil {
+			if _, err := store.Set(ctx, shared, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: at.Cell}, Plaintext: "shared"}}); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := store.SetReference(ctx, scope, at, variablestore.Target{Project: shared.Project, Cell: at.Cell}); err != nil {
