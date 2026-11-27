@@ -118,7 +118,7 @@ func TestLiveTheEnvSourceSyncKeepsATiersValuesInStepWithItsEnvSourceAndGoesWithT
 	store := variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
 	scope := variablestore.Scope{Project: "shop", Tier: tier}
 	for key, value := range map[string]string{"INFISICAL_CLIENT_ID": "id", "INFISICAL_CLIENT_SECRET": "secret"} {
-		if _, err := store.Set(ctx, scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}, value, nil); err != nil {
+		if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}, Plaintext: value}}); err != nil {
 			t.Fatalf("Set(%s) = %v", key, err)
 		}
 	}

@@ -30,7 +30,7 @@ const DefaultAbandonAfter = 5 * time.Second
 type Values interface {
 	List(ctx context.Context) ([]variables.ValueMetadata, error)
 	Reveal(ctx context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error)
-	Set(ctx context.Context, at variables.Coordinate, value string, expected *int64) (int64, error)
+	Set(ctx context.Context, writes []variables.ValueWrite) ([]int64, error)
 	Delete(ctx context.Context, at variables.Coordinate, expected *int64) (bool, error)
 	History(ctx context.Context, at variables.Coordinate) ([]variables.Version, error)
 }
@@ -208,7 +208,7 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if _, err := s.opts.Values.Set(r.Context(), at, req.Value, req.Version); err != nil {
+	if _, err := s.opts.Values.Set(r.Context(), []variables.ValueWrite{{At: at, Value: req.Value, Expected: req.Version}}); err != nil {
 		if errors.Is(err, variables.ErrStaleValue) {
 			fail(w, http.StatusConflict, err)
 			return
@@ -508,7 +508,7 @@ func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
 				outcome.Error = err.Error()
 				break
 			}
-			_, err := s.opts.Values.Set(r.Context(), at, value, cell.Version)
+			_, err := s.opts.Values.Set(r.Context(), []variables.ValueWrite{{At: at, Value: value, Expected: cell.Version}})
 			switch {
 			case errors.Is(err, variables.ErrStaleValue):
 				outcome.Conflict = true

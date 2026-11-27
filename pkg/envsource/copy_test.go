@@ -200,7 +200,7 @@ func TestCopyValuesRemovesWhatTheSourceDroppedAndSparesNamedEnvironments(t *test
 		t.Fatal(err)
 	}
 	override := variablestore.Coordinate{Cell: variablestore.Cell{Key: "GONE"}, Environment: "pr-1"}
-	if _, err := store.Set(ctx, scope, override, "override", nil); err != nil {
+	if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: override, Plaintext: "override"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -229,14 +229,14 @@ func TestATierSwitchedToAnEnvSourceKeepsNoTierWideValueTheSourceLacks(t *testing
 		t.Fatal(err)
 	}
 	for key, plaintext := range map[string]string{"SET_IN_OCEL": "mine", "ALSO_IN_THE_SOURCE": "old", "INFISICAL_CLIENT_SECRET": "credential"} {
-		if _, err := store.Set(ctx, scope, tierWide("", key), plaintext, nil); err != nil {
+		if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: tierWide("", key), Plaintext: plaintext}}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := store.Set(ctx, scope, tierWide("/other", "UNREAD_FOLDER"), "kept", nil); err != nil {
+	if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: tierWide("/other", "UNREAD_FOLDER"), Plaintext: "kept"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, variablestore.Scope{Project: "shared", Tier: scope.Tier}, tierWide("", "TARGET"), "t", nil); err != nil {
+	if _, err := store.Set(ctx, variablestore.Scope{Project: "shared", Tier: scope.Tier}, []variablestore.ValueWrite{{At: tierWide("", "TARGET"), Plaintext: "t"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, scope, tierWide("", "REFERENCED"), variablestore.Target{Project: "shared", Cell: variablestore.Cell{Key: "TARGET"}}); err != nil {
@@ -271,7 +271,7 @@ func TestCopyValuesLeavesTheCellsItIsToldToKeep(t *testing.T) {
 	t.Parallel()
 	store, scope := storeFixture()
 	ctx := context.Background()
-	if _, err := store.Set(ctx, scope, tierWide("", "INFISICAL_CLIENT_SECRET"), "real", nil); err != nil {
+	if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: tierWide("", "INFISICAL_CLIENT_SECRET"), Plaintext: "real"}}); err != nil {
 		t.Fatal(err)
 	}
 	read := map[variablestore.Cell]envsource.Value{cell("", "INFISICAL_CLIENT_SECRET"): value("from-the-source", "s1@1")}
@@ -374,7 +374,7 @@ func TestCopyValuesIntoAPreviewWritesOnlyWhereItsEnvironmentReadsSomethingElseAn
 	copyInto("", 1, map[variablestore.Cell]envsource.Value{cell("", "CHANGED"): value("old", "s1@1"), cell("", "SAME"): value("same", "s2@1")})
 	tierWideBefore := listed(t, store, scope)
 	byHand := variablestore.Coordinate{Cell: cell("", "BY_HAND"), Environment: "pr-1"}
-	if _, err := store.Set(ctx, scope, byHand, "set for pr-1", nil); err != nil {
+	if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: byHand, Plaintext: "set for pr-1"}}); err != nil {
 		t.Fatal(err)
 	}
 

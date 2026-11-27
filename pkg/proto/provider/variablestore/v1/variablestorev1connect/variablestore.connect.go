@@ -33,9 +33,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// VariableStoreServiceSetValueProcedure is the fully-qualified name of the VariableStoreService's
-	// SetValue RPC.
-	VariableStoreServiceSetValueProcedure = "/provider.variablestore.v1.VariableStoreService/SetValue"
+	// VariableStoreServiceSetValuesProcedure is the fully-qualified name of the VariableStoreService's
+	// SetValues RPC.
+	VariableStoreServiceSetValuesProcedure = "/provider.variablestore.v1.VariableStoreService/SetValues"
 	// VariableStoreServiceListValuesProcedure is the fully-qualified name of the VariableStoreService's
 	// ListValues RPC.
 	VariableStoreServiceListValuesProcedure = "/provider.variablestore.v1.VariableStoreService/ListValues"
@@ -86,7 +86,7 @@ const (
 // VariableStoreServiceClient is a client for the provider.variablestore.v1.VariableStoreService
 // service.
 type VariableStoreServiceClient interface {
-	SetValue(context.Context, *v1.SetValueRequest) (*v1.SetValueResponse, error)
+	SetValues(context.Context, *v1.SetValuesRequest) (*v1.SetValuesResponse, error)
 	ListValues(context.Context, *v1.ListValuesRequest) (*v1.ListValuesResponse, error)
 	GetValue(context.Context, *v1.GetValueRequest) (*v1.GetValueResponse, error)
 	RevealValues(context.Context, *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error)
@@ -116,10 +116,10 @@ func NewVariableStoreServiceClient(httpClient connect.HTTPClient, baseURL string
 	baseURL = strings.TrimRight(baseURL, "/")
 	variableStoreServiceMethods := v1.File_provider_variablestore_v1_variablestore_proto.Services().ByName("VariableStoreService").Methods()
 	return &variableStoreServiceClient{
-		setValue: connect.NewClient[v1.SetValueRequest, v1.SetValueResponse](
+		setValues: connect.NewClient[v1.SetValuesRequest, v1.SetValuesResponse](
 			httpClient,
-			baseURL+VariableStoreServiceSetValueProcedure,
-			connect.WithSchema(variableStoreServiceMethods.ByName("SetValue")),
+			baseURL+VariableStoreServiceSetValuesProcedure,
+			connect.WithSchema(variableStoreServiceMethods.ByName("SetValues")),
 			connect.WithClientOptions(opts...),
 		),
 		listValues: connect.NewClient[v1.ListValuesRequest, v1.ListValuesResponse](
@@ -217,7 +217,7 @@ func NewVariableStoreServiceClient(httpClient connect.HTTPClient, baseURL string
 
 // variableStoreServiceClient implements VariableStoreServiceClient.
 type variableStoreServiceClient struct {
-	setValue          *connect.Client[v1.SetValueRequest, v1.SetValueResponse]
+	setValues         *connect.Client[v1.SetValuesRequest, v1.SetValuesResponse]
 	listValues        *connect.Client[v1.ListValuesRequest, v1.ListValuesResponse]
 	getValue          *connect.Client[v1.GetValueRequest, v1.GetValueResponse]
 	revealValues      *connect.Client[v1.RevealValuesRequest, v1.RevealValuesResponse]
@@ -235,9 +235,9 @@ type variableStoreServiceClient struct {
 	unpublishValues   *connect.Client[v1.UnpublishValuesRequest, v1.UnpublishValuesResponse]
 }
 
-// SetValue calls provider.variablestore.v1.VariableStoreService.SetValue.
-func (c *variableStoreServiceClient) SetValue(ctx context.Context, req *v1.SetValueRequest) (*v1.SetValueResponse, error) {
-	response, err := c.setValue.CallUnary(ctx, connect.NewRequest(req))
+// SetValues calls provider.variablestore.v1.VariableStoreService.SetValues.
+func (c *variableStoreServiceClient) SetValues(ctx context.Context, req *v1.SetValuesRequest) (*v1.SetValuesResponse, error) {
+	response, err := c.setValues.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -382,7 +382,7 @@ func (c *variableStoreServiceClient) UnpublishValues(ctx context.Context, req *v
 // VariableStoreServiceHandler is an implementation of the
 // provider.variablestore.v1.VariableStoreService service.
 type VariableStoreServiceHandler interface {
-	SetValue(context.Context, *v1.SetValueRequest) (*v1.SetValueResponse, error)
+	SetValues(context.Context, *v1.SetValuesRequest) (*v1.SetValuesResponse, error)
 	ListValues(context.Context, *v1.ListValuesRequest) (*v1.ListValuesResponse, error)
 	GetValue(context.Context, *v1.GetValueRequest) (*v1.GetValueResponse, error)
 	RevealValues(context.Context, *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error)
@@ -407,10 +407,10 @@ type VariableStoreServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewVariableStoreServiceHandler(svc VariableStoreServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	variableStoreServiceMethods := v1.File_provider_variablestore_v1_variablestore_proto.Services().ByName("VariableStoreService").Methods()
-	variableStoreServiceSetValueHandler := connect.NewUnaryHandlerSimple(
-		VariableStoreServiceSetValueProcedure,
-		svc.SetValue,
-		connect.WithSchema(variableStoreServiceMethods.ByName("SetValue")),
+	variableStoreServiceSetValuesHandler := connect.NewUnaryHandlerSimple(
+		VariableStoreServiceSetValuesProcedure,
+		svc.SetValues,
+		connect.WithSchema(variableStoreServiceMethods.ByName("SetValues")),
 		connect.WithHandlerOptions(opts...),
 	)
 	variableStoreServiceListValuesHandler := connect.NewUnaryHandlerSimple(
@@ -505,8 +505,8 @@ func NewVariableStoreServiceHandler(svc VariableStoreServiceHandler, opts ...con
 	)
 	return "/provider.variablestore.v1.VariableStoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case VariableStoreServiceSetValueProcedure:
-			variableStoreServiceSetValueHandler.ServeHTTP(w, r)
+		case VariableStoreServiceSetValuesProcedure:
+			variableStoreServiceSetValuesHandler.ServeHTTP(w, r)
 		case VariableStoreServiceListValuesProcedure:
 			variableStoreServiceListValuesHandler.ServeHTTP(w, r)
 		case VariableStoreServiceGetValueProcedure:
@@ -546,8 +546,8 @@ func NewVariableStoreServiceHandler(svc VariableStoreServiceHandler, opts ...con
 // UnimplementedVariableStoreServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedVariableStoreServiceHandler struct{}
 
-func (UnimplementedVariableStoreServiceHandler) SetValue(context.Context, *v1.SetValueRequest) (*v1.SetValueResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.variablestore.v1.VariableStoreService.SetValue is not implemented"))
+func (UnimplementedVariableStoreServiceHandler) SetValues(context.Context, *v1.SetValuesRequest) (*v1.SetValuesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.variablestore.v1.VariableStoreService.SetValues is not implemented"))
 }
 
 func (UnimplementedVariableStoreServiceHandler) ListValues(context.Context, *v1.ListValuesRequest) (*v1.ListValuesResponse, error) {

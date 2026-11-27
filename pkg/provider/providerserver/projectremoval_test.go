@@ -88,7 +88,7 @@ func TestRemovingAProjectRemovesWhatTheVendorHoldsForItOnceItsValuesArePurged(t 
 	ctx := context.Background()
 	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
 	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
-	if _, err := store.Set(ctx, scope, variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/", Key: "REGION"}}, "eu", nil); err != nil {
+	if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/", Key: "REGION"}}, Plaintext: "eu"}}); err != nil {
 		t.Fatal(err)
 	}
 	var removed []string
@@ -384,7 +384,7 @@ func TestRemoveProjectLeavesNothingInTheProjectsValuesOrReferencesPartitions(t *
 	store := variablestore.Store{KeyValues: vendor.KeyValues(), Cipher: vendor.Cipher()}
 	shop := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 	region := variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/", Key: "REGION"}}
-	if _, err := store.Set(ctx, shop, region, "eu", nil); err != nil {
+	if _, err := store.Set(ctx, shop, []variablestore.ValueWrite{{At: region, Plaintext: "eu"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, variablestore.Scope{Project: "blog", Tier: environment.TierProduction}, region,

@@ -713,7 +713,7 @@ func switchToBuiltinAndSet(t *testing.T, store variablestore.Store, project, key
 	if value == "" {
 		return
 	}
-	if _, err := store.Set(ctx, scopeOf(project), tierWide("", key), value, nil); err != nil {
+	if _, err := store.Set(ctx, scopeOf(project), []variablestore.ValueWrite{{At: tierWide("", key), Plaintext: value}}); err != nil {
 		t.Error(err)
 	}
 }

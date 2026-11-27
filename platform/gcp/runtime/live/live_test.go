@@ -36,7 +36,7 @@ func (s stores) store() variablestore.Store {
 
 func (s stores) set(t *testing.T, scope variablestore.Scope, at variablestore.Coordinate, plaintext string) {
 	t.Helper()
-	if _, err := s.store().Set(context.Background(), scope, at, plaintext, nil); err != nil {
+	if _, err := s.store().Set(context.Background(), scope, []variablestore.ValueWrite{{At: at, Plaintext: plaintext}}); err != nil {
 		t.Fatalf("Set(%s) = %v", at, err)
 	}
 }

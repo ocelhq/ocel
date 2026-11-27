@@ -246,7 +246,7 @@ export default {
 	url := "postgres://app:s3cret-pw@" + clitest.ServePostgres(t, "170004") + "/main?sslmode=disable"
 	store := variablestore.Store{KeyValues: fixture.Provider.KeyValues(), Cipher: fixture.Provider.Cipher()}
 	at := variablestore.Coordinate{Cell: variablestore.Cell{Key: "MAIN_DATABASE_URL"}}
-	if _, err := store.Set(context.Background(), variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}, at, url, nil); err != nil {
+	if _, err := store.Set(context.Background(), variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}, []variablestore.ValueWrite{{At: at, Plaintext: url}}); err != nil {
 		t.Fatalf("set MAIN_DATABASE_URL: %v", err)
 	}
 	return url

@@ -47,12 +47,12 @@ func storeValue(t *testing.T, ctx context.Context, provider *providerprocess.Pro
 	if err != nil {
 		t.Fatalf("reach the provider's variable store: %v", err)
 	}
-	if _, err := variableStore.SetValue(ctx, &variablestorev1.SetValueRequest{
-		Tier:       tier,
-		Coordinate: coordinate,
-		Value:      value,
+	if _, err := variableStore.SetValues(ctx, &variablestorev1.SetValuesRequest{
+		Tier:   tier,
+		Slug:   coordinate.GetSlug(),
+		Values: []*variablestorev1.ValueWrite{{Coordinate: coordinate, Value: value}},
 	}); err != nil {
-		t.Fatalf("SetValue %v: %v", coordinate, err)
+		t.Fatalf("SetValues %v: %v", coordinate, err)
 	}
 }
 
@@ -150,7 +150,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 			at := variables.Coordinate{Cell: variables.Cell{Key: "API_URL"}}
 
 			unset := int64(0)
-			if _, err := values.Set(ctx, at, "https://mine.example", &unset); !errors.Is(err, variables.ErrStaleValue) {
+			if _, err := values.Set(ctx, []variables.ValueWrite{{At: at, Value: "https://mine.example", Expected: &unset}}); !errors.Is(err, variables.ErrStaleValue) {
 				t.Fatalf("Set expecting an empty cell err = %v, want variables.ErrStaleValue — the page drew a cell somebody has since filled", err)
 			}
 			if got, _, err := revealOne(ctx, values, at.Cell); err != nil || got != "https://someone-elses.example" {
@@ -158,7 +158,7 @@ func TestTheValuesTheVariablesPageShowsAndChangesAreTheProvidersAnswers(t *testi
 			}
 
 			current := int64(1)
-			if _, err := values.Set(ctx, at, "https://mine.example", &current); err != nil {
+			if _, err := values.Set(ctx, []variables.ValueWrite{{At: at, Value: "https://mine.example", Expected: &current}}); err != nil {
 				t.Fatalf("Set expecting the current version err = %v, want the write to land", err)
 			}
 			if got, _, err := revealOne(ctx, values, at.Cell); err != nil || got != "https://mine.example" {

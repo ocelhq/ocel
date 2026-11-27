@@ -45,7 +45,7 @@ func TestASetValueOnlyEverTouchesTheVariablesTable(t *testing.T) {
 	store := variablestore.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}
 	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 
-	if _, err := store.Set(context.Background(), scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}}, Plaintext: "sk_live_secret"}}); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 

@@ -81,7 +81,7 @@ func cellAt(key string) variablestore.Coordinate {
 
 func seedValue(t *testing.T, project clitest.FakeProject, tier environment.Tier, slug string, at variablestore.Coordinate, value string) {
 	t.Helper()
-	if _, err := valuesOf(project).Set(context.Background(), variablestore.Scope{Project: slug, Tier: tier}, at, value, nil); err != nil {
+	if _, err := valuesOf(project).Set(context.Background(), variablestore.Scope{Project: slug, Tier: tier}, []variablestore.ValueWrite{{At: at, Plaintext: value}}); err != nil {
 		t.Fatalf("seed %s in %s's %s values: %v", at, slug, tier, err)
 	}
 }
@@ -598,6 +598,25 @@ func TestSettingSeveralPairsValidatesEveryPairBeforeWritingAny(t *testing.T) {
 		}
 	})
 
+	t.Run("writes every pair in one call, reading none of them first", func(t *testing.T) {
+		project := setUpEnvFixture(t)
+		var stdout, stderr bytes.Buffer
+		err := runEnvSetPairs(context.Background(), newTestDependencies(), project.Root, []envSetPair{
+			{key: "STRIPE_API_KEY", value: "sk_live_secret"},
+			{key: "LOG_LEVEL", value: "debug"},
+		}, envOptions{}, nil, &stdout, &stderr)
+		if err != nil {
+			t.Fatalf("runEnvSetPairs() = %v; stdout=%s", err, stdout.String())
+		}
+		sent := clitest.RequestsTo[*variablestorev1.SetValuesRequest](t, project.Requests, variablestorev1connect.VariableStoreServiceSetValuesProcedure)
+		if len(sent) != 1 || len(sent[0].GetValues()) != 2 {
+			t.Fatalf("the CLI sent %d SetValues calls, want one carrying both pairs", len(sent))
+		}
+		if read := clitest.RequestsTo[*variablestorev1.GetValueRequest](t, project.Requests, variablestorev1connect.VariableStoreServiceGetValueProcedure); len(read) != 0 {
+			t.Errorf("the CLI read %d values before writing, want none: the store checks each value as it writes it", len(read))
+		}
+	})
+
 	t.Run("validates every pair before writing any", func(t *testing.T) {
 		project := setUpEnvFixture(t)
 		var stdout, stderr bytes.Buffer
@@ -608,7 +627,7 @@ func TestSettingSeveralPairsValidatesEveryPairBeforeWritingAny(t *testing.T) {
 		if err == nil {
 			t.Fatal("runEnvSetPairs() = nil, want an undeclared key refusal")
 		}
-		if sent := clitest.RequestsTo[*variablestorev1.SetValueRequest](t, project.Requests, variablestorev1connect.VariableStoreServiceSetValueProcedure); len(sent) != 0 {
+		if sent := clitest.RequestsTo[*variablestorev1.SetValuesRequest](t, project.Requests, variablestorev1connect.VariableStoreServiceSetValuesProcedure); len(sent) != 0 {
 			t.Errorf("the CLI sent %d writes, want none", len(sent))
 		}
 		stored, err := valuesOf(project).List(context.Background(), variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction})

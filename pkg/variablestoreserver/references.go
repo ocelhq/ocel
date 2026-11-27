@@ -11,7 +11,7 @@ import (
 )
 
 func (h *Service) SetReference(ctx context.Context, req *variablestorev1.SetReferenceRequest) (*variablestorev1.SetReferenceResponse, error) {
-	if err := h.addressable(ctx, req.GetTier(), req.GetCoordinate()); err != nil {
+	if err := h.addressable(ctx, req.GetTier(), req.GetCoordinate().GetSlug(), req.GetCoordinate().GetEnvironment()); err != nil {
 		return nil, err
 	}
 	target := req.GetTarget()
@@ -24,7 +24,7 @@ func (h *Service) SetReference(ctx context.Context, req *variablestorev1.SetRefe
 	if err != nil {
 		return nil, err
 	}
-	if err := refuseEnvSourceOwned(ctx, store, scope, coordinateOf(req.GetCoordinate()), false); err != nil {
+	if err := refuseEnvSourceOwned(ctx, store, scope, false, coordinateOf(req.GetCoordinate())); err != nil {
 		return nil, err
 	}
 	metadata, err := store.SetReference(ctx, scope, coordinateOf(req.GetCoordinate()), variablestore.Target{

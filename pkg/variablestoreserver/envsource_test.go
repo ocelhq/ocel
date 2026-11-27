@@ -197,7 +197,7 @@ func servedToDeployAndConnector(t *testing.T) (deploy, connector variablestorev1
 
 func setValue(t *testing.T, variables variablestorev1connect.VariableStoreServiceClient, tier environmentv1.Tier, at *variablestorev1.Coordinate, value string) error {
 	t.Helper()
-	_, err := variables.SetValue(context.Background(), &variablestorev1.SetValueRequest{Tier: tier, Coordinate: at, Value: value})
+	_, err := setOne(context.Background(), variables, tier, at, value)
 	return err
 }
 
@@ -205,7 +205,7 @@ func setCredentials(t *testing.T, variables variablestorev1connect.VariableStore
 	t.Helper()
 	for key, value := range map[string]string{"INFISICAL_CLIENT_ID": "id", "INFISICAL_CLIENT_SECRET": "secret"} {
 		if err := setValue(t, variables, tier, cell(key), value); err != nil {
-			t.Fatalf("SetValue(%s) = %v, want a credential ocel stores", key, err)
+			t.Fatalf("SetValues(%s) = %v, want a credential ocel stores", key, err)
 		}
 	}
 }
@@ -337,7 +337,21 @@ func TestAValueTheEnvSourceOwnsIsRefusedToEveryOtherWriter(t *testing.T) {
 
 	err := setValue(t, variables, preview, cell("DATABASE_URL"), "by-hand")
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "infisical:p-1/prod") || !strings.Contains(err.Error(), "/organizations/org-1/") {
-		t.Fatalf("SetValue() on a value the env source owns = %v, want it refused naming the env source and where to change it", err)
+		t.Fatalf("SetValues() on a value the env source owns = %v, want it refused naming the env source and where to change it", err)
+	}
+	_, err = variables.SetValues(context.Background(), &variablestorev1.SetValuesRequest{
+		Tier: preview,
+		Slug: slug,
+		Values: []*variablestorev1.ValueWrite{
+			{Coordinate: cell("INFISICAL_CLIENT_SECRET"), Value: "rotated"},
+			{Coordinate: cell("DATABASE_URL"), Value: "by-hand"},
+		},
+	})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("SetValues() beside a value the env source owns = %v, want the whole call refused", err)
+	}
+	if secret, err := revealOne(context.Background(), variables, preview, cell("INFISICAL_CLIENT_SECRET")); err != nil || secret.GetValue() == "rotated" {
+		t.Fatalf("the credential after the refused SetValues() = %q, %v, want it left as it was", secret.GetValue(), err)
 	}
 	_, err = variables.DeleteValue(context.Background(), &variablestorev1.DeleteValueRequest{Tier: preview, Coordinate: cell("DATABASE_URL")})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
@@ -350,10 +364,10 @@ func TestAValueTheEnvSourceOwnsIsRefusedToEveryOtherWriter(t *testing.T) {
 
 	override := &variablestorev1.Coordinate{Slug: slug, Key: "DATABASE_URL", Environment: "pr-12"}
 	if err := setValue(t, variables, preview, override, "postgres://pr-12"); err != nil {
-		t.Fatalf("SetValue() for one named preview environment = %v, want an override ocel stores", err)
+		t.Fatalf("SetValues() for one named preview environment = %v, want an override ocel stores", err)
 	}
 	if err := setValue(t, variables, preview, cell("INFISICAL_CLIENT_SECRET"), "secret"); err != nil {
-		t.Fatalf("SetValue() on the credential = %v, want it stored by ocel", err)
+		t.Fatalf("SetValues() on the credential = %v, want it stored by ocel", err)
 	}
 	if leftover, err := variables.GetValue(context.Background(), &variablestorev1.GetValueRequest{Tier: preview, Coordinate: cell("LEFTOVER")}); err != nil || leftover.GetFound() {
 		t.Fatalf("GetValue() of a value set before the env source found=%t, %v, want it removed by the sync, which is the one writer now", leftover.GetFound(), err)
@@ -364,7 +378,7 @@ func TestAValueTheEnvSourceOwnsIsRefusedToEveryOtherWriter(t *testing.T) {
 		t.Fatalf("SyncEnvSource(builtin) = %+v, %v", back, err)
 	}
 	if err := setValue(t, variables, preview, cell("DATABASE_URL"), "by-hand"); err != nil {
-		t.Fatalf("SetValue() once the tier is back on ocel's store = %v", err)
+		t.Fatalf("SetValues() once the tier is back on ocel's store = %v", err)
 	}
 }
 
@@ -440,7 +454,7 @@ func TestADeploySwitchingToBuiltinClearsARegistrationThatNoLongerDecodes(t *test
 		t.Fatalf("DescribeEnvSource() = %+v, %v, want builtin", described, err)
 	}
 	if err := setValue(t, variables, production, cell("TOKEN"), "by-hand"); err != nil {
-		t.Fatalf("SetValue() once builtin = %v, want ocel's own value taken", err)
+		t.Fatalf("SetValues() once builtin = %v, want ocel's own value taken", err)
 	}
 }
 
@@ -475,7 +489,7 @@ func TestAnExecEnvSourceIsWrittenAsTheOutputTheCallerReadAndIsNeverScheduled(t *
 		t.Fatalf("GetValue() = %q from %q, %v", got.GetValue(), got.GetMetadata().GetEnvSource(), err)
 	}
 	if err := setValue(t, variables, production, cell("TOKEN"), "by-hand"); connect.CodeOf(err) != connect.CodeFailedPrecondition {
-		t.Fatalf("SetValue() on a value exec owns = %v, want it refused", err)
+		t.Fatalf("SetValues() on a value exec owns = %v, want it refused", err)
 	}
 }
 
@@ -841,7 +855,7 @@ func TestADeployWhoseFirstEnvSourceCannotBeReadLeavesTheTierBuiltin(t *testing.T
 		t.Fatalf("DescribeEnvSource() = %+v, %v, want builtin: nothing was ever read from the env source", described, err)
 	}
 	if err := setValue(t, variables, production, cell("DATABASE_URL"), "postgres://mine"); err != nil {
-		t.Fatalf("SetValue() after the failed deploy = %v, want ocel's own value taken", err)
+		t.Fatalf("SetValues() after the failed deploy = %v, want ocel's own value taken", err)
 	}
 }
 
@@ -862,7 +876,7 @@ func TestADeployWhoseNewEnvSourceLacksItsCredentialRegistersItSoTheCredentialCan
 		t.Fatalf("SyncEnvSource() with OTHER_CLIENT_ID unset = %v, want it refused for the caller to set", err)
 	}
 	if err := setValue(t, variables, production, cell("OTHER_CLIENT_ID"), "id"); err != nil {
-		t.Fatalf("SetValue(OTHER_CLIENT_ID) = %v, want the credential the new env source logs in with taken", err)
+		t.Fatalf("SetValues(OTHER_CLIENT_ID) = %v, want the credential the new env source logs in with taken", err)
 	}
 	if _, err := syncEnvSource(variables, production, renamed); err != nil {
 		t.Fatalf("SyncEnvSource() once its credential is set = %v", err)

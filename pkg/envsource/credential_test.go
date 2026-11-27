@@ -18,7 +18,7 @@ func scopeOf(project string) variablestore.Scope {
 func setCredentials(t *testing.T, store variablestore.Store, project, clientID, clientSecret string) {
 	t.Helper()
 	for key, plaintext := range map[string]string{"INFISICAL_CLIENT_ID": clientID, "INFISICAL_CLIENT_SECRET": clientSecret} {
-		if _, err := store.Set(context.Background(), scopeOf(project), tierWide("", key), plaintext, nil); err != nil {
+		if _, err := store.Set(context.Background(), scopeOf(project), []variablestore.ValueWrite{{At: tierWide("", key), Plaintext: plaintext}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -62,7 +62,7 @@ func TestACredentialReferencedFromAProjectMustBeOneThatProjectStoresItself(t *te
 	ctx := context.Background()
 	shared := scopeOf("shared")
 	for _, key := range []string{"INFISICAL_CLIENT_ID", "INFISICAL_CLIENT_SECRET", "OTHER"} {
-		if _, err := store.Set(ctx, shared, tierWide("", key), "x", nil); err != nil {
+		if _, err := store.Set(ctx, shared, []variablestore.ValueWrite{{At: tierWide("", key), Plaintext: "x"}}); err != nil {
 			t.Fatal(err)
 		}
 	}

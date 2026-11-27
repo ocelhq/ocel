@@ -452,7 +452,7 @@ func TestRemoveEnvironmentForgetsWhatThePreviewsEnvSourceSyncCopiedThereAndKeeps
 	copied("pr-8", "TOKEN", "pr-8's", 1)
 	copied("", "TOKEN", "tier-wide", 1)
 	byHand := variablestore.Coordinate{Cell: variablestore.Cell{Key: "PAGE_ID"}, Environment: "pr-7"}
-	if _, err := store.Set(ctx, scope, byHand, "set for pr-7", nil); err != nil {
+	if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: byHand, Plaintext: "set for pr-7"}}); err != nil {
 		t.Fatal(err)
 	}
 

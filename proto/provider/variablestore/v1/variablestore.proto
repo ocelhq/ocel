@@ -9,7 +9,7 @@ import "common/bindings/v1/bindings.proto";
 import "common/scope/v1/scope.proto";
 
 service VariableStoreService {
-    rpc SetValue(SetValueRequest) returns (SetValueResponse) {
+    rpc SetValues(SetValuesRequest) returns (SetValuesResponse) {
       option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
     }
 
@@ -122,17 +122,30 @@ message VersionEntry {
   int64 size = 3;
 }
 
-message SetValueRequest {
+message SetValuesRequest {
+  option (buf.validate.message).cel = {
+    id: "variablestore.set_values.one_project"
+    message: "every value is written to the project the request names"
+    expression: "this.values.all(v, v.coordinate.slug == this.slug)"
+  };
+
   common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
 
-  Coordinate coordinate = 2 [(buf.validate.field).required = true];
-  string value = 3 [debug_redact = true];
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
-  optional int64 expected_version = 4;
+  repeated ValueWrite values = 3 [(buf.validate.field).repeated.min_items = 1];
 }
 
-message SetValueResponse {
-  ValueMetadata metadata = 1;
+message ValueWrite {
+  Coordinate coordinate = 1 [(buf.validate.field).required = true];
+
+  string value = 2 [debug_redact = true];
+
+  optional int64 expected_version = 3;
+}
+
+message SetValuesResponse {
+  repeated ValueMetadata written = 1;
 }
 
 message ListValuesRequest {

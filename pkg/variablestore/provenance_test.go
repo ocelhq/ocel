@@ -91,7 +91,7 @@ func TestForgettingAPurgedCopyKeepsTheVersionAWriteRecreatingTheValueRecordedUnd
 	recreating := store
 	hooked := store
 	hooked.KeyValues = &historyReadHook{Store: store.KeyValues, before: func() {
-		if _, err := recreating.Set(ctx, scope, at("K"), "recreated", nil); err != nil {
+		if _, err := setValue(ctx, recreating, scope, at("K"), "recreated", nil); err != nil {
 			t.Error(err)
 		}
 	}}
@@ -132,7 +132,7 @@ func TestAValueCopiedFromAnEnvSourceNamesItUntilOcelWritesOverIt(t *testing.T) {
 		t.Fatalf("SetFromEnvSource() expecting an absent value over a stored one = %v, want ErrStaleVersion", err)
 	}
 
-	set, err := store.Set(ctx, scope, at("API_KEY"), "by-hand", nil)
+	set, err := setValue(ctx, store, scope, at("API_KEY"), "by-hand", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestADereferencedValueNamesTheProjectAndProvenanceItLandsOn(t *testing.T) {
 		t.Fatalf("GetDereferenced() with reveal = %+v, %v", revealed, err)
 	}
 
-	if _, err := store.Set(ctx, scope, at("OWN"), "mine", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("OWN"), "mine", nil); err != nil {
 		t.Fatal(err)
 	}
 	own, err := store.GetDereferenced(ctx, scope, at("OWN"), true)

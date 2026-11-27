@@ -23,11 +23,19 @@ func at(key string) variablestore.Coordinate {
 	return variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}
 }
 
+func setValue(ctx context.Context, store variablestore.Store, scope variablestore.Scope, at variablestore.Coordinate, plaintext string, expected *int64) (variablestore.Metadata, error) {
+	written, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: at, Plaintext: plaintext, Expected: expected}})
+	if err != nil {
+		return variablestore.Metadata{}, err
+	}
+	return written[0], nil
+}
+
 func TestAValueIsSealedAndComesBackVersioned(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	first, err := store.Set(ctx, scope, at("DATABASE_URL"), "postgres://one", nil)
+	first, err := setValue(ctx, store, scope, at("DATABASE_URL"), "postgres://one", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,14 +61,14 @@ func TestAWriteAtTheVersionSeenWinsAndAStaleOneLoses(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.Set(ctx, scope, at("KEY"), "one", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("KEY"), "one", nil); err != nil {
 		t.Fatal(err)
 	}
 	seen := int64(1)
-	if _, err := store.Set(ctx, scope, at("KEY"), "two", &seen); err != nil {
+	if _, err := setValue(ctx, store, scope, at("KEY"), "two", &seen); err != nil {
 		t.Fatalf("Set() at the version seen = %v, want it written", err)
 	}
-	if _, err := store.Set(ctx, scope, at("KEY"), "three", &seen); !errors.Is(err, variablestore.ErrStaleVersion) {
+	if _, err := setValue(ctx, store, scope, at("KEY"), "three", &seen); !errors.Is(err, variablestore.ErrStaleVersion) {
 		t.Fatalf("Set() at a version that moved = %v, want ErrStaleVersion", err)
 	}
 }
@@ -70,7 +78,7 @@ func TestADeletedValueIsGoneButItsVersionsSurvive(t *testing.T) {
 	ctx := context.Background()
 
 	for _, value := range []string{"one", "two", "three"} {
-		if _, err := store.Set(ctx, scope, at("KEY"), value, nil); err != nil {
+		if _, err := setValue(ctx, store, scope, at("KEY"), value, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -98,7 +106,7 @@ func TestADeletedValueIsGoneButItsVersionsSurvive(t *testing.T) {
 	if err != nil || again {
 		t.Fatalf("a second Delete() = %v, %v, want it report nothing removed", again, err)
 	}
-	written, err := store.Set(ctx, scope, at("KEY"), "four", nil)
+	written, err := setValue(ctx, store, scope, at("KEY"), "four", nil)
 	if err != nil || written.Version != 4 {
 		t.Fatalf("Set() after Delete() = %+v, %v, want the version to continue", written, err)
 	}
@@ -108,10 +116,10 @@ func TestAValueOverTheCapIsRefused(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.Set(ctx, scope, at("KEY"), strings.Repeat("x", variablestore.MaxValueBytes), nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("KEY"), strings.Repeat("x", variablestore.MaxValueBytes), nil); err != nil {
 		t.Fatalf("Set() at the cap = %v, want it written", err)
 	}
-	_, err := store.Set(ctx, scope, at("KEY"), strings.Repeat("x", variablestore.MaxValueBytes+1), nil)
+	_, err := setValue(ctx, store, scope, at("KEY"), strings.Repeat("x", variablestore.MaxValueBytes+1), nil)
 	if !errors.Is(err, variablestore.ErrTooLarge) {
 		t.Fatalf("Set() over the cap = %v, want ErrTooLarge", err)
 	}
@@ -121,11 +129,11 @@ func TestAnEnvironmentValueShadowsTheTierWideOne(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.Set(ctx, scope, at("KEY"), "tier-wide", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("KEY"), "tier-wide", nil); err != nil {
 		t.Fatal(err)
 	}
 	scoped := variablestore.Coordinate{Cell: variablestore.Cell{Key: "KEY"}, Environment: "pr-7"}
-	if _, err := store.Set(ctx, scope, scoped, "pr-7 only", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, scoped, "pr-7 only", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -147,7 +155,7 @@ func TestAReferenceResolvesOneHopAndNoFurther(t *testing.T) {
 	ctx := context.Background()
 	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
 
-	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
+	if _, err := setValue(ctx, store, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
 	}
 	target := variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "DATABASE_URL"}}
@@ -176,13 +184,13 @@ func TestAReferenceRefusesToShadowAValueItsOwnConsumersRead(t *testing.T) {
 	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
 	consumer := variablestore.Scope{Project: "web", Tier: environment.TierProduction}
 
-	if _, err := store.Set(ctx, scope, at("KEY"), "set here", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("KEY"), "set here", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, consumer, at("KEY"), variablestore.Target{Project: "shop", Cell: variablestore.Cell{Key: "KEY"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, shared, at("KEY"), "set elsewhere", nil); err != nil {
+	if _, err := setValue(ctx, store, shared, at("KEY"), "set elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -200,13 +208,13 @@ func TestSettingAValueOverAReferenceIsRefused(t *testing.T) {
 	ctx := context.Background()
 	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
 
-	if _, err := store.Set(ctx, shared, at("KEY"), "set elsewhere", nil); err != nil {
+	if _, err := setValue(ctx, store, shared, at("KEY"), "set elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, scope, at("KEY"), variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "KEY"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, scope, at("KEY"), "set here now", nil); !errors.Is(err, variablestore.ErrIsReference) {
+	if _, err := setValue(ctx, store, scope, at("KEY"), "set here now", nil); !errors.Is(err, variablestore.ErrIsReference) {
 		t.Fatalf("Set() over a reference = %v, want ErrIsReference", err)
 	}
 }
@@ -215,7 +223,7 @@ func TestTheReverseIndexAnswersWhoReadsACell(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.Set(ctx, scope, at("KEY"), "set here", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("KEY"), "set here", nil); err != nil {
 		t.Fatal(err)
 	}
 	target := variablestore.Target{Project: "shop", Cell: variablestore.Cell{Key: "KEY"}}
@@ -248,7 +256,7 @@ func TestRevealAnswersOnlyTheCellsThatHaveValues(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.Set(ctx, scope, at("A"), "one", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("A"), "one", nil); err != nil {
 		t.Fatal(err)
 	}
 	found, err := store.Reveal(ctx, scope, []variablestore.Coordinate{at("A"), at("B")})
@@ -262,7 +270,7 @@ func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
 	ctx := context.Background()
 	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
 
-	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
+	if _, err := setValue(ctx, store, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "DATABASE_URL"}}); err != nil {
@@ -291,7 +299,7 @@ func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
 	ctx := context.Background()
 	consumer := variablestore.Scope{Project: "web", Tier: environment.TierProduction}
 
-	if _, err := store.Set(ctx, scope, at("KEY"), "set here", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("KEY"), "set here", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, consumer, at("KEY"), variablestore.Target{Project: "shop", Cell: variablestore.Cell{Key: "KEY"}}); err != nil {
@@ -307,7 +315,7 @@ func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
 	}
 
 	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
-	if _, err := store.Set(ctx, shared, at("KEY"), "set elsewhere", nil); err != nil {
+	if _, err := setValue(ctx, store, shared, at("KEY"), "set elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, scope, at("KEY"), variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "KEY"}}); err != nil {
@@ -319,7 +327,7 @@ func TestPurgeTakesEveryRecordAProjectOwns(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.Set(ctx, scope, at("KEY"), "one", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("KEY"), "one", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", variablestore.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
@@ -359,7 +367,7 @@ func TestAKeyKeepsItsShapeThroughTheRecordTree(t *testing.T) {
 		{Cell: variablestore.Cell{Key: "KEY"}, Environment: "pr/7"},
 	}
 	for i, cell := range awkward {
-		if _, err := store.Set(ctx, scope, cell, string(rune('a'+i)), nil); err != nil {
+		if _, err := setValue(ctx, store, scope, cell, string(rune('a'+i)), nil); err != nil {
 			t.Fatalf("Set(%+v) = %v", cell, err)
 		}
 	}
@@ -471,10 +479,10 @@ func TestReferenceOwnersNamesTheProjectsAValueIsBorrowedFrom(t *testing.T) {
 	ctx := context.Background()
 	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
 
-	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
+	if _, err := setValue(ctx, store, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, scope, at("OWN"), "set here", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("OWN"), "set here", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), variablestore.Target{Project: "platform", Cell: variablestore.Cell{Key: "DATABASE_URL"}}); err != nil {
@@ -557,11 +565,11 @@ func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 	ctx := context.Background()
 	shared := variablestore.Scope{Project: "platform", Tier: environment.TierProduction}
 
-	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
+	if _, err := setValue(ctx, store, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, key := range []string{"A", "B", "C"} {
-		if _, err := store.Set(ctx, scope, at(key), "value "+key, nil); err != nil {
+		if _, err := setValue(ctx, store, scope, at(key), "value "+key, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -650,7 +658,7 @@ func TestRevealUnderACancelledContextNeverReadsAsEmptyValues(t *testing.T) {
 	store, scope := fixture()
 	var wanted []variablestore.Coordinate
 	for _, key := range []string{"A", "B", "C", "D", "E", "F", "G", "H"} {
-		if _, err := store.Set(context.Background(), scope, at(key), "value "+key, nil); err != nil {
+		if _, err := setValue(context.Background(), store, scope, at(key), "value "+key, nil); err != nil {
 			t.Fatal(err)
 		}
 		wanted = append(wanted, at(key))
@@ -743,5 +751,103 @@ func TestConcurrentWritesAtOneVersionSeenLetExactlyOneWin(t *testing.T) {
 	}
 	if won != 1 {
 		t.Errorf("%d of %d writers expecting the binding absent won, want exactly one: %v", won, writers, errs)
+	}
+}
+
+func write(key, plaintext string) variablestore.ValueWrite {
+	return variablestore.ValueWrite{At: at(key), Plaintext: plaintext}
+}
+
+func TestSetWritesEveryValueAndAnswersInTheOrderAsked(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	keys := []string{"ZULU", "ALPHA", "MIKE", "BRAVO", "YANKEE", "CHARLIE", "XRAY", "DELTA",
+		"WHISKEY", "ECHO", "VICTOR", "FOXTROT", "UNIFORM", "GOLF", "TANGO", "HOTEL", "SIERRA", "INDIA"}
+	writes := make([]variablestore.ValueWrite, 0, len(keys))
+	for _, key := range keys {
+		writes = append(writes, write(key, strings.ToLower(key)))
+	}
+	written, err := store.Set(ctx, scope, writes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, key := range keys {
+		if written[i].Coordinate.Key != key || written[i].Version != 1 {
+			t.Fatalf("Set() answered %+v at %d, want %s at version 1", written[i], i, key)
+		}
+		revealed, err := store.Get(ctx, scope, at(key), true)
+		if err != nil || revealed.Plaintext != strings.ToLower(key) {
+			t.Fatalf("Get(%s) = %q, %v, want the value it was set to", key, revealed.Plaintext, err)
+		}
+	}
+}
+
+func TestSetWritesNothingWhenOneValueIsRefused(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{write("KEPT", "before")}); err != nil {
+		t.Fatal(err)
+	}
+	moved := int64(7)
+	refusals := map[string]variablestore.ValueWrite{
+		"over the cap":           write("HUGE", strings.Repeat("x", variablestore.MaxValueBytes+1)),
+		"at a version not there": {At: at("KEPT"), Plaintext: "after", Expected: &moved},
+	}
+	for name, refused := range refusals {
+		t.Run(name, func(t *testing.T) {
+			if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{write("FRESH", "one"), refused}); err == nil {
+				t.Fatal("Set() = nil, want the refused value to refuse the whole call")
+			}
+			if _, err := store.Get(ctx, scope, at("FRESH"), false); !errors.Is(err, variablestore.ErrNotFound) {
+				t.Fatalf("Get(FRESH) after a refused Set() = %v, want nothing written", err)
+			}
+			kept, err := store.Get(ctx, scope, at("KEPT"), true)
+			if err != nil || kept.Plaintext != "before" || kept.Version != 1 {
+				t.Fatalf("Get(KEPT) after a refused Set() = %+v, %v, want it untouched", kept, err)
+			}
+		})
+	}
+}
+
+func TestSetRefusesACoordinateNamedTwice(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+
+	_, err := store.Set(ctx, scope, []variablestore.ValueWrite{write("KEY", "one"), write("KEY", "two")})
+	if err == nil || !strings.Contains(err.Error(), "KEY") {
+		t.Fatalf("Set() naming KEY twice = %v, want a refusal naming KEY", err)
+	}
+	if _, err := store.Get(ctx, scope, at("KEY"), false); !errors.Is(err, variablestore.ErrNotFound) {
+		t.Fatalf("Get(KEY) after the refusal = %v, want nothing written", err)
+	}
+}
+
+type failingCellWrite struct {
+	records.Store
+	failing records.Key
+}
+
+func (s failingCellWrite) Write(ctx context.Context, entry records.Entry) (records.Revision, error) {
+	if entry.Key.String() == s.failing.String() {
+		return "", errors.New("the table is unreachable")
+	}
+	return s.Store.Write(ctx, entry)
+}
+
+func TestSetWritesTheOtherValuesWhenOneWriteFailsAndNamesTheOneThatDidNot(t *testing.T) {
+	store, scope := fixture()
+	ctx := context.Background()
+	store.KeyValues = failingCellWrite{Store: store.KeyValues, failing: variablestore.CellKey(scope, at("BROKEN"))}
+
+	_, err := store.Set(ctx, scope, []variablestore.ValueWrite{write("FIRST", "one"), write("BROKEN", "two"), write("LAST", "three")})
+	if err == nil || !strings.Contains(err.Error(), "BROKEN was not written") || strings.Contains(err.Error(), "FIRST") {
+		t.Fatalf("Set() with BROKEN's write failing = %v, want an error naming BROKEN alone as not written", err)
+	}
+	for _, key := range []string{"FIRST", "LAST"} {
+		if _, err := store.Get(ctx, scope, at(key), false); err != nil {
+			t.Fatalf("Get(%s) = %v, want it written beside the failed one", key, err)
+		}
 	}
 }

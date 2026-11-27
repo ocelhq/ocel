@@ -48,10 +48,10 @@ func TestAnAppWhoseValueReferencesAnotherProjectMayReadAndOpenThatProjectsRecord
 	store := variablestore.Store{KeyValues: p.KeyValues(), Cipher: fake.NewCipher()}
 	tier := environment.TierProduction
 	stripe := variablestore.Cell{Key: "STRIPE_KEY"}
-	if _, err := store.Set(ctx, variablestore.Scope{Project: "billing", Tier: tier}, variablestore.Coordinate{Cell: stripe}, "sk_live", nil); err != nil {
+	if _, err := store.Set(ctx, variablestore.Scope{Project: "billing", Tier: tier}, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: stripe}, Plaintext: "sk_live"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, variablestore.Scope{Project: "blog", Tier: tier}, variablestore.Coordinate{Cell: stripe}, "sk_blog", nil); err != nil {
+	if _, err := store.Set(ctx, variablestore.Scope{Project: "blog", Tier: tier}, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: stripe}, Plaintext: "sk_blog"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, variablestore.Scope{Project: "shop", Tier: tier}, variablestore.Coordinate{Cell: stripe},

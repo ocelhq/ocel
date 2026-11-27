@@ -31,7 +31,7 @@ func TestAHandWriteOverAPublishedValueIsRefusedNamingItsPublisher(t *testing.T) 
 	store, scope := fixture()
 	ctx := context.Background()
 	shared := variablestore.Scope{Project: "platform", Tier: scope.Tier}
-	if _, err := store.Set(ctx, shared, at("API_KEY"), "elsewhere", nil); err != nil {
+	if _, err := setValue(ctx, store, shared, at("API_KEY"), "elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetPublished(ctx, scope, at("API_KEY"), "k3y", variablestore.Provenance{Publisher: infra}, 0); err != nil {
@@ -40,7 +40,7 @@ func TestAHandWriteOverAPublishedValueIsRefusedNamingItsPublisher(t *testing.T) 
 
 	for name, write := range map[string]func() error{
 		"Set": func() error {
-			_, err := store.Set(ctx, scope, at("API_KEY"), "by hand", nil)
+			_, err := setValue(ctx, store, scope, at("API_KEY"), "by hand", nil)
 			return err
 		},
 		"Delete": func() error {
@@ -72,7 +72,7 @@ func TestAPublisherTakesOverAHandSetValueAndRemovesWhatItPublished(t *testing.T)
 	store, scope := fixture()
 	ctx := context.Background()
 	from := variablestore.Provenance{Publisher: infra}
-	if _, err := store.Set(ctx, scope, at("DATABASE_URL"), "by hand", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("DATABASE_URL"), "by hand", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -82,7 +82,7 @@ func TestAPublisherTakesOverAHandSetValueAndRemovesWhatItPublished(t *testing.T)
 	if removed, err := store.DeletePublished(ctx, scope, at("DATABASE_URL"), from, 2); err != nil || !removed {
 		t.Fatalf("DeletePublished() = %v, %v, want it removed", removed, err)
 	}
-	if _, err := store.Set(ctx, scope, at("DATABASE_URL"), "by hand again", nil); err != nil {
+	if _, err := setValue(ctx, store, scope, at("DATABASE_URL"), "by hand again", nil); err != nil {
 		t.Fatalf("Set() after the publisher removed it = %v, want it written", err)
 	}
 }

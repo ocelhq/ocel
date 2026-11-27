@@ -32,24 +32,24 @@ func TestPurgingAProjectsValuesLeavesNothingOfItOnTheBox(t *testing.T) {
 		return variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/", Key: key}}
 	}
 	for _, key := range []string{"DATABASE_URL", "STRIPE_KEY"} {
-		if _, err := store.Set(ctx, purged, at(key), "v1", nil); err != nil {
+		if _, err := store.Set(ctx, purged, []variablestore.ValueWrite{{At: at(key), Plaintext: "v1"}}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := store.Set(ctx, purged, at("STRIPE_KEY"), "v2", nil); err != nil {
+	if _, err := store.Set(ctx, purged, []variablestore.ValueWrite{{At: at("STRIPE_KEY"), Plaintext: "v2"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Delete(ctx, purged, at("DATABASE_URL"), nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, shared, tierWide("SENTRY_DSN"), "dsn", nil); err != nil {
+	if _, err := store.Set(ctx, shared, []variablestore.ValueWrite{{At: tierWide("SENTRY_DSN"), Plaintext: "dsn"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, purged, tierWide("SENTRY_DSN"),
 		variablestore.Target{Project: shared.Project, Cell: variablestore.Cell{Folder: "/", Key: "SENTRY_DSN"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, purged, tierWide("REGION"), "eu", nil); err != nil {
+	if _, err := store.Set(ctx, purged, []variablestore.ValueWrite{{At: tierWide("REGION"), Plaintext: "eu"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, consumer, tierWide("REGION"),

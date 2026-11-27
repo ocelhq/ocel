@@ -152,7 +152,7 @@ func ClearProvenance(ctx context.Context, store variablestore.Store, scope varia
 			return err
 		}
 		expected := copied.Version
-		if _, err := store.Set(ctx, scope, metadata.Coordinate, copied.Plaintext, &expected); err != nil && !errors.Is(err, variablestore.ErrStaleVersion) {
+		if _, err := store.Set(ctx, scope, []variablestore.ValueWrite{{At: metadata.Coordinate, Plaintext: copied.Plaintext, Expected: &expected}}); err != nil && !errors.Is(err, variablestore.ErrStaleVersion) {
 			return err
 		}
 	}

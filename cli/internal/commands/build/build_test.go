@@ -542,7 +542,7 @@ func TestBuildWithAnEnvHandsEachAppTheValuesOfThatTierAsADeployDoes(t *testing.T
 	store := variablestore.Store{KeyValues: fixture.Provider.KeyValues(), Cipher: fixture.Provider.Cipher()}
 	production := variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
 	for key, value := range map[string]string{"PAGE_ID": "page-123", "STRIPE_API_KEY": "sk_live_123"} {
-		if _, err := store.Set(context.Background(), production, variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}, value, nil); err != nil {
+		if _, err := store.Set(context.Background(), production, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}, Plaintext: value}}); err != nil {
 			t.Fatalf("set %s: %v", key, err)
 		}
 	}

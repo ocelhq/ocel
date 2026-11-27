@@ -49,7 +49,7 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 	t.Helper()
 	ctx := context.Background()
 	store := liveStore(p)
-	if _, err := store.Set(ctx, liveScope(), variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, liveSecretValue, nil); err != nil {
+	if _, err := store.Set(ctx, liveScope(), []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, Plaintext: liveSecretValue}}); err != nil {
 		t.Fatalf("sealing a secret through the box's own helper = %v", err)
 	}
 	pair, err := variablestoreserver.BindingPair("terraform", &variablestorev1.PublishedBinding{Binding: &bindingsv1.Binding{
@@ -174,7 +174,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	}
 
 	rotated := liveSecretValue + "-rotated"
-	if _, err := liveStore(p).Set(context.Background(), liveScope(), variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, rotated, nil); err != nil {
+	if _, err := liveStore(p).Set(context.Background(), liveScope(), []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: variablestore.Cell{Key: "DATABASE_URL"}}, Plaintext: rotated}}); err != nil {
 		t.Fatalf("rotating the secret after the deploy = %v", err)
 	}
 	deadline := time.Now().Add(3 * live.StalenessBound)

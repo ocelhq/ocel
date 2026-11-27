@@ -20,6 +20,13 @@ func TestAWriteThatLostAVersionRaceIsAStaleValue(t *testing.T) {
 		}
 	})
 
+	t.Run("a version conflict keeps which value moved", func(t *testing.T) {
+		conflict := connect.NewError(connect.CodeAborted, errors.New("1 of 2 values were written:\nREGION was not written: variablestore: stale version"))
+		if err := staleValueError(conflict); !errors.Is(err, ErrStaleValue) || !strings.Contains(err.Error(), "REGION was not written") {
+			t.Errorf("staleValueError = %v, want ErrStaleValue saying REGION was not written", err)
+		}
+	})
+
 	t.Run("a refusal keeps what it says", func(t *testing.T) {
 		refused := provider.RefusalError(refusal.Refuse(refusal.CodeBusy,
 			"the production bootstrap has no key to seal a value under"))

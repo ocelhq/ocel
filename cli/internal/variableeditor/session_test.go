@@ -96,18 +96,26 @@ func (s *fakeStore) stale(at variables.Coordinate, expected *int64) bool {
 	return expected != nil && *expected != s.version(at)
 }
 
-func (s *fakeStore) Set(_ context.Context, at variables.Coordinate, value string, expected *int64) (int64, error) {
-	s.expected = append(s.expected, expected)
-	if s.stale(at, expected) {
-		return 0, variables.ErrStaleValue
+func (s *fakeStore) Set(_ context.Context, writes []variables.ValueWrite) ([]int64, error) {
+	for _, write := range writes {
+		s.expected = append(s.expected, write.Expected)
+		if s.stale(write.At, write.Expected) {
+			return nil, variables.ErrStaleValue
+		}
 	}
-	s.values[at] = value
-	if at.Environment != "" {
-		s.overrides = append(s.overrides, variables.ValueMetadata{Coordinate: at, Version: 1})
-		return 1, nil
+	versions := make([]int64, 0, len(writes))
+	for _, write := range writes {
+		at := write.At
+		s.values[at] = write.Value
+		if at.Environment != "" {
+			s.overrides = append(s.overrides, variables.ValueMetadata{Coordinate: at, Version: 1})
+			versions = append(versions, 1)
+			continue
+		}
+		s.cells[at.Cell] = write.Value
+		versions = append(versions, s.versions[at.Cell])
 	}
-	s.cells[at.Cell] = value
-	return s.versions[at.Cell], nil
+	return versions, nil
 }
 
 func (s *fakeStore) Delete(_ context.Context, at variables.Coordinate, expected *int64) (bool, error) {
