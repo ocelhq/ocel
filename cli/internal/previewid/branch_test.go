@@ -67,3 +67,33 @@ func TestADetachedCheckoutWithoutGitHubHeadRefIsRefusedAndAsksForAName(t *testin
 		t.Errorf("error %q does not ask for a name as `ocel preview up <name>`", err)
 	}
 }
+
+func TestACheckoutWithNoCommitYetReadsTheBranchItWasInitializedOn(t *testing.T) {
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "--quiet", "--initial-branch", "feature/first").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+
+	branch, err := ReadGitBranch(t.Context(), dir)
+	if err != nil {
+		t.Fatalf("ReadGitBranch: %v", err)
+	}
+	if branch != "feature/first" {
+		t.Errorf("ReadGitBranch() = %q, want %q", branch, "feature/first")
+	}
+}
+
+func TestADirectoryOutsideGitIsRefusedAndAsksForAName(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("GIT_CEILING_DIRECTORIES", dir)
+
+	branch, err := ReadGitBranch(t.Context(), dir)
+	if err == nil {
+		t.Fatalf("ReadGitBranch() = %q, want an error", branch)
+	}
+	for _, want := range []string{"not in a git checkout", "ocel preview up <name>"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+}
