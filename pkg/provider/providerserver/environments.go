@@ -198,7 +198,7 @@ func (h *handlers) removePreview(ctx context.Context, lease provider.Lease, req 
 	if err := removeOcelOwnedBindings(ctx, session.provider, req.GetSlug(), pointer); err != nil {
 		return err
 	}
-	if err := forgetEnvSourceCopies(ctx, session.provider, req.GetSlug(), pointer); err != nil {
+	if err := purgePreviewValues(ctx, session.provider, req.GetSlug(), pointer); err != nil {
 		return err
 	}
 	if err := records.Forget(ctx, session.provider.KeyValues(), stackrecords.EnvironmentKey(environment.TierPreview, req.GetSlug(), pointer)); err != nil {
@@ -306,11 +306,11 @@ func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, pre
 	return nil
 }
 
-func forgetEnvSourceCopies(ctx context.Context, p provider.Provider, slug, preview string) error {
+func purgePreviewValues(ctx context.Context, p provider.Provider, slug, preview string) error {
 	store := variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
 	scope := variablestore.Scope{Project: slug, Tier: environment.TierPreview}
-	if err := store.ForgetEnvSourceCopies(ctx, scope, preview); err != nil {
-		return fmt.Errorf("forget the values preview %s's env source sync copied there: %w", preview, err)
+	if err := store.PurgeEnvironment(ctx, scope, preview); err != nil {
+		return fmt.Errorf("purge preview %s's values: %w", preview, err)
 	}
 	return nil
 }
