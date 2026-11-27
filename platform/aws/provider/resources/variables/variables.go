@@ -52,23 +52,17 @@ func ReadPolicy(r Reader) (string, error) {
 		})
 	}
 	if r.TableARN != "" {
-		partitions := []string{ValuePartition(r.Slug, r.Tier)}
+		statements = append(statements, tableRead(r.TableARN, "dynamodb:Query", []string{ValuePartition(r.Slug, r.Tier)}))
+		var referenced []string
 		for _, owner := range r.Referenced {
 			if owner == r.Slug {
 				continue
 			}
-			partitions = append(partitions, ValuePartition(owner, r.Tier))
+			referenced = append(referenced, ValuePartition(owner, r.Tier))
 		}
-		statements = append(statements, map[string]any{
-			"Effect":   "Allow",
-			"Action":   []string{"dynamodb:Query"},
-			"Resource": r.TableARN,
-			"Condition": map[string]any{
-				"ForAllValues:StringEquals": map[string]any{
-					"dynamodb:LeadingKeys": partitions,
-				},
-			},
-		})
+		if len(referenced) > 0 {
+			statements = append(statements, tableRead(r.TableARN, "dynamodb:GetItem", referenced))
+		}
 	}
 	if len(statements) == 0 {
 		return "", nil
@@ -78,6 +72,19 @@ func ReadPolicy(r Reader) (string, error) {
 		return "", fmt.Errorf("render variables read policy: %w", err)
 	}
 	return string(out), nil
+}
+
+func tableRead(tableARN, action string, partitions []string) map[string]any {
+	return map[string]any{
+		"Effect":   "Allow",
+		"Action":   []string{action},
+		"Resource": tableARN,
+		"Condition": map[string]any{
+			"ForAllValues:StringEquals": map[string]any{
+				"dynamodb:LeadingKeys": partitions,
+			},
+		},
+	}
 }
 
 func ValuePartition(slug, tier string) string {

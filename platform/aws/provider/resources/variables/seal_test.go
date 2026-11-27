@@ -279,21 +279,29 @@ func TestTheVariablesReadPolicyScopesTheTableToTheProjectsPartition(t *testing.T
 
 		var doc struct {
 			Statement []struct {
+				Action    []string
 				Condition map[string]map[string][]string
 			}
 		}
 		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
 			t.Fatalf("policy is not valid JSON: %v", err)
 		}
-
-		leading := doc.Statement[1].Condition["ForAllValues:StringEquals"]["dynamodb:LeadingKeys"]
-		want := []string{
-			partitionOf(t, "shop"),
-			partitionOf(t, "platform"),
-			partitionOf(t, "billing"),
+		if len(doc.Statement) != 3 {
+			t.Fatalf("got %d statements, want the decrypt grant, the own-partition query and the referenced-partition read", len(doc.Statement))
 		}
-		if !slices.Equal(leading, want) {
-			t.Errorf("LeadingKeys = %v, want %v (its own partition once, plus each project it references)", leading, want)
+
+		own, referenced := doc.Statement[1], doc.Statement[2]
+		if want := []string{"dynamodb:Query"}; !slices.Equal(own.Action, want) {
+			t.Errorf("own partition Action = %v, want %v", own.Action, want)
+		}
+		if leading, want := own.Condition["ForAllValues:StringEquals"]["dynamodb:LeadingKeys"], []string{partitionOf(t, "shop")}; !slices.Equal(leading, want) {
+			t.Errorf("queried LeadingKeys = %v, want %v (its own partition alone)", leading, want)
+		}
+		if want := []string{"dynamodb:GetItem"}; !slices.Equal(referenced.Action, want) {
+			t.Errorf("referenced partitions Action = %v, want %v: the runtime reads a referenced cell by its key", referenced.Action, want)
+		}
+		if leading, want := referenced.Condition["ForAllValues:StringEquals"]["dynamodb:LeadingKeys"], []string{partitionOf(t, "platform"), partitionOf(t, "billing")}; !slices.Equal(leading, want) {
+			t.Errorf("read LeadingKeys = %v, want %v (each project it references, never its own twice)", leading, want)
 		}
 	})
 }
