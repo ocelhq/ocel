@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"os"
@@ -195,6 +196,29 @@ func TestVendoringAsksPipOnlyForWheelsTheDeclaredArchitectureCanImport(t *testin
 	}
 }
 
+func TestVendoringAsksUvOnlyForWheelsTheDeclaredArchitectureCanImport(t *testing.T) {
+	t.Parallel()
+
+	for platform, target := range map[string]string{
+		"manylinux2014_x86_64":  "x86_64-manylinux2014",
+		"manylinux2014_aarch64": "aarch64-manylinux2014",
+	} {
+		args := strings.Join(uvPipArgs("/out", "/app/requirements.txt", platform), " ")
+		for _, want := range []string{
+			"pip install",
+			"--target /out",
+			"-r /app/requirements.txt",
+			"--only-binary=:all:",
+			"--python-platform " + target,
+			"--python-version " + arch.PythonVersion,
+		} {
+			if !strings.Contains(args, want) {
+				t.Errorf("uv is run as %q for %s, want %q", args, platform, want)
+			}
+		}
+	}
+}
+
 func TestCompileRefusesAPythonAppWithDependenciesAndNoInterpreterToVendorThemWith(t *testing.T) {
 	source := pythonApp(t, map[string]string{
 		"main.py":          "print('hi')\n",
@@ -260,28 +284,72 @@ func TestVendoringRunsTheInterpretersPipAndNeverAModuleOfTheApps(t *testing.T) {
 }
 
 func TestCompileVendorsWhatAUvLockPinsIntoTheArtifact(t *testing.T) {
-	t.Parallel()
-
-	if !pipAvailable() {
-		t.Skip("no python interpreter with pip on PATH to vendor with")
-	}
 	if _, err := exec.LookPath("uv"); err != nil {
-		t.Skip("no uv on PATH to export the lock with")
+		t.Skip("no uv on PATH to sync and vendor the app with")
+	}
+	python, err := exec.LookPath(containerimage.PythonWorkerEntry.Interpreter)
+	if err != nil {
+		t.Skip("no python interpreter on PATH to create a virtual environment with")
+	}
+	t.Setenv("UV_CACHE_DIR", t.TempDir())
+	t.Setenv("UV_OFFLINE", "1")
+	t.Setenv("UV_PYTHON_DOWNLOADS", "never")
+	wheel := filepath.Join(t.TempDir(), "build_probe-1.0-py3-none-any.whl")
+	file, err := os.Create(wheel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := zip.NewWriter(file)
+	for name, body := range map[string]string{
+		"build_probe.py":                     "answer = 42\n",
+		"build_probe-1.0.dist-info/METADATA": "Metadata-Version: 2.1\nName: build-probe\nVersion: 1.0\n",
+		"build_probe-1.0.dist-info/WHEEL":    "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+		"build_probe-1.0.dist-info/RECORD":   "",
+	} {
+		entry, err := archive.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := entry.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
 	}
 	source := pythonApp(t, map[string]string{
-		"main.py":        "import six\n",
-		"pyproject.toml": "[project]\nname = \"web\"\nversion = \"0\"\nrequires-python = \">=3.12\"\ndependencies = [\"six==1.17.0\"]\n\n[tool.uv]\npackage = false\n",
+		"main.py":        "import build_probe\n",
+		"pyproject.toml": "[project]\nname = \"web\"\nversion = \"0\"\nrequires-python = \">=3.12\"\ndependencies = [\"build-probe==1.0\"]\n\n[tool.uv]\npackage = false\n\n[tool.uv.sources]\nbuild-probe = { path = " + strconv.Quote(filepath.ToSlash(wheel)) + " }\n",
 	})
-	lock := exec.Command("uv", "lock")
-	lock.Dir = source
-	if said, err := lock.CombinedOutput(); err != nil {
-		t.Skipf("uv could not lock the fixture, so the index is out of reach: %v\n%s", err, said)
+	sync := exec.Command("uv", "sync", "--python", python)
+	sync.Dir = source
+	if said, err := sync.CombinedOutput(); err != nil {
+		t.Fatalf("sync the local wheel into a pip-free virtual environment: %v\n%s", err, said)
 	}
-	_, functionDir := vendored(t, source, "x86_64")
+	if said, err := exec.Command(discovery.PythonInterpreter(source), "-I", "-m", "pip", "--version").CombinedOutput(); err == nil || !strings.Contains(string(said), "No module named pip") {
+		t.Fatalf("the virtual environment must have no pip: %v\n%s", err, said)
+	}
 
-	if _, err := os.Stat(filepath.Join(functionDir, "six.py")); err != nil {
-		t.Errorf("the artifact contains no six.py, which uv.lock pins: %v", err)
+	for _, architecture := range []string{"x86_64", "arm64"} {
+		t.Run(architecture, func(t *testing.T) {
+			_, functionDir := vendored(t, source, architecture)
+			if got := readFile(t, filepath.Join(functionDir, "build_probe.py")); got != "answer = 42\n" {
+				t.Errorf("vendored build_probe.py = %q, want the module uv.lock pins", got)
+			}
+		})
 	}
+	t.Run("requirements.txt", func(t *testing.T) {
+		if err := os.WriteFile(filepath.Join(source, pythonRequirementsFile), []byte(wheel+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, functionDir := vendored(t, source, "x86_64")
+		if got := readFile(t, filepath.Join(functionDir, "build_probe.py")); got != "answer = 42\n" {
+			t.Errorf("vendored build_probe.py = %q, want the module requirements.txt declares", got)
+		}
+	})
 }
 
 func pipAvailable() bool {
