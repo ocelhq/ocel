@@ -1334,13 +1334,13 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 		}
 	})
 
-	t.Run("a redeployed branch finds the override it already had", func(t *testing.T) {
+	t.Run("a branch rebuilt after its preview was removed reads the tier-wide value, not the override the removal purged", func(t *testing.T) {
 		fixture, dependencies := setUpPreviewVariablesProject(t, `[{"key":"PAGE_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 		envSet(t, fixture, "PAGE_ID", "page_shared", envOptions{preview: true})
 		envSet(t, fixture, "PAGE_ID", "page_staging", envOptions{preview: true, environment: "staging"})
 		got := captureBuildVariables(&dependencies)
 
-		up := func(when string) {
+		up := func(when, want string) {
 			t.Helper()
 			*got = nil
 			if out, err := previewUpWith(t, fixture, dependencies, previewUpOptions{name: "staging", persistent: true}); err != nil {
@@ -1350,13 +1350,13 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 				t.Fatalf("no app was built %s, so nothing resolved a value", when)
 			}
 			for app, built := range *got {
-				if built.Env["PAGE_ID"] != "page_staging" {
-					t.Errorf("%s built %s with PAGE_ID=%q, want %q", when, app, built.Env["PAGE_ID"], "page_staging")
+				if built.Env["PAGE_ID"] != want {
+					t.Errorf("%s built %s with PAGE_ID=%q, want %q", when, app, built.Env["PAGE_ID"], want)
 				}
 			}
 		}
 
-		up("before the teardown")
+		up("before the teardown", "page_staging")
 
 		var rm bytes.Buffer
 		clitest.AttachTerminalSink(dependencies.Invocation, &rm)
@@ -1364,7 +1364,7 @@ func TestAPreviewIsRefusedUntilItsVariablesAreReady(t *testing.T) {
 			t.Fatalf("runPreviewRemove err = %v; out=%s", err, rm.String())
 		}
 
-		up("after the branch was rebuilt")
+		up("after the branch was rebuilt", "page_shared")
 	})
 }
 
