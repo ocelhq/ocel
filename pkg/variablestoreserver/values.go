@@ -9,22 +9,37 @@ import (
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
-func (h *Service) SetValue(ctx context.Context, req *variablestorev1.SetValueRequest) (*variablestorev1.SetValueResponse, error) {
-	if err := h.addressable(ctx, req.GetTier(), req.GetCoordinate()); err != nil {
+func (h *Service) SetValues(ctx context.Context, req *variablestorev1.SetValuesRequest) (*variablestorev1.SetValuesResponse, error) {
+	writes := make([]variablestore.ValueWrite, 0, len(req.GetValues()))
+	environments := make([]string, 0, len(req.GetValues()))
+	for _, value := range req.GetValues() {
+		at := coordinateOf(value.GetCoordinate())
+		writes = append(writes, variablestore.ValueWrite{At: at, Plaintext: value.GetValue(), Expected: value.ExpectedVersion})
+		environments = append(environments, at.Environment)
+	}
+	if err := h.addressable(ctx, req.GetTier(), req.GetSlug(), environments...); err != nil {
 		return nil, err
 	}
-	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetCoordinate().GetSlug())
+	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	if err := refuseEnvSourceOwned(ctx, store, scope, coordinateOf(req.GetCoordinate()), false); err != nil {
+	coordinates := make([]variablestore.Coordinate, 0, len(writes))
+	for _, write := range writes {
+		coordinates = append(coordinates, write.At)
+	}
+	if err := refuseEnvSourceOwned(ctx, store, scope, false, coordinates...); err != nil {
 		return nil, err
 	}
-	metadata, err := store.Set(ctx, scope, coordinateOf(req.GetCoordinate()), req.GetValue(), req.ExpectedVersion)
+	written, err := store.Set(ctx, scope, writes)
 	if err != nil {
 		return nil, valuesError(err)
 	}
-	return &variablestorev1.SetValueResponse{Metadata: metadataProto(scope, metadata)}, nil
+	resp := &variablestorev1.SetValuesResponse{Written: make([]*variablestorev1.ValueMetadata, 0, len(written))}
+	for _, metadata := range written {
+		resp.Written = append(resp.Written, metadataProto(scope, metadata))
+	}
+	return resp, nil
 }
 
 func (h *Service) ListValues(ctx context.Context, req *variablestorev1.ListValuesRequest) (*variablestorev1.ListValuesResponse, error) {
@@ -89,7 +104,7 @@ func (h *Service) DeleteValue(ctx context.Context, req *variablestorev1.DeleteVa
 	if err != nil {
 		return nil, err
 	}
-	if err := refuseEnvSourceOwned(ctx, store, scope, coordinateOf(req.GetCoordinate()), true); err != nil {
+	if err := refuseEnvSourceOwned(ctx, store, scope, true, coordinateOf(req.GetCoordinate())); err != nil {
 		return nil, err
 	}
 	deleted, err := store.Delete(ctx, scope, coordinateOf(req.GetCoordinate()), req.ExpectedVersion)

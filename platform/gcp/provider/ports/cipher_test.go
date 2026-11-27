@@ -194,7 +194,7 @@ func TestACellAndABindingAreSealedUnderTheAssociatedDataBytesEveryStoredValueIsB
 	store := variablestore.Store{KeyValues: fake.NewKeyValues(), Cipher: Cipher{Clients: clients}}
 	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 
-	if _, err := store.Set(context.Background(), scope, variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}, "sk_live_secret", nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}, Plaintext: "sk_live_secret"}}); err != nil {
 		t.Fatalf("Set() = %v", err)
 	}
 	if _, err := store.SetBinding(context.Background(), scope, "", variablestore.OwnerOcel, "orders", variablestore.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {

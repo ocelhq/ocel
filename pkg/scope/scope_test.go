@@ -51,7 +51,7 @@ func TestTheScopeOfAProcedureIsTheOneItsMethodOptionDeclares(t *testing.T) {
 
 	for procedure, want := range map[string]scopev1.Scope{
 		variablestorev1connect.VariableStoreServiceRevealValuesProcedure: scopev1.Scope_SCOPE_VARIABLES_REVEAL,
-		variablestorev1connect.VariableStoreServiceSetValueProcedure:     scopev1.Scope_SCOPE_VARIABLES_WRITE,
+		variablestorev1connect.VariableStoreServiceSetValuesProcedure:    scopev1.Scope_SCOPE_VARIABLES_WRITE,
 		variablestorev1connect.VariableStoreServiceGetValueProcedure:     scopev1.Scope_SCOPE_VARIABLES_READ,
 		"/runner.v1.RunnerService/StartJob":                              scopev1.Scope_SCOPE_JOB,
 		"/endpoint.v1.SshCertificateService/IssueUserCertificate":        scopev1.Scope_SCOPE_TARGET_CREDENTIAL,

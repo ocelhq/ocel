@@ -29,7 +29,7 @@ func sealValue(t *testing.T, p *fake.Provider, key, plaintext string) {
 	t.Helper()
 	store := variablestore.Store{KeyValues: p.KeyValues(), Cipher: p.Cipher()}
 	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
-	if _, err := store.Set(context.Background(), scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}, plaintext, nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}, Plaintext: plaintext}}); err != nil {
 		t.Fatalf("Set(%s): %v", key, err)
 	}
 }

@@ -124,7 +124,7 @@ func TestAHandWriteOverAPublishedValueIsRefusedNamingWhereToChangeIt(t *testing.
 	}
 
 	for name, write := range map[string]func() error{
-		"SetValue": func() error {
+		"SetValues": func() error {
 			return setValue(t, variables, environmentv1.Tier_TIER_PRODUCTION, cell("API_KEY"), "by hand")
 		},
 		"DeleteValue": func() error {

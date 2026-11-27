@@ -77,8 +77,8 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 
 	ctx := context.Background()
 	calls := map[string]func() error{
-		"SetValue": func() error {
-			_, err := variables.SetValue(ctx, &variablestorev1.SetValueRequest{Coordinate: cell("KEY")})
+		"SetValues": func() error {
+			_, err := variables.SetValues(ctx, &variablestorev1.SetValuesRequest{Slug: slug, Values: []*variablestorev1.ValueWrite{{Coordinate: cell("KEY")}}})
 			return err
 		},
 		"ListValues": func() error {

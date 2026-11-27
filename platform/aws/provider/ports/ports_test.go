@@ -72,7 +72,7 @@ func TestValueEntriesPartitionOnTheProjectAndTier(t *testing.T) {
 	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 	store := variablestore.Store{KeyValues: table, Cipher: newCipherIgnoringKMSCalls()}
 
-	if _, err := store.Set(context.Background(), scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}}, Plaintext: "sk_live_secret"}}); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 
@@ -125,7 +125,7 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 	store := variablestore.Store{KeyValues: table, Cipher: cipher}
 
-	if _, err := store.Set(context.Background(), scope, variablestore.Coordinate{Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, []variablestore.ValueWrite{{At: variablestore.Coordinate{Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}}, Plaintext: "sk_live_secret"}}); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 
@@ -147,7 +147,7 @@ func TestACellIsSealedUnderAnEncryptionContextBindingItAsAVariableOfItsProjectTi
 	scope := variablestore.Scope{Project: "shop", Tier: environment.TierProduction}
 	at := variablestore.Coordinate{Cell: variablestore.Cell{Folder: "/web", Key: "STRIPE_API_KEY"}, Environment: "staging"}
 
-	if _, err := store.Set(context.Background(), scope, at, "sk_live_secret", nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, []variablestore.ValueWrite{{At: at, Plaintext: "sk_live_secret"}}); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 

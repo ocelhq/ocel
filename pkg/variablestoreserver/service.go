@@ -76,29 +76,36 @@ func (h *Service) scoped(ctx context.Context, requested environmentv1.Tier, slug
 	return store, variablestore.Scope{Project: slug, Tier: tier}, nil
 }
 
-func (h *Service) addressable(ctx context.Context, tier environmentv1.Tier, at *variablestorev1.Coordinate) error {
-	env := at.GetEnvironment()
-	if env == "" {
-		return nil
-	}
-	if tier != environmentv1.Tier_TIER_PREVIEW {
-		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"production has a single environment, so %q addresses no value a production function could read", env))
-	}
-	named, err := h.namedEnvironments(ctx, at.GetSlug())
-	if err != nil {
-		return err
-	}
-	if slices.Contains(named, env) {
-		return nil
-	}
-	if len(named) == 0 {
+func (h *Service) addressable(ctx context.Context, tier environmentv1.Tier, slug string, environments ...string) error {
+	var named []string
+	read := false
+	for _, env := range environments {
+		if env == "" {
+			continue
+		}
+		if tier != environmentv1.Tier_TIER_PREVIEW {
+			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+				"production has a single environment, so %q addresses no value a production function could read", env))
+		}
+		if !read {
+			var err error
+			if named, err = h.namedEnvironments(ctx, slug); err != nil {
+				return err
+			}
+			read = true
+		}
+		if slices.Contains(named, env) {
+			continue
+		}
+		if len(named) == 0 {
+			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+				"no preview environment named %q exists, and this project has none at all; deploy one with `ocel preview` before setting a value only it would read", env))
+		}
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"no preview environment named %q exists, and this project has none at all; deploy one with `ocel preview` before setting a value only it would read", env))
+			"no preview environment named %q exists, so nothing would ever read that value. This project's environments are: %s",
+			env, strings.Join(named, ", ")))
 	}
-	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-		"no preview environment named %q exists, so nothing would ever read that value. This project's environments are: %s",
-		env, strings.Join(named, ", ")))
+	return nil
 }
 
 func (h *Service) namedEnvironments(ctx context.Context, slug string) ([]string, error) {

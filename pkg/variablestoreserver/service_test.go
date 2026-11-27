@@ -51,20 +51,87 @@ func cell(key string) *variablestorev1.Coordinate {
 	return &variablestorev1.Coordinate{Slug: slug, Key: key}
 }
 
+func setOne(ctx context.Context, variables variablestorev1connect.VariableStoreServiceClient, tier environmentv1.Tier, at *variablestorev1.Coordinate, value string) (*variablestorev1.ValueMetadata, error) {
+	resp, err := variables.SetValues(ctx, &variablestorev1.SetValuesRequest{
+		Tier:   tier,
+		Slug:   at.GetSlug(),
+		Values: []*variablestorev1.ValueWrite{{Coordinate: at, Value: value}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetWritten()[0], nil
+}
+
+func TestSetValuesRefusesAValueForAProjectTheRequestDoesNotName(t *testing.T) {
+	variables, _ := served(t)
+	ctx := context.Background()
+
+	_, err := variables.SetValues(ctx, &variablestorev1.SetValuesRequest{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug: slug,
+		Values: []*variablestorev1.ValueWrite{
+			{Coordinate: cell("KEY"), Value: "mine"},
+			{Coordinate: &variablestorev1.Coordinate{Slug: "billing", Key: "KEY"}, Value: "theirs"},
+		},
+	})
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Fatalf("SetValues() reaching into another project: code = %v, want %v", got, connect.CodeInvalidArgument)
+	}
+	for _, at := range []*variablestorev1.Coordinate{cell("KEY"), {Slug: "billing", Key: "KEY"}} {
+		got, err := variables.GetValue(ctx, &variablestorev1.GetValueRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Coordinate: at})
+		if err != nil || got.GetFound() {
+			t.Fatalf("GetValue(%s/%s) found=%t, %v, want nothing written", at.GetSlug(), at.GetKey(), got.GetFound(), err)
+		}
+	}
+}
+
+func TestSetValuesWritesNothingWhenOneValueIsForAnEnvironmentNobodyDeployed(t *testing.T) {
+	variables, provider := served(t)
+	ctx := context.Background()
+	deployPreview(t, provider, "pr-7")
+
+	_, err := variables.SetValues(ctx, &variablestorev1.SetValuesRequest{
+		Tier: environmentv1.Tier_TIER_PREVIEW,
+		Slug: slug,
+		Values: []*variablestorev1.ValueWrite{
+			{Coordinate: &variablestorev1.Coordinate{Slug: slug, Key: "KEY", Environment: "pr-7"}, Value: "seven"},
+			{Coordinate: &variablestorev1.Coordinate{Slug: slug, Key: "KEY", Environment: "pr-9"}, Value: "nine"},
+		},
+	})
+	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "pr-9") {
+		t.Fatalf("SetValues() naming pr-9 beside pr-7 = %v, want a refusal naming pr-9", err)
+	}
+	got, err := variables.GetValue(ctx, &variablestorev1.GetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PREVIEW,
+		Coordinate: &variablestorev1.Coordinate{Slug: slug, Key: "KEY", Environment: "pr-7"},
+	})
+	if err != nil || got.GetFound() {
+		t.Fatalf("GetValue() for pr-7 found=%t, %v, want nothing written beside the refused value", got.GetFound(), err)
+	}
+}
+
 func TestSetGetAndRevealAnswerAcrossTheWire(t *testing.T) {
 	variables, _ := served(t)
 	ctx := context.Background()
 
-	set, err := variables.SetValue(ctx, &variablestorev1.SetValueRequest{
-		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: cell("DATABASE_URL"),
-		Value:      "postgres://one",
+	set, err := variables.SetValues(ctx, &variablestorev1.SetValuesRequest{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug: slug,
+		Values: []*variablestorev1.ValueWrite{
+			{Coordinate: cell("DATABASE_URL"), Value: "postgres://one"},
+			{Coordinate: cell("REGION"), Value: "eu"},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if set.GetMetadata().GetVersion() != 1 || set.GetMetadata().GetCoordinate().GetSlug() != slug {
-		t.Fatalf("SetValue() = %+v, want version 1 at the coordinate asked for", set.GetMetadata())
+	written := set.GetWritten()
+	if len(written) != 2 || written[0].GetCoordinate().GetKey() != "DATABASE_URL" || written[1].GetCoordinate().GetKey() != "REGION" {
+		t.Fatalf("SetValues() = %+v, want both values answered in the order asked", written)
+	}
+	if written[0].GetVersion() != 1 || written[0].GetCoordinate().GetSlug() != slug {
+		t.Fatalf("SetValues() = %+v, want version 1 at the coordinate asked for", written[0])
 	}
 
 	got, err := variables.GetValue(ctx, &variablestorev1.GetValueRequest{
@@ -87,8 +154,8 @@ func TestSetGetAndRevealAnswerAcrossTheWire(t *testing.T) {
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug: slug,
 	})
-	if err != nil || len(listed.GetValues()) != 1 {
-		t.Fatalf("ListValues() = %+v, %v, want the one value set", listed.GetValues(), err)
+	if err != nil || len(listed.GetValues()) != 2 {
+		t.Fatalf("ListValues() = %+v, %v, want the two values set", listed.GetValues(), err)
 	}
 
 	revealed, err := variables.RevealValues(ctx, &variablestorev1.RevealValuesRequest{
@@ -110,11 +177,7 @@ func TestVersionsAndDeleteAnswerAcrossTheWire(t *testing.T) {
 	ctx := context.Background()
 
 	for _, value := range []string{"one", "two"} {
-		if _, err := variables.SetValue(ctx, &variablestorev1.SetValueRequest{
-			Tier:       environmentv1.Tier_TIER_PRODUCTION,
-			Coordinate: cell("KEY"),
-			Value:      value,
-		}); err != nil {
+		if _, err := setOne(ctx, variables, environmentv1.Tier_TIER_PRODUCTION, cell("KEY"), value); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -152,13 +215,9 @@ func TestVersionsAndDeleteAnswerAcrossTheWire(t *testing.T) {
 func TestAValueOverTheCapIsAnInvalidArgument(t *testing.T) {
 	variables, _ := served(t)
 
-	_, err := variables.SetValue(context.Background(), &variablestorev1.SetValueRequest{
-		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: cell("KEY"),
-		Value:      strings.Repeat("x", 4097),
-	})
+	_, err := setOne(context.Background(), variables, environmentv1.Tier_TIER_PRODUCTION, cell("KEY"), strings.Repeat("x", 4097))
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
-		t.Fatalf("SetValue() over the cap: code = %v, want %v", got, connect.CodeInvalidArgument)
+		t.Fatalf("SetValues() over the cap: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
 }
 
@@ -166,12 +225,9 @@ func TestAValueNamingNoTierIsRefusedRatherThanWrittenToProduction(t *testing.T) 
 	variables, _ := served(t)
 	ctx := context.Background()
 
-	_, err := variables.SetValue(ctx, &variablestorev1.SetValueRequest{
-		Coordinate: cell("DATABASE_URL"),
-		Value:      "postgres://unaddressed",
-	})
+	_, err := setOne(ctx, variables, environmentv1.Tier_TIER_UNSPECIFIED, cell("DATABASE_URL"), "postgres://unaddressed")
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
-		t.Fatalf("SetValue() with no tier: code = %v, want %v", got, connect.CodeInvalidArgument)
+		t.Fatalf("SetValues() with no tier: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
 
 	got, err := variables.GetValue(ctx, &variablestorev1.GetValueRequest{
@@ -187,11 +243,7 @@ func TestReferencesAnswerAcrossTheWire(t *testing.T) {
 	variables, _ := served(t)
 	ctx := context.Background()
 
-	if _, err := variables.SetValue(ctx, &variablestorev1.SetValueRequest{
-		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: &variablestorev1.Coordinate{Slug: "platform", Key: "DATABASE_URL"},
-		Value:      "postgres://shared",
-	}); err != nil {
+	if _, err := setOne(ctx, variables, environmentv1.Tier_TIER_PRODUCTION, &variablestorev1.Coordinate{Slug: "platform", Key: "DATABASE_URL"}, "postgres://shared"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -220,13 +272,9 @@ func TestReferencesAnswerAcrossTheWire(t *testing.T) {
 		t.Fatalf("ListReferences() = %+v, %v", found.GetReferences(), err)
 	}
 
-	_, err = variables.SetValue(ctx, &variablestorev1.SetValueRequest{
-		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: cell("DATABASE_URL"),
-		Value:      "postgres://mine",
-	})
+	_, err = setOne(ctx, variables, environmentv1.Tier_TIER_PRODUCTION, cell("DATABASE_URL"), "postgres://mine")
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
-		t.Fatalf("SetValue() over a reference: code = %v, want %v", got, connect.CodeInvalidArgument)
+		t.Fatalf("SetValues() over a reference: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
 
 	_, err = variables.SetReference(ctx, &variablestorev1.SetReferenceRequest{
@@ -245,39 +293,23 @@ func TestTheEnvironmentGateRefusesWhatNothingWouldRead(t *testing.T) {
 
 	named := &variablestorev1.Coordinate{Slug: slug, Key: "KEY", Environment: "pr-7"}
 
-	_, err := variables.SetValue(ctx, &variablestorev1.SetValueRequest{
-		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: named,
-		Value:      "one",
-	})
+	_, err := setOne(ctx, variables, environmentv1.Tier_TIER_PRODUCTION, named, "one")
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 		t.Fatalf("a named environment in production: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
 
-	_, err = variables.SetValue(ctx, &variablestorev1.SetValueRequest{
-		Tier:       environmentv1.Tier_TIER_PREVIEW,
-		Coordinate: named,
-		Value:      "one",
-	})
+	_, err = setOne(ctx, variables, environmentv1.Tier_TIER_PREVIEW, named, "one")
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Fatalf("a preview environment nobody deployed: code = %v, want %v", got, connect.CodeFailedPrecondition)
 	}
 
 	deployPreview(t, provider, "pr-7")
 
-	if _, err := variables.SetValue(ctx, &variablestorev1.SetValueRequest{
-		Tier:       environmentv1.Tier_TIER_PREVIEW,
-		Coordinate: named,
-		Value:      "one",
-	}); err != nil {
-		t.Fatalf("SetValue() for a deployed preview environment = %v, want it written", err)
+	if _, err := setOne(ctx, variables, environmentv1.Tier_TIER_PREVIEW, named, "one"); err != nil {
+		t.Fatalf("SetValues() for a deployed preview environment = %v, want it written", err)
 	}
 
-	_, err = variables.SetValue(ctx, &variablestorev1.SetValueRequest{
-		Tier:       environmentv1.Tier_TIER_PREVIEW,
-		Coordinate: &variablestorev1.Coordinate{Slug: slug, Key: "KEY", Environment: "pr-9"},
-		Value:      "one",
-	})
+	_, err = setOne(ctx, variables, environmentv1.Tier_TIER_PREVIEW, &variablestorev1.Coordinate{Slug: slug, Key: "KEY", Environment: "pr-9"}, "one")
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Fatalf("an environment beside the deployed one: code = %v, want %v", got, connect.CodeFailedPrecondition)
 	}

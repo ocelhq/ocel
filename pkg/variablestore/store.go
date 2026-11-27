@@ -95,8 +95,79 @@ func (s Store) now() int64 {
 	return s.Now().Unix()
 }
 
-func (s Store) Set(ctx context.Context, scope Scope, at Coordinate, plaintext string, expected *int64) (Metadata, error) {
-	return s.write(ctx, scope, at, plaintext, Provenance{}, expected)
+type ValueWrite struct {
+	At        Coordinate
+	Plaintext string
+	Expected  *int64
+}
+
+type recordedCell struct {
+	entry  records.Entry
+	stored storedValue
+}
+
+func (s Store) Set(ctx context.Context, scope Scope, writes []ValueWrite) ([]Metadata, error) {
+	if err := refuseRepeatedCoordinate(writes); err != nil {
+		return nil, err
+	}
+	recorded := make([]recordedCell, len(writes))
+	if err := forEachConcurrently(ctx, len(writes), func(ctx context.Context, i int) error {
+		entry, current, err := s.cellAt(ctx, scope, writes[i].At)
+		if err != nil {
+			return err
+		}
+		recorded[i] = recordedCell{entry: entry, stored: current}
+		return refuseWriteOver(writes[i].At, current, writes[i].Plaintext, Provenance{}, writes[i].Expected)
+	}); err != nil {
+		return nil, err
+	}
+
+	written := make([]Metadata, len(writes))
+	failed := make([]error, len(writes))
+	_ = forEachConcurrently(ctx, len(writes), func(ctx context.Context, i int) error {
+		written[i], failed[i] = s.sealAndCommit(ctx, scope, writes[i].At, recorded[i].entry, recorded[i].stored, writes[i].Plaintext, Provenance{}, writes[i].Expected)
+		return nil
+	})
+	if err := refuseUnwritten(writes, written, failed); err != nil {
+		return nil, err
+	}
+	return written, nil
+}
+
+func refuseRepeatedCoordinate(writes []ValueWrite) error {
+	seen := make(map[Coordinate]bool, len(writes))
+	for _, write := range writes {
+		at := write.At.canonical()
+		if seen[at] {
+			return fmt.Errorf("%s is named more than once, so which value it should hold is unclear: name it once", write.At)
+		}
+		seen[at] = true
+	}
+	return nil
+}
+
+func refuseUnwritten(writes []ValueWrite, written []Metadata, failed []error) error {
+	var problems []error
+	stored := 0
+	for i, err := range failed {
+		if written[i].Version != 0 {
+			stored++
+		}
+		switch {
+		case err == nil:
+		case written[i].Version != 0:
+			problems = append(problems, fmt.Errorf("%s was written, but its version history was not: %w", writes[i].At, err))
+		default:
+			problems = append(problems, fmt.Errorf("%s was not written: %w", writes[i].At, err))
+		}
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	if len(writes) == 1 {
+		return problems[0]
+	}
+	return fmt.Errorf("%d of %d values were written:\n%w", stored, len(writes), errors.Join(problems...))
 }
 
 func RefuseWrite(at Coordinate, current Metadata, plaintext string, from Provenance) error {
@@ -114,13 +185,23 @@ func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext 
 	if err != nil {
 		return Metadata{}, err
 	}
-	if err := RefuseWrite(at, current.liveMetadata(at), plaintext, from); err != nil {
+	if err := refuseWriteOver(at, current, plaintext, from, expected); err != nil {
 		return Metadata{}, err
 	}
-	if from.isOlderThan(current.Provenance) {
-		return Metadata{}, ErrStaleVersion
-	}
+	return s.sealAndCommit(ctx, scope, at, recorded, current, plaintext, from, expected)
+}
 
+func refuseWriteOver(at Coordinate, current storedValue, plaintext string, from Provenance, expected *int64) error {
+	if err := RefuseWrite(at, current.liveMetadata(at), plaintext, from); err != nil {
+		return err
+	}
+	if from.isOlderThan(current.Provenance) || (expected != nil && *expected != current.live()) {
+		return fmt.Errorf("%s: %w", at, ErrStaleVersion)
+	}
+	return nil
+}
+
+func (s Store) sealAndCommit(ctx context.Context, scope Scope, at Coordinate, recorded records.Entry, current storedValue, plaintext string, from Provenance, expected *int64) (Metadata, error) {
 	bound, err := newCellAssociatedData(scope, at)
 	if err != nil {
 		return Metadata{}, err

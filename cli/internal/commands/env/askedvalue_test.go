@@ -115,7 +115,7 @@ func TestABareArgumentNoDeclarationNamesIsRefusedByPositionWithoutAskingOrEchoin
 	if len(prompt.asked) != 0 {
 		t.Errorf("asked %q, want nothing asked", prompt.asked)
 	}
-	if sent := clitest.RequestsTo[*variablestorev1.SetValueRequest](t, project.Requests, variablestorev1connect.VariableStoreServiceSetValueProcedure); len(sent) != 0 {
+	if sent := clitest.RequestsTo[*variablestorev1.SetValuesRequest](t, project.Requests, variablestorev1connect.VariableStoreServiceSetValuesProcedure); len(sent) != 0 {
 		t.Errorf("the CLI sent %d writes, want none", len(sent))
 	}
 }
@@ -133,7 +133,7 @@ func TestAnAskedValueLeftEmptyWritesNothing(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "API_TOKEN=") {
 				t.Fatalf("runEnvSetPairs() = %v, want a refusal saying how to store an empty value on purpose", err)
 			}
-			if sent := clitest.RequestsTo[*variablestorev1.SetValueRequest](t, project.Requests, variablestorev1connect.VariableStoreServiceSetValueProcedure); len(sent) != 0 {
+			if sent := clitest.RequestsTo[*variablestorev1.SetValuesRequest](t, project.Requests, variablestorev1connect.VariableStoreServiceSetValuesProcedure); len(sent) != 0 {
 				t.Errorf("the CLI sent %d writes, want none: every value is asked before any is written", len(sent))
 			}
 		})

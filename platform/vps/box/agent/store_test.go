@@ -150,7 +150,7 @@ func (b *box) store() variablestore.Store {
 
 func (b *box) set(t *testing.T, scope variablestore.Scope, at variablestore.Coordinate, plaintext string) {
 	t.Helper()
-	if _, err := b.store().Set(context.Background(), scope, at, plaintext, nil); err != nil {
+	if _, err := b.store().Set(context.Background(), scope, []variablestore.ValueWrite{{At: at, Plaintext: plaintext}}); err != nil {
 		t.Fatal(err)
 	}
 }

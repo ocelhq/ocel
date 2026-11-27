@@ -89,11 +89,11 @@ func TestAValueThatNamesNoProjectOrKeyIsRefusedBeforeItIsSealed(t *testing.T) {
 
 	for name, write := range map[string]func(variablestore.Store) error{
 		"a cell with no project": func(store variablestore.Store) error {
-			_, err := store.Set(context.Background(), variablestore.Scope{Tier: environment.TierProduction}, at("KEY"), "value", nil)
+			_, err := setValue(context.Background(), store, variablestore.Scope{Tier: environment.TierProduction}, at("KEY"), "value", nil)
 			return err
 		},
 		"a cell with no key": func(store variablestore.Store) error {
-			_, err := store.Set(context.Background(), variablestore.Scope{Project: "shop", Tier: environment.TierProduction}, at(""), "value", nil)
+			_, err := setValue(context.Background(), store, variablestore.Scope{Project: "shop", Tier: environment.TierProduction}, at(""), "value", nil)
 			return err
 		},
 		"a binding with no project": func(store variablestore.Store) error {

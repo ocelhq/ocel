@@ -322,7 +322,7 @@ func envSet(t *testing.T, fixture clitest.FakeProject, key, value string, opts e
 func setValue(t *testing.T, fixture clitest.FakeProject, scope variablestore.Scope, key, value string, opts envOptions) {
 	t.Helper()
 	at := variablestore.Coordinate{Cell: variablestore.Cell{Folder: opts.folder, Key: key}, Environment: opts.environment}
-	if _, err := valueStore(fixture).Set(context.Background(), scope, at, value, nil); err != nil {
+	if _, err := valueStore(fixture).Set(context.Background(), scope, []variablestore.ValueWrite{{At: at, Plaintext: value}}); err != nil {
 		t.Fatalf("set %s for %s: %v", key, scope.Project, err)
 	}
 }

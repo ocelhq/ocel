@@ -160,23 +160,33 @@ func askForValues(ctx context.Context, values commands.ValuePrompt, run *run.Run
 }
 
 func setPairs(ctx context.Context, values variables.Store, owner variables.EnvSource, pairs []envSetPair, opts envOptions, definitions []*resourcesv1.VariableDefinition, stdout io.Writer) error {
+	var stored, ownedByEnvSource []envSetPair
+	var writes []variables.ValueWrite
 	for _, pair := range pairs {
 		at := envCoordinate(pair.key, pair.options(opts))
 		if owner.CanSet(at) {
-			if err := setInEnvSource(ctx, values, owner.ID, at, pair.value, definitions, stdout); err != nil {
-				return err
-			}
+			ownedByEnvSource = append(ownedByEnvSource, pair)
 			continue
 		}
-		seen, err := values.Version(ctx, at)
+		stored = append(stored, pair)
+		writes = append(writes, variables.ValueWrite{At: at, Value: pair.value})
+	}
+	if len(writes) > 0 {
+		versions, err := values.Set(ctx, writes)
+		if errors.Is(err, variables.ErrStaleValue) {
+			return fmt.Errorf("somebody else edited a value at the same time, so it was not written — %w. Read it again with `ocel env get <KEY>` and run this command again", err)
+		}
 		if err != nil {
 			return err
 		}
-		version, err := values.Set(ctx, at, pair.value, &seen)
-		if err != nil {
-			return staleCell(err, pair.key, pair.options(opts))
+		for i, pair := range stored {
+			fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, pair.options(opts)), versions[i])
 		}
-		fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, pair.options(opts)), version)
+	}
+	for _, pair := range ownedByEnvSource {
+		if err := setInEnvSource(ctx, values, owner.ID, envCoordinate(pair.key, pair.options(opts)), pair.value, definitions, stdout); err != nil {
+			return err
+		}
 	}
 	return nil
 }

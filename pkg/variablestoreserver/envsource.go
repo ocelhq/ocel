@@ -364,8 +364,8 @@ func envSourceStatus(ctx context.Context, store variablestore.Store, scope varia
 	return out, nil
 }
 
-func refuseEnvSourceOwned(ctx context.Context, store variablestore.Store, scope variablestore.Scope, at variablestore.Coordinate, removing bool) error {
-	if at.Environment != "" {
+func refuseEnvSourceOwned(ctx context.Context, store variablestore.Store, scope variablestore.Scope, removing bool, ats ...variablestore.Coordinate) error {
+	if !slices.ContainsFunc(ats, func(at variablestore.Coordinate) bool { return at.Environment == "" }) {
 		return nil
 	}
 	registration, registered, err := envsource.Registered(ctx, store.KeyValues, scope.Tier, scope.Project)
@@ -375,7 +375,12 @@ func refuseEnvSourceOwned(ctx context.Context, store variablestore.Store, scope 
 	if !registered {
 		return nil
 	}
-	return refuseRegisteredEnvSource(ctx, store, scope, registration, at, removing)
+	for _, at := range ats {
+		if err := refuseRegisteredEnvSource(ctx, store, scope, registration, at, removing); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func refuseRegisteredEnvSource(ctx context.Context, store variablestore.Store, scope variablestore.Scope, registration envsource.Registration, at variablestore.Coordinate, removing bool) error {

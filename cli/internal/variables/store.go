@@ -2,6 +2,8 @@ package variables
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	connect "connectrpc.com/connect"
 
@@ -106,21 +108,34 @@ func (s Store) Version(ctx context.Context, at Coordinate) (int64, error) {
 	return resp.GetMetadata().GetVersion(), nil
 }
 
-func (s Store) Set(ctx context.Context, at Coordinate, value string, expected *int64) (int64, error) {
+type ValueWrite struct {
+	At       Coordinate
+	Value    string
+	Expected *int64
+}
+
+func (s Store) Set(ctx context.Context, writes []ValueWrite) ([]int64, error) {
 	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	resp, err := variableStore.SetValue(ctx, &variablestorev1.SetValueRequest{
-		Tier:            s.Tier,
-		Coordinate:      s.coordinate(at),
-		Value:           value,
-		ExpectedVersion: expected,
+	values := make([]*variablestorev1.ValueWrite, 0, len(writes))
+	for _, write := range writes {
+		values = append(values, &variablestorev1.ValueWrite{Coordinate: s.coordinate(write.At), Value: write.Value, ExpectedVersion: write.Expected})
+	}
+	resp, err := variableStore.SetValues(ctx, &variablestorev1.SetValuesRequest{
+		Tier:   s.Tier,
+		Slug:   s.Project.Slug,
+		Values: values,
 	})
 	if err != nil {
-		return 0, staleValueError(err)
+		return nil, staleValueError(err)
 	}
-	return resp.GetMetadata().GetVersion(), nil
+	versions := make([]int64, 0, len(resp.GetWritten()))
+	for _, written := range resp.GetWritten() {
+		versions = append(versions, written.GetVersion())
+	}
+	return versions, nil
 }
 
 func (s Store) Delete(ctx context.Context, at Coordinate, expected *int64) (bool, error) {
@@ -145,6 +160,10 @@ func staleValueError(err error) error {
 	}
 	if _, refused := provider.RefusedCode(err); refused {
 		return err
+	}
+	var conflict *connect.Error
+	if errors.As(err, &conflict) {
+		return fmt.Errorf("%w: %s", ErrStaleValue, conflict.Message())
 	}
 	return ErrStaleValue
 }

@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/environment"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
 	providercontract "github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
 	"github.com/ocelhq/ocel/pkg/refusal"
@@ -30,13 +29,9 @@ func TestAValueRefusedForWantOfAPartToSealUnderRecordsTheProjectsWant(t *testing
 	vendor := fake.NewProvider(fake.Options{})
 	variables := serve(t, &variablestoreserver.Service{Source: variablestoreserver.FixedBackend{KeyValues: vendor.KeyValues(), Cipher: keylessCipher{}}})
 
-	_, err := variables.SetValue(context.Background(), &variablestorev1.SetValueRequest{
-		Tier:       environmentv1.Tier_TIER_PRODUCTION,
-		Coordinate: cell("DATABASE_URL"),
-		Value:      "postgres://one",
-	})
+	_, err := setOne(context.Background(), variables, environmentv1.Tier_TIER_PRODUCTION, cell("DATABASE_URL"), "postgres://one")
 	if err == nil {
-		t.Fatal("SetValue() = nil, want the seal's refusal passed on")
+		t.Fatal("SetValues() = nil, want the seal's refusal passed on")
 	}
 
 	wants, err := stackrecords.ListBootstrapWants(context.Background(), vendor.KeyValues(), environment.TierProduction)
