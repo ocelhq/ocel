@@ -1068,16 +1068,19 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 		}
 	})
 
-	t.Run("a declared domain equal to the global one serves as the project's own and calls nothing ignored", func(t *testing.T) {
+	t.Run("a declared domain equal to the global one is refused, since every project here shares that wildcard and none can own it", func(t *testing.T) {
 		t.Parallel()
 
-		same := &project.Project{Slug: "acme", Domains: project.Domains{Preview: "*.preview.ocel.app"}}
+		same := &project.Project{Slug: "acme", Path: "/work/ocel.aws.json", Domains: project.Domains{Preview: "*.preview.ocel.app"}}
 		var out bytes.Buffer
-		if err := refuseMissingPreviewDomain(same, global, nil, true, checkSpan(t, &out)); err != nil {
-			t.Fatalf("refuseMissingPreviewDomain err = %v, want nil", err)
+		err := refuseMissingPreviewDomain(same, global, nil, true, checkSpan(t, &out))
+		if err == nil {
+			t.Fatalf("refuseMissingPreviewDomain err = nil, want a refusal; out = %q", out.String())
 		}
-		if got := out.String(); !strings.Contains(got, "Serving previews on project-level *.preview.ocel.app, also the global preview domain") || strings.Contains(got, "ignored") {
-			t.Errorf("out = %q, want the one wildcard named as both, nothing ignored", got)
+		for _, want := range []string{"*.preview.ocel.app", "global preview domain", "every project", "remove domains.preview from ocel.aws.json", "already serves"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to contain %q", err, want)
+			}
 		}
 	})
 

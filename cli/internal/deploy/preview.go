@@ -52,7 +52,9 @@ func refuseMissingPreviewDomain(cfg *project.Project, wildcard *contractv1.Previ
 		check.Say(fmt.Sprintf("Serving previews on global *.%s", base))
 
 	case declared == edge.PreviewWildcard(base):
-		check.Say(fmt.Sprintf("Serving previews on project-level %s, also the global preview domain", declared))
+		return fmt.Errorf("domains.preview %s is this bootstrap's global preview domain, which every project here shares through one entry, so no project can own it too: "+
+			"remove domains.preview from %s, since the global domain already serves this project's previews, or declare a wildcard of its own",
+			declared, configName)
 
 	case base != "":
 		check.Say(fmt.Sprintf("Serving previews on project-level %s; global *.%s ignored", declared, base))
