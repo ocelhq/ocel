@@ -18,6 +18,33 @@ pub(crate) enum Shape {
     Direct(Type),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ValueType {
+    Unspecified,
+    Boolean,
+    Integer,
+    Number,
+}
+
+const INTEGERS: [&str; 12] = [
+    "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
+];
+
+const FLOATS: [&str; 2] = ["f32", "f64"];
+
+fn value_type_of(ty: &Type) -> ValueType {
+    if is_bool(ty) {
+        return ValueType::Boolean;
+    }
+    if INTEGERS.iter().any(|name| named(ty, name)) {
+        return ValueType::Integer;
+    }
+    if FLOATS.iter().any(|name| named(ty, name)) {
+        return ValueType::Number;
+    }
+    ValueType::Unspecified
+}
+
 pub(crate) struct Variable {
     pub(crate) ident: syn::Ident,
     pub(crate) key: String,
@@ -32,6 +59,13 @@ pub(crate) struct Variable {
 impl Variable {
     pub(crate) fn required(&self) -> bool {
         self.fallback.is_none() && !matches!(self.shape, Shape::Optional(_))
+    }
+
+    pub(crate) fn value_type(&self) -> ValueType {
+        match &self.shape {
+            Shape::Live => ValueType::Unspecified,
+            Shape::Optional(inner) | Shape::Direct(inner) => value_type_of(inner),
+        }
     }
 
     pub(crate) fn parsed(&self) -> Option<&Type> {

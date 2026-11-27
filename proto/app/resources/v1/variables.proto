@@ -17,7 +17,43 @@ enum VariableClass {
   VARIABLE_CLASS_DERIVED = 4;
 }
 
+enum ValueType {
+  VALUE_TYPE_UNSPECIFIED = 0;
+
+  VALUE_TYPE_BOOLEAN = 1;
+
+  VALUE_TYPE_INTEGER = 2;
+
+  VALUE_TYPE_NUMBER = 3;
+}
+
 message VariableDefinition {
+  option (buf.validate.message).cel = {
+    id: "variables.definition.defaulted_not_required"
+    message: "a variable with a default is not required"
+    expression: "!(this.defaulted && this.required)"
+  };
+  option (buf.validate.message).cel = {
+    id: "variables.definition.secret_no_default"
+    message: "a secret has no default"
+    expression: "!(this.defaulted && this.class == app.resources.v1.VariableClass.VARIABLE_CLASS_SECRET)"
+  };
+  option (buf.validate.message).cel = {
+    id: "variables.definition.default_value_plain"
+    message: "only a plain variable with a default sends the default's text"
+    expression: "!has(this.default_value) || (this.defaulted && this.class == app.resources.v1.VariableClass.VARIABLE_CLASS_PLAIN)"
+  };
+  option (buf.validate.message).cel = {
+    id: "variables.definition.secret_untyped"
+    message: "a secret is read as text, so it has no value type and no choices"
+    expression: "this.class != app.resources.v1.VariableClass.VARIABLE_CLASS_SECRET || (this.value_type == app.resources.v1.ValueType.VALUE_TYPE_UNSPECIFIED && size(this.choices) == 0)"
+  };
+  option (buf.validate.message).cel = {
+    id: "variables.definition.choices_text"
+    message: "choices are text, so a variable with choices has no value type"
+    expression: "size(this.choices) == 0 || this.value_type == app.resources.v1.ValueType.VALUE_TYPE_UNSPECIFIED"
+  };
+
   string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
   VariableClass class = 2 [(buf.validate.field).enum.defined_only = true];
 
@@ -37,6 +73,18 @@ message VariableDefinition {
   }];
 
   string group = 10 [(buf.validate.field).string = {pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  bool defaulted = 11;
+
+  optional string default_value = 12 [(buf.validate.field).string.max_bytes = 1024];
+
+  ValueType value_type = 13 [(buf.validate.field).enum.defined_only = true];
+
+  repeated string choices = 14 [(buf.validate.field).repeated = {
+    max_items: 100
+    unique: true
+    items: {string: {max_bytes: 256}}
+  }];
 }
 
 message GroupDefinition {

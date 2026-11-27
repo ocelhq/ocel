@@ -26,6 +26,12 @@ struct Env {
     scoped: String,
     ready: bool,
     started: bool,
+    #[ocel(default = "info")]
+    level: String,
+    #[ocel(sensitive, default = 9090)]
+    metrics_port: u16,
+    ratio: Option<f64>,
+    token: ocel::Secret,
 }
 
 const DB_LINE: &str = "10";
@@ -124,21 +130,30 @@ fn discovery_posts_every_declaration_and_reports_each_value_its_type_cannot_pars
         .iter()
         .map(|definition| {
             format!(
-                "{} {:?} required={}",
-                definition.key, definition.class, definition.required,
+                "{} {:?} required={} defaulted={} default={:?} {:?}",
+                definition.key,
+                definition.class,
+                definition.required,
+                definition.defaulted,
+                definition.default_value,
+                definition.value_type,
             )
         })
         .collect();
     assert_eq!(
         shapes,
         [
-            "DATABASE_NAME VARIABLE_CLASS_PLAIN required=true",
-            "PORT VARIABLE_CLASS_PLAIN required=false",
-            "MISSING_ONE VARIABLE_CLASS_SENSITIVE required=true",
-            "API_PORT VARIABLE_CLASS_SENSITIVE required=true",
-            "SCOPED VARIABLE_CLASS_PLAIN required=true",
-            "READY VARIABLE_CLASS_PLAIN required=true",
-            "STARTED VARIABLE_CLASS_PLAIN required=true",
+            "DATABASE_NAME VARIABLE_CLASS_PLAIN required=true defaulted=false default=None VALUE_TYPE_UNSPECIFIED",
+            "PORT VARIABLE_CLASS_PLAIN required=false defaulted=true default=Some(\"3000\") VALUE_TYPE_INTEGER",
+            "MISSING_ONE VARIABLE_CLASS_SENSITIVE required=true defaulted=false default=None VALUE_TYPE_INTEGER",
+            "API_PORT VARIABLE_CLASS_SENSITIVE required=true defaulted=false default=None VALUE_TYPE_INTEGER",
+            "SCOPED VARIABLE_CLASS_PLAIN required=true defaulted=false default=None VALUE_TYPE_UNSPECIFIED",
+            "READY VARIABLE_CLASS_PLAIN required=true defaulted=false default=None VALUE_TYPE_BOOLEAN",
+            "STARTED VARIABLE_CLASS_PLAIN required=true defaulted=false default=None VALUE_TYPE_BOOLEAN",
+            "LEVEL VARIABLE_CLASS_PLAIN required=false defaulted=true default=Some(\"info\") VALUE_TYPE_UNSPECIFIED",
+            "METRICS_PORT VARIABLE_CLASS_SENSITIVE required=false defaulted=true default=None VALUE_TYPE_INTEGER",
+            "RATIO VARIABLE_CLASS_PLAIN required=false defaulted=false default=None VALUE_TYPE_NUMBER",
+            "TOKEN VARIABLE_CLASS_SECRET required=true defaulted=false default=None VALUE_TYPE_UNSPECIFIED",
         ]
     );
 

@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
@@ -191,12 +192,138 @@ describe("the declaration payload", () => {
           key: "PAYLOAD_DEFAULTED",
           class: 2,
           required: false,
+          defaulted: true,
           folders: [],
           source: declaredIn,
         },
       ],
       groups: [],
     });
+  });
+
+  it("declares each default, and the type and choices a value is read as", async () => {
+    defineEnv({
+      HINT_GREETING: { class: "plain", schema: z.string().default("hello") },
+      HINT_EMPTY: { class: "plain", schema: z.string().default("") },
+      HINT_BANNER: { class: "plain", schema: z.string().default("a".repeat(1025)) },
+      HINT_LENGTH: {
+        class: "plain",
+        schema: z
+          .string()
+          .transform((s) => s.length)
+          .default(5),
+      },
+      HINT_WEBHOOK: { class: "sensitive", schema: z.string().default("k") },
+      HINT_OPTIONAL: { class: "plain", schema: z.string().optional() },
+      HINT_PORT: { class: "plain", schema: z.coerce.number().int().default(3000) },
+      HINT_RATIO: { class: "plain", schema: z.coerce.number() },
+      HINT_BETA: { class: "sensitive", schema: z.stringbool() },
+      HINT_COERCED: { class: "plain", schema: z.coerce.boolean() },
+      HINT_LEVEL: { class: "plain", schema: z.enum(["debug", "info", "warn"]).default("info") },
+      HINT_URL: { class: "plain", schema: z.url() },
+      HINT_TEXT: { class: "plain" },
+      HINT_KEY: { class: "secret" },
+    });
+    await flushDeclarations();
+
+    const [call] = declareEnvMock.mock.calls as unknown as [
+      [{ definitions: Array<Record<string, unknown>> }],
+    ];
+    const hints = Object.fromEntries(
+      call[0].definitions.map(({ key, defaulted, defaultValue, valueType, choices }) => [
+        key,
+        { defaulted, defaultValue, valueType, choices },
+      ]),
+    );
+    const none = {
+      defaulted: undefined,
+      defaultValue: undefined,
+      valueType: undefined,
+      choices: undefined,
+    };
+    expect(hints).toEqual({
+      HINT_GREETING: { ...none, defaulted: true, defaultValue: "hello" },
+      HINT_EMPTY: { ...none, defaulted: true, defaultValue: "" },
+      HINT_BANNER: { ...none, defaulted: true },
+      HINT_LENGTH: { ...none, defaulted: true },
+      HINT_WEBHOOK: { ...none, defaulted: true },
+      HINT_OPTIONAL: none,
+      HINT_PORT: { ...none, defaulted: true, defaultValue: "3000", valueType: 2 },
+      HINT_RATIO: { ...none, valueType: 3 },
+      HINT_BETA: { ...none, valueType: 1 },
+      HINT_COERCED: { ...none, defaulted: true },
+      HINT_LEVEL: {
+        ...none,
+        defaulted: true,
+        defaultValue: "info",
+        choices: ["debug", "info", "warn"],
+      },
+      HINT_URL: none,
+      HINT_TEXT: none,
+      HINT_KEY: none,
+    });
+  });
+
+  it("declares a schema that throws on a probe, leaving out the hint the probe was for", async () => {
+    defineEnv({
+      THROWS_URL: { class: "plain", schema: z.string().transform((value) => new URL(value)) },
+      THROWS_DEFAULT: {
+        class: "plain",
+        schema: z
+          .string()
+          .transform((value) => {
+            if (value === "x") throw new Error("x is reserved");
+            return value;
+          })
+          .default("x"),
+      },
+      THROWS_CHOICE: {
+        class: "plain",
+        schema: z.enum(["a", "b"]).transform((value) => {
+          if (value === "b") throw new Error("b is reserved");
+          return value;
+        }),
+      },
+    });
+    await flushDeclarations();
+
+    const [call] = declareEnvMock.mock.calls as unknown as [
+      [{ definitions: Array<Record<string, unknown>> }],
+    ];
+    expect(call[0].definitions).toEqual([
+      expect.objectContaining({ key: "THROWS_URL", required: true }),
+      expect.objectContaining({ key: "THROWS_DEFAULT", required: false, defaulted: true }),
+      expect.objectContaining({ key: "THROWS_CHOICE", required: true }),
+    ]);
+    for (const definition of call[0].definitions) {
+      expect(definition).not.toHaveProperty("defaultValue");
+      expect(definition).not.toHaveProperty("valueType");
+      expect(definition).not.toHaveProperty("choices");
+    }
+  });
+
+  it("decides required and defaulted from one read of the schema's default", async () => {
+    let reads = 0;
+    const settlesLate: StandardSchemaV1<unknown, string> = {
+      "~standard": {
+        version: 1,
+        vendor: "test",
+        validate: (value) => {
+          if (value !== undefined) return { value: String(value) };
+          reads += 1;
+          return reads === 1 ? { issues: [{ message: "not yet" }] } : { value: "late" };
+        },
+      },
+    };
+    defineEnv({ SETTLES_LATE: { class: "plain", schema: settlesLate } });
+    await flushDeclarations();
+
+    const [call] = declareEnvMock.mock.calls as unknown as [
+      [{ definitions: Array<Record<string, unknown>> }],
+    ];
+    const [definition] = call[0].definitions;
+    expect(definition).toMatchObject({ key: "SETTLES_LATE", required: true });
+    expect(definition).not.toHaveProperty("defaulted");
   });
 
   it("reports a plain value its schema rejects before anything is built", async () => {
