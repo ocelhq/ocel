@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
+	"github.com/ocelhq/ocel/cli/internal/readiness"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	providercontract "github.com/ocelhq/ocel/pkg/provider"
 )
 
 func TestADeployChecksWhatItsTierNeeds(t *testing.T) {
@@ -33,6 +35,15 @@ func TestOnlyADeployAsksTheProviderToCheckItsEdgeCanForwardItsHostnames(t *testi
 	}
 	if req := (OpenOptions{Intent: UseParts, Tier: environmentv1.Tier_TIER_PRODUCTION}).request(cfg); req.CheckForwarding {
 		t.Errorf("request checks forwarding = %v, want no forwarding checked by a command that forwards nothing", req.CheckForwarding)
+	}
+}
+
+func TestSigningPreviewHostnamesNeedsTheEdgePartsAndTheVariablesKeyAndRecordsTheWant(t *testing.T) {
+	cfg := &project.Project{Slug: "shop"}
+
+	req := OpenOptions{Intent: SignPreviewHostnames, Tier: environmentv1.Tier_TIER_PREVIEW}.request(cfg)
+	if req.Require != readiness.Parts || req.Part != providercontract.VariablesKeyPart || !req.RecordWants || req.Slug != "shop" {
+		t.Errorf("request = require %v, part %q, record wants %v, slug %q; want the parts, the %s part, its want recorded for shop", req.Require, req.Part, req.RecordWants, req.Slug, providercontract.VariablesKeyPart)
 	}
 }
 
