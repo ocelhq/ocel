@@ -205,6 +205,41 @@ func TestADryRunLackingAPartSaysToRunWithoutDryBeforeTheBootstrap(t *testing.T) 
 	}
 }
 
+func TestAPreviewDeployWithNoDomainToServeOnIsRefusedBeforeItsBootstrapIsOffered(t *testing.T) {
+	resp := &contractv1.PreflightResponse{HostnameRequired: true, Identity: &contractv1.Identity{Account: "203.0.113.7"}}
+	cfg := &project.Project{Slug: "shop", Path: "/code/shop/ocel.aws.json"}
+	req := Request{Tier: environmentv1.Tier_TIER_PREVIEW, Require: Parts, CheckPreviewRoute: true}
+
+	err := RefuseUnready(resp, nil, cfg, req)
+	if err == nil {
+		t.Fatal("RefuseUnready err = nil, want a refusal")
+	}
+	var missing prerequisite.MissingError
+	if errors.As(err, &missing) {
+		t.Errorf("err = %v is a missing %v, want no setup offered: a bootstrap set up for this deploy still leaves it nowhere to serve", err, missing.Missing())
+	}
+	for _, want := range []string{"declares no preview domain", "domains.preview", "ocel.aws.json", "ocel domain use"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to contain %q", err, want)
+		}
+	}
+
+	t.Run("a declared preview domain is set up for", func(t *testing.T) {
+		declared := &project.Project{Slug: "shop", Domains: project.Domains{Preview: "*.preview.acme.com"}}
+		var absent NoInfrastructureError
+		if err := RefuseUnready(resp, nil, declared, req); !errors.As(err, &absent) {
+			t.Errorf("RefuseUnready err = %v, want the bootstrap to set up", err)
+		}
+	})
+	t.Run("an edge that addresses each release needs no domain", func(t *testing.T) {
+		addressed := &contractv1.PreflightResponse{Identity: &contractv1.Identity{}}
+		var absent NoInfrastructureError
+		if err := RefuseUnready(addressed, nil, cfg, req); !errors.As(err, &absent) {
+			t.Errorf("RefuseUnready err = %v, want the bootstrap to set up", err)
+		}
+	})
+}
+
 func TestAProjectWithNoHostnameWhereTheRouterNeedsOneIsADomainToSetUp(t *testing.T) {
 	resp := infrastructureIn(environmentv1.Tier_TIER_PRODUCTION)
 	resp.HostnameRequired = true
