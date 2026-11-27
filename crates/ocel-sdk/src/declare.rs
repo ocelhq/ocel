@@ -2,7 +2,8 @@ use crate::env::{complaint, Class};
 use crate::proto::app::resources::v1::variable_problem::Kind;
 use crate::proto::app::resources::v1::{
     DeclareEnvRequest, DeclareRequest, GroupDefinition, ReportEnvProblemsRequest,
-    ResourceServiceClient, VariableCell, VariableClass, VariableDefinition, VariableProblem,
+    ResourceServiceClient, ValueType, VariableCell, VariableClass, VariableDefinition,
+    VariableProblem,
 };
 #[cfg(feature = "realtime")]
 use crate::proto::app::resources::v1::{
@@ -47,11 +48,15 @@ pub struct DeclaredVariable {
     pub required: bool,
     pub folders: &'static [&'static str],
     pub description: Option<&'static str>,
+    pub fallback: Option<&'static str>,
+    pub value_type: ValueType,
     pub file: &'static str,
     pub line: u32,
     pub check: Option<Check>,
     pub group: Option<&'static str>,
 }
+
+const MAX_DEFAULT_BYTES: usize = 1024;
 
 #[doc(hidden)]
 pub struct DeclaredGroup {
@@ -364,6 +369,12 @@ fn build_definition(variable: &DeclaredVariable) -> VariableDefinition {
         source: format_source(variable.file, variable.line),
         description: variable.description.unwrap_or_default().to_string(),
         group: variable.group.unwrap_or_default().to_string(),
+        defaulted: variable.fallback.is_some(),
+        default_value: variable
+            .fallback
+            .filter(|text| variable.class == Class::Plain && text.len() <= MAX_DEFAULT_BYTES)
+            .map(str::to_string),
+        value_type: variable.value_type.into(),
         ..Default::default()
     }
 }
@@ -452,5 +463,49 @@ fn refuse_declaration(resource: &DeclaredResource, said: String) -> Error {
             .to_ascii_lowercase(),
         name: identifier.name.clone(),
         said,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_definition, DeclaredVariable, ValueType};
+    use crate::env::Class;
+
+    fn declared(class: Class, fallback: &'static str) -> DeclaredVariable {
+        DeclaredVariable {
+            key: "BANNER",
+            class,
+            required: false,
+            folders: &[],
+            description: None,
+            fallback: Some(fallback),
+            value_type: ValueType::VALUE_TYPE_UNSPECIFIED,
+            file: "env.rs",
+            line: 1,
+            check: None,
+            group: None,
+        }
+    }
+
+    #[test]
+    fn a_plain_default_of_at_most_1024_bytes_is_sent_with_its_text() {
+        let text: &'static str = "a".repeat(1024).leak();
+        let definition = build_definition(&declared(Class::Plain, text));
+        assert!(definition.defaulted);
+        assert_eq!(definition.default_value.as_deref(), Some(text));
+    }
+
+    #[test]
+    fn a_default_too_long_to_send_is_flagged_without_its_text() {
+        let definition = build_definition(&declared(Class::Plain, "a".repeat(1025).leak()));
+        assert!(definition.defaulted);
+        assert_eq!(definition.default_value, None);
+    }
+
+    #[test]
+    fn a_sensitive_default_is_flagged_without_its_text() {
+        let definition = build_definition(&declared(Class::Sensitive, "k"));
+        assert!(definition.defaulted);
+        assert_eq!(definition.default_value, None);
     }
 }

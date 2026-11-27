@@ -1,6 +1,6 @@
 use crate::attribute::{parse_entries, read_container_crate_path};
 use crate::source::source;
-use crate::variable::{description, is_bool, refused, variable, Class, Shape, Variable};
+use crate::variable::{description, is_bool, refused, variable, Class, Shape, ValueType, Variable};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, GenericArgument, PathArguments, Type};
@@ -34,6 +34,8 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
         let required = variable.required();
         let folders = variable.folders.iter();
         let description = text(variable.description.as_deref());
+        let fallback = text(variable.fallback.as_deref());
+        let value_type = value_type(variable.value_type(), krate);
         let check = match variable.parsed() {
             Some(ty) => {
                 let parsed = parsed(ty, krate);
@@ -48,6 +50,8 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
                 required: #required,
                 folders: &[#(#folders),*],
                 description: #description,
+                fallback: #fallback,
+                value_type: #value_type,
                 file: #file,
                 line: #line,
                 check: #check,
@@ -221,6 +225,16 @@ fn parsed(ty: &syn::Type, krate: &syn::Path) -> TokenStream {
     match is_bool(ty) {
         true => quote!(#krate::Boolean),
         false => quote!(#ty),
+    }
+}
+
+fn value_type(value_type: ValueType, krate: &syn::Path) -> TokenStream {
+    let wire = quote!(#krate::proto::app::resources::v1::ValueType);
+    match value_type {
+        ValueType::Unspecified => quote!(#wire::VALUE_TYPE_UNSPECIFIED),
+        ValueType::Boolean => quote!(#wire::VALUE_TYPE_BOOLEAN),
+        ValueType::Integer => quote!(#wire::VALUE_TYPE_INTEGER),
+        ValueType::Number => quote!(#wire::VALUE_TYPE_NUMBER),
     }
 }
 

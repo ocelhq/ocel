@@ -77,6 +77,58 @@ func (VariableClass) EnumDescriptor() ([]byte, []int) {
 	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{0}
 }
 
+type ValueType int32
+
+const (
+	ValueType_VALUE_TYPE_UNSPECIFIED ValueType = 0
+	ValueType_VALUE_TYPE_BOOLEAN     ValueType = 1
+	ValueType_VALUE_TYPE_INTEGER     ValueType = 2
+	ValueType_VALUE_TYPE_NUMBER      ValueType = 3
+)
+
+// Enum value maps for ValueType.
+var (
+	ValueType_name = map[int32]string{
+		0: "VALUE_TYPE_UNSPECIFIED",
+		1: "VALUE_TYPE_BOOLEAN",
+		2: "VALUE_TYPE_INTEGER",
+		3: "VALUE_TYPE_NUMBER",
+	}
+	ValueType_value = map[string]int32{
+		"VALUE_TYPE_UNSPECIFIED": 0,
+		"VALUE_TYPE_BOOLEAN":     1,
+		"VALUE_TYPE_INTEGER":     2,
+		"VALUE_TYPE_NUMBER":      3,
+	}
+)
+
+func (x ValueType) Enum() *ValueType {
+	p := new(ValueType)
+	*p = x
+	return p
+}
+
+func (x ValueType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ValueType) Descriptor() protoreflect.EnumDescriptor {
+	return file_app_resources_v1_variables_proto_enumTypes[1].Descriptor()
+}
+
+func (ValueType) Type() protoreflect.EnumType {
+	return &file_app_resources_v1_variables_proto_enumTypes[1]
+}
+
+func (x ValueType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ValueType.Descriptor instead.
+func (ValueType) EnumDescriptor() ([]byte, []int) {
+	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{1}
+}
+
 type VariableProblem_Kind int32
 
 const (
@@ -110,11 +162,11 @@ func (x VariableProblem_Kind) String() string {
 }
 
 func (VariableProblem_Kind) Descriptor() protoreflect.EnumDescriptor {
-	return file_app_resources_v1_variables_proto_enumTypes[1].Descriptor()
+	return file_app_resources_v1_variables_proto_enumTypes[2].Descriptor()
 }
 
 func (VariableProblem_Kind) Type() protoreflect.EnumType {
-	return &file_app_resources_v1_variables_proto_enumTypes[1]
+	return &file_app_resources_v1_variables_proto_enumTypes[2]
 }
 
 func (x VariableProblem_Kind) Number() protoreflect.EnumNumber {
@@ -135,6 +187,10 @@ type VariableDefinition struct {
 	Source        string                 `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
 	Description   string                 `protobuf:"bytes,9,opt,name=description,proto3" json:"description,omitempty"`
 	Group         string                 `protobuf:"bytes,10,opt,name=group,proto3" json:"group,omitempty"`
+	Defaulted     bool                   `protobuf:"varint,11,opt,name=defaulted,proto3" json:"defaulted,omitempty"`
+	DefaultValue  *string                `protobuf:"bytes,12,opt,name=default_value,json=defaultValue,proto3,oneof" json:"default_value,omitempty"`
+	ValueType     ValueType              `protobuf:"varint,13,opt,name=value_type,json=valueType,proto3,enum=app.resources.v1.ValueType" json:"value_type,omitempty"`
+	Choices       []string               `protobuf:"bytes,14,rep,name=choices,proto3" json:"choices,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -216,6 +272,34 @@ func (x *VariableDefinition) GetGroup() string {
 		return x.Group
 	}
 	return ""
+}
+
+func (x *VariableDefinition) GetDefaulted() bool {
+	if x != nil {
+		return x.Defaulted
+	}
+	return false
+}
+
+func (x *VariableDefinition) GetDefaultValue() string {
+	if x != nil && x.DefaultValue != nil {
+		return *x.DefaultValue
+	}
+	return ""
+}
+
+func (x *VariableDefinition) GetValueType() ValueType {
+	if x != nil {
+		return x.ValueType
+	}
+	return ValueType_VALUE_TYPE_UNSPECIFIED
+}
+
+func (x *VariableDefinition) GetChoices() []string {
+	if x != nil {
+		return x.Choices
+	}
+	return nil
 }
 
 type GroupDefinition struct {
@@ -586,7 +670,7 @@ var File_app_resources_v1_variables_proto protoreflect.FileDescriptor
 
 const file_app_resources_v1_variables_proto_rawDesc = "" +
 	"\n" +
-	" app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto\"\x8e\x04\n" +
+	" app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto\"\xc1\r\n" +
 	"\x12VariableDefinition\x12/\n" +
 	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12?\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12\x1a\n" +
@@ -596,7 +680,18 @@ const file_app_resources_v1_variables_proto_rawDesc = "" +
 	"\vdescription\x18\t \x01(\tB\xb8\x01\xbaH\xb4\x01\xba\x01\xb0\x01\n" +
 	" variables.definition.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a?size(bytes(this)) <= 120 && !this.matches('[\\\\x00-\\\\x1f\\\\x7f]')R\vdescription\x121\n" +
 	"\x05group\x18\n" +
-	" \x01(\tB\x1b\xbaH\x18r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\x05group\"\xb7\x02\n" +
+	" \x01(\tB\x1b\xbaH\x18r\x162\x14^[^#\\x00-\\x1f\\x7f]*$R\x05group\x12\x1c\n" +
+	"\tdefaulted\x18\v \x01(\bR\tdefaulted\x122\n" +
+	"\rdefault_value\x18\f \x01(\tB\b\xbaH\x05r\x03(\x80\bH\x00R\fdefaultValue\x88\x01\x01\x12D\n" +
+	"\n" +
+	"value_type\x18\r \x01(\x0e2\x1b.app.resources.v1.ValueTypeB\b\xbaH\x05\x82\x01\x02\x10\x01R\tvalueType\x12+\n" +
+	"\achoices\x18\x0e \x03(\tB\x11\xbaH\x0e\x92\x01\v\x10d\x18\x01\"\x05r\x03(\x80\x02R\achoices:\xd9\a\xbaH\xd5\a\x1a|\n" +
+	"+variables.definition.defaulted_not_required\x12)a variable with a default is not required\x1a\"!(this.defaulted && this.required)\x1a\x9a\x01\n" +
+	"&variables.definition.secret_no_default\x12\x17a secret has no default\x1aW!(this.defaulted && this.class == app.resources.v1.VariableClass.VARIABLE_CLASS_SECRET)\x1a\xdc\x01\n" +
+	"(variables.definition.default_value_plain\x12=only a plain variable with a default sends the default's text\x1aq!has(this.default_value) || (this.defaulted && this.class == app.resources.v1.VariableClass.VARIABLE_CLASS_PLAIN)\x1a\x91\x02\n" +
+	"#variables.definition.secret_untyped\x12@a secret is read as text, so it has no value type and no choices\x1a\xa7\x01this.class != app.resources.v1.VariableClass.VARIABLE_CLASS_SECRET || (this.value_type == app.resources.v1.ValueType.VALUE_TYPE_UNSPECIFIED && size(this.choices) == 0)\x1a\xc4\x01\n" +
+	"!variables.definition.choices_text\x12>choices are text, so a variable with choices has no value type\x1a_size(this.choices) == 0 || this.value_type == app.resources.v1.ValueType.VALUE_TYPE_UNSPECIFIEDB\x10\n" +
+	"\x0e_default_value\"\xb7\x02\n" +
 	"\x0fGroupDefinition\x12/\n" +
 	"\x03key\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$R\x03key\x12\x1a\n" +
 	"\brequired\x18\x02 \x01(\bR\brequired\x12\xd6\x01\n" +
@@ -628,7 +723,12 @@ const file_app_resources_v1_variables_proto_rawDesc = "" +
 	"\x14VARIABLE_CLASS_PLAIN\x10\x01\x12\x1c\n" +
 	"\x18VARIABLE_CLASS_SENSITIVE\x10\x02\x12\x19\n" +
 	"\x15VARIABLE_CLASS_SECRET\x10\x03\x12\x1a\n" +
-	"\x16VARIABLE_CLASS_DERIVED\x10\x04B?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3"
+	"\x16VARIABLE_CLASS_DERIVED\x10\x04*n\n" +
+	"\tValueType\x12\x1a\n" +
+	"\x16VALUE_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12VALUE_TYPE_BOOLEAN\x10\x01\x12\x16\n" +
+	"\x12VALUE_TYPE_INTEGER\x10\x02\x12\x15\n" +
+	"\x11VALUE_TYPE_NUMBER\x10\x03B?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3"
 
 var (
 	file_app_resources_v1_variables_proto_rawDescOnce sync.Once
@@ -642,32 +742,34 @@ func file_app_resources_v1_variables_proto_rawDescGZIP() []byte {
 	return file_app_resources_v1_variables_proto_rawDescData
 }
 
-var file_app_resources_v1_variables_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_app_resources_v1_variables_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_app_resources_v1_variables_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_app_resources_v1_variables_proto_goTypes = []any{
 	(VariableClass)(0),                // 0: app.resources.v1.VariableClass
-	(VariableProblem_Kind)(0),         // 1: app.resources.v1.VariableProblem.Kind
-	(*VariableDefinition)(nil),        // 2: app.resources.v1.VariableDefinition
-	(*GroupDefinition)(nil),           // 3: app.resources.v1.GroupDefinition
-	(*DeclareEnvRequest)(nil),         // 4: app.resources.v1.DeclareEnvRequest
-	(*VariableCell)(nil),              // 5: app.resources.v1.VariableCell
-	(*DeclareEnvResponse)(nil),        // 6: app.resources.v1.DeclareEnvResponse
-	(*VariableProblem)(nil),           // 7: app.resources.v1.VariableProblem
-	(*ReportEnvProblemsRequest)(nil),  // 8: app.resources.v1.ReportEnvProblemsRequest
-	(*ReportEnvProblemsResponse)(nil), // 9: app.resources.v1.ReportEnvProblemsResponse
+	(ValueType)(0),                    // 1: app.resources.v1.ValueType
+	(VariableProblem_Kind)(0),         // 2: app.resources.v1.VariableProblem.Kind
+	(*VariableDefinition)(nil),        // 3: app.resources.v1.VariableDefinition
+	(*GroupDefinition)(nil),           // 4: app.resources.v1.GroupDefinition
+	(*DeclareEnvRequest)(nil),         // 5: app.resources.v1.DeclareEnvRequest
+	(*VariableCell)(nil),              // 6: app.resources.v1.VariableCell
+	(*DeclareEnvResponse)(nil),        // 7: app.resources.v1.DeclareEnvResponse
+	(*VariableProblem)(nil),           // 8: app.resources.v1.VariableProblem
+	(*ReportEnvProblemsRequest)(nil),  // 9: app.resources.v1.ReportEnvProblemsRequest
+	(*ReportEnvProblemsResponse)(nil), // 10: app.resources.v1.ReportEnvProblemsResponse
 }
 var file_app_resources_v1_variables_proto_depIdxs = []int32{
 	0, // 0: app.resources.v1.VariableDefinition.class:type_name -> app.resources.v1.VariableClass
-	2, // 1: app.resources.v1.DeclareEnvRequest.definitions:type_name -> app.resources.v1.VariableDefinition
-	3, // 2: app.resources.v1.DeclareEnvRequest.groups:type_name -> app.resources.v1.GroupDefinition
-	5, // 3: app.resources.v1.DeclareEnvResponse.cells:type_name -> app.resources.v1.VariableCell
-	1, // 4: app.resources.v1.VariableProblem.kind:type_name -> app.resources.v1.VariableProblem.Kind
-	7, // 5: app.resources.v1.ReportEnvProblemsRequest.problems:type_name -> app.resources.v1.VariableProblem
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	1, // 1: app.resources.v1.VariableDefinition.value_type:type_name -> app.resources.v1.ValueType
+	3, // 2: app.resources.v1.DeclareEnvRequest.definitions:type_name -> app.resources.v1.VariableDefinition
+	4, // 3: app.resources.v1.DeclareEnvRequest.groups:type_name -> app.resources.v1.GroupDefinition
+	6, // 4: app.resources.v1.DeclareEnvResponse.cells:type_name -> app.resources.v1.VariableCell
+	2, // 5: app.resources.v1.VariableProblem.kind:type_name -> app.resources.v1.VariableProblem.Kind
+	8, // 6: app.resources.v1.ReportEnvProblemsRequest.problems:type_name -> app.resources.v1.VariableProblem
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_app_resources_v1_variables_proto_init() }
@@ -675,12 +777,13 @@ func file_app_resources_v1_variables_proto_init() {
 	if File_app_resources_v1_variables_proto != nil {
 		return
 	}
+	file_app_resources_v1_variables_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_resources_v1_variables_proto_rawDesc), len(file_app_resources_v1_variables_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,

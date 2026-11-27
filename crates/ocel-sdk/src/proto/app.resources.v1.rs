@@ -171,6 +171,165 @@ impl ::buffa::Enumeration for VariableClass {
         ]
     }
 }
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[repr(i32)]
+pub enum ValueType {
+    VALUE_TYPE_UNSPECIFIED = 0i32,
+    VALUE_TYPE_BOOLEAN = 1i32,
+    VALUE_TYPE_INTEGER = 2i32,
+    VALUE_TYPE_NUMBER = 3i32,
+}
+impl ValueType {
+    ///Idiomatic alias for [`Self::VALUE_TYPE_UNSPECIFIED`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Unspecified: Self = Self::VALUE_TYPE_UNSPECIFIED;
+    ///Idiomatic alias for [`Self::VALUE_TYPE_BOOLEAN`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Boolean: Self = Self::VALUE_TYPE_BOOLEAN;
+    ///Idiomatic alias for [`Self::VALUE_TYPE_INTEGER`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Integer: Self = Self::VALUE_TYPE_INTEGER;
+    ///Idiomatic alias for [`Self::VALUE_TYPE_NUMBER`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Number: Self = Self::VALUE_TYPE_NUMBER;
+}
+impl ::core::default::Default for ValueType {
+    fn default() -> Self {
+        Self::VALUE_TYPE_UNSPECIFIED
+    }
+}
+impl ::serde::Serialize for ValueType {
+    fn serialize<S: ::serde::Serializer>(
+        &self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        s.serialize_str(::buffa::Enumeration::proto_name(self))
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for ValueType {
+    fn deserialize<D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        struct _V;
+        impl ::serde::de::Visitor<'_> for _V {
+            type Value = ValueType;
+            fn expecting(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                f.write_str(
+                    concat!("a string, integer, or null for ", stringify!(ValueType)),
+                )
+            }
+            fn visit_str<E: ::serde::de::Error>(
+                self,
+                v: &str,
+            ) -> ::core::result::Result<ValueType, E> {
+                <ValueType as ::buffa::Enumeration>::from_proto_name(v)
+                    .ok_or_else(|| { ::serde::de::Error::unknown_variant(v, &[]) })
+            }
+            fn visit_i64<E: ::serde::de::Error>(
+                self,
+                v: i64,
+            ) -> ::core::result::Result<ValueType, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <ValueType as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_u64<E: ::serde::de::Error>(
+                self,
+                v: u64,
+            ) -> ::core::result::Result<ValueType, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <ValueType as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_unit<E: ::serde::de::Error>(
+                self,
+            ) -> ::core::result::Result<ValueType, E> {
+                ::core::result::Result::Ok(::core::default::Default::default())
+            }
+        }
+        d.deserialize_any(_V)
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for ValueType {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+impl ::buffa::Enumeration for ValueType {
+    fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0i32 => ::core::option::Option::Some(Self::VALUE_TYPE_UNSPECIFIED),
+            1i32 => ::core::option::Option::Some(Self::VALUE_TYPE_BOOLEAN),
+            2i32 => ::core::option::Option::Some(Self::VALUE_TYPE_INTEGER),
+            3i32 => ::core::option::Option::Some(Self::VALUE_TYPE_NUMBER),
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn to_i32(&self) -> i32 {
+        *self as i32
+    }
+    fn proto_name(&self) -> &'static str {
+        match self {
+            Self::VALUE_TYPE_UNSPECIFIED => "VALUE_TYPE_UNSPECIFIED",
+            Self::VALUE_TYPE_BOOLEAN => "VALUE_TYPE_BOOLEAN",
+            Self::VALUE_TYPE_INTEGER => "VALUE_TYPE_INTEGER",
+            Self::VALUE_TYPE_NUMBER => "VALUE_TYPE_NUMBER",
+        }
+    }
+    fn from_proto_name(name: &str) -> ::core::option::Option<Self> {
+        match name {
+            "VALUE_TYPE_UNSPECIFIED" => {
+                ::core::option::Option::Some(Self::VALUE_TYPE_UNSPECIFIED)
+            }
+            "VALUE_TYPE_BOOLEAN" => {
+                ::core::option::Option::Some(Self::VALUE_TYPE_BOOLEAN)
+            }
+            "VALUE_TYPE_INTEGER" => {
+                ::core::option::Option::Some(Self::VALUE_TYPE_INTEGER)
+            }
+            "VALUE_TYPE_NUMBER" => ::core::option::Option::Some(Self::VALUE_TYPE_NUMBER),
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn values() -> &'static [Self] {
+        &[
+            Self::VALUE_TYPE_UNSPECIFIED,
+            Self::VALUE_TYPE_BOOLEAN,
+            Self::VALUE_TYPE_INTEGER,
+            Self::VALUE_TYPE_NUMBER,
+        ]
+    }
+}
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(default)]
@@ -224,6 +383,35 @@ pub struct VariableDefinition {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub group: ::buffa::alloc::string::String,
+    /// Field 11: `defaulted`
+    #[serde(
+        rename = "defaulted",
+        with = "::buffa::json_helpers::proto_bool",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
+    )]
+    pub defaulted: bool,
+    /// Field 12: `default_value`
+    #[serde(
+        rename = "defaultValue",
+        alias = "default_value",
+        skip_serializing_if = "::core::option::Option::is_none"
+    )]
+    pub default_value: ::core::option::Option<::buffa::alloc::string::String>,
+    /// Field 13: `value_type`
+    #[serde(
+        rename = "valueType",
+        alias = "value_type",
+        with = "::buffa::json_helpers::proto_enum",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
+    )]
+    pub value_type: ::buffa::EnumValue<ValueType>,
+    /// Field 14: `choices`
+    #[serde(
+        rename = "choices",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec",
+        deserialize_with = "::buffa::json_helpers::null_as_default"
+    )]
+    pub choices: ::buffa::alloc::vec::Vec<::buffa::alloc::string::String>,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -238,6 +426,10 @@ impl ::core::fmt::Debug for VariableDefinition {
             .field("source", &self.source)
             .field("description", &self.description)
             .field("group", &self.group)
+            .field("defaulted", &self.defaulted)
+            .field("default_value", &self.default_value)
+            .field("value_type", &self.value_type)
+            .field("choices", &self.choices)
             .finish()
     }
 }
@@ -247,6 +439,18 @@ impl VariableDefinition {
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
     pub const TYPE_URL: &'static str = "type.googleapis.com/app.resources.v1.VariableDefinition";
+}
+impl VariableDefinition {
+    #[must_use = "with_* setters return `self` by value; assign or chain the result"]
+    #[inline]
+    ///Sets [`Self::default_value`] to `Some(value)`, consuming and returning `self`.
+    pub fn with_default_value(
+        mut self,
+        value: impl Into<::buffa::alloc::string::String>,
+    ) -> Self {
+        self.default_value = Some(value.into());
+        self
+    }
 }
 ::buffa::impl_default_instance!(VariableDefinition);
 impl ::buffa::MessageName for VariableDefinition {
@@ -292,6 +496,21 @@ impl ::buffa::Message for VariableDefinition {
         if !self.group.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.group) as u64;
         }
+        if self.defaulted {
+            size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+        }
+        if let Some(ref v) = self.default_value {
+            size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
+        }
+        {
+            let val = self.value_type.to_i32();
+            if val != 0 {
+                size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+            }
+        }
+        for v in &self.choices {
+            size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -325,6 +544,21 @@ impl ::buffa::Message for VariableDefinition {
         }
         if !self.group.is_empty() {
             ::buffa::types::put_string_field(10u32, &self.group, buf);
+        }
+        if self.defaulted {
+            ::buffa::types::put_bool_field(11u32, self.defaulted, buf);
+        }
+        if let Some(ref v) = self.default_value {
+            ::buffa::types::put_string_field(12u32, v, buf);
+        }
+        {
+            let val = self.value_type.to_i32();
+            if val != 0 {
+                ::buffa::types::put_int32_field(13u32, val, buf);
+            }
+        }
+        for v in &self.choices {
+            ::buffa::types::put_string_field(14u32, v, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -394,6 +628,45 @@ impl ::buffa::Message for VariableDefinition {
                 )?;
                 ::buffa::types::merge_string(&mut self.group, buf)?;
             }
+            11u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.defaulted = ::buffa::types::decode_bool(buf)?;
+            }
+            12u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(
+                    self
+                        .default_value
+                        .get_or_insert_with(::buffa::alloc::string::String::new),
+                    buf,
+                )?;
+            }
+            13u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.value_type = ::buffa::EnumValue::from(
+                    ::buffa::types::decode_int32(buf)?,
+                );
+            }
+            14u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                let __elem = ::buffa::types::decode_string(buf)?;
+                ctx.register_element_memory(
+                    ::buffa::__private::element_footprint(&__elem),
+                )?;
+                self.choices.push(__elem);
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -409,6 +682,10 @@ impl ::buffa::Message for VariableDefinition {
         self.source.clear();
         self.description.clear();
         self.group.clear();
+        self.defaulted = false;
+        self.default_value = ::core::option::Option::None;
+        self.value_type = ::buffa::EnumValue::from(0);
+        self.choices.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -5909,6 +6186,14 @@ pub mod __buffa {
             pub description: &'a str,
             /// Field 10: `group`
             pub group: &'a str,
+            /// Field 11: `defaulted`
+            pub defaulted: bool,
+            /// Field 12: `default_value`
+            pub default_value: ::core::option::Option<&'a str>,
+            /// Field 13: `value_type`
+            pub value_type: ::buffa::EnumValue<super::super::ValueType>,
+            /// Field 14: `choices`
+            pub choices: ::buffa::RepeatedView<'a, &'a str>,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for VariableDefinitionView<'a> {
@@ -5991,6 +6276,29 @@ pub mod __buffa {
                         )?;
                         view.group = ::buffa::types::borrow_str(&mut cur)?;
                     }
+                    11u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.defaulted = ::buffa::types::decode_bool(&mut cur)?;
+                    }
+                    12u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.default_value = Some(::buffa::types::borrow_str(&mut cur)?);
+                    }
+                    13u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.value_type = ::buffa::EnumValue::from(
+                            ::buffa::types::decode_int32(&mut cur)?,
+                        );
+                    }
                     5u32 => {
                         ::buffa::encoding::check_wire_type(
                             tag,
@@ -6001,6 +6309,17 @@ pub mod __buffa {
                             ::buffa::__private::element_footprint(&__elem),
                         )?;
                         view.folders.push(__elem);
+                    }
+                    14u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __elem = ::buffa::types::borrow_str(&mut cur)?;
+                        ctx.register_element_memory(
+                            ::buffa::__private::element_footprint(&__elem),
+                        )?;
+                        view.choices.push(__elem);
                     }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
@@ -6038,6 +6357,10 @@ pub mod __buffa {
                     source: self.source.to_string(),
                     description: self.description.to_string(),
                     group: self.group.to_string(),
+                    defaulted: self.defaulted,
+                    default_value: self.default_value.map(|s| s.to_string()),
+                    value_type: self.value_type,
+                    choices: self.choices.iter().map(|s| s.to_string()).collect(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -6082,6 +6405,21 @@ pub mod __buffa {
                     size
                         += 1u64 + ::buffa::types::string_encoded_len(&self.group) as u64;
                 }
+                if self.defaulted {
+                    size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+                }
+                if let Some(ref v) = self.default_value {
+                    size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
+                }
+                {
+                    let val = self.value_type.to_i32();
+                    if val != 0 {
+                        size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+                    }
+                }
+                for v in &self.choices {
+                    size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
+                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -6116,6 +6454,21 @@ pub mod __buffa {
                 }
                 if !self.group.is_empty() {
                     ::buffa::types::put_string_field(10u32, &self.group, buf);
+                }
+                if self.defaulted {
+                    ::buffa::types::put_bool_field(11u32, self.defaulted, buf);
+                }
+                if let Some(ref v) = self.default_value {
+                    ::buffa::types::put_string_field(12u32, v, buf);
+                }
+                {
+                    let val = self.value_type.to_i32();
+                    if val != 0 {
+                        ::buffa::types::put_int32_field(13u32, val, buf);
+                    }
+                }
+                for v in &self.choices {
+                    ::buffa::types::put_string_field(14u32, v, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -6158,6 +6511,20 @@ pub mod __buffa {
                 }
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.group) {
                     __map.serialize_entry("group", self.group)?;
+                }
+                if self.defaulted {
+                    __map.serialize_entry("defaulted", &self.defaulted)?;
+                }
+                if let ::core::option::Option::Some(__v) = self.default_value {
+                    __map.serialize_entry("defaultValue", __v)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_default_enum_value(
+                    &self.value_type,
+                ) {
+                    __map.serialize_entry("valueType", &self.value_type)?;
+                }
+                if !self.choices.is_empty() {
+                    __map.serialize_entry("choices", &*self.choices)?;
                 }
                 __map.end()
             }
@@ -6288,6 +6655,26 @@ pub mod __buffa {
             #[must_use]
             pub fn group(&self) -> &'_ str {
                 self.0.reborrow().group
+            }
+            /// Field 11: `defaulted`
+            #[must_use]
+            pub fn defaulted(&self) -> bool {
+                self.0.reborrow().defaulted
+            }
+            /// Field 12: `default_value`
+            #[must_use]
+            pub fn default_value(&self) -> ::core::option::Option<&'_ str> {
+                self.0.reborrow().default_value
+            }
+            /// Field 13: `value_type`
+            #[must_use]
+            pub fn value_type(&self) -> ::buffa::EnumValue<super::super::ValueType> {
+                self.0.reborrow().value_type
+            }
+            /// Field 14: `choices`
+            #[must_use]
+            pub fn choices(&self) -> &::buffa::RepeatedView<'_, &'_ str> {
+                &self.0.reborrow().choices
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<VariableDefinitionView<'static>>>

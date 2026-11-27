@@ -6,6 +6,7 @@ import types
 import typing
 import unicodedata
 from collections.abc import Sequence
+from enum import Enum
 from typing import Any, overload
 
 from ocel._declare import declare_env, is_discovering, report_env_problems
@@ -15,6 +16,7 @@ from ocel.gen.app.resources.v1.variables_pb import (
     DeclareEnvRequest,
     GroupDefinition,
     ReportEnvProblemsRequest,
+    ValueType,
     VariableCell,
     VariableClass,
     VariableDefinition,
@@ -800,12 +802,76 @@ def _declare_entries(entries: Sequence[_Variable | _Group], site: _Site) -> None
                     source=source,
                     description=variable.description,
                     group=group_key,
+                    defaulted=variable.defaulted,
+                    default_value=_write_default(variable),
+                    value_type=_find_value_type(variable.target),
+                    choices=_find_choices(variable.target),
                 )
             )
     response = declare_env(DeclareEnvRequest(definitions=definitions, groups=groups))
     problems = _find_invalid_values(entries, response.cells)
     if problems:
         report_env_problems(ReportEnvProblemsRequest(problems=problems))
+
+
+_MAX_DEFAULT_BYTES = 1024
+_MAX_CHOICES = 100
+_MAX_CHOICE_BYTES = 256
+
+
+def _write_default(variable: _Variable) -> str | None:
+    if variable.variable_class is not VariableClass.PLAIN:
+        return None
+    if variable.default_raw is not None:
+        text = variable.default_raw
+    else:
+        text = _write_as_text(variable.default_value)
+        if text is None or not _reads_as(variable.target, text, variable.default_value):
+            return None
+    if len(text.encode()) > _MAX_DEFAULT_BYTES:
+        return None
+    return text
+
+
+def _write_as_text(value: Any) -> str | None:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, Enum):
+        return value.value if isinstance(value.value, str) else None
+    if isinstance(value, (str, int, float)):
+        try:
+            return str(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _reads_as(target: Any, text: str, value: Any) -> bool:
+    try:
+        return _parse_value(target, text) == value
+    except Exception:
+        return False
+
+
+def _find_value_type(target: Any) -> ValueType:
+    if target is bool:
+        return ValueType.BOOLEAN
+    if target is int:
+        return ValueType.INTEGER
+    if target is float:
+        return ValueType.NUMBER
+    return ValueType.UNSPECIFIED
+
+
+def _find_choices(target: Any) -> list[str]:
+    if not (isinstance(target, type) and issubclass(target, Enum)):
+        return []
+    choices = [member.value for member in target]
+    if len(choices) > _MAX_CHOICES or not all(
+        isinstance(choice, str) and len(choice.encode()) <= _MAX_CHOICE_BYTES for choice in choices
+    ):
+        return []
+    return choices
 
 
 def _find_invalid_values(

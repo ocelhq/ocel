@@ -520,7 +520,7 @@ func declareEnv(decl declared, source string) error {
 		req.Groups = append(req.Groups, &resourcesv1.GroupDefinition{Key: g.key, Required: g.required, Description: g.description})
 	}
 	for _, v := range decl.variables {
-		req.Definitions = append(req.Definitions, &resourcesv1.VariableDefinition{
+		definition := &resourcesv1.VariableDefinition{
 			Key:         v.key,
 			Class:       v.class,
 			Required:    v.required(),
@@ -528,7 +528,13 @@ func declareEnv(decl declared, source string) error {
 			Source:      source,
 			Description: v.description,
 			Group:       v.group,
-		})
+			Defaulted:   v.fallback != nil,
+			ValueType:   valueTypeOf(v.field.Type),
+		}
+		if v.fallback != nil && v.class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN && len(*v.fallback) <= maxDefaultBytes {
+			definition.DefaultValue = v.fallback
+		}
+		req.Definitions = append(req.Definitions, definition)
 	}
 	res, err := declaration.DeclareVariables(req)
 	if err != nil {
@@ -655,6 +661,27 @@ func parseable(t reflect.Type) bool {
 		return true
 	}
 	return false
+}
+
+const maxDefaultBytes = 1024
+
+func valueTypeOf(t reflect.Type) resourcesv1.ValueType {
+	if t.Kind() == reflect.Pointer {
+		return valueTypeOf(t.Elem())
+	}
+	if reflect.PointerTo(t).Implements(textUnmarshaler) || t == durationType {
+		return resourcesv1.ValueType_VALUE_TYPE_UNSPECIFIED
+	}
+	switch t.Kind() {
+	case reflect.Bool:
+		return resourcesv1.ValueType_VALUE_TYPE_BOOLEAN
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return resourcesv1.ValueType_VALUE_TYPE_INTEGER
+	case reflect.Float32, reflect.Float64:
+		return resourcesv1.ValueType_VALUE_TYPE_NUMBER
+	}
+	return resourcesv1.ValueType_VALUE_TYPE_UNSPECIFIED
 }
 
 func parse(t reflect.Type, raw string) (reflect.Value, error) {

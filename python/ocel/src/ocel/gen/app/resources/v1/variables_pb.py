@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from protobuf import DescFile
 
 
-_VariableDefinitionFields: TypeAlias = Literal["key", "class", "required", "folders", "source", "description", "group"]
+_VariableDefinitionFields: TypeAlias = Literal["key", "class", "required", "folders", "source", "description", "group", "defaulted", "default_value", "value_type", "choices"]
 
 class VariableDefinition(Message[_VariableDefinitionFields]):
     """
@@ -54,9 +54,25 @@ class VariableDefinition(Message[_VariableDefinitionFields]):
             ```proto
             string group = 10;
             ```
+        defaulted:
+            ```proto
+            bool defaulted = 11;
+            ```
+        default_value:
+            ```proto
+            optional string default_value = 12;
+            ```
+        value_type:
+            ```proto
+            app.resources.v1.ValueType value_type = 13;
+            ```
+        choices:
+            ```proto
+            repeated string choices = 14;
+            ```
     """
 
-    __slots__ = ("key", "class_", "required", "folders", "source", "description", "group")
+    __slots__ = ("key", "class_", "required", "folders", "source", "description", "group", "defaulted", "default_value", "value_type", "choices")
 
     if TYPE_CHECKING:
 
@@ -70,6 +86,10 @@ class VariableDefinition(Message[_VariableDefinitionFields]):
             source: str = "",
             description: str = "",
             group: str = "",
+            defaulted: bool = False,
+            default_value: str | None = None,
+            value_type: ValueType | None = None,
+            choices: list[str] | None = None,
         ) -> None:
             pass
 
@@ -80,6 +100,10 @@ class VariableDefinition(Message[_VariableDefinitionFields]):
         source: str
         description: str
         group: str
+        defaulted: bool
+        default_value: str
+        value_type: ValueType
+        choices: list[str]
 
 _GroupDefinitionFields: TypeAlias = Literal["key", "required", "description"]
 
@@ -375,9 +399,39 @@ class VariableClass(Enum):
     SECRET = 3
     DERIVED = 4
 
+class ValueType(Enum):
+    """
+    ```proto
+    enum app.resources.v1.ValueType
+    ```
+
+    Attributes:
+        UNSPECIFIED:
+            ```proto
+            VALUE_TYPE_UNSPECIFIED = 0
+            ```
+        BOOLEAN:
+            ```proto
+            VALUE_TYPE_BOOLEAN = 1
+            ```
+        INTEGER:
+            ```proto
+            VALUE_TYPE_INTEGER = 2
+            ```
+        NUMBER:
+            ```proto
+            VALUE_TYPE_NUMBER = 3
+            ```
+    """
+
+    UNSPECIFIED = 0
+    BOOLEAN = 1
+    INTEGER = 2
+    NUMBER = 3
+
 
 _DESC = file_desc(
-    b'\n app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto"\x8e\x04\n\x12VariableDefinition\x12/\n\x03key\x18\x01 \x01(\tR\x03keyB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$\x12?\n\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassR\x05classB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12\x1a\n\x08required\x18\x04 \x01(\x08R\x08required\x12A\n\x07folders\x18\x05 \x03(\tR\x07foldersB\'\xbaH$\x92\x01!\x18\x01"\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)+$\x12\x16\n\x06source\x18\x06 \x01(\tR\x06source\x12\xdb\x01\n\x0bdescription\x18\t \x01(\tR\x0bdescriptionB\xb8\x01\xbaH\xb4\x01\xba\x01\xb0\x01\n variables.definition.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a?size(bytes(this)) <= 120 && !this.matches(\'[\\\\x00-\\\\x1f\\\\x7f]\')\x121\n\x05group\x18\n \x01(\tR\x05groupB\x1b\xbaH\x18r\x162\x14^[^#\\x00-\\x1f\\x7f]*$"\xb7\x02\n\x0fGroupDefinition\x12/\n\x03key\x18\x01 \x01(\tR\x03keyB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$\x12\x1a\n\x08required\x18\x02 \x01(\x08R\x08required\x12\xd6\x01\n\x0bdescription\x18\x03 \x01(\tR\x0bdescriptionB\xb3\x01\xbaH\xaf\x01\xba\x01\xab\x01\n\x1bvariables.group.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a?size(bytes(this)) <= 120 && !this.matches(\'[\\\\x00-\\\\x1f\\\\x7f]\')"\x96\x01\n\x11DeclareEnvRequest\x12F\n\x0bdefinitions\x18\x01 \x03(\x0b2$.app.resources.v1.VariableDefinitionR\x0bdefinitions\x129\n\x06groups\x18\x02 \x03(\x0b2!.app.resources.v1.GroupDefinitionR\x06groups"\x8f\x01\n\x0cVariableCell\x12/\n\x03key\x18\x01 \x01(\tR\x03keyB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$\x128\n\x06folder\x18\x02 \x01(\tR\x06folderB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$\x12\x14\n\x05value\x18\x03 \x01(\tR\x05value"J\n\x12DeclareEnvResponse\x124\n\x05cells\x18\x01 \x03(\x0b2\x1e.app.resources.v1.VariableCellR\x05cells"\xfd\x01\n\x0fVariableProblem\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x128\n\x06folder\x18\x02 \x01(\tR\x06folderB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$\x12D\n\x04kind\x18\x03 \x01(\x0e2&.app.resources.v1.VariableProblem.KindR\x04kindB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12\x16\n\x06detail\x18\x04 \x01(\tR\x06detail"@\n\x04Kind\x12\x14\n\x10KIND_UNSPECIFIED\x10\x00\x12\x10\n\x0cKIND_MISSING\x10\x01\x12\x10\n\x0cKIND_INVALID\x10\x02"Y\n\x18ReportEnvProblemsRequest\x12=\n\x08problems\x18\x01 \x03(\x0b2!.app.resources.v1.VariableProblemR\x08problems"\x1b\n\x19ReportEnvProblemsResponse*\x9e\x01\n\rVariableClass\x12\x1e\n\x1aVARIABLE_CLASS_UNSPECIFIED\x10\x00\x12\x18\n\x14VARIABLE_CLASS_PLAIN\x10\x01\x12\x1c\n\x18VARIABLE_CLASS_SENSITIVE\x10\x02\x12\x19\n\x15VARIABLE_CLASS_SECRET\x10\x03\x12\x1a\n\x16VARIABLE_CLASS_DERIVED\x10\x04B?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
+    b'\n app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto"\xc1\r\n\x12VariableDefinition\x12/\n\x03key\x18\x01 \x01(\tR\x03keyB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$\x12?\n\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassR\x05classB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12\x1a\n\x08required\x18\x04 \x01(\x08R\x08required\x12A\n\x07folders\x18\x05 \x03(\tR\x07foldersB\'\xbaH$\x92\x01!\x18\x01"\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)+$\x12\x16\n\x06source\x18\x06 \x01(\tR\x06source\x12\xdb\x01\n\x0bdescription\x18\t \x01(\tR\x0bdescriptionB\xb8\x01\xbaH\xb4\x01\xba\x01\xb0\x01\n variables.definition.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a?size(bytes(this)) <= 120 && !this.matches(\'[\\\\x00-\\\\x1f\\\\x7f]\')\x121\n\x05group\x18\n \x01(\tR\x05groupB\x1b\xbaH\x18r\x162\x14^[^#\\x00-\\x1f\\x7f]*$\x12\x1c\n\tdefaulted\x18\x0b \x01(\x08R\tdefaulted\x122\n\rdefault_value\x18\x0c \x01(\tH\x00R\x0cdefaultValueB\x08\xbaH\x05r\x03(\x80\x08\x88\x01\x01\x12D\n\nvalue_type\x18\r \x01(\x0e2\x1b.app.resources.v1.ValueTypeR\tvalueTypeB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12+\n\x07choices\x18\x0e \x03(\tR\x07choicesB\x11\xbaH\x0e\x92\x01\x0b\x10d\x18\x01"\x05r\x03(\x80\x02B\x10\n\x0e_default_value:\xd9\x07\xbaH\xd5\x07\x1a|\n+variables.definition.defaulted_not_required\x12)a variable with a default is not required\x1a"!(this.defaulted && this.required)\x1a\x9a\x01\n&variables.definition.secret_no_default\x12\x17a secret has no default\x1aW!(this.defaulted && this.class == app.resources.v1.VariableClass.VARIABLE_CLASS_SECRET)\x1a\xdc\x01\n(variables.definition.default_value_plain\x12=only a plain variable with a default sends the default\'s text\x1aq!has(this.default_value) || (this.defaulted && this.class == app.resources.v1.VariableClass.VARIABLE_CLASS_PLAIN)\x1a\x91\x02\n#variables.definition.secret_untyped\x12@a secret is read as text, so it has no value type and no choices\x1a\xa7\x01this.class != app.resources.v1.VariableClass.VARIABLE_CLASS_SECRET || (this.value_type == app.resources.v1.ValueType.VALUE_TYPE_UNSPECIFIED && size(this.choices) == 0)\x1a\xc4\x01\n!variables.definition.choices_text\x12>choices are text, so a variable with choices has no value type\x1a_size(this.choices) == 0 || this.value_type == app.resources.v1.ValueType.VALUE_TYPE_UNSPECIFIED"\xb7\x02\n\x0fGroupDefinition\x12/\n\x03key\x18\x01 \x01(\tR\x03keyB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$\x12\x1a\n\x08required\x18\x02 \x01(\x08R\x08required\x12\xd6\x01\n\x0bdescription\x18\x03 \x01(\tR\x0bdescriptionB\xb3\x01\xbaH\xaf\x01\xba\x01\xab\x01\n\x1bvariables.group.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a?size(bytes(this)) <= 120 && !this.matches(\'[\\\\x00-\\\\x1f\\\\x7f]\')"\x96\x01\n\x11DeclareEnvRequest\x12F\n\x0bdefinitions\x18\x01 \x03(\x0b2$.app.resources.v1.VariableDefinitionR\x0bdefinitions\x129\n\x06groups\x18\x02 \x03(\x0b2!.app.resources.v1.GroupDefinitionR\x06groups"\x8f\x01\n\x0cVariableCell\x12/\n\x03key\x18\x01 \x01(\tR\x03keyB\x1d\xbaH\x1ar\x18\x10\x012\x14^[^#\\x00-\\x1f\\x7f]*$\x128\n\x06folder\x18\x02 \x01(\tR\x06folderB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$\x12\x14\n\x05value\x18\x03 \x01(\tR\x05value"J\n\x12DeclareEnvResponse\x124\n\x05cells\x18\x01 \x03(\x0b2\x1e.app.resources.v1.VariableCellR\x05cells"\xfd\x01\n\x0fVariableProblem\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x128\n\x06folder\x18\x02 \x01(\tR\x06folderB \xbaH\x1dr\x1b2\x19^(/[^/#\\x00-\\x1f\\x7f]+)*$\x12D\n\x04kind\x18\x03 \x01(\x0e2&.app.resources.v1.VariableProblem.KindR\x04kindB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12\x16\n\x06detail\x18\x04 \x01(\tR\x06detail"@\n\x04Kind\x12\x14\n\x10KIND_UNSPECIFIED\x10\x00\x12\x10\n\x0cKIND_MISSING\x10\x01\x12\x10\n\x0cKIND_INVALID\x10\x02"Y\n\x18ReportEnvProblemsRequest\x12=\n\x08problems\x18\x01 \x03(\x0b2!.app.resources.v1.VariableProblemR\x08problems"\x1b\n\x19ReportEnvProblemsResponse*\x9e\x01\n\rVariableClass\x12\x1e\n\x1aVARIABLE_CLASS_UNSPECIFIED\x10\x00\x12\x18\n\x14VARIABLE_CLASS_PLAIN\x10\x01\x12\x1c\n\x18VARIABLE_CLASS_SENSITIVE\x10\x02\x12\x19\n\x15VARIABLE_CLASS_SECRET\x10\x03\x12\x1a\n\x16VARIABLE_CLASS_DERIVED\x10\x04*n\n\tValueType\x12\x1a\n\x16VALUE_TYPE_UNSPECIFIED\x10\x00\x12\x16\n\x12VALUE_TYPE_BOOLEAN\x10\x01\x12\x16\n\x12VALUE_TYPE_INTEGER\x10\x02\x12\x15\n\x11VALUE_TYPE_NUMBER\x10\x03B?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
     [
         validate_pb.desc(),
     ],
@@ -392,6 +446,7 @@ _DESC = file_desc(
         "ReportEnvProblemsRequest": ReportEnvProblemsRequest,
         "ReportEnvProblemsResponse": ReportEnvProblemsResponse,
         "VariableClass": VariableClass,
+        "ValueType": ValueType,
     },
 )
 

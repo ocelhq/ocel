@@ -428,6 +428,67 @@ func TestDefineDeclaresEveryVariableWithItsClassAndWhetherItIsRequired(t *testin
 	}
 }
 
+func TestDefineDeclaresEachDefaultAndTheTypeAValueIsParsedInto(t *testing.T) {
+	seen := discover(t, nil)
+
+	type vars struct {
+		Greeting string        `ocel:"GREETING,default=hello"`
+		Suffix   string        `ocel:"SUFFIX,default="`
+		Webhook  string        `ocel:"WEBHOOK,sensitive,default=k"`
+		Port     int           `ocel:"PORT,default=3000"`
+		Workers  uint8         `ocel:"WORKERS"`
+		Ratio    float64       `ocel:"RATIO"`
+		Beta     bool          `ocel:"BETA,sensitive"`
+		Debug    *bool         `ocel:"DEBUG"`
+		Timeout  time.Duration `ocel:"TIMEOUT"`
+		Address  netip.Addr    `ocel:"ADDRESS"`
+		APIKey   env.Secret    `ocel:"API_KEY"`
+	}
+	env.MustDefine[vars]()
+
+	definitions := byPath(*seen, "/DeclareEnv")["definitions"].([]any)
+	want := map[string]map[string]any{
+		"GREETING": {"defaulted": true, "defaultValue": "hello"},
+		"SUFFIX":   {"defaulted": true, "defaultValue": ""},
+		"WEBHOOK":  {"defaulted": true},
+		"PORT":     {"defaulted": true, "defaultValue": "3000", "valueType": "VALUE_TYPE_INTEGER"},
+		"WORKERS":  {"valueType": "VALUE_TYPE_INTEGER"},
+		"RATIO":    {"valueType": "VALUE_TYPE_NUMBER"},
+		"BETA":     {"valueType": "VALUE_TYPE_BOOLEAN"},
+		"DEBUG":    {"valueType": "VALUE_TYPE_BOOLEAN"},
+		"TIMEOUT":  {},
+		"ADDRESS":  {},
+		"API_KEY":  {},
+	}
+	for _, raw := range definitions {
+		d := raw.(map[string]any)
+		key := d["key"].(string)
+		w := want[key]
+		for _, field := range []string{"defaulted", "defaultValue", "valueType", "choices"} {
+			if got, want := d[field], w[field]; !equal(got, want) {
+				t.Errorf("%s.%s = %v, want %v", key, field, got, want)
+			}
+		}
+	}
+}
+
+func TestDefineFlagsADefaultTooLongToSendWithoutItsText(t *testing.T) {
+	seen := discover(t, nil)
+
+	type vars struct {
+		Banner string `ocel:"BANNER,default=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`
+	}
+	env.MustDefine[vars]()
+
+	d := byPath(*seen, "/DeclareEnv")["definitions"].([]any)[0].(map[string]any)
+	if d["defaulted"] != true {
+		t.Errorf("defaulted = %v, want true", d["defaulted"])
+	}
+	if _, ok := d["defaultValue"]; ok {
+		t.Error("defaultValue sent, want it left out: a default's text is at most 1024 bytes")
+	}
+}
+
 func equal(got, want any) bool {
 	g, _ := json.Marshal(got)
 	w, _ := json.Marshal(want)

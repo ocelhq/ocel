@@ -111,7 +111,15 @@ describe("the declaration ocel/env/sveltekit makes through core defineEnv", () =
         folders: [],
         source: expect.any(String),
       },
-      { key: "PORT_HINT", class: 1, required: false, folders: [], source: expect.any(String) },
+      {
+        key: "PORT_HINT",
+        class: 1,
+        required: false,
+        defaulted: true,
+        defaultValue: "3000",
+        folders: [],
+        source: expect.any(String),
+      },
     ]);
   });
 

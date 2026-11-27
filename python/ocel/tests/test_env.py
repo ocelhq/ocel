@@ -8,7 +8,12 @@ import pytest
 
 import ocel
 from ocel.env import _Variable
-from ocel.gen.app.resources.v1.variables_pb import VariableCell, VariableClass, VariableProblem
+from ocel.gen.app.resources.v1.variables_pb import (
+    ValueType,
+    VariableCell,
+    VariableClass,
+    VariableProblem,
+)
 
 
 def define(source: str, filename: str) -> dict:
@@ -358,6 +363,84 @@ def test_every_variable_reaches_the_dev_server_with_its_class_and_what_it_needs(
     assert list(definitions[5].folders) == ["/apps/web", "/apps/api"]
     for definition in definitions:
         assert definition.source == f"{__file__}:{line}"
+
+
+class Priority(Enum):
+    LOW = 1
+    HIGH = 2
+
+
+class Doubled(int):
+    def __new__(cls, raw: str | int) -> "Doubled":
+        return super().__new__(cls, int(raw) * 2)
+
+
+class Bumped(int):
+    def __new__(cls, raw: str | int) -> "Bumped":
+        value = int(raw)
+        if value % 2 == 0:
+            raise ValueError("want an odd number")
+        return super().__new__(cls, value + 1)
+
+
+def test_every_variable_reaches_the_dev_server_with_its_default_and_the_type_it_is_read_as(
+    collector,
+):
+    class Env(ocel.Env):
+        greeting: str = "hello"
+        suffix: str = ""
+        banner: str = "a" * 1025
+        webhook: str = ocel.var(default="k", sensitive=True)
+        port: int = 3000
+        port_text: int = "8080"
+        ratio: float
+        beta: bool = ocel.var(sensitive=True)
+        debug: bool | None = False
+        level: Level = Level.INFO
+        priority: Priority | None = None
+        optional: str | None = None
+        doubled: Doubled = Doubled(2)
+        bumped: Bumped = Bumped(3)
+        signing_key: ocel.Secret
+
+    _ = Env
+    hints = {
+        d.key: (
+            d.defaulted,
+            d.default_value if d.has_field("default_value") else None,
+            d.value_type,
+            list(d.choices),
+        )
+        for d in collector.declared_env().definitions
+    }
+    unspecified = ValueType.UNSPECIFIED
+    assert hints == {
+        "GREETING": (True, "hello", unspecified, []),
+        "SUFFIX": (True, "", unspecified, []),
+        "BANNER": (True, None, unspecified, []),
+        "WEBHOOK": (True, None, unspecified, []),
+        "PORT": (True, "3000", ValueType.INTEGER, []),
+        "PORT_TEXT": (True, "8080", ValueType.INTEGER, []),
+        "RATIO": (False, None, ValueType.NUMBER, []),
+        "BETA": (False, None, ValueType.BOOLEAN, []),
+        "DEBUG": (True, "false", ValueType.BOOLEAN, []),
+        "LEVEL": (True, "info", unspecified, ["debug", "info"]),
+        "PRIORITY": (False, None, unspecified, []),
+        "OPTIONAL": (False, None, unspecified, []),
+        "DOUBLED": (True, None, unspecified, []),
+        "BUMPED": (True, None, unspecified, []),
+        "SIGNING_KEY": (False, None, unspecified, []),
+    }
+
+
+def test_a_default_python_cannot_write_as_text_is_declared_without_its_text(collector):
+    class Env(ocel.Env):
+        limit: int = 10**5000
+
+    _ = Env
+    [definition] = collector.declared_env().definitions
+    assert definition.defaulted
+    assert not definition.has_field("default_value")
 
 
 def test_a_required_key_the_store_has_no_cell_for_is_left_to_the_cli_to_report(collector):
