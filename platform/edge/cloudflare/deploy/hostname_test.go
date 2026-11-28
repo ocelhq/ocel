@@ -1071,10 +1071,8 @@ func TestARouteHeldByAWorkerNoOriginTaggedIsRefusedAsNotOcelsToRelease(t *testin
 	if err == nil {
 		t.Fatal("reconcileWorkerRoutes err = nil, want a refusal")
 	}
-	for _, want := range []string{"ocel-preview-entry", "carries no Ocel origin tag", "remove the route", "Cloudflare"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("err = %v, want it to contain %q", err, want)
-		}
+	if want := `worker route "*.preview.app.com/*" runs "ocel-preview-entry", which no Ocel origin tagged: remove the route in Cloudflare if nothing uses it`; err.Error() != want {
+		t.Errorf("err = %q, want %q", err, want)
 	}
 	if strings.Contains(err.Error(), "release it from the project that owns it") {
 		t.Errorf("err = %v, want no remedy naming a project, since no project owns an untagged worker", err)

@@ -1077,10 +1077,9 @@ func TestAPreviewNeedsADomainToServeOn(t *testing.T) {
 		if err == nil {
 			t.Fatalf("refuseMissingPreviewDomain err = nil, want a refusal; out = %q", out.String())
 		}
-		for _, want := range []string{"*.preview.ocel.app", "global preview domain", "every project", "remove domains.preview from ocel.aws.json", "already serves"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("err = %v, want it to contain %q", err, want)
-			}
+		want := "domains.preview *.preview.ocel.app is this bootstrap's global preview domain: remove domains.preview from ocel.aws.json"
+		if err.Error() != want {
+			t.Errorf("err = %q, want %q", err, want)
 		}
 	})
 

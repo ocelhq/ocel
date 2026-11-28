@@ -192,7 +192,7 @@ func (p *cloudflare) refuseHeldRoute(ctx context.Context, origin OriginScope, ac
 		case err != nil:
 			return err
 		case !tagged:
-			return fmt.Errorf("worker route %q runs %q, which carries no Ocel origin tag, so no project here can release it and it is left in place; if nothing uses it, remove the route in Cloudflare and run this again", route.Pattern, route.Script)
+			return fmt.Errorf("worker route %q runs %q, which no Ocel origin tagged: remove the route in Cloudflare if nothing uses it", route.Pattern, route.Script)
 		case held != origin:
 			return refuseOtherOriginsRoute(route.Pattern, route.Script, held)
 		}
