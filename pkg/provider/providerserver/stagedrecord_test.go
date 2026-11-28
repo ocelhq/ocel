@@ -485,6 +485,7 @@ func TestTheStagedRecordIncludesTheDeclarationsGroupsAndValueVersionsTheReleaseW
 	req.Manifest.Apps[0].Variables = []*contractv1.ManifestVariable{
 		{Key: "PUBLIC_MODE", Value: "loud", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Folder: "/web", Environment: "staging", Version: 3},
 		{Key: "UNVERSIONED", Value: "x", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+		{Key: "STRIPE_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Folder: "/web", Version: 2},
 	}
 
 	result, _ := deploy(t, client, req)
@@ -517,8 +518,8 @@ func TestTheStagedRecordIncludesTheDeclarationsGroupsAndValueVersionsTheReleaseW
 	if !proto.Equal(&gotGroup, group) {
 		t.Errorf("variableGroups[0] = %v, want %v", &gotGroup, group)
 	}
-	wantValues := []router.ReleasedValue{{Key: "PUBLIC_MODE", Folder: "/web", Environment: "staging", Version: 3, Class: "VARIABLE_CLASS_PLAIN"}}
+	wantValues := []router.ReleasedValue{{Key: "PUBLIC_MODE", Folder: "/web", Environment: "staging", Version: 3}}
 	if !reflect.DeepEqual(record.Values, wantValues) {
-		t.Errorf("values = %+v, want %+v: only a value the deploy released at a version is one a rollback can report", record.Values, wantValues)
+		t.Errorf("values = %+v, want %+v: only a non-secret value the deploy released at a version is one a rollback reports, and a secret's version never leaves the record", record.Values, wantValues)
 	}
 }

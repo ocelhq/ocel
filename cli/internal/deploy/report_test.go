@@ -476,11 +476,9 @@ func TestADeployRecordsWithItsReleaseTheDeclarationsGroupsAndValuesItsReportName
 	}
 	var recorded []*consolev1.ReleasedValue
 	for _, value := range record.Values {
-		if value.Class != resourcesv1.VariableClass_VARIABLE_CLASS_SECRET.String() {
-			recorded = append(recorded, &consolev1.ReleasedValue{Key: value.Key, Folder: value.Folder, Environment: value.Environment, Version: value.Version})
-		}
+		recorded = append(recorded, &consolev1.ReleasedValue{Key: value.Key, Folder: value.Folder, Environment: value.Environment, Version: value.Version})
 	}
 	if len(app.GetValues()) != 1 || len(recorded) != 1 || !proto.Equal(recorded[0], app.GetValues()[0]) {
-		t.Errorf("the record's non-secret values are %v, want the %v the report names", recorded, app.GetValues())
+		t.Errorf("the record's values are %v, want exactly the %v the report names, and no version of the secret LIVE_KEY", recorded, app.GetValues())
 	}
 }

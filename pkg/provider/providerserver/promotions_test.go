@@ -143,7 +143,7 @@ func TestARollbackResultCarriesTheDeclarationsGroupsAndValuesOfTheReleaseItServe
 		Release:        releaseFor(0),
 		Declarations:   []json.RawMessage{protojsonOf(t, declared)},
 		VariableGroups: []json.RawMessage{protojsonOf(t, group)},
-		Values:         []router.ReleasedValue{{Key: "PUBLIC_MODE", Folder: "/web", Environment: "staging", Version: 3, Class: "VARIABLE_CLASS_PLAIN"}},
+		Values:         []router.ReleasedValue{{Key: "PUBLIC_MODE", Folder: "/web", Environment: "staging", Version: 3}},
 	}
 	for i, record := range []router.ReleaseRecord{built, {App: "web", Release: releaseFor(1)}} {
 		if err := releases.PutStaged(context.Background(), record); err != nil {
@@ -174,7 +174,7 @@ func TestARollbackResultCarriesTheDeclarationsGroupsAndValuesOfTheReleaseItServe
 		Outcome:        progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED,
 		Variables:      []*resourcesv1.VariableDefinition{declared},
 		VariableGroups: []*resourcesv1.GroupDefinition{group},
-		Values:         []*progressv1.ReleasedValue{{Key: "PUBLIC_MODE", Folder: "/web", Environment: "staging", Version: 3, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN}},
+		Values:         []*progressv1.ReleasedValue{{Key: "PUBLIC_MODE", Folder: "/web", Environment: "staging", Version: 3}},
 	}
 	if !proto.Equal(apps[0], want) {
 		t.Errorf("Rollback() reported %v, want %v: the report of a rollback names what the release it serves declared and was released with", apps[0], want)
@@ -239,6 +239,34 @@ func TestEveryRecordARollbackReadsOrWritesIsReadOrWrittenWhileItsSpanNamesIt(t *
 	}
 	if unnamed := callsNoSpanNamed(rolled.events, calls.list()); len(unnamed) > 0 {
 		t.Errorf("the rollback made these calls while no span named what it waited on: %v", unnamed)
+	}
+}
+
+func TestARollbackReadsTheRecordOfTheReleaseItServesOnce(t *testing.T) {
+	t.Parallel()
+	client, vendor, calls := timedServed(t)
+	edgeProvisioned(t, vendor, environment.TierProduction, "shop")
+	seedPromotions(t, vendor, environment.TierProduction, "shop", "", "p1", "p2")
+	calls.reset()
+
+	if _, err := rollBack(context.Background(), client, &contractv1.RollbackRequest{Slug: "shop"}); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+
+	reads, writes := 0, 0
+	for _, call := range calls.list() {
+		if !strings.Contains(call.name, releaseFor(0)) {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(call.name, "read "):
+			reads++
+		case strings.HasPrefix(call.name, "write "):
+			writes++
+		}
+	}
+	if read := reads - writes; read != 1 {
+		t.Errorf("the rollback read the record of the release it serves %d times besides the reads it rewrote the record after, want once: a release record never changes, so what the report and the promotion need comes from one read", read)
 	}
 }
 

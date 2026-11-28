@@ -95,7 +95,11 @@ func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv
 	if err != nil {
 		return router.Promotion{}, nil, err
 	}
-	apps, err := rolledBackApps(leased, session.ledger, target)
+	served, err := session.ledger.readRecords(leased, target, slices.Sorted(maps.Keys(target.Releases)))
+	if err != nil {
+		return router.Promotion{}, nil, err
+	}
+	apps, err := rolledBackApps(target, served)
 	if err != nil {
 		return router.Promotion{}, nil, err
 	}
@@ -113,7 +117,7 @@ func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv
 		Releases:    target.Releases,
 		Propagation: &propagation,
 	}
-	dropped, err := session.promoteApps(leased, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted, confirm: hold.confirm}, session.readAppRouter, log)
+	dropped, err := session.promoteApps(leased, promoteRequest{replaces: current.Active, rollsBackTo: target.PromotionID, promotion: promoted, records: served, confirm: hold.confirm}, session.readAppRouter, log)
 	teardown := provider.StackDestroy{Images: removalImages(leased, session.provider, req.GetProjectRegistry(), log), Lease: hold.lease()}
 	if err != nil {
 		return router.Promotion{}, nil, errors.Join(err, session.reclaimDropped(leased, teardown, "", dropped, log))
@@ -130,18 +134,12 @@ func (h *handlers) rollBack(ctx context.Context, hold *leaseHold, req *contractv
 	return promoted, apps, nil
 }
 
-func rolledBackApps(ctx context.Context, l projectLedger, target router.Promotion) ([]*progressv1.AppResult, error) {
+func rolledBackApps(target router.Promotion, records map[string]router.ReleaseRecord) ([]*progressv1.AppResult, error) {
 	apps := make([]*progressv1.AppResult, 0, len(target.Releases))
 	for _, app := range slices.Sorted(maps.Keys(target.Releases)) {
 		result := &progressv1.AppResult{App: app, Release: target.Releases[app], Outcome: progressv1.AppOutcome_APP_OUTCOME_SUCCEEDED}
-		record, staged, err := l.Record(ctx, app, target.Releases[app])
-		if err != nil {
+		if err := readReleasedVariables(result, records[app]); err != nil {
 			return nil, err
-		}
-		if staged {
-			if err := readReleasedVariables(result, record); err != nil {
-				return nil, err
-			}
 		}
 		apps = append(apps, result)
 	}

@@ -56,5 +56,4 @@ export interface ReleasedValue {
   folder?: string;
   environment?: string;
   version: number;
-  class?: string;
 }
