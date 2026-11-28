@@ -72,7 +72,6 @@ type ReleasedValue struct {
 	Folder      string `json:"folder,omitempty"`
 	Environment string `json:"environment,omitempty"`
 	Version     int64  `json:"version"`
-	Class       string `json:"class,omitempty"`
 }
 
 type EdgeBundle struct {

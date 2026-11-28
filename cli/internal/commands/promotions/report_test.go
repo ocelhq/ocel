@@ -90,10 +90,7 @@ func TestARollbackReportCarriesTheDeclarationsGroupsAndValuesOfTheReleaseItServe
 		Release:        "build-1~fp1",
 		Declarations:   []json.RawMessage{protojsonOf(t, declared)},
 		VariableGroups: []json.RawMessage{protojsonOf(t, group)},
-		Values: []router.ReleasedValue{
-			{Key: "PAGE_SIZE", Folder: "/web", Environment: "staging", Version: 4, Class: "VARIABLE_CLASS_PLAIN"},
-			{Key: "STRIPE_KEY", Version: 2, Class: "VARIABLE_CLASS_SECRET"},
-		},
+		Values:         []router.ReleasedValue{{Key: "PAGE_SIZE", Folder: "/web", Environment: "staging", Version: 4}},
 	}
 	if err := project.Provider.Releases(environment.TierProduction, clitest.FixtureSlug).PutStaged(context.Background(), staged); err != nil {
 		t.Fatal(err)
@@ -117,7 +114,7 @@ func TestARollbackReportCarriesTheDeclarationsGroupsAndValuesOfTheReleaseItServe
 	}
 	wantValues := []*consolev1.ReleasedValue{{Key: "PAGE_SIZE", Folder: "/web", Environment: "staging", Version: 4}}
 	if len(web.GetValues()) != 1 || !proto.Equal(web.GetValues()[0], wantValues[0]) {
-		t.Errorf("values = %v, want %v: a rollback reports the versions its release serves, and never a secret's", web.GetValues(), wantValues)
+		t.Errorf("values = %v, want %v: a rollback reports the versions its release serves", web.GetValues(), wantValues)
 	}
 	if len(got.GetVariableGroups()) != 1 || !proto.Equal(got.GetVariableGroups()[0], group) {
 		t.Errorf("variable groups = %v, want the %v its declarations name", got.GetVariableGroups(), group)

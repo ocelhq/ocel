@@ -24,7 +24,7 @@ func recordReleasedVariables(record *router.ReleaseRecord, manifest *contractv1.
 	}
 	record.Declarations, record.VariableGroups = declarations, groups
 	for _, variable := range app.GetVariables() {
-		if variable.GetVersion() <= 0 {
+		if variable.GetVersion() <= 0 || variable.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
 			continue
 		}
 		record.Values = append(record.Values, router.ReleasedValue{
@@ -32,7 +32,6 @@ func recordReleasedVariables(record *router.ReleaseRecord, manifest *contractv1.
 			Folder:      variable.GetFolder(),
 			Environment: variable.GetEnvironment(),
 			Version:     variable.GetVersion(),
-			Class:       variable.GetClass().String(),
 		})
 	}
 	return nil
@@ -54,7 +53,6 @@ func readReleasedVariables(result *progressv1.AppResult, record router.ReleaseRe
 			Folder:      value.Folder,
 			Environment: value.Environment,
 			Version:     value.Version,
-			Class:       resourcesv1.VariableClass(resourcesv1.VariableClass_value[value.Class]),
 		})
 	}
 	return nil

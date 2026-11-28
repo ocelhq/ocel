@@ -1045,7 +1045,6 @@ type ReleasedValue struct {
 	Folder        string                 `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
 	Environment   string                 `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
 	Version       int64                  `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
-	Class         v11.VariableClass      `protobuf:"varint,5,opt,name=class,proto3,enum=app.resources.v1.VariableClass" json:"class,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1106,13 +1105,6 @@ func (x *ReleasedValue) GetVersion() int64 {
 		return x.Version
 	}
 	return 0
-}
-
-func (x *ReleasedValue) GetClass() v11.VariableClass {
-	if x != nil {
-		return x.Class
-	}
-	return v11.VariableClass(0)
 }
 
 type OperationResult struct {
@@ -1512,13 +1504,12 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\tvariables\x18\t \x03(\v2$.app.resources.v1.VariableDefinitionR\tvariables\x12J\n" +
 	"\x0fvariable_groups\x18\n" +
 	" \x03(\v2!.app.resources.v1.GroupDefinitionR\x0evariableGroups\x129\n" +
-	"\x06values\x18\v \x03(\v2!.common.progress.v1.ReleasedValueR\x06values\"\xac\x01\n" +
+	"\x06values\x18\v \x03(\v2!.common.progress.v1.ReleasedValueR\x06values\"u\n" +
 	"\rReleasedValue\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x16\n" +
 	"\x06folder\x18\x02 \x01(\tR\x06folder\x12 \n" +
 	"\venvironment\x18\x03 \x01(\tR\venvironment\x12\x18\n" +
-	"\aversion\x18\x04 \x01(\x03R\aversion\x125\n" +
-	"\x05class\x18\x05 \x01(\x0e2\x1f.app.resources.v1.VariableClassR\x05class\"\x85\x04\n" +
+	"\aversion\x18\x04 \x01(\x03R\aversion\"\x85\x04\n" +
 	"\x0fOperationResult\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12!\n" +
@@ -1641,7 +1632,6 @@ var file_common_progress_v1_progress_proto_goTypes = []any{
 	(*v1.ChangePlan)(nil),          // 21: common.plan.v1.ChangePlan
 	(*v11.VariableDefinition)(nil), // 22: app.resources.v1.VariableDefinition
 	(*v11.GroupDefinition)(nil),    // 23: app.resources.v1.GroupDefinition
-	(v11.VariableClass)(0),         // 24: app.resources.v1.VariableClass
 }
 var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	20, // 0: common.progress.v1.OperationEvent.time:type_name -> google.protobuf.Timestamp
@@ -1662,17 +1652,16 @@ var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	22, // 15: common.progress.v1.AppResult.variables:type_name -> app.resources.v1.VariableDefinition
 	23, // 16: common.progress.v1.AppResult.variable_groups:type_name -> app.resources.v1.GroupDefinition
 	14, // 17: common.progress.v1.AppResult.values:type_name -> common.progress.v1.ReleasedValue
-	24, // 18: common.progress.v1.ReleasedValue.class:type_name -> app.resources.v1.VariableClass
-	19, // 19: common.progress.v1.OperationResult.propagation:type_name -> common.progress.v1.Propagation
-	13, // 20: common.progress.v1.OperationResult.apps:type_name -> common.progress.v1.AppResult
-	18, // 21: common.progress.v1.OperationResult.connector:type_name -> common.progress.v1.ConnectorInstalled
-	16, // 22: common.progress.v1.OperationResult.protection:type_name -> common.progress.v1.ProtectionPublished
-	17, // 23: common.progress.v1.ProtectionPublished.edges:type_name -> common.progress.v1.EdgePublication
-	24, // [24:24] is the sub-list for method output_type
-	24, // [24:24] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	19, // 18: common.progress.v1.OperationResult.propagation:type_name -> common.progress.v1.Propagation
+	13, // 19: common.progress.v1.OperationResult.apps:type_name -> common.progress.v1.AppResult
+	18, // 20: common.progress.v1.OperationResult.connector:type_name -> common.progress.v1.ConnectorInstalled
+	16, // 21: common.progress.v1.OperationResult.protection:type_name -> common.progress.v1.ProtectionPublished
+	17, // 22: common.progress.v1.ProtectionPublished.edges:type_name -> common.progress.v1.EdgePublication
+	23, // [23:23] is the sub-list for method output_type
+	23, // [23:23] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_common_progress_v1_progress_proto_init() }

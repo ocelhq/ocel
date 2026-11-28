@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
-	"github.com/ocelhq/ocel/cli/internal/variables"
 	"github.com/ocelhq/ocel/pkg/buildoutput"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -110,11 +109,11 @@ func VariableGroupsRolledBack(results []*progressv1.AppResult) []*resourcesv1.Gr
 }
 
 func rolledBackValues(values []*progressv1.ReleasedValue) []*consolev1.ReleasedValue {
-	resolved := make([]variables.Variable, 0, len(values))
+	var released []*consolev1.ReleasedValue
 	for _, v := range values {
-		resolved = append(resolved, variables.Variable{Key: v.GetKey(), Class: v.GetClass(), Folder: v.GetFolder(), Environment: v.GetEnvironment(), Version: v.GetVersion()})
+		released = append(released, &consolev1.ReleasedValue{Key: v.GetKey(), Folder: v.GetFolder(), Environment: v.GetEnvironment(), Version: v.GetVersion()})
 	}
-	return ReleasedValues(resolved)
+	return released
 }
 
 func computeKind(compute provider.Compute) consolev1.ComputeKind {

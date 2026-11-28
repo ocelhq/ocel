@@ -157,8 +157,6 @@ message ReleasedValue {
   string environment = 3;
 
   int64 version = 4;
-
-  app.resources.v1.VariableClass class = 5;
 }
 
 message OperationResult {

@@ -38,7 +38,21 @@ type promoteRequest struct {
 	replaces    string
 	rollsBackTo string
 	promotion   router.Promotion
+	records     map[string]router.ReleaseRecord
 	confirm     func(ctx context.Context) error
+}
+
+func (r promoteRequest) readRecords(ctx context.Context, l projectLedger, apps []string) (map[string]router.ReleaseRecord, error) {
+	if r.records == nil {
+		return l.readRecords(ctx, r.promotion, apps)
+	}
+	read := make(map[string]router.ReleaseRecord, len(apps))
+	for _, app := range apps {
+		if record, found := r.records[app]; found {
+			read[app] = record
+		}
+	}
+	return read, nil
 }
 
 func (r promoteRequest) record(ctx context.Context, l projectLedger) ([]ledger.RecordedPromotion, error) {
@@ -52,7 +66,7 @@ func promote(ctx context.Context, l projectLedger, releases *provider.ContainerR
 	pointer, promoted := req.pointer, req.promotion
 	moves := make([]router.PointerMove, len(routers))
 	for i, routed := range routers {
-		records, err := l.readRecords(ctx, promoted, routed.apps)
+		records, err := req.readRecords(ctx, l, routed.apps)
 		if err != nil {
 			return nil, err
 		}

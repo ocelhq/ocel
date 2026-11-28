@@ -1525,30 +1525,6 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
-        "class": {
-          "anyOf": [
-            {
-              "pattern": "^VARIABLE_CLASS_UNSPECIFIED$",
-              "type": "string"
-            },
-            {
-              "enum": [
-                "VARIABLE_CLASS_PLAIN",
-                "VARIABLE_CLASS_SENSITIVE",
-                "VARIABLE_CLASS_SECRET",
-                "VARIABLE_CLASS_DERIVED"
-              ],
-              "type": "string"
-            },
-            {
-              "maximum": 2147483647,
-              "minimum": -2147483648,
-              "type": "integer"
-            }
-          ],
-          "default": 0,
-          "title": "Variable Class"
-        },
         "environment": {
           "default": "",
           "type": "string"
