@@ -342,7 +342,7 @@ func TestEnvSetUpdatesAValueTheEnvSourceOwnsWhenItsWritePolicyIsValues(t *testin
 	if _, updated := source.writes(); !slices.Contains(updated, "STRIPE_API_KEY=sk_rotated") {
 		t.Fatalf("updated = %q, want STRIPE_API_KEY written through to the env source", updated)
 	}
-	if got := envGet(t, project.Root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}); !strings.Contains(got, "sk_rotated") {
+	if got := storedValue(t, project, cellAt("STRIPE_API_KEY")); got != "sk_rotated" {
 		t.Errorf("ocel env get = %q, want the value synced straight back", got)
 	}
 }

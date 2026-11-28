@@ -58,7 +58,7 @@ func (v *fakeValues) List(context.Context) ([]variables.ValueMetadata, error) {
 	return append(out, v.overrides...), nil
 }
 
-func (v *fakeValues) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
+func (v *fakeValues) Deliver(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	v.revealed = append(v.revealed, rows...)
 	v.reveals++
 	found := map[variables.Coordinate]string{}
@@ -546,4 +546,8 @@ func TestDeclaringVariablesAnswersTheCellsThatHoldTheirValues(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (*fakeValues) Classify(context.Context, map[variables.Cell]resourcesv1.VariableClass) error {
+	return nil
 }

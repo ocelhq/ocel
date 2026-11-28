@@ -85,6 +85,7 @@ const (
 	Scope_SCOPE_VARIABLES_REVEAL  Scope = 5
 	Scope_SCOPE_JOB               Scope = 6
 	Scope_SCOPE_TARGET_CREDENTIAL Scope = 7
+	Scope_SCOPE_VARIABLES_DELIVER Scope = 8
 )
 
 // Enum value maps for Scope.
@@ -98,6 +99,7 @@ var (
 		5: "SCOPE_VARIABLES_REVEAL",
 		6: "SCOPE_JOB",
 		7: "SCOPE_TARGET_CREDENTIAL",
+		8: "SCOPE_VARIABLES_DELIVER",
 	}
 	Scope_value = map[string]int32{
 		"SCOPE_UNSPECIFIED":       0,
@@ -108,6 +110,7 @@ var (
 		"SCOPE_VARIABLES_REVEAL":  5,
 		"SCOPE_JOB":               6,
 		"SCOPE_TARGET_CREDENTIAL": 7,
+		"SCOPE_VARIABLES_DELIVER": 8,
 	}
 )
 
@@ -215,7 +218,7 @@ const file_common_scope_v1_scope_proto_rawDesc = "" +
 	"\n" +
 	"ROLE_ADMIN\x10\x02\x1a\t\x8a\xb5\x18\x05admin\x12\x19\n" +
 	"\n" +
-	"ROLE_OWNER\x10\x03\x1a\t\x8a\xb5\x18\x05owner*\xb8\x02\n" +
+	"ROLE_OWNER\x10\x03\x1a\t\x8a\xb5\x18\x05owner*\xd5\x02\n" +
 	"\x05Scope\x12\x15\n" +
 	"\x11SCOPE_UNSPECIFIED\x10\x00\x12&\n" +
 	"\x0fSCOPE_APPS_READ\x10\x01\x1a\x11\x8a\xb5\x18\tapps.read\x90\xb5\x18\x01\x12(\n" +
@@ -225,7 +228,8 @@ const file_common_scope_v1_scope_proto_rawDesc = "" +
 	"\x15SCOPE_VARIABLES_WRITE\x10\x04\x1a\x17\x8a\xb5\x18\x0fvariables.write\x90\xb5\x18\x02\x124\n" +
 	"\x16SCOPE_VARIABLES_REVEAL\x10\x05\x1a\x18\x8a\xb5\x18\x10variables.reveal\x90\xb5\x18\x03\x12\r\n" +
 	"\tSCOPE_JOB\x10\x06\x12\x1b\n" +
-	"\x17SCOPE_TARGET_CREDENTIAL\x10\a:9\n" +
+	"\x17SCOPE_TARGET_CREDENTIAL\x10\a\x12\x1b\n" +
+	"\x17SCOPE_VARIABLES_DELIVER\x10\b:9\n" +
 	"\x05claim\x12!.google.protobuf.EnumValueOptions\x18ц\x03 \x01(\tR\x05claim:Y\n" +
 	"\n" +
 	"least_role\x12!.google.protobuf.EnumValueOptions\x18҆\x03 \x01(\x0e2\x15.common.scope.v1.RoleR\tleastRole:T\n" +

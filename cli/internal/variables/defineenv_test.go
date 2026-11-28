@@ -191,7 +191,7 @@ func (v *readTrackingValues) List(context.Context) ([]variables.ValueMetadata, e
 	return stored, nil
 }
 
-func (v *readTrackingValues) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
+func (v *readTrackingValues) Deliver(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	v.mu.Lock()
 	for _, row := range rows {
 		v.reads = append(v.reads, row.Cell)
@@ -216,4 +216,8 @@ func (v *readTrackingValues) revealed(cell variables.Cell) bool {
 		}
 	}
 	return false
+}
+
+func (*readTrackingValues) Classify(context.Context, map[variables.Cell]resourcesv1.VariableClass) error {
+	return nil
 }

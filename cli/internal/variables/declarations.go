@@ -89,7 +89,7 @@ func (d *Declarations) reveal(ctx context.Context, cells []Cell) (map[Cell]revea
 	}
 
 	if len(wanted) > 0 {
-		found, err := d.values.Reveal(ctx, wanted)
+		found, err := d.values.Deliver(ctx, wanted)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeOf(err), fmt.Errorf("read %s: %w", describeAll(wanted), err))
 		}

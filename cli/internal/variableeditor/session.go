@@ -30,6 +30,7 @@ const DefaultAbandonAfter = 5 * time.Second
 type Values interface {
 	List(ctx context.Context) ([]variables.ValueMetadata, error)
 	Reveal(ctx context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error)
+	Deliver(ctx context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error)
 	Set(ctx context.Context, writes []variables.ValueWrite) ([]int64, error)
 	Delete(ctx context.Context, at variables.Coordinate, expected *int64) (bool, error)
 	History(ctx context.Context, at variables.Coordinate) ([]variables.Version, error)
@@ -208,7 +209,7 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if _, err := s.opts.Values.Set(r.Context(), []variables.ValueWrite{{At: at, Value: req.Value, Expected: req.Version}}); err != nil {
+	if _, err := s.opts.Values.Set(r.Context(), []variables.ValueWrite{{At: at, Value: req.Value, Expected: req.Version, Class: s.classOf(at.Cell.Key)}}); err != nil {
 		if errors.Is(err, variables.ErrStaleValue) {
 			fail(w, http.StatusConflict, err)
 			return
@@ -338,20 +339,20 @@ func (s *Session) handleReveal(w http.ResponseWriter, r *http.Request) {
 	rows := make([]variables.Coordinate, 0, len(req.Cells))
 	for _, cell := range req.Cells {
 		if secrets[cell.Key] {
-			fail(w, http.StatusBadRequest, fmt.Errorf("%s is a secret, and a secret's value never reaches a browser; overwrite it here or read it with ocel env get --reveal", cell.Key))
+			fail(w, http.StatusBadRequest, fmt.Errorf("%s is a secret, and a secret is never revealed once set; overwrite it here", cell.Key))
 			return
 		}
 		rows = append(rows, cell.coordinate())
 	}
-	writeJSON(w, s.reveal(r.Context(), s.opts.Values, rows))
+	writeJSON(w, s.read(r.Context(), s.opts.Values.Reveal, rows))
 }
 
-func (s *Session) reveal(ctx context.Context, from Values, rows []variables.Coordinate) revealResponse {
+func (s *Session) read(ctx context.Context, from func(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error), rows []variables.Coordinate) revealResponse {
 	out := revealResponse{Values: []revealedValue{}, Errors: []cellError{}}
 	if len(rows) == 0 {
 		return out
 	}
-	found, err := from.Reveal(ctx, rows)
+	found, err := from(ctx, rows)
 	for _, at := range rows {
 		switch value, ok := found[at]; {
 		case err != nil:
@@ -363,6 +364,15 @@ func (s *Session) reveal(ctx context.Context, from Values, rows []variables.Coor
 		}
 	}
 	return out
+}
+
+func (s *Session) classOf(key string) resourcesv1.VariableClass {
+	for _, definition := range s.opts.Declarations.Declared() {
+		if definition.GetKey() == key {
+			return definition.GetClass()
+		}
+	}
+	return resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED
 }
 
 func (s *Session) secrets() map[string]bool {
@@ -430,7 +440,7 @@ func (s *Session) handleOther(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	read := s.reveal(r.Context(), s.opts.OtherValues, readable)
+	read := s.read(r.Context(), s.opts.OtherValues.Reveal, readable)
 	values := make(map[variables.Coordinate]string, len(read.Values))
 	for _, v := range read.Values {
 		values[v.coordinate()] = v.Value
@@ -485,7 +495,7 @@ func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
 	for _, cell := range req.Cells {
 		rows = append(rows, cell.coordinate())
 	}
-	read := s.reveal(r.Context(), s.opts.OtherValues, rows)
+	read := s.read(r.Context(), s.opts.OtherValues.Deliver, rows)
 	values := make(map[variables.Coordinate]string, len(read.Values))
 	for _, v := range read.Values {
 		values[v.coordinate()] = v.Value
@@ -508,7 +518,7 @@ func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
 				outcome.Error = err.Error()
 				break
 			}
-			_, err := s.opts.Values.Set(r.Context(), []variables.ValueWrite{{At: at, Value: value, Expected: cell.Version}})
+			_, err := s.opts.Values.Set(r.Context(), []variables.ValueWrite{{At: at, Value: value, Expected: cell.Version, Class: s.classOf(at.Cell.Key)}})
 			switch {
 			case errors.Is(err, variables.ErrStaleValue):
 				outcome.Conflict = true

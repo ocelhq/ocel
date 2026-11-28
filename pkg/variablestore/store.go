@@ -46,6 +46,7 @@ type Metadata struct {
 	Size       int64
 	Target     *Target
 	Provenance Provenance
+	Class      Class
 }
 
 type Target struct {
@@ -71,6 +72,7 @@ type storedValue struct {
 	Sealed    []byte  `json:"sealed,omitempty"`
 	Deleted   bool    `json:"deleted,omitempty"`
 	Target    *Target `json:"target,omitempty"`
+	Class     Class   `json:"class,omitempty"`
 	Provenance
 }
 
@@ -99,6 +101,7 @@ type ValueWrite struct {
 	At        Coordinate
 	Plaintext string
 	Expected  *int64
+	Class     Class
 }
 
 type recordedCell struct {
@@ -125,7 +128,7 @@ func (s Store) Set(ctx context.Context, scope Scope, writes []ValueWrite) ([]Met
 	written := make([]Metadata, len(writes))
 	failed := make([]error, len(writes))
 	_ = forEachConcurrently(ctx, len(writes), func(ctx context.Context, i int) error {
-		written[i], failed[i] = s.sealAndCommit(ctx, scope, writes[i].At, recorded[i].entry, recorded[i].stored, writes[i].Plaintext, Provenance{}, writes[i].Expected)
+		written[i], failed[i] = s.sealAndCommit(ctx, scope, writes[i].At, recorded[i].entry, recorded[i].stored, writes[i].Plaintext, writes[i].Class, Provenance{}, writes[i].Expected)
 		return nil
 	})
 	if err := refuseUnwritten(writes, written, failed); err != nil {
@@ -180,7 +183,7 @@ func RefuseWrite(at Coordinate, current Metadata, plaintext string, from Provena
 	return refusePublisher(at, current.Provenance.Publisher, from)
 }
 
-func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext string, from Provenance, expected *int64) (Metadata, error) {
+func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext string, class Class, from Provenance, expected *int64) (Metadata, error) {
 	recorded, current, err := s.cellAt(ctx, scope, at)
 	if err != nil {
 		return Metadata{}, err
@@ -188,7 +191,7 @@ func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext 
 	if err := refuseWriteOver(at, current, plaintext, from, expected); err != nil {
 		return Metadata{}, err
 	}
-	return s.sealAndCommit(ctx, scope, at, recorded, current, plaintext, from, expected)
+	return s.sealAndCommit(ctx, scope, at, recorded, current, plaintext, class, from, expected)
 }
 
 func refuseWriteOver(at Coordinate, current storedValue, plaintext string, from Provenance, expected *int64) error {
@@ -201,7 +204,7 @@ func refuseWriteOver(at Coordinate, current storedValue, plaintext string, from 
 	return nil
 }
 
-func (s Store) sealAndCommit(ctx context.Context, scope Scope, at Coordinate, recorded records.Entry, current storedValue, plaintext string, from Provenance, expected *int64) (Metadata, error) {
+func (s Store) sealAndCommit(ctx context.Context, scope Scope, at Coordinate, recorded records.Entry, current storedValue, plaintext string, class Class, from Provenance, expected *int64) (Metadata, error) {
 	bound, err := newCellAssociatedData(scope, at)
 	if err != nil {
 		return Metadata{}, err
@@ -210,7 +213,11 @@ func (s Store) sealAndCommit(ctx context.Context, scope Scope, at Coordinate, re
 	if err != nil {
 		return Metadata{}, err
 	}
-	return s.commit(ctx, scope, at, recorded, current, expected, storedValue{Sealed: sealed, Size: int64(len(plaintext)), Provenance: from})
+	kept := ClassUnstated
+	if current.live() != 0 {
+		kept = current.Class
+	}
+	return s.commit(ctx, scope, at, recorded, current, expected, storedValue{Sealed: sealed, Size: int64(len(plaintext)), Class: kept.overwrittenBy(class), Provenance: from})
 }
 
 func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, recorded records.Entry, current storedValue, expected *int64, next storedValue) (Metadata, error) {
@@ -267,7 +274,11 @@ func (s Store) Get(ctx context.Context, scope Scope, at Coordinate, reveal bool)
 	if cell.live() == 0 {
 		return Value{}, ErrNotFound
 	}
-	value := Value{Metadata: metadataOf(at, cell)}
+	source, err := s.sourceOf(ctx, scope, cell)
+	if err != nil {
+		return Value{}, err
+	}
+	value := Value{Metadata: metadataAgainst(at, cell, source)}
 	if !reveal {
 		return value, nil
 	}
@@ -326,7 +337,9 @@ func (s Store) List(ctx context.Context, scope Scope) ([]Metadata, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s's values: %w", scope.Project, err)
 	}
-	out := make([]Metadata, 0, len(recorded))
+	cells := make(map[string]storedValue, len(recorded))
+	found := make([]Coordinate, 0, len(recorded))
+	cellValues := make([]storedValue, 0, len(recorded))
 	for _, entry := range recorded {
 		at, ok := cellOf(entry.Key)
 		if !ok {
@@ -336,10 +349,20 @@ func (s Store) List(ctx context.Context, scope Scope) ([]Metadata, error) {
 		if err := json.Unmarshal(entry.Value, &stored); err != nil {
 			return nil, fmt.Errorf("read %s: %w", at, err)
 		}
+		cells[entry.Key.String()] = stored
 		if stored.Deleted {
 			continue
 		}
-		out = append(out, metadataOf(at, stored))
+		found = append(found, at)
+		cellValues = append(cellValues, stored)
+	}
+	sources, err := s.gather(ctx, scope, cells, cellValues)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Metadata, 0, len(found))
+	for i, at := range found {
+		out = append(out, metadataAgainst(at, cellValues[i], sources[sourceKey(scope, cellValues[i])]))
 	}
 	slices.SortFunc(out, func(a, b Metadata) int {
 		return strings.Compare(a.Coordinate.String(), b.Coordinate.String())
@@ -423,9 +446,24 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 
 	out := make([]Value, 0, len(found))
 	for i, at := range found {
-		out = append(out, Value{Metadata: metadataOf(at, cellValues[i]), Plaintext: plaintexts[slotOf[i]]})
+		out = append(out, Value{Metadata: metadataAgainst(at, cellValues[i], sealed[i]), Plaintext: plaintexts[slotOf[i]]})
 	}
 	return out, nil
+}
+
+func sourceKey(scope Scope, cell storedValue) string {
+	if cell.Target == nil {
+		return ""
+	}
+	return CellKey(Scope{Project: cell.Target.Project, Tier: scope.Tier}, Coordinate{Cell: cell.Target.Cell}).String()
+}
+
+func (s Store) sourceOf(ctx context.Context, scope Scope, cell storedValue) (storedValue, error) {
+	if cell.Target == nil {
+		return storedValue{}, nil
+	}
+	_, source, err := s.cellAt(ctx, Scope{Project: cell.Target.Project, Tier: scope.Tier}, Coordinate{Cell: cell.Target.Cell})
+	return source, err
 }
 
 func (s Store) storedCells(ctx context.Context, scope Scope) (map[string]storedValue, error) {
@@ -597,7 +635,14 @@ func metadataOf(at Coordinate, cell storedValue) Metadata {
 		Size:       cell.Size,
 		Target:     cell.Target,
 		Provenance: cell.Provenance,
+		Class:      cell.classAgainst(storedValue{}),
 	}
+}
+
+func metadataAgainst(at Coordinate, cell, source storedValue) Metadata {
+	metadata := metadataOf(at, cell)
+	metadata.Class = cell.classAgainst(source)
+	return metadata
 }
 
 func (t *Target) String() string {

@@ -99,7 +99,7 @@ func TestAScopeIsUserGrantableExactlyWhenItHasALeastRole(t *testing.T) {
 			t.Errorf("%v has no least role and names the claim %q, so a token could carry what no person holds", declared, scope.ClaimOf(declared))
 		}
 	}
-	for _, declared := range []scopev1.Scope{scopev1.Scope_SCOPE_JOB, scopev1.Scope_SCOPE_TARGET_CREDENTIAL, scopev1.Scope_SCOPE_UNSPECIFIED} {
+	for _, declared := range []scopev1.Scope{scopev1.Scope_SCOPE_JOB, scopev1.Scope_SCOPE_TARGET_CREDENTIAL, scopev1.Scope_SCOPE_VARIABLES_DELIVER, scopev1.Scope_SCOPE_UNSPECIFIED} {
 		if scope.IsUserScope(declared) {
 			t.Errorf("IsUserScope(%v) = true, want false: only the kind of token grants it", declared)
 		}

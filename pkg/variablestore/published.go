@@ -15,11 +15,18 @@ func (e *PublishedError) Error() string {
 }
 
 func (s Store) SetPublished(ctx context.Context, scope Scope, at Coordinate, plaintext string, from Provenance, expected int64) (Metadata, error) {
-	return s.write(ctx, scope, at, plaintext, from, &expected)
+	return s.write(ctx, scope, at, plaintext, publishedClass(from), from, &expected)
 }
 
 func (s Store) DeletePublished(ctx context.Context, scope Scope, at Coordinate, from Provenance, expected int64) (bool, error) {
 	return s.remove(ctx, scope, at, from, &expected)
+}
+
+func publishedClass(from Provenance) Class {
+	if from.PublishedSecret {
+		return ClassSecret
+	}
+	return ClassPlain
 }
 
 func refuseOtherPublisher(at Coordinate, current storedValue, from Provenance) error {

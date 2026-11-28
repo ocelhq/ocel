@@ -232,6 +232,13 @@ func (s *served) revealValues(t *testing.T, token string) error {
 	return err
 }
 
+func (s *served) deliverValues(t *testing.T, token string) error {
+	t.Helper()
+	_, err := variablestorev1connect.NewVariableStoreServiceClient(s.client, s.url, bearing(token)).
+		DeliverValues(t.Context(), &variablestorev1.DeliverValuesRequest{Tier: 1, Slug: "shop"})
+	return err
+}
+
 func (s *served) revealProtectionPassword(t *testing.T, token string) error {
 	t.Helper()
 	_, err := contractv1connect.NewProviderServiceClient(s.client, s.url, bearing(token)).
@@ -278,6 +285,17 @@ func TestAUserTokenIsRefusedWhatItsScopeOrTheEndpointDoesNotAllow(t *testing.T) 
 	wantCode(t, s.listValues(t, at.user(t, "apps.read")), connect.CodePermissionDenied, "the token holds no variables.read")
 	wantCode(t, s.revealValues(t, at.user(t, "variables.read", "variables.reveal")), connect.CodePermissionDenied,
 		"the endpoint allows no variables.reveal, whatever the token holds")
+}
+
+func TestNoTokenAnEndpointAdmitsIsDeliveredASecret(t *testing.T) {
+	t.Parallel()
+	at := consoleServing(t)
+	s := serve(t, at, scope.ClaimsOf(scope.ListUserScopes()))
+
+	wantCode(t, s.deliverValues(t, at.user(t, scope.ClaimsOf(scope.ListUserScopes())...)), connect.CodePermissionDenied,
+		"a person holding every scope still reads a secret only through a deploy that runs with the account's own credentials")
+	wantCode(t, s.deliverValues(t, at.job(t, endpointID)), connect.CodePermissionDenied,
+		"a job token speaks to its runner, and is delivered no values by it")
 }
 
 func TestRevealingAProtectionPasswordNeedsTheScopeThatChangesIt(t *testing.T) {

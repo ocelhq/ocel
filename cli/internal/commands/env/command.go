@@ -137,7 +137,7 @@ func newGetCommand(dependencies Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "get <KEY>",
 		Short:   "Inspect a value",
-		Example: "  $ ocel env get LOG_LEVEL\n  $ ocel env get LOG_LEVEL --reveal\n  $ ocel env get STRIPE_API_KEY --reveal --yes",
+		Example: "  $ ocel env get LOG_LEVEL\n  $ ocel env get LOG_LEVEL --reveal",
 		Args:    cobra.ExactArgs(1),
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -148,7 +148,6 @@ func newGetCommand(dependencies Dependencies) *cobra.Command {
 	valueFlags(cmd, &opts)
 	environmentFlag(cmd, &opts)
 	cmd.Flags().BoolVar(&opts.reveal, "reveal", false, "Print the value")
-	commands.AddYesFlag(cmd, &opts.yes)
 	return commands.DeclareResult(commands.DeclareReadOnly(cmd), &resultv1.EnvGetResult{})
 }
 

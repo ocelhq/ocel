@@ -51,10 +51,15 @@ func (s Store) SetReference(ctx context.Context, scope Scope, at Coordinate, tar
 			return Metadata{}, err
 		}
 	}
-	metadata, err := s.commit(ctx, scope, at, recorded, current, nil, storedValue{Target: &target})
+	kept := ClassUnstated
+	if current.live() != 0 {
+		kept = current.Class
+	}
+	metadata, err := s.commit(ctx, scope, at, recorded, current, nil, storedValue{Target: &target, Class: kept})
 	if err != nil {
 		return Metadata{}, err
 	}
+	metadata.Class = storedValue{Target: &target, Class: kept}.classAgainst(pointedAt)
 	if err := s.indexReference(ctx, scope, at, target); err != nil {
 		return Metadata{}, err
 	}

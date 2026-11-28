@@ -128,7 +128,7 @@ func (d *Declarations) RevealSecrets(ctx context.Context, apps []string) (map[st
 	var found map[Coordinate]string
 	if len(wanted) > 0 {
 		var err error
-		found, err = d.values.Reveal(ctx, wanted)
+		found, err = d.values.Deliver(ctx, wanted)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeOf(err), fmt.Errorf("read %s: %w", describeAll(wanted), err))
 		}

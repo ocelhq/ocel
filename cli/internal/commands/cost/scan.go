@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+
 	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
 
@@ -218,7 +220,11 @@ type unread struct{}
 
 func (unread) List(context.Context) ([]variables.ValueMetadata, error) { return nil, nil }
 
-func (unread) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
+func (unread) Classify(context.Context, map[variables.Cell]resourcesv1.VariableClass) error {
+	return nil
+}
+
+func (unread) Deliver(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	return map[variables.Coordinate]string{}, nil
 }
 

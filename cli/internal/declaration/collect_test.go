@@ -278,6 +278,10 @@ type emptyValues struct{}
 
 func (emptyValues) List(context.Context) ([]variables.ValueMetadata, error) { return nil, nil }
 
-func (emptyValues) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
+func (emptyValues) Deliver(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	return nil, nil
+}
+
+func (emptyValues) Classify(context.Context, map[variables.Cell]resourcesv1.VariableClass) error {
+	return nil
 }

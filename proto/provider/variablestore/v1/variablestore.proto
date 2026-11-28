@@ -3,6 +3,7 @@ package provider.variablestore.v1;
 
 option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1;variablestorev1";
 
+import "app/resources/v1/variables.proto";
 import "buf/validate/validate.proto";
 import "common/environment/v1/environment.proto";
 import "common/bindings/v1/bindings.proto";
@@ -23,6 +24,14 @@ service VariableStoreService {
 
     rpc RevealValues(RevealValuesRequest) returns (RevealValuesResponse) {
       option (common.scope.v1.required) = SCOPE_VARIABLES_REVEAL;
+    }
+
+    rpc DeliverValues(DeliverValuesRequest) returns (DeliverValuesResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_DELIVER;
+    }
+
+    rpc ClassifyValues(ClassifyValuesRequest) returns (ClassifyValuesResponse) {
+      option (common.scope.v1.required) = SCOPE_VARIABLES_WRITE;
     }
 
     rpc DeleteValue(DeleteValueRequest) returns (DeleteValueResponse) {
@@ -114,6 +123,8 @@ message ValueMetadata {
   string publisher = 7;
 
   bool published_secret = 8;
+
+  app.resources.v1.VariableClass class = 9;
 }
 
 message VersionEntry {
@@ -142,6 +153,8 @@ message ValueWrite {
   string value = 2 [debug_redact = true];
 
   optional int64 expected_version = 3;
+
+  app.resources.v1.VariableClass class = 4 [(buf.validate.field).enum = {in: [0, 1, 2, 3]}];
 }
 
 message SetValuesResponse {
@@ -188,6 +201,48 @@ message RevealValuesResponse {
 message RevealedValue {
   ValueMetadata metadata = 1;
   string value = 2 [debug_redact = true];
+}
+
+message DeliverValuesRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+  repeated Coordinate cells = 3;
+}
+
+message DeliverValuesResponse {
+  repeated RevealedValue values = 1;
+}
+
+message ClassifyValuesRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).enum.defined_only = true];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  repeated ClassifiedCell cells = 3 [(buf.validate.field).cel = {
+    id: "variablestore.classified.unique_cells"
+    message: "a cell is classified once, with one class"
+    expression: "this.all(c, this.filter(d, d.key == c.key && d.folder == c.folder).size() == 1)"
+  }];
+}
+
+message ClassifiedCell {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#\\x00-\\x1f\\x7f]*$"}];
+
+  string folder = 2 [
+    (buf.validate.field).string.pattern = "^(/([^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.[^/#.\\x00-\\x1f\\x7f][^/#\\x00-\\x1f\\x7f]*|\\.\\.[^/#\\x00-\\x1f\\x7f]+))*$",
+    (buf.validate.field).cel = {
+      id: "variablestore.classified.folder.root"
+      message: "\"/\" is the project root, which is what an unbound app already reads; leave the folder off instead"
+      expression: "this != '/'"
+    }
+  ];
+
+  app.resources.v1.VariableClass class = 3 [(buf.validate.field).enum = {in: [1, 2, 3]}];
+}
+
+message ClassifyValuesResponse {
+  repeated ValueMetadata raised = 1;
 }
 
 message DeleteValueRequest {

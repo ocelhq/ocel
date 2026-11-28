@@ -292,7 +292,7 @@ func TestAGuidedSetStoresWhatWasTypedInTheTierItNames(t *testing.T) {
 		t.Fatalf("runGuidedSet() = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	for key, want := range map[string]string{"STRIPE_API_KEY": "sk_live_typed", "LOG_LEVEL": "debug"} {
-		if got := envGet(t, project.Root, key, envOptions{reveal: true, yes: true}); strings.TrimSpace(got) != want {
+		if got := storedValue(t, project, cellAt(key)); got != want {
 			t.Errorf("%s = %q, want %q", key, got, want)
 		}
 	}

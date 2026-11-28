@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	variablestorev1 "github.com/ocelhq/ocel/pkg/proto/provider/variablestore/v1"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/variablestore"
 )
 
@@ -14,7 +18,7 @@ func (h *Service) SetValues(ctx context.Context, req *variablestorev1.SetValuesR
 	environments := make([]string, 0, len(req.GetValues()))
 	for _, value := range req.GetValues() {
 		at := coordinateOf(value.GetCoordinate())
-		writes = append(writes, variablestore.ValueWrite{At: at, Plaintext: value.GetValue(), Expected: value.ExpectedVersion})
+		writes = append(writes, variablestore.ValueWrite{At: at, Plaintext: value.GetValue(), Expected: value.ExpectedVersion, Class: classOf(value.GetClass())})
 		environments = append(environments, at.Environment)
 	}
 	if err := h.addressable(ctx, req.GetTier(), req.GetSlug(), environments...); err != nil {
@@ -77,26 +81,67 @@ func (h *Service) GetValue(ctx context.Context, req *variablestorev1.GetValueReq
 }
 
 func (h *Service) RevealValues(ctx context.Context, req *variablestorev1.RevealValuesRequest) (*variablestorev1.RevealValuesResponse, error) {
-	store, scope, err := h.scoped(ctx, req.GetTier(), req.GetSlug())
+	found, scope, err := h.open(ctx, req.GetTier(), req.GetSlug(), req.GetCells())
 	if err != nil {
 		return nil, err
 	}
-	cells := make([]variablestore.Coordinate, 0, len(req.GetCells()))
-	for _, c := range req.GetCells() {
+	if err := refuseSecrets(found); err != nil {
+		return nil, err
+	}
+	return &variablestorev1.RevealValuesResponse{Values: revealedProto(scope, found)}, nil
+}
+
+func (h *Service) DeliverValues(ctx context.Context, req *variablestorev1.DeliverValuesRequest) (*variablestorev1.DeliverValuesResponse, error) {
+	found, scope, err := h.open(ctx, req.GetTier(), req.GetSlug(), req.GetCells())
+	if err != nil {
+		return nil, err
+	}
+	return &variablestorev1.DeliverValuesResponse{Values: revealedProto(scope, found)}, nil
+}
+
+func (h *Service) open(ctx context.Context, tier environmentv1.Tier, slug string, named []*variablestorev1.Coordinate) ([]variablestore.Value, variablestore.Scope, error) {
+	store, scope, err := h.scoped(ctx, tier, slug)
+	if err != nil {
+		return nil, variablestore.Scope{}, err
+	}
+	cells := make([]variablestore.Coordinate, 0, len(named))
+	for _, c := range named {
 		cells = append(cells, coordinateOf(c))
 	}
 	found, err := store.Reveal(ctx, scope, cells)
 	if err != nil {
-		return nil, valuesError(err)
+		return nil, variablestore.Scope{}, valuesError(err)
 	}
-	resp := &variablestorev1.RevealValuesResponse{Values: make([]*variablestorev1.RevealedValue, 0, len(found))}
+	return found, scope, nil
+}
+
+func refuseSecrets(found []variablestore.Value) error {
+	var secrets []string
 	for _, v := range found {
-		resp.Values = append(resp.Values, &variablestorev1.RevealedValue{
+		if v.Class == variablestore.ClassSecret {
+			secrets = append(secrets, v.Coordinate.String())
+		}
+	}
+	if len(secrets) == 0 {
+		return nil
+	}
+	named := secrets[0] + " is a secret"
+	if len(secrets) > 1 {
+		named = strings.Join(secrets, ", ") + " are secrets"
+	}
+	return provider.RefusalError(refusal.Refuse(refusal.CodeDenied,
+		"%s, and a secret is never revealed once set: only a deploy reads it. Set it again to change it", named))
+}
+
+func revealedProto(scope variablestore.Scope, found []variablestore.Value) []*variablestorev1.RevealedValue {
+	out := make([]*variablestorev1.RevealedValue, 0, len(found))
+	for _, v := range found {
+		out = append(out, &variablestorev1.RevealedValue{
 			Metadata: metadataProto(scope, v.Metadata),
 			Value:    v.Plaintext,
 		})
 	}
-	return resp, nil
+	return out
 }
 
 func (h *Service) DeleteValue(ctx context.Context, req *variablestorev1.DeleteValueRequest) (*variablestorev1.DeleteValueResponse, error) {

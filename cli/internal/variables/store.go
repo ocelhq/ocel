@@ -1,14 +1,17 @@
 package variables
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/project"
 	"github.com/ocelhq/ocel/cli/internal/providerprocess"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -66,27 +69,46 @@ func (s Store) Reveal(ctx context.Context, rows []Coordinate) (map[Coordinate]st
 	if s.DefinitionsOnly {
 		return map[Coordinate]string{}, nil
 	}
-	named := make([]*variablestorev1.Coordinate, 0, len(rows))
-	for _, row := range rows {
-		named = append(named, s.coordinate(row))
+	variableStore, err := s.Provider.VariableStore()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := variableStore.RevealValues(ctx, &variablestorev1.RevealValuesRequest{Tier: s.Tier, Slug: s.Project.Slug, Cells: s.coordinates(rows)})
+	if err != nil {
+		return nil, err
+	}
+	return plaintexts(resp.GetValues()), nil
+}
+
+func (s Store) Deliver(ctx context.Context, rows []Coordinate) (map[Coordinate]string, error) {
+	if s.DefinitionsOnly {
+		return map[Coordinate]string{}, nil
 	}
 	variableStore, err := s.Provider.VariableStore()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := variableStore.RevealValues(ctx, &variablestorev1.RevealValuesRequest{
-		Tier:  s.Tier,
-		Slug:  s.Project.Slug,
-		Cells: named,
-	})
+	resp, err := variableStore.DeliverValues(ctx, &variablestorev1.DeliverValuesRequest{Tier: s.Tier, Slug: s.Project.Slug, Cells: s.coordinates(rows)})
 	if err != nil {
 		return nil, err
 	}
-	found := make(map[Coordinate]string, len(resp.GetValues()))
-	for _, value := range resp.GetValues() {
+	return plaintexts(resp.GetValues()), nil
+}
+
+func (s Store) coordinates(rows []Coordinate) []*variablestorev1.Coordinate {
+	named := make([]*variablestorev1.Coordinate, 0, len(rows))
+	for _, row := range rows {
+		named = append(named, s.coordinate(row))
+	}
+	return named
+}
+
+func plaintexts(values []*variablestorev1.RevealedValue) map[Coordinate]string {
+	found := make(map[Coordinate]string, len(values))
+	for _, value := range values {
 		found[coordinateOf(value.GetMetadata().GetCoordinate())] = value.GetValue()
 	}
-	return found, nil
+	return found
 }
 
 func (s Store) coordinate(at Coordinate) *variablestorev1.Coordinate {
@@ -112,6 +134,7 @@ type ValueWrite struct {
 	At       Coordinate
 	Value    string
 	Expected *int64
+	Class    resourcesv1.VariableClass
 }
 
 func (s Store) Set(ctx context.Context, writes []ValueWrite) ([]int64, error) {
@@ -121,7 +144,7 @@ func (s Store) Set(ctx context.Context, writes []ValueWrite) ([]int64, error) {
 	}
 	values := make([]*variablestorev1.ValueWrite, 0, len(writes))
 	for _, write := range writes {
-		values = append(values, &variablestorev1.ValueWrite{Coordinate: s.coordinate(write.At), Value: write.Value, ExpectedVersion: write.Expected})
+		values = append(values, &variablestorev1.ValueWrite{Coordinate: s.coordinate(write.At), Value: write.Value, ExpectedVersion: write.Expected, Class: storedClass(write.Class)})
 	}
 	resp, err := variableStore.SetValues(ctx, &variablestorev1.SetValuesRequest{
 		Tier:   s.Tier,
@@ -136,6 +159,32 @@ func (s Store) Set(ctx context.Context, writes []ValueWrite) ([]int64, error) {
 		versions = append(versions, written.GetVersion())
 	}
 	return versions, nil
+}
+
+func storedClass(class resourcesv1.VariableClass) resourcesv1.VariableClass {
+	if isStoredClass(class) {
+		return class
+	}
+	return resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED
+}
+
+func (s Store) Classify(ctx context.Context, classes map[Cell]resourcesv1.VariableClass) error {
+	if s.DefinitionsOnly || len(classes) == 0 {
+		return nil
+	}
+	variableStore, err := s.Provider.VariableStore()
+	if err != nil {
+		return err
+	}
+	cells := make([]*variablestorev1.ClassifiedCell, 0, len(classes))
+	for cell, class := range classes {
+		cells = append(cells, &variablestorev1.ClassifiedCell{Key: cell.Key, Folder: cell.Folder, Class: class})
+	}
+	slices.SortFunc(cells, func(a, b *variablestorev1.ClassifiedCell) int {
+		return cmp.Or(cmp.Compare(a.GetFolder(), b.GetFolder()), cmp.Compare(a.GetKey(), b.GetKey()))
+	})
+	_, err = variableStore.ClassifyValues(ctx, &variablestorev1.ClassifyValuesRequest{Tier: s.Tier, Slug: s.Project.Slug, Cells: cells})
+	return err
 }
 
 func (s Store) Delete(ctx context.Context, at Coordinate, expected *int64) (bool, error) {
