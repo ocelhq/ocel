@@ -45,6 +45,12 @@ const (
 	// VariableStoreServiceRevealValuesProcedure is the fully-qualified name of the
 	// VariableStoreService's RevealValues RPC.
 	VariableStoreServiceRevealValuesProcedure = "/provider.variablestore.v1.VariableStoreService/RevealValues"
+	// VariableStoreServiceDeliverValuesProcedure is the fully-qualified name of the
+	// VariableStoreService's DeliverValues RPC.
+	VariableStoreServiceDeliverValuesProcedure = "/provider.variablestore.v1.VariableStoreService/DeliverValues"
+	// VariableStoreServiceClassifyValuesProcedure is the fully-qualified name of the
+	// VariableStoreService's ClassifyValues RPC.
+	VariableStoreServiceClassifyValuesProcedure = "/provider.variablestore.v1.VariableStoreService/ClassifyValues"
 	// VariableStoreServiceDeleteValueProcedure is the fully-qualified name of the
 	// VariableStoreService's DeleteValue RPC.
 	VariableStoreServiceDeleteValueProcedure = "/provider.variablestore.v1.VariableStoreService/DeleteValue"
@@ -90,6 +96,8 @@ type VariableStoreServiceClient interface {
 	ListValues(context.Context, *v1.ListValuesRequest) (*v1.ListValuesResponse, error)
 	GetValue(context.Context, *v1.GetValueRequest) (*v1.GetValueResponse, error)
 	RevealValues(context.Context, *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error)
+	DeliverValues(context.Context, *v1.DeliverValuesRequest) (*v1.DeliverValuesResponse, error)
+	ClassifyValues(context.Context, *v1.ClassifyValuesRequest) (*v1.ClassifyValuesResponse, error)
 	DeleteValue(context.Context, *v1.DeleteValueRequest) (*v1.DeleteValueResponse, error)
 	SetReference(context.Context, *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error)
 	ListReferences(context.Context, *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error)
@@ -138,6 +146,18 @@ func NewVariableStoreServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+VariableStoreServiceRevealValuesProcedure,
 			connect.WithSchema(variableStoreServiceMethods.ByName("RevealValues")),
+			connect.WithClientOptions(opts...),
+		),
+		deliverValues: connect.NewClient[v1.DeliverValuesRequest, v1.DeliverValuesResponse](
+			httpClient,
+			baseURL+VariableStoreServiceDeliverValuesProcedure,
+			connect.WithSchema(variableStoreServiceMethods.ByName("DeliverValues")),
+			connect.WithClientOptions(opts...),
+		),
+		classifyValues: connect.NewClient[v1.ClassifyValuesRequest, v1.ClassifyValuesResponse](
+			httpClient,
+			baseURL+VariableStoreServiceClassifyValuesProcedure,
+			connect.WithSchema(variableStoreServiceMethods.ByName("ClassifyValues")),
 			connect.WithClientOptions(opts...),
 		),
 		deleteValue: connect.NewClient[v1.DeleteValueRequest, v1.DeleteValueResponse](
@@ -221,6 +241,8 @@ type variableStoreServiceClient struct {
 	listValues        *connect.Client[v1.ListValuesRequest, v1.ListValuesResponse]
 	getValue          *connect.Client[v1.GetValueRequest, v1.GetValueResponse]
 	revealValues      *connect.Client[v1.RevealValuesRequest, v1.RevealValuesResponse]
+	deliverValues     *connect.Client[v1.DeliverValuesRequest, v1.DeliverValuesResponse]
+	classifyValues    *connect.Client[v1.ClassifyValuesRequest, v1.ClassifyValuesResponse]
 	deleteValue       *connect.Client[v1.DeleteValueRequest, v1.DeleteValueResponse]
 	setReference      *connect.Client[v1.SetReferenceRequest, v1.SetReferenceResponse]
 	listReferences    *connect.Client[v1.ListReferencesRequest, v1.ListReferencesResponse]
@@ -265,6 +287,24 @@ func (c *variableStoreServiceClient) GetValue(ctx context.Context, req *v1.GetVa
 // RevealValues calls provider.variablestore.v1.VariableStoreService.RevealValues.
 func (c *variableStoreServiceClient) RevealValues(ctx context.Context, req *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error) {
 	response, err := c.revealValues.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// DeliverValues calls provider.variablestore.v1.VariableStoreService.DeliverValues.
+func (c *variableStoreServiceClient) DeliverValues(ctx context.Context, req *v1.DeliverValuesRequest) (*v1.DeliverValuesResponse, error) {
+	response, err := c.deliverValues.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// ClassifyValues calls provider.variablestore.v1.VariableStoreService.ClassifyValues.
+func (c *variableStoreServiceClient) ClassifyValues(ctx context.Context, req *v1.ClassifyValuesRequest) (*v1.ClassifyValuesResponse, error) {
+	response, err := c.classifyValues.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -386,6 +426,8 @@ type VariableStoreServiceHandler interface {
 	ListValues(context.Context, *v1.ListValuesRequest) (*v1.ListValuesResponse, error)
 	GetValue(context.Context, *v1.GetValueRequest) (*v1.GetValueResponse, error)
 	RevealValues(context.Context, *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error)
+	DeliverValues(context.Context, *v1.DeliverValuesRequest) (*v1.DeliverValuesResponse, error)
+	ClassifyValues(context.Context, *v1.ClassifyValuesRequest) (*v1.ClassifyValuesResponse, error)
 	DeleteValue(context.Context, *v1.DeleteValueRequest) (*v1.DeleteValueResponse, error)
 	SetReference(context.Context, *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error)
 	ListReferences(context.Context, *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error)
@@ -429,6 +471,18 @@ func NewVariableStoreServiceHandler(svc VariableStoreServiceHandler, opts ...con
 		VariableStoreServiceRevealValuesProcedure,
 		svc.RevealValues,
 		connect.WithSchema(variableStoreServiceMethods.ByName("RevealValues")),
+		connect.WithHandlerOptions(opts...),
+	)
+	variableStoreServiceDeliverValuesHandler := connect.NewUnaryHandlerSimple(
+		VariableStoreServiceDeliverValuesProcedure,
+		svc.DeliverValues,
+		connect.WithSchema(variableStoreServiceMethods.ByName("DeliverValues")),
+		connect.WithHandlerOptions(opts...),
+	)
+	variableStoreServiceClassifyValuesHandler := connect.NewUnaryHandlerSimple(
+		VariableStoreServiceClassifyValuesProcedure,
+		svc.ClassifyValues,
+		connect.WithSchema(variableStoreServiceMethods.ByName("ClassifyValues")),
 		connect.WithHandlerOptions(opts...),
 	)
 	variableStoreServiceDeleteValueHandler := connect.NewUnaryHandlerSimple(
@@ -513,6 +567,10 @@ func NewVariableStoreServiceHandler(svc VariableStoreServiceHandler, opts ...con
 			variableStoreServiceGetValueHandler.ServeHTTP(w, r)
 		case VariableStoreServiceRevealValuesProcedure:
 			variableStoreServiceRevealValuesHandler.ServeHTTP(w, r)
+		case VariableStoreServiceDeliverValuesProcedure:
+			variableStoreServiceDeliverValuesHandler.ServeHTTP(w, r)
+		case VariableStoreServiceClassifyValuesProcedure:
+			variableStoreServiceClassifyValuesHandler.ServeHTTP(w, r)
 		case VariableStoreServiceDeleteValueProcedure:
 			variableStoreServiceDeleteValueHandler.ServeHTTP(w, r)
 		case VariableStoreServiceSetReferenceProcedure:
@@ -560,6 +618,14 @@ func (UnimplementedVariableStoreServiceHandler) GetValue(context.Context, *v1.Ge
 
 func (UnimplementedVariableStoreServiceHandler) RevealValues(context.Context, *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.variablestore.v1.VariableStoreService.RevealValues is not implemented"))
+}
+
+func (UnimplementedVariableStoreServiceHandler) DeliverValues(context.Context, *v1.DeliverValuesRequest) (*v1.DeliverValuesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.variablestore.v1.VariableStoreService.DeliverValues is not implemented"))
+}
+
+func (UnimplementedVariableStoreServiceHandler) ClassifyValues(context.Context, *v1.ClassifyValuesRequest) (*v1.ClassifyValuesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.variablestore.v1.VariableStoreService.ClassifyValues is not implemented"))
 }
 
 func (UnimplementedVariableStoreServiceHandler) DeleteValue(context.Context, *v1.DeleteValueRequest) (*v1.DeleteValueResponse, error) {

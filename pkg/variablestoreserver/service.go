@@ -153,6 +153,7 @@ func metadataProto(scope variablestore.Scope, m variablestore.Metadata) *variabl
 		EnvSource:       m.Provenance.EnvSource,
 		Publisher:       m.Provenance.Publisher,
 		PublishedSecret: m.Provenance.PublishedSecret,
+		Class:           classProto(m.Class),
 	}
 	if m.Target != nil {
 		out.Target = &variablestorev1.Coordinate{

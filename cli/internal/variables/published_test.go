@@ -18,7 +18,7 @@ func (v publishedValues) List(context.Context) ([]variables.ValueMetadata, error
 	return v.listed, nil
 }
 
-func (v publishedValues) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
+func (v publishedValues) Deliver(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	found := map[variables.Coordinate]string{}
 	for _, row := range rows {
 		found[row] = "published " + row.Cell.Key
@@ -97,4 +97,8 @@ func TestADeployRefusesAPublishedValueWhoseDeclarationDoesNotMatchItsSecrecy(t *
 			}
 		})
 	}
+}
+
+func (publishedValues) Classify(context.Context, map[variables.Cell]resourcesv1.VariableClass) error {
+	return nil
 }

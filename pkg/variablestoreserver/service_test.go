@@ -259,7 +259,7 @@ func TestReferencesAnswerAcrossTheWire(t *testing.T) {
 		t.Fatalf("SetReference() = %+v, want the target reported back", set.GetMetadata())
 	}
 
-	got, err := revealOne(ctx, variables, environmentv1.Tier_TIER_PRODUCTION, cell("DATABASE_URL"))
+	got, err := deliverOne(ctx, variables, environmentv1.Tier_TIER_PRODUCTION, cell("DATABASE_URL"))
 	if err != nil || got.GetValue() != "postgres://shared" {
 		t.Fatalf("GetValue() through a reference = %q, %v", got.GetValue(), err)
 	}
@@ -469,8 +469,8 @@ func TestTheRecordsInlineBindingsKeepAreWrittenByThemAlone(t *testing.T) {
 	}
 }
 
-func revealOne(ctx context.Context, variables variablestorev1connect.VariableStoreServiceClient, tier environmentv1.Tier, at *variablestorev1.Coordinate) (*variablestorev1.RevealedValue, error) {
-	revealed, err := variables.RevealValues(ctx, &variablestorev1.RevealValuesRequest{Tier: tier, Slug: at.GetSlug(), Cells: []*variablestorev1.Coordinate{at}})
+func deliverOne(ctx context.Context, variables variablestorev1connect.VariableStoreServiceClient, tier environmentv1.Tier, at *variablestorev1.Coordinate) (*variablestorev1.RevealedValue, error) {
+	revealed, err := variables.DeliverValues(ctx, &variablestorev1.DeliverValuesRequest{Tier: tier, Slug: at.GetSlug(), Cells: []*variablestorev1.Coordinate{at}})
 	if err != nil || len(revealed.GetValues()) == 0 {
 		return &variablestorev1.RevealedValue{}, err
 	}

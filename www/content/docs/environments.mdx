@@ -104,7 +104,7 @@ Every value is encrypted in ocel's store. The class decides where it may go from
 | Quoted in a parse error | Yes | No | No |
 | In build output | As is | As `[secret]` | As `[secret]` |
 | Reaches an image build | A public one, as a build argument | Yes, as a build secret | Yes, as a build secret |
-| `ocel env get --reveal` | Prints it | Prints it | Prints it after `--yes` |
+| `ocel env get --reveal`, the console | Prints it | Prints it | Never: only a deploy reads it |
 
 ### Which class to choose
 
@@ -115,7 +115,12 @@ Every value is encrypted in ocel's store. The class decides where it may go from
 - **`secret`** for a value that rotates, such as a database password. Your app reads it on each
   use, so a rotation takes effect without a redeploy, and it has no default, because a missing
   secret should fail loudly. A page prerendered from a secret keeps the old value until the next
-  deploy.
+  deploy. Once set, a secret is never shown again; to change it, set it again.
+
+A value takes the class it is set with. A deploy records the class each app declares, so a value
+set before its declaration, or by an env source, takes the class the code gives it. A class a
+value was set with only ever rises: declaring a secret `plain` later does not make it readable,
+and setting the value again does.
 
 ### Values your infrastructure publishes
 

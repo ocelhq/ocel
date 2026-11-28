@@ -415,7 +415,7 @@ func (v oneValue) List(context.Context) ([]variables.ValueMetadata, error) {
 	return []variables.ValueMetadata{{Coordinate: variables.Coordinate{Cell: v.cell}}}, nil
 }
 
-func (v oneValue) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
+func (v oneValue) Deliver(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	return map[variables.Coordinate]string{{Cell: v.cell}: v.value}, nil
 }
 
@@ -441,7 +441,7 @@ type emptyValues struct{}
 
 func (emptyValues) List(context.Context) ([]variables.ValueMetadata, error) { return nil, nil }
 
-func (emptyValues) Reveal(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
+func (emptyValues) Deliver(context.Context, []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	return nil, nil
 }
 
@@ -1854,4 +1854,12 @@ func TestADeployWarnsOfPlaintextValuesAnImageBuildGetsNoneOfWhenEveryOneIsPlaint
 	if strings.Contains(out, processenv.AppURLEnvVar+",") || strings.Contains(out, ", "+processenv.AppURLEnvVar) {
 		t.Errorf("the warning names %s, which ocel sets and the app never declares:\n%s", processenv.AppURLEnvVar, out)
 	}
+}
+
+func (oneValue) Classify(context.Context, map[variables.Cell]resourcesv1.VariableClass) error {
+	return nil
+}
+
+func (emptyValues) Classify(context.Context, map[variables.Cell]resourcesv1.VariableClass) error {
+	return nil
 }

@@ -8,7 +8,8 @@ dial it. Sign in and link the directory first, with [`ocel login`](/docs/cli/log
 
 A connector lets the console do everything a person's role allows on this target: read the
 deployed apps and act on them (a rollback, a hostname, protection), and read, write and reveal
-variables. What each person may do is still capped by their role in the console.
+variables. A secret is the exception: the connector never reveals one, whatever the role. What each
+person may do is still capped by their role in the console.
 
 `--compute` picks what the connector runs on, `serverless` or `container`; otherwise the provider's
 default.

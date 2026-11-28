@@ -60,6 +60,10 @@ func (s *fakeStore) List(context.Context) ([]variables.ValueMetadata, error) {
 	return append(out, s.overrides...), nil
 }
 
+func (s *fakeStore) Deliver(ctx context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
+	return s.Reveal(ctx, rows)
+}
+
 func (s *fakeStore) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	if s.unreadable != "" {
 		return nil, errors.New(s.unreadable)
@@ -1542,4 +1546,8 @@ func TestResumingADeploySyncsTheEnvSourceFirst(t *testing.T) {
 			t.Errorf("syncs = %d, want none", source.syncs)
 		}
 	})
+}
+
+func (*fakeStore) Classify(context.Context, map[variables.Cell]resourcesv1.VariableClass) error {
+	return nil
 }

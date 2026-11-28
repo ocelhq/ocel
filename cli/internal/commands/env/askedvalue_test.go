@@ -78,7 +78,7 @@ func TestEnvSetAsksForTheValueOfABareKeyHidingWhatASecretIsTyped(t *testing.T) {
 		t.Errorf("asked %q, want %q: a secret is typed hidden, a plain value in the open", prompt.asked, want)
 	}
 	for key, want := range map[string]string{"STRIPE_API_KEY": "sk_live_typed", "LOG_LEVEL": "debug"} {
-		if got := envGet(t, project.Root, key, envOptions{reveal: true, yes: true}); strings.TrimSpace(got) != want {
+		if got := storedValue(t, project, cellAt(key)); got != want {
 			t.Errorf("%s = %q, want %q", key, got, want)
 		}
 	}
@@ -152,7 +152,7 @@ func TestEnvSetRefusesAValueTheEnvSourceOwnsBeforeWritingOrAskingForAny(t *testi
 		if err == nil || !strings.Contains(err.Error(), "infisical:p-1/prod") || !strings.Contains(err.Error(), "nothing was written") {
 			t.Fatalf("runEnvSetPairs() = %v, want STRIPE_API_KEY refused naming its env source, with nothing written", err)
 		}
-		if got := envGet(t, project.Root, "INFISICAL_CLIENT_SECRET", envOptions{reveal: true, yes: true}); strings.TrimSpace(got) != "client-secret" {
+		if got := storedValue(t, project, cellAt("INFISICAL_CLIENT_SECRET")); got != "client-secret" {
 			t.Errorf("INFISICAL_CLIENT_SECRET = %q, want it left as it was", got)
 		}
 	})

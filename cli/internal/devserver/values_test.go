@@ -243,9 +243,9 @@ func TestRefuseIncompleteEnv(t *testing.T) {
 		}
 
 		store, _ := s.env.current()
-		found, err := store.Reveal(ctx, []variables.Coordinate{{Cell: variables.Cell{Key: "DB_PASSWORD"}}})
+		found, err := store.Deliver(ctx, []variables.Coordinate{{Cell: variables.Cell{Key: "DB_PASSWORD"}}})
 		if err != nil {
-			t.Fatalf("Reveal: %v", err)
+			t.Fatalf("Deliver: %v", err)
 		}
 		if len(found) != 0 {
 			t.Errorf("Reveal = %v, want nothing: presence is not a value", found)

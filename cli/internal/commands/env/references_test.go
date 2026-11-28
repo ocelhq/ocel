@@ -46,12 +46,12 @@ func TestAReferenceReadsAValueAnotherProjectOwns(t *testing.T) {
 			t.Errorf("ref stdout = %q, want it to name the cell the value is read from", out)
 		}
 
-		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true})); got != "sk_live_first" {
+		if got := storedValue(t, project, cellAt("STRIPE_API_KEY")); got != "sk_live_first" {
 			t.Errorf("revealed value = %q, want the owner's", got)
 		}
 
 		ownedElsewhere(t, project, "STRIPE_API_KEY", "sk_live_rotated")
-		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true})); got != "sk_live_rotated" {
+		if got := storedValue(t, project, cellAt("STRIPE_API_KEY")); got != "sk_live_rotated" {
 			t.Errorf("revealed value after an edit at the source = %q, want %q with nothing re-run here", got, "sk_live_rotated")
 		}
 	})
@@ -77,21 +77,21 @@ func TestAReferenceReadsAValueAnotherProjectOwns(t *testing.T) {
 		root := project.Root
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvRef(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"}, &stdout, &stderr); err != nil {
+		if err := runEnvRef(context.Background(), newStreamedDependencies(&stderr), root, "LOG_LEVEL", envOptions{}, envRefOptions{project: "platform"}, &stdout, &stderr); err != nil {
 			t.Fatalf("runEnvRef at a cell not set yet err = %v; stderr=%s", err, stderr.String())
 		}
 
 		var out, errs bytes.Buffer
-		err := runEnvGet(context.Background(), newStreamedDependencies(&errs), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &out, &errs)
+		err := runEnvGet(context.Background(), newStreamedDependencies(&errs), root, "LOG_LEVEL", envOptions{reveal: true}, &out, &errs)
 		if err == nil {
 			t.Fatal("runEnvGet through a reference to nothing err = nil, want a failure")
 		}
-		if !strings.Contains(errs.String(), "platform/STRIPE_API_KEY") {
+		if !strings.Contains(errs.String(), "platform/LOG_LEVEL") {
 			t.Errorf("stream = %q, want it to name the cell that contains nothing", errs.String())
 		}
 
-		ownedElsewhere(t, project, "STRIPE_API_KEY", "sk_live_secret")
-		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true})); got != "sk_live_secret" {
+		ownedElsewhere(t, project, "LOG_LEVEL", "debug")
+		if got := strings.TrimSpace(envGet(t, root, "LOG_LEVEL", envOptions{reveal: true})); got != "debug" {
 			t.Errorf("value once the source was set = %q, want it read through with no second write", got)
 		}
 	})
@@ -164,7 +164,7 @@ func TestEveryEnvCommandTreatsAReferenceAsAPointer(t *testing.T) {
 		if !strings.Contains(stderr.String(), "platform/STRIPE_API_KEY") {
 			t.Errorf("stream = %q, want it to name where the value is edited", stderr.String())
 		}
-		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true})); got != "sk_live_secret" {
+		if got := storedValue(t, project, cellAt("STRIPE_API_KEY")); got != "sk_live_secret" {
 			t.Errorf("value after the refused edit = %q, want it untouched", got)
 		}
 	})

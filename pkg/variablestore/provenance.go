@@ -23,7 +23,7 @@ func (p Provenance) isOlderThan(stored Provenance) bool {
 }
 
 func (s Store) SetFromEnvSource(ctx context.Context, scope Scope, at Coordinate, plaintext string, from Provenance, expected int64) (Metadata, error) {
-	return s.write(ctx, scope, at, plaintext, from, &expected)
+	return s.write(ctx, scope, at, plaintext, ClassUnstated, from, &expected)
 }
 
 func (s Store) DeleteFromEnvSource(ctx context.Context, scope Scope, at Coordinate, from Provenance, expected int64) (bool, error) {
@@ -74,6 +74,7 @@ func (s Store) GetDereferenced(ctx context.Context, scope Scope, at Coordinate, 
 		return Dereferenced{}, err
 	}
 	out := Dereferenced{Project: from.Project, Metadata: metadataOf(sourceAt, source)}
+	out.Class = cell.classAgainst(source)
 	if !reveal {
 		return out, nil
 	}

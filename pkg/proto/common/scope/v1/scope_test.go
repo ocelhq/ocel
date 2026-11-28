@@ -22,7 +22,7 @@ func TestAScopeAPersonCanHoldNamesItsClaimAndLeastRoleAndOneNoPersonHoldsNamesNe
 		claim := proto.GetExtension(value.Options(), scopev1.E_Claim).(string)
 		role := proto.GetExtension(value.Options(), scopev1.E_LeastRole).(scopev1.Role)
 		switch scopev1.Scope(value.Number()) {
-		case scopev1.Scope_SCOPE_UNSPECIFIED, scopev1.Scope_SCOPE_JOB, scopev1.Scope_SCOPE_TARGET_CREDENTIAL:
+		case scopev1.Scope_SCOPE_UNSPECIFIED, scopev1.Scope_SCOPE_JOB, scopev1.Scope_SCOPE_TARGET_CREDENTIAL, scopev1.Scope_SCOPE_VARIABLES_DELIVER:
 			if claim != "" || role != scopev1.Role_ROLE_UNSPECIFIED {
 				t.Errorf("%s names the claim %q and the role %s, want neither: only the kind of token grants it", value.Name(), claim, role)
 			}

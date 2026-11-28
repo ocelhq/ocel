@@ -93,6 +93,14 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 			_, err := variables.RevealValues(ctx, &variablestorev1.RevealValuesRequest{Slug: slug})
 			return err
 		},
+		"DeliverValues": func() error {
+			_, err := variables.DeliverValues(ctx, &variablestorev1.DeliverValuesRequest{Slug: slug})
+			return err
+		},
+		"ClassifyValues": func() error {
+			_, err := variables.ClassifyValues(ctx, &variablestorev1.ClassifyValuesRequest{Slug: slug})
+			return err
+		},
 		"DeleteValue": func() error {
 			_, err := variables.DeleteValue(ctx, &variablestorev1.DeleteValueRequest{Coordinate: cell("KEY")})
 			return err

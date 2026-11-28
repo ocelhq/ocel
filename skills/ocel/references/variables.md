@@ -65,4 +65,4 @@ Import from the framework's own entry instead of `ocel/env`; ocel writes nothing
   - `ocel env rm`
   - `ocel env history`
 - **Missing values:** a deploy missing a value stops with `variables.missing`. The error names the keys; set them, or ask the human for values that are theirs to supply.
-- **Reading a value:** `ocel env get KEY` shows it masked. `--reveal` prints it; use that only when the human asks to see it.
+- **Reading a value:** `ocel env get KEY` shows it masked. `--reveal` prints a `plain` or `sensitive` value; use that only when the human asks to see it. A `secret` is never revealed once set: to change it, set it again.

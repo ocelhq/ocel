@@ -3,6 +3,7 @@ package env
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -77,6 +78,28 @@ func valuesOf(project clitest.FakeProject) variablestore.Store {
 
 func cellAt(key string) variablestore.Coordinate {
 	return variablestore.Coordinate{Cell: variablestore.Cell{Key: key}}
+}
+
+func readStored(project clitest.FakeProject, tier environment.Tier, at variablestore.Coordinate) (string, error) {
+	value, err := valuesOf(project).Get(context.Background(), variablestore.Scope{Project: clitest.FixtureSlug, Tier: tier}, at, true)
+	return value.Plaintext, err
+}
+
+func storedValue(t *testing.T, project clitest.FakeProject, at variablestore.Coordinate) string {
+	t.Helper()
+	plaintext, err := readStored(project, environment.TierProduction, at)
+	if err != nil {
+		t.Fatalf("read %s from the store: %v", at, err)
+	}
+	return plaintext
+}
+
+func seedClassedValue(t *testing.T, project clitest.FakeProject, at variablestore.Coordinate, value string, class variablestore.Class) {
+	t.Helper()
+	scope := variablestore.Scope{Project: clitest.FixtureSlug, Tier: environment.TierProduction}
+	if _, err := valuesOf(project).Set(context.Background(), scope, []variablestore.ValueWrite{{At: at, Plaintext: value, Class: class}}); err != nil {
+		t.Fatalf("seed %s: %v", at, err)
+	}
 }
 
 func seedValue(t *testing.T, project clitest.FakeProject, tier environment.Tier, slug string, at variablestore.Coordinate, value string) {
@@ -174,8 +197,9 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 		}
 	})
 
-	t.Run("names the key it set, and the value it wrote reads back only when revealing is explicit", func(t *testing.T) {
-		root := setUpEnvFixture(t).Root
+	t.Run("names the key it set, and the value it wrote is stored but never revealed", func(t *testing.T) {
+		project := setUpEnvFixture(t)
+		root := project.Root
 
 		if out := envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}); !strings.Contains(out, "STRIPE_API_KEY") {
 			t.Errorf("set stdout = %q, want it to name the key it set", out)
@@ -187,21 +211,16 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 				t.Fatalf("runEnvGet err = %v; out=%s", err, plain.String())
 			}
 			if strings.Contains(plain.String(), "sk_live_secret") {
-				t.Errorf("get stdout = %q, want the value withheld without --reveal", plain.String())
+				t.Errorf("get stdout = %q, want the value withheld", plain.String())
 			}
-			if !strings.Contains(plain.String(), "--reveal") {
-				t.Errorf("get stdout = %q, want it to name the flag that reveals", plain.String())
+			if strings.Contains(plain.String(), "--reveal") || !strings.Contains(plain.String(), "never revealed") {
+				t.Errorf("get stdout = %q, want it to say a secret is never revealed rather than offer --reveal", plain.String())
 			}
 		})
 
-		t.Run("--reveal prints exactly the value so it is scriptable", func(t *testing.T) {
-			var revealed bytes.Buffer
-			var chatter bytes.Buffer
-			if err := runEnvGet(context.Background(), newStreamedDependencies(&chatter), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &revealed, &chatter); err != nil {
-				t.Fatalf("runEnvGet --reveal err = %v; out=%s", err, revealed.String())
-			}
-			if strings.TrimSpace(revealed.String()) != "sk_live_secret" {
-				t.Errorf("get --reveal stdout = %q, want exactly the value so it is scriptable", revealed.String())
+		t.Run("the store holds exactly the value", func(t *testing.T) {
+			if got := storedValue(t, project, cellAt("STRIPE_API_KEY")); got != "sk_live_secret" {
+				t.Errorf("stored value = %q, want exactly the value set", got)
 			}
 		})
 	})
@@ -214,22 +233,22 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 
 		preview := envOptions{preview: true}
 		staging := envOptions{preview: true, environment: "staging"}
-		envSet(t, root, "STRIPE_API_KEY", "sk_shared", preview)
-		envSet(t, root, "STRIPE_API_KEY", "sk_staging", staging)
+		envSet(t, root, "LOG_LEVEL", "warn", preview)
+		envSet(t, root, "LOG_LEVEL", "debug", staging)
 
 		for name, tc := range map[string]struct {
 			opts envOptions
 			want string
 		}{
-			"the environment with the override": {opts: staging, want: "sk_staging"},
-			"every other environment":           {opts: preview, want: "sk_shared"},
+			"the environment with the override": {opts: staging, want: "debug"},
+			"every other environment":           {opts: preview, want: "warn"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				opts := tc.opts
-				opts.reveal, opts.yes = true, true
+				opts.reveal = true
 				var stdout bytes.Buffer
 				var chatter bytes.Buffer
-				if err := runEnvGet(context.Background(), newStreamedDependencies(&chatter), root, "STRIPE_API_KEY", opts, &stdout, &chatter); err != nil {
+				if err := runEnvGet(context.Background(), newStreamedDependencies(&chatter), root, "LOG_LEVEL", opts, &stdout, &chatter); err != nil {
 					t.Fatalf("runEnvGet err = %v; out=%s", err, stdout.String())
 				}
 				if got := strings.TrimSpace(stdout.String()); got != tc.want {
@@ -254,9 +273,9 @@ func TestSettingAValueStoresItOnlyWhereADeclarationReadsIt(t *testing.T) {
 			t.Errorf("stream = %q, want it to name what was asked for and what exists", stderr.String())
 		}
 
-		var get bytes.Buffer
-		if err := runEnvGet(context.Background(), newStreamedDependencies(&get), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "stagng", reveal: true, yes: true}, &get, &get); err == nil {
-			t.Errorf("the refused write landed anyway: get = %q", get.String())
+		typo := variablestore.Coordinate{Cell: variablestore.Cell{Key: "STRIPE_API_KEY"}, Environment: "stagng"}
+		if got, err := readStored(project, environment.TierPreview, typo); !errors.Is(err, variablestore.ErrNotFound) {
+			t.Errorf("the refused write landed anyway: %q, %v", got, err)
 		}
 	})
 
@@ -442,9 +461,8 @@ func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
 		clitest.Bootstrap(t, project.Provider, environment.TierPreview)
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
-		var get bytes.Buffer
-		if err := runEnvGet(context.Background(), newStreamedDependencies(&get), root, "STRIPE_API_KEY", envOptions{preview: true, reveal: true, yes: true}, &get, &get); err == nil {
-			t.Errorf("preview get err = nil (out=%q), want the production value unreadable from preview", get.String())
+		if got, err := readStored(project, environment.TierPreview, cellAt("STRIPE_API_KEY")); !errors.Is(err, variablestore.ErrNotFound) {
+			t.Errorf("preview holds %q, %v, want the production value unreadable from preview", got, err)
 		}
 
 		var ls bytes.Buffer
@@ -457,12 +475,7 @@ func TestGettingAValueReadsOneCellOfOneTier(t *testing.T) {
 
 		envSet(t, root, "STRIPE_API_KEY", "sk_test_preview", envOptions{preview: true})
 
-		var production bytes.Buffer
-		var chatter bytes.Buffer
-		if err := runEnvGet(context.Background(), newStreamedDependencies(&chatter), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &production, &chatter); err != nil {
-			t.Fatalf("runEnvGet err = %v; out=%s", err, production.String())
-		}
-		if got := strings.TrimSpace(production.String()); got != "sk_live_secret" {
+		if got := storedValue(t, project, cellAt("STRIPE_API_KEY")); got != "sk_live_secret" {
 			t.Errorf("production value = %q, want %q: a preview write must not reach production", got, "sk_live_secret")
 		}
 	})
@@ -670,58 +683,33 @@ func TestTheEnvCommandsOfferOnlyTheFlagsTheyHonour(t *testing.T) {
 	})
 }
 
-func TestRevealingASecretNeedsAnExplicitYes(t *testing.T) {
-	t.Run("--reveal alone will not print a secret", func(t *testing.T) {
+func TestASecretIsNeverRevealed(t *testing.T) {
+	t.Run("--reveal refuses a declared secret and prints nothing of it", func(t *testing.T) {
 		root := setUpEnvFixture(t).Root
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
 		var stdout, stderr bytes.Buffer
 		err := runEnvGet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{reveal: true}, &stdout, &stderr)
 		if err == nil {
-			t.Fatal("runEnvGet --reveal on a secret err = nil, want it refused: a secret must not reach stdout on a flag the operator passes out of habit")
+			t.Fatal("runEnvGet --reveal on a secret err = nil, want it refused: a secret is never read back once set")
 		}
 		if strings.Contains(stdout.String()+stderr.String()+err.Error(), "sk_live_secret") {
 			t.Errorf("output = %q / %q / %v, want no plaintext anywhere in a refusal", stdout.String(), stderr.String(), err)
 		}
-		for _, want := range []string{"STRIPE_API_KEY", "--yes"} {
+		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY"} {
 			if !strings.Contains(stderr.String(), want) {
 				t.Errorf("stream = %q, want %q named", stderr.String(), want)
 			}
 		}
 	})
 
-	t.Run("--reveal --yes prints the secret on stdout and warns on stderr", func(t *testing.T) {
-		root := setUpEnvFixture(t).Root
-		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+	t.Run("--reveal refuses a value the store holds as a secret though no app declares it one", func(t *testing.T) {
+		project := setUpEnvFixture(t)
+		seedClassedValue(t, project, cellAt("LOG_LEVEL"), "debug", variablestore.ClassSecret)
 
 		var stdout, stderr bytes.Buffer
-		if err := runEnvGet(context.Background(), newStreamedDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &stdout, &stderr); err != nil {
-			t.Fatalf("runEnvGet --reveal --yes err = %v; stderr=%s", err, stderr.String())
-		}
-		if got := strings.TrimSpace(stdout.String()); got != "sk_live_secret" {
-			t.Errorf("stdout = %q, want exactly the value so a script can capture it", got)
-		}
-		if !strings.Contains(stderr.String(), "STRIPE_API_KEY") {
-			t.Errorf("stderr = %q, want a warning naming the secret that was printed", stderr.String())
-		}
-		if strings.Contains(stderr.String(), "sk_live_secret") {
-			t.Errorf("stderr = %q, want the warning to name the key, never repeat the plaintext", stderr.String())
-		}
-	})
-
-	t.Run("--reveal --yes warns through the run, so nothing reaches stderr beside it", func(t *testing.T) {
-		root := setUpEnvFixture(t).Root
-		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
-
-		var stdout, stderr, stream bytes.Buffer
-		if err := runEnvGet(context.Background(), newStreamedDependencies(&stream), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &stdout, &stderr); err != nil {
-			t.Fatalf("runEnvGet --reveal --yes err = %v; stream=%s", err, stream.String())
-		}
-		if stderr.Len() != 0 {
-			t.Errorf("stderr = %q, want nothing written around the run", stderr.String())
-		}
-		if !strings.Contains(stream.String(), "WARN  [check] STRIPE_API_KEY") {
-			t.Errorf("stream = %q, want the warning as a WARN line of the run naming the secret", stream.String())
+		if err := runEnvGet(context.Background(), newStreamedDependencies(&stderr), project.Root, "LOG_LEVEL", envOptions{reveal: true}, &stdout, &stderr); err == nil {
+			t.Fatalf("runEnvGet --reveal on a value stored as a secret printed %q, want it refused", stdout.String())
 		}
 	})
 
@@ -1132,7 +1120,7 @@ func TestGettingAValueAsJSONPrintsItsMetadataAndRevealsAValueOnlyOnRequest(t *te
 		}
 	})
 
-	t.Run("a secret appears only when revealed with --yes", func(t *testing.T) {
+	t.Run("a secret is never revealed", func(t *testing.T) {
 		root := setUpEnvFixture(t).Root
 		envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
 
@@ -1142,18 +1130,6 @@ func TestGettingAValueAsJSONPrintsItsMetadataAndRevealsAValueOnlyOnRequest(t *te
 		}
 		if refused.Len() != 0 || strings.Contains(refusedStream.String(), "sk_live_secret") {
 			t.Errorf("stdout = %q, stream = %q, want nothing printed and no plaintext on a refusal", refused.String(), refusedStream.String())
-		}
-
-		var stdout, stderr bytes.Buffer
-		if err := runEnvGet(context.Background(), newJSONDependencies(&stderr), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &stdout, &stderr); err != nil {
-			t.Fatalf("runEnvGet --reveal --yes err = %v; stderr=%s", err, stderr.String())
-		}
-		got := clitest.DecodeResult(t, stdout.String())
-		if got["revealed"] != true || got["value"] != "sk_live_secret" {
-			t.Errorf("get json = %v, want revealed true and the secret", got)
-		}
-		if strings.Contains(stderr.String(), "sk_live_secret") {
-			t.Errorf("stream = %q, want the plaintext only on stdout", stderr.String())
 		}
 	})
 

@@ -83,8 +83,8 @@ These stay with the human; bring them the plan or the question and wait:
 - choosing the provider, the account, a domain, or anything that costs money.
 
 When a `hint` offers a way to confirm on the human's behalf, pass the decision to the human.
-Secret values stay masked: `ocel env ls` and `ocel env get` show what is set; reveal a value
-only when the human asks to see it.
+Values stay masked: `ocel env ls` and `ocel env get` show what is set; reveal a `plain` or
+`sensitive` value only when the human asks to see it. A `secret` is never revealed once set.
 
 ## Words
 

@@ -350,7 +350,7 @@ func TestAValueTheEnvSourceOwnsIsRefusedToEveryOtherWriter(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("SetValues() beside a value the env source owns = %v, want the whole call refused", err)
 	}
-	if secret, err := revealOne(context.Background(), variables, preview, cell("INFISICAL_CLIENT_SECRET")); err != nil || secret.GetValue() == "rotated" {
+	if secret, err := deliverOne(context.Background(), variables, preview, cell("INFISICAL_CLIENT_SECRET")); err != nil || secret.GetValue() == "rotated" {
 		t.Fatalf("the credential after the refused SetValues() = %q, %v, want it left as it was", secret.GetValue(), err)
 	}
 	_, err = variables.DeleteValue(context.Background(), &variablestorev1.DeleteValueRequest{Tier: preview, Coordinate: cell("DATABASE_URL")})
@@ -395,7 +395,7 @@ func TestATierSwitchedBackToBuiltinKeepsEachCopiedValueAsOcelsOwn(t *testing.T) 
 	if _, err := syncEnvSource(variables, production, builtin); err != nil {
 		t.Fatal(err)
 	}
-	got, err := revealOne(context.Background(), variables, production, cell("DATABASE_URL"))
+	got, err := deliverOne(context.Background(), variables, production, cell("DATABASE_URL"))
 	if err != nil || got.GetValue() != "postgres://prod" || got.GetMetadata().GetEnvSource() != "" {
 		t.Fatalf("GetValue(DATABASE_URL) after the switch back = %q from %q, %v, want the value kept and named as ocel's own", got.GetValue(), got.GetMetadata().GetEnvSource(), err)
 	}
@@ -484,7 +484,7 @@ func TestAnExecEnvSourceIsWrittenAsTheOutputTheCallerReadAndIsNeverScheduled(t *
 	if synced.GetStatus().GetEnvSource() != "exec" || synced.GetStatus().GetScheduled() || synced.GetWritten() != 2 {
 		t.Fatalf("SyncEnvSource(exec) = %+v, want both values written and nothing scheduled", synced)
 	}
-	got, err := revealOne(context.Background(), variables, production, &variablestorev1.Coordinate{Slug: slug, Folder: "/web", Key: "API_KEY"})
+	got, err := deliverOne(context.Background(), variables, production, &variablestorev1.Coordinate{Slug: slug, Folder: "/web", Key: "API_KEY"})
 	if err != nil || got.GetValue() != "k" || got.GetMetadata().GetEnvSource() != "exec" {
 		t.Fatalf("GetValue() = %q from %q, %v", got.GetValue(), got.GetMetadata().GetEnvSource(), err)
 	}
@@ -563,7 +563,7 @@ func TestAnEnvSourceWritingValuesUpdatesOneItHoldsThenCopiesIt(t *testing.T) {
 	if !slices.Equal(fake.updated, []string{"/web API_KEY"}) || fake.secrets["/web"]["API_KEY"] != "new" {
 		t.Fatalf("updated = %v, want API_KEY updated in place", fake.updated)
 	}
-	got, err := revealOne(context.Background(), variables, production, &variablestorev1.Coordinate{Slug: slug, Folder: "/web", Key: "API_KEY"})
+	got, err := deliverOne(context.Background(), variables, production, &variablestorev1.Coordinate{Slug: slug, Folder: "/web", Key: "API_KEY"})
 	if err != nil || got.GetValue() != "new" {
 		t.Fatalf("GetValue() = %q, %v, want the updated value synced straight back", got.GetValue(), err)
 	}
@@ -969,7 +969,7 @@ func TestAPreviewDeploySyncsItsEnvSourceIntoItsOwnEnvironmentWhereTierWideValues
 		t.Fatalf("SyncEnvSource() for pr-7 = %v, want it written where pr-7 alone reads it", err)
 	}
 
-	tierWide, err := revealOne(ctx, person, preview, cell("TOKEN"))
+	tierWide, err := deliverOne(ctx, person, preview, cell("TOKEN"))
 	if err != nil || tierWide.GetValue() != "tier-wide" {
 		t.Fatalf("tier-wide TOKEN = %q, %v, want it as the tier-wide sync left it", tierWide.GetValue(), err)
 	}
@@ -1014,7 +1014,7 @@ func TestAPreviewDeploySwitchingToBuiltinKeepsItsOwnCopiesAsItsOwnValuesAndChang
 	if err := syncFor(builtin); err != nil {
 		t.Fatalf("SyncEnvSource(builtin) for pr-7 = %v, want the switch made without a tier-wide write", err)
 	}
-	own, err := revealOne(ctx, person, preview, &variablestorev1.Coordinate{Slug: slug, Key: "TOKEN", Environment: "pr-7"})
+	own, err := deliverOne(ctx, person, preview, &variablestorev1.Coordinate{Slug: slug, Key: "TOKEN", Environment: "pr-7"})
 	if err != nil || own.GetValue() != "for-pr-7" || own.GetMetadata().GetEnvSource() != "" {
 		t.Fatalf("pr-7's TOKEN = %q from %q, %v, want the copy kept as pr-7's own value", own.GetValue(), own.GetMetadata().GetEnvSource(), err)
 	}

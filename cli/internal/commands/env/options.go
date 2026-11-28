@@ -16,7 +16,6 @@ type envOptions struct {
 	folder      string
 	environment string
 	reveal      bool
-	yes         bool
 }
 
 func (o envOptions) checkEnvironment() error {

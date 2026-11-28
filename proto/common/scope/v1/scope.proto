@@ -37,4 +37,5 @@ enum Scope {
   SCOPE_VARIABLES_REVEAL = 5 [(claim) = "variables.reveal", (least_role) = ROLE_OWNER];
   SCOPE_JOB = 6;
   SCOPE_TARGET_CREDENTIAL = 7;
+  SCOPE_VARIABLES_DELIVER = 8;
 }

@@ -61,7 +61,11 @@ func (v *flatValues) List(context.Context) ([]variables.ValueMetadata, error) {
 	return stored, nil
 }
 
-func (v *flatValues) Reveal(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
+func (v *flatValues) Classify(context.Context, map[variables.Cell]resourcesv1.VariableClass) error {
+	return nil
+}
+
+func (v *flatValues) Deliver(_ context.Context, rows []variables.Coordinate) (map[variables.Coordinate]string, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	found := make(map[variables.Coordinate]string, len(rows))

@@ -169,7 +169,7 @@ func setPairs(ctx context.Context, values variables.Store, owner variables.EnvSo
 			continue
 		}
 		stored = append(stored, pair)
-		writes = append(writes, variables.ValueWrite{At: at, Value: pair.value})
+		writes = append(writes, variables.ValueWrite{At: at, Value: pair.value, Class: classOf(definitions, pair.key)})
 	}
 	if len(writes) > 0 {
 		versions, err := values.Set(ctx, writes)
@@ -240,7 +240,7 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 
 		var revealed *variablestorev1.RevealedValue
 		if opts.reveal {
-			if err := consentToReveal(definitions, key, opts, run.Phase(progressv1.Phase_PHASE_CHECK).Warn); err != nil {
+			if err := refuseRevealingSecret(definitions, key, resp.GetMetadata(), opts); err != nil {
 				return err
 			}
 			if revealed, err = revealValue(ctx, variableStore, req); err != nil {
@@ -257,12 +257,20 @@ func runEnvGet(ctx context.Context, dependencies Dependencies, cwd, key string, 
 		}
 		if target := m.GetTarget(); target != nil {
 			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), terminal.EpochDate(m.GetUpdatedAt()))
+			if isSecret(definitions, key, m) {
+				fmt.Fprintln(stdout, "It reads a secret, which is never revealed once set. Edit that value where it is set.")
+				return nil
+			}
 			fmt.Fprintln(stdout, "Pass --reveal to print the value it reads. Edit that value where it is set.")
 			return nil
 		}
 		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), terminal.EpochDate(m.GetUpdatedAt()))
 		if publisher := m.GetPublisher(); publisher != "" {
 			fmt.Fprintf(stdout, "Published by %s, the program to change it in.\n", publisher)
+		}
+		if isSecret(definitions, key, m) {
+			fmt.Fprintln(stdout, "It is a secret, and a secret is never revealed once set.")
+			return nil
 		}
 		fmt.Fprintln(stdout, "Pass --reveal to print the value.")
 		return nil
@@ -278,16 +286,16 @@ func classOf(definitions []*resourcesv1.VariableDefinition, key string) resource
 	return resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED
 }
 
-func consentToReveal(definitions []*resourcesv1.VariableDefinition, key string, opts envOptions, warn func(message string)) error {
-	if classOf(definitions, key) != resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
+func isSecret(definitions []*resourcesv1.VariableDefinition, key string, stored *variablestorev1.ValueMetadata) bool {
+	return classOf(definitions, key) == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET || stored.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET
+}
+
+func refuseRevealingSecret(definitions []*resourcesv1.VariableDefinition, key string, stored *variablestorev1.ValueMetadata, opts envOptions) error {
+	if !isSecret(definitions, key, stored) {
 		return nil
 	}
-	if !opts.yes {
-		return fmt.Errorf("%s is declared a secret, and --reveal alone will not print one: the plaintext would land in this terminal's scrollback and in whatever shell history, CI log or screen recording is watching. Pass --yes as well to print it anyway",
-			describeCell(key, opts))
-	}
-	warn(describeCell(key, opts) + " is a secret and its plaintext is now on stdout, in this terminal's scrollback, and in anything capturing either.")
-	return nil
+	return fmt.Errorf("%s is a secret, and a secret is never revealed once set: only a deploy reads it. Set it again with `ocel env set %s` to change it",
+		describeCell(key, opts), key)
 }
 
 func runEnvRemove(ctx context.Context, dependencies Dependencies, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"slices"
 	"strings"
+
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 type Cell struct {
@@ -55,7 +57,9 @@ type Version struct {
 type Values interface {
 	List(ctx context.Context) ([]ValueMetadata, error)
 
-	Reveal(ctx context.Context, rows []Coordinate) (map[Coordinate]string, error)
+	Deliver(ctx context.Context, rows []Coordinate) (map[Coordinate]string, error)
+
+	Classify(ctx context.Context, classes map[Cell]resourcesv1.VariableClass) error
 }
 
 func describeAll(rows []Coordinate) string {
