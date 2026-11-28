@@ -131,7 +131,44 @@ func TestAPrerequisiteStillMissingAfterItsSetupIsAnError(t *testing.T) {
 		t.Fatalf("Ensure err = %v, want the prerequisite its setup left missing returned", err)
 	}
 	if recorded.runs != 1 {
-		t.Errorf("the setup ran %d times, want once: a kind is set up at most once per run", recorded.runs)
+		t.Errorf("the setup ran %d times, want once: a gap its setup left is not set up again", recorded.runs)
+	}
+}
+
+type missingParts struct{}
+
+func (missingParts) Error() string {
+	return "the production bootstrap does not include what this project needs: variables-key.\nRun `ocel bootstrap production` and try again"
+}
+func (missingParts) Missing() prerequisite.Kind { return prerequisite.Bootstrap }
+func (missingParts) Finding() string {
+	return "The production bootstrap does not include what this project needs: variables-key."
+}
+func (missingParts) Remedy() string { return "`ocel bootstrap production`" }
+func (missingParts) Hint() string   { return "ocel bootstrap production" }
+
+func TestASetupThatRevealsAnotherGapOfItsKindIsOfferedAgainForIt(t *testing.T) {
+	var found []error
+	recorded := &recordedSetup{}
+	setups := prerequisite.Setups{prerequisite.Bootstrap: recorded.setup(true, func() {
+		if len(found) > 0 {
+			found = found[1:]
+		}
+	})}
+	found = []error{missingBootstrap{}, missingParts{}}
+
+	var out bytes.Buffer
+	err := setups.Ensure(context.Background(), terminalPolicy("y\ny\n", &out), checkSpan(t), func(context.Context) error {
+		if len(found) == 0 {
+			return nil
+		}
+		return found[0]
+	})
+	if err != nil {
+		t.Fatalf("Ensure err = %v, want the gap the first setup revealed set up too", err)
+	}
+	if recorded.runs != 2 {
+		t.Errorf("the setup ran %d times, want twice: once for the absent bootstrap, once for the part it then lacked", recorded.runs)
 	}
 }
 

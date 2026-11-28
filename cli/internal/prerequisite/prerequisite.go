@@ -46,21 +46,26 @@ func IsDeclined(err error) bool {
 
 func (s Setups) Ensure(ctx context.Context, policy consent.Policy, span *run.Span, check func(context.Context) error) error {
 	ctx = run.ContextWithSpan(ctx, span)
-	set := map[Kind]bool{}
+	type gap struct {
+		kind    Kind
+		finding string
+	}
+	set := map[gap]bool{}
 	for {
 		err := check(ctx)
 		var missing MissingError
 		if !errors.As(err, &missing) {
 			return err
 		}
-		if !policy.Interactive || set[missing.Missing()] {
+		found := gap{missing.Missing(), missing.Finding()}
+		if !policy.Interactive || set[found] {
 			return refuseMissing(err, missing)
 		}
 		setup, ok := s[missing.Missing()]
 		if !ok || (setup.ChangesAccount && policy.DryRun) {
 			return refuseMissing(err, missing)
 		}
-		set[missing.Missing()] = true
+		set[found] = true
 		span.Say(missing.Finding())
 		if setup.Prompt != nil {
 			granted, offerErr := policy.Offer(ctx, span, setup.Prompt(missing))
