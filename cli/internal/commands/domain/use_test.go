@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/clitest"
+	bootstrapcmd "github.com/ocelhq/ocel/cli/internal/commands/bootstrap"
+	"github.com/ocelhq/ocel/cli/internal/prerequisite"
 	"github.com/ocelhq/ocel/pkg/edge"
 	"github.com/ocelhq/ocel/pkg/environment"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -107,6 +110,32 @@ func TestDomainUseWithoutTheVariablesKeyRecordsTheWantSoTheBootstrapItNamesAddsI
 	}
 	if !slices.Contains(wants[provider.VariablesKeyPart], clitest.FixtureSlug) {
 		t.Errorf("wants = %v, want %s recorded as wanting %s so `ocel bootstrap preview` adds it", wants, clitest.FixtureSlug, provider.VariablesKeyPart)
+	}
+}
+
+func TestDomainUseOnAnAccountWithNoPreviewBootstrapSetsItUpWithTheVariablesKeyAndServesTheWildcard(t *testing.T) {
+	project := clitest.SetUpProject(t)
+	bootstrap := project.Provider.FakeBootstrap()
+	bootstrap.Offers(append(bootstrap.Parts(), provider.Part{Name: provider.VariablesKeyPart, Summary: "a key the preview key is sealed under"})...)
+	invocation := newTestInvocation()
+	invocation.StdinIsTerminal = func(io.Reader) bool { return true }
+	invocation.Setups = prerequisite.Setups{prerequisite.Bootstrap: bootstrapcmd.NewSetup()}
+
+	var stdout bytes.Buffer
+	clitest.AttachTerminalSink(invocation, &stdout)
+	err := runDomainUse(context.Background(), invocation, project.Root, "*.preview.acme.com", domainOptions{preview: true}, &stdout, strings.NewReader(strings.Repeat("y\n", 8)))
+	if err != nil {
+		t.Fatalf("runDomainUse err = %v, want the bootstrap set up with the key and the wildcard served; stdout=%s", err, stdout.String())
+	}
+	if asked := clitest.RequestsTo[*contractv1.UsePreviewWildcardRequest](t, project.Requests, contractv1connect.ProviderServiceUsePreviewWildcardProcedure); len(asked) != 1 {
+		t.Errorf("the CLI asked %v, want the wildcard served once the bootstrap holds the key", asked)
+	}
+	var installed bool
+	for _, applied := range bootstrap.Applied() {
+		installed = installed || (applied.Tier == environment.TierPreview && slices.Contains(applied.Parts, provider.VariablesKeyPart))
+	}
+	if !installed {
+		t.Errorf("applied = %+v, want the preview bootstrap to install %s", bootstrap.Applied(), provider.VariablesKeyPart)
 	}
 }
 
